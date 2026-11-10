@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>【番号】【タイトル】</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0;
+    --card: #f6f8fa; --accent: #0969da; --ok: #1a7f37; --warn: #9a6700;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d;
+      --card: #151b23; --accent: #4493f8; --ok: #3fb950; --warn: #d29922;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d;
+    --card: #151b23; --accent: #4493f8; --ok: #3fb950; --warn: #d29922;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; line-height: 1.8; }
+  main { max-width: 920px; margin: 0 auto; padding: 24px 16px 80px; }
+  a { color: var(--accent); }
+  h1 { font-size: 1.6rem; margin: 8px 0 4px; }
+  h2 { font-size: 1.25rem; margin-top: 40px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 1.05rem; margin-top: 24px; }
+  .meta { color: var(--muted); font-size: .9rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
+  .point { border-left: 4px solid var(--accent); }
+  .warn { border-left: 4px solid var(--warn); }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--card); white-space: nowrap; }
+  code { background: var(--card); padding: 1px 5px; border-radius: 4px; font-size: .9em; }
+  pre:not(.mermaid) { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; line-height: 1.5; }
+  pre.mermaid { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; text-align: center; }
+  details { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; margin: 8px 0; }
+  summary { cursor: pointer; font-weight: 600; }
+  .status { display: inline-block; padding: 0 8px; border-radius: 10px; font-size: .8rem; border: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<main>
+  <p class="meta"><a href="index.html">← 目次へ</a></p>
+  <h1>【番号】【タイトル】</h1>
+  <p class="meta">作成: 【YYYY-MM-DD】 ／ 状態: <span class="status">【解説だけ／実装済み】</span></p>
+
+  <div class="card point">
+    <strong>この一歩でできるようになること</strong>
+    <ul><li>【1〜3個】</li></ul>
+  </div>
+
+  <h2>1. 何を作るか</h2>
+  <p>【機能と、どんな場面で使われるか】</p>
+
+  <h2>2. 先に知っておく言葉</h2>
+  <table>
+    <tr><th>言葉</th><th>意味（1〜2文）</th></tr>
+    <tr><td>【】</td><td>【】</td></tr>
+  </table>
+
+  <h2>3. 図で見る</h2>
+  <p>【図の見方を1文】</p>
+  <pre class="mermaid">
+erDiagram
+  USERS ||--o{ LIKES : "いいねする"
+  </pre>
+
+  <h2>4. 設計の選択肢を比べる</h2>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>【】</td><td>【】</td><td>【】</td><td>【】</td></tr>
+  </table>
+  <div class="card point"><strong>この一歩で選ぶもの</strong>：【案と、選ぶ理由】</div>
+
+  <h2>5. 見本（小さく）</h2>
+  <pre><code>【SQL や Go の要点だけ。全部は書かない】</code></pre>
+  <p>【見本の読み方。どの行が大事か】</p>
+
+  <h2>6. どう確かめるか</h2>
+  <ul><li>【テストで確かめること・EXPLAIN で見ること・数字】</li></ul>
+
+  <h2>7. 気をつけること（罠）</h2>
+  <div class="card warn"><ul><li>【よくある間違い】</li></ul></div>
+
+  <h2>8. 理解を確かめる6つの問い</h2>
+  <p>先に自分で答えてから、開いて見る。</p>
+  <details><summary>なぜそうするのか？</summary><p>【】</p></details>
+  <details><summary>ほかの方法は？なぜ選ばなかったか？</summary><p>【】</p></details>
+  <details><summary>弱点は？</summary><p>【】</p></details>
+  <details><summary>問題が起きたら、どう調べて直すか？</summary><p>【】</p></details>
+  <details><summary>データが10倍・100倍になったら？</summary><p>【】</p></details>
+  <details><summary>ORM（ActiveRecord など）で書くと、何が違うか？</summary><p>【】</p></details>
+
+  <h2>9. 実装の記録</h2>
+  <p class="meta">実装したあとに explain-change が書く。</p>
+  <p>【まだ実装していない】</p>
+</main>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+  const dark = document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
+</script>
+</body>
+</html>

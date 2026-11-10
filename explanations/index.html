@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DB 設計の学習ノート</title>
+<style>
+  :root { --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --card: #f6f8fa; --accent: #0969da; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d; --card: #151b23; --accent: #4493f8; }
+  }
+  :root[data-theme="dark"] { --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d; --card: #151b23; --accent: #4493f8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; line-height: 1.8; }
+  main { max-width: 920px; margin: 0 auto; padding: 24px 16px 80px; }
+  a { color: var(--accent); }
+  h1 { font-size: 1.6rem; }
+  h2 { font-size: 1.2rem; margin-top: 36px; border-bottom: 1px solid var(--line); }
+  .meta { color: var(--muted); font-size: .9rem; }
+  table { border-collapse: collapse; width: 100%; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--card); white-space: nowrap; }
+  pre.mermaid { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <h1>DB 設計の学習ノート（マッチングアプリ）</h1>
+  <p>マッチングアプリ（会員・いいね・マッチ・メッセージ・有料プラン）を題材に、テーブル設計・JOIN・中間テーブル・インデックス・同時更新を、作って確かめる。実在のサービスのコード・名前・データは使わない。</p>
+  <p class="meta">技術: Go ＋ sqlc ＋ PostgreSQL。1つの一歩ごとに、explain-step で解説を作り、理解してから実装し、explain-change で記録する。</p>
+
+  <h2>進め方</h2>
+  <pre class="mermaid">
+flowchart LR
+  A["explain-step<br>解説と図を作る"] --> B["読んで理解する<br>6つの問いに答える"]
+  B --> C["実装を頼む<br>（テストを先に）"]
+  C --> D["explain-change<br>書いたコードを解説・記録"]
+  D --> E["次の一歩へ"]
+  E --> A
+  </pre>
+
+  <h2>一歩ずつの目次</h2>
+  <p class="meta">状態: 未着手／解説だけ／実装済み。ページができたら、名前をリンクにする。</p>
+  <table>
+    <tr><th>番号</th><th>一歩</th><th>学ぶこと</th><th>状態</th></tr>
+    <tr><td>00</td><td>環境を作る</td><td>PostgreSQL（Docker）・マイグレーション・sqlc の流れ</td><td>未着手</td></tr>
+    <tr><td>01</td><td>会員とプロフィール</td><td>主キー・データの型・NOT NULL・CHECK・1対1</td><td>未着手</td></tr>
+    <tr><td>02</td><td>いいね</td><td>中間テーブル・自分の表どうしの多対多・UNIQUE で二重を防ぐ</td><td>未着手</td></tr>
+    <tr><td>03</td><td>マッチ</td><td>自己結合（お互いにいいね）・INNER と LEFT JOIN</td><td>未着手</td></tr>
+    <tr><td>04</td><td>検索と一覧</td><td>複合インデックス・EXPLAIN・OFFSET とカーソル・大量のデータ</td><td>未着手</td></tr>
+    <tr><td>05</td><td>メッセージ</td><td>相手ごとの最新の1件（ウィンドウ関数）・N+1</td><td>未着手</td></tr>
+    <tr><td>06</td><td>ブロックと退会</td><td>NOT EXISTS・論理削除と再登録・部分インデックス</td><td>未着手</td></tr>
+    <tr><td>07</td><td>有料プランとキャンペーン</td><td>購入した時の価格を残す・有効期間・1人1回を UNIQUE で守る</td><td>未着手</td></tr>
+    <tr><td>08</td><td>決済の通知</td><td>状態の遷移・トランザクション・冪等性</td><td>未着手</td></tr>
+    <tr><td>09</td><td>同時更新</td><td>楽観ロック・悲観ロック・デッドロック</td><td>未着手</td></tr>
+    <tr><td>10</td><td>止めずに変えるマイグレーション</td><td>列の追加・名前の変更の手順・ロック</td><td>未着手</td></tr>
+  </table>
+</main>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+  const dark = document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
+</script>
+</body>
+</html>

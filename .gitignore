@@ -1,0 +1,23 @@
+# 秘密の値（値の入っていない見本の .env.example だけをコミットする）
+.env
+.env.*
+!.env.example
+.dev.vars
+secrets/
+
+# Issue ごとの作業フォルダ（wt で作る）
+.claude/worktrees/
+
+# Claude Code の手元だけの設定（許可した操作の記録など）
+.claude/settings.local.json
+
+# 【記入】言語・フレームワークの生成物（記入例: Node.js）
+node_modules/
+dist/
+coverage/
+
+# OS
+.DS_Store
+
+# 手元だけのメモ（個人のパスなど）
+*.local.md
