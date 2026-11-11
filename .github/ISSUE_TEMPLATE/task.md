@@ -1,17 +1,20 @@
 ---
-name: タスク（子）
+name: 子（親の中の1つの作業）
 about: 親 Issue の中の1つの作業。1つの子 Issue を1つの PR で閉じる
-title: "【番号】【機能名】：【DB・テーブル設計／バックエンド API／フロントエンド／固定するテスト】"
+title: "【番号】【名前】：【DB・テーブル設計／バックエンド API／フロントエンド／固定するテスト】"
 labels: []
 ---
 
-<!-- ラベルは領域（db・api・frontend・auth）と段階（legacy・refactor）を付ける。親 Issue の「Create sub-issue」から作る -->
+<!-- 親 Issue の「Create sub-issue」から作る。ラベルは領域（db・api・frontend・auth・docs）と段階（legacy・refactor）。マイルストーンは親と同じ -->
+
+親 Issue：#
 
 ## やること
 
 <!-- 例：DB・テーブル設計 → マイグレーション（列・型・制約・インデックス）・Model とリレーション・docs/data-model.md
          バックエンド API → ルートとコントローラ・curl で確かめる・docs/api.md
-         フロントエンド → 画面・API の呼び出し・型（docs/api.md に合わせる） -->
+         フロントエンド → 画面・API の呼び出し・型（docs/api.md に合わせる）
+         固定するテスト → 要件 ID ごとのテスト。素朴な版のまま通ることを確かめる -->
 - [ ] 
 
 ## 確かめ方
