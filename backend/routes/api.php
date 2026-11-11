@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
@@ -11,3 +12,7 @@ Route::get('/health', function () {
         'migrations' => DB::table('migrations')->count(),
     ]);
 });
+
+// 01 会員とプロフィール（docs/api.md）
+Route::get('/users/{id}/profile', [ProfileController::class, 'show']);
+Route::put('/users/{id}/profile', [ProfileController::class, 'update']);
