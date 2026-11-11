@@ -46,7 +46,7 @@
 <main>
   <p class="meta"><a href="index.html">← 目次へ</a></p>
   <h1>01 会員とプロフィール</h1>
-  <p class="meta">作成: 2026-11-11 ／ 状態: <span class="status">解説だけ</span> ／ Issue: <a href="https://github.com/masa-devx/matching-db-study/issues/8">#8</a> ／ 要件: <code>docs/requirements/members.md</code>（FR-001〜FR-014）</p>
+  <p class="meta">作成: 2026-11-11 ／ 状態: <span class="status">素朴な版まで</span> ／ Issue: <a href="https://github.com/masa-devx/matching-db-study/issues/8">#8</a> ／ 要件: <code>docs/requirements/members.md</code>（FR-001〜FR-014）</p>
 
   <div class="card point">
     <strong>この一歩でできるようになること</strong>
@@ -274,9 +274,83 @@ $user->profile()->update($data);   // 性別・生年月日は受け取らない
   <h2>9. 実装の記録</h2>
   <p class="meta">素朴な版のあと（9-1・9-2）と、直したあと（9-3・9-4）に、explain-change が書く。</p>
   <h3>9-1. 素朴な版</h3>
-  <p>【まだ実装していない】</p>
+  <p class="meta">記録: 2026-11-11 ／ PR: <a href="https://github.com/masa-devx/matching-db-study/pull/11">#11 DB・テーブル設計</a>・<a href="https://github.com/masa-devx/matching-db-study/pull/12">#12 バックエンド API</a></p>
+  <h4>書いたもの</h4>
+  <table>
+    <tr><th>ファイル</th><th>役割</th></tr>
+    <tr><td><code>backend/database/migrations/2026_11_11_112231_add_profile_columns_to_users_table.php</code></td><td><code>users</code> に <code>gender</code>・<code>birthday</code>・<code>prefecture</code>・<code>height</code>・<code>introduction</code>・<code>image</code> を足す。すべて文字で、NULL を許し、制約なし</td></tr>
+    <tr><td><code>backend/app/Models/User.php</code></td><td><code>$guarded = []</code> でどの列でも一括代入できる。<code>password</code> は <code>hashed</code> のまま</td></tr>
+    <tr><td><code>backend/database/factories/UserFactory.php</code>・<code>seeders/DatabaseSeeder.php</code></td><td>会員 20人（1人目は <code>test@example.com</code>）。プロフィールも文字で入れる</td></tr>
+    <tr><td><code>backend/public/images/avatars/demo-1.svg</code>〜<code>demo-6.svg</code></td><td>デモ用のプロフィール画像（色と形だけの絵）</td></tr>
+    <tr><td><code>backend/app/Http/Controllers/ProfileController.php</code></td><td><code>show</code>：1人を探してそのまま返す。<code>update</code>：送られたものを全部入れて保存する</td></tr>
+    <tr><td><code>backend/routes/api.php</code></td><td><code>GET</code>・<code>PUT /api/users/{id}/profile</code></td></tr>
+  </table>
+
+  <h4>大事な行の読み方</h4>
+  <p><strong>① 今ある表に列を足す</strong>（マイグレーション）</p>
+  <pre><code>Schema::table('users', function (Blueprint $table) {
+    $table->string('height')->nullable();   // varchar(255)。身長も文字で持つ
+});</code></pre>
+  <p><code>Schema::create</code> ではなく <code>Schema::table</code> なので、新しい表を作らず <code>alter table "users" add column ...</code> が流れる。型は文字、制約はなし。</p>
+
+  <p><strong>② 一括代入の守りを外す</strong>（<code>User.php</code>）</p>
+  <pre><code>#[Hidden(['password', 'remember_token'])]
+class User extends Authenticatable
+{
+    protected $guarded = [];   // 守る列がない</code></pre>
+  <p><code>$guarded</code> は「一括代入させない列」の一覧で、空なので全部の列に入る。<code>#[Hidden]</code> は JSON にするときに隠す列で、書いた2つ以外（<code>email</code>・<code>birthday</code>）はそのまま出る。</p>
+
+  <p><strong>③ 送られたものを全部入れる</strong>（<code>ProfileController::update</code>）</p>
+  <pre><code>$user = User::findOrFail($id);   // いなければ 404
+$user->fill($request->all());    // 送られた JSON を全部、同じ名前の列に入れる
+$user->save();                   // 変わった列だけを update する
+return $user;                    // Model をそのまま JSON にする</code></pre>
+  <p><code>fill()</code> は値を入れるだけで、DB に書くのは <code>save()</code>。入力の確かめも、だれが編集してよいかの確かめも、どこにもない。</p>
+
+  <h4>実際に流れる SQL</h4>
+  <table>
+    <tr><th>API</th><th>SQL（ログから）</th><th>本数</th></tr>
+    <tr><td><code>GET /api/users/1/profile</code></td><td><code>select * from "users" where "users"."id" = ? limit 1</code></td><td>1本</td></tr>
+    <tr><td><code>PUT /api/users/3/profile</code></td><td>上と同じ <code>select</code> ＋ <code>update "users" set "email" = ?, ... where "id" = ?</code>（変わった列だけ）</td><td>2本</td></tr>
+  </table>
+
+  <h4>解説から変えたこと</h4>
+  <p>なし（素朴な版は、5章の見本どおり）。</p>
   <h3>9-2. 測った問題と数字</h3>
-  <p>【まだ実装していない】</p>
+  <h4>おかしな値が入るか（DB に直接・API から）</h4>
+  <table>
+    <tr><th>確かめたこと</th><th>結果</th><th>要件</th></tr>
+    <tr><td>DB に直接、会員 2 に <code>height='abc'</code>・<code>gender='M'</code>・<code>birthday='2026-13-45'</code>・<code>prefecture='東京'</code></td><td><strong>入った</strong></td><td>FR-012</td></tr>
+    <tr><td><code>PUT</code> で <code>height:"abc"</code>・<code>prefecture:"とうきょう"</code></td><td><code>200</code>。<strong>保存された</strong></td><td>FR-007・008</td></tr>
+    <tr><td><code>PUT</code> で21文字の名前</td><td><code>200</code>。21文字のまま保存</td><td>FR-006</td></tr>
+    <tr><td><code>PUT</code> で <code>gender</code>・<code>birthday</code>・<code>email</code>・<code>password</code></td><td><code>200</code>。<strong>全部書き換わった</strong>（パスワードはハッシュ化されて入る）</td><td>FR-010</td></tr>
+    <tr><td><code>GET</code> の応答</td><td><code>email</code>・<code>birthday</code> が返る（<code>password</code> は <code>#[Hidden]</code> で隠れる）。年齢は返らない</td><td>FR-001〜003</td></tr>
+    <tr><td><code>PUT</code> で空の名前（<code>"name": ""</code>）</td><td><strong><code>500</code></strong>。Laravel が空の文字を <code>null</code> に変え（<code>ConvertEmptyStringsToNull</code>）、ひな形の <code>users.name</code> の NOT NULL に DB が断った（<code>SQLSTATE[23502]</code>）。何も保存されないが、応答に SQL のエラーが出る</td><td>FR-006（直した版は <code>422</code>）</td></tr>
+    <tr><td>同じメールアドレスの会員を DB に入れる</td><td>ひな形の <code>users_email_unique</code> で<strong>断られた</strong></td><td>FR-013</td></tr>
+  </table>
+  <h4>文字の生年月日で起きること</h4>
+  <table>
+    <tr><th>SQL</th><th>結果</th></tr>
+    <tr><td><code>select count(*) from users where birthday::date &lt;= current_date - interval '30 years'</code>（30歳以上を数える）</td><td><strong>エラー</strong>：<code>date/time field value out of range: "2026-13-45"</code>。1行でもおかしな値があると、年齢で絞る SQL が全部失敗する（04 の検索が書けない）</td></tr>
+    <tr><td><code>select '1995/4/1' &lt; '1995-04-01'</code></td><td><strong>偽</strong>。文字として1文字ずつ比べるので、日付として正しく比べられない</td></tr>
+  </table>
+  <h4>数字</h4>
+  <table>
+    <tr><th>測ったもの</th><th>素朴な版（前）</th></tr>
+    <tr><td>守れている要件</td><td><strong>5 / 14</strong>（FR-004・005・011・013・014）</td></tr>
+    <tr><td>守れていない要件</td><td>FR-001〜003（返す形）・006〜010（入力の確かめ）・012（DB の制約）</td></tr>
+    <tr><td><code>GET</code> 1回の SQL</td><td>1本（NFR-001 の「2本以内」は守れている）</td></tr>
+    <tr><td><code>PUT</code> 1回の SQL</td><td>2本</td></tr>
+    <tr><td>DB に直接入れたおかしな値のうち、断られたもの</td><td>0 / 4（身長・性別・生年月日・都道府県）</td></tr>
+  </table>
+  <p>FR-011（1人にプロフィールは1つ）は、表が1つなので2つ目ができる余地がなく、守れていることにした。FR-009（自己紹介は 500文字まで）は試していないが、確かめる場所がないので守れていないと数えた。</p>
+  <h4>気になる点（直していない）</h4>
+  <ul>
+    <li>空の名前のときの <code>500</code> の応答に、SQL のエラー（と、送った値）がそのまま出る。00 のレビューの P2 で予想していたもの</li>
+    <li>表にない列の名前（例：<code>nickname</code>）を送っても <code>500</code> になる（<code>$guarded = []</code> は列があるかを確かめないため）</li>
+    <li>他人の <code>id</code> でも書き換えられる（01b で直す）</li>
+    <li>確かめに使った会員 3 の都道府県は、元の値を控えておらず「北海道」に戻した</li>
+  </ul>
   <h3>9-3. 足したテスト</h3>
   <p>【まだ実装していない】</p>
   <h3>9-4. 直した版と、前と後の数字</h3>
