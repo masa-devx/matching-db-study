@@ -24,12 +24,22 @@ class UserFactory extends Factory
      */
     public function definition(): array
     {
+        // 素朴な版（01）：プロフィールも文字で持つ。シードでは、それらしい値だけを入れる
+        $faker = fake('ja_JP');
+
         return [
-            'name' => fake()->name(),
+            'name' => $faker->firstName(),
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
+            // casts() の 'hashed' があるので、ここでハッシュ化したものは2回はかからない
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
+            'gender' => $faker->randomElement(['male', 'female']),
+            'birthday' => $faker->dateTimeBetween('-45 years', '-18 years')->format('Y-m-d'),
+            'prefecture' => $faker->randomElement(['北海道', '宮城県', '東京都', '神奈川県', '愛知県', '大阪府', '福岡県', '沖縄県']),
+            'height' => (string) $faker->numberBetween(150, 185),
+            'introduction' => $faker->realText(80),
+            'image' => '/images/avatars/demo-'.$faker->numberBetween(1, 6).'.svg',
         ];
     }
 

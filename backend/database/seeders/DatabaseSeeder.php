@@ -15,11 +15,12 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
-
+        // 01：会員を 20人。1人目は、確かめに使う決まった会員にする
         User::factory()->create([
-            'name' => 'Test User',
+            'name' => 'テスト',
             'email' => 'test@example.com',
         ]);
+
+        User::factory(19)->create();
     }
 }
