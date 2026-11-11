@@ -1,0 +1,17 @@
+[2026-11-11 08:42:19] local.DEBUG: db.query {"requestId":"8f4f7e5f-b3e3-4f3d-b69c-8f96c5dbdb97","n":1,"ms":7.16,"sql":"select count(*) as \"aggregate\" from \"migrations\"","connection":"pgsql"} 
+[2026-11-11 08:42:19] local.INFO: db.summary {"requestId":"8f4f7e5f-b3e3-4f3d-b69c-8f96c5dbdb97","path":"GET api/health","queries":1,"ms":7.16} 
+[2026-11-11 09:24:41] local.DEBUG: db.query {"requestId":"e7162d7a-8f97-4ab1-8004-17b964973c28","n":1,"ms":5.23,"sql":"select count(*) as \"aggregate\" from \"migrations\"","connection":"pgsql"} 
+[2026-11-11 09:24:41] local.INFO: db.summary {"requestId":"e7162d7a-8f97-4ab1-8004-17b964973c28","path":"GET api/health","queries":1,"ms":5.23} 
+[2026-11-11 09:25:12] local.DEBUG: db.query {"requestId":"a7353ff4-3d92-453d-bb47-2e619b2bcc2c","n":1,"ms":6.27,"sql":"select * from \"sessions\" where \"id\" = ? limit 1","connection":"pgsql"} 
+[2026-11-11 09:25:12] local.DEBUG: db.query {"requestId":"a7353ff4-3d92-453d-bb47-2e619b2bcc2c","n":2,"ms":0.39,"sql":"select * from \"sessions\" where \"id\" = ? limit 1","connection":"pgsql"} 
+[2026-11-11 09:25:12] local.DEBUG: db.query {"requestId":"a7353ff4-3d92-453d-bb47-2e619b2bcc2c","n":3,"ms":0.86,"sql":"insert into \"sessions\" (\"payload\", \"last_activity\", \"user_id\", \"ip_address\", \"user_agent\", \"id\") values (?, ?, ?, ?, ?, ?)","connection":"pgsql"} 
+[2026-11-11 09:25:12] local.INFO: db.summary {"requestId":"a7353ff4-3d92-453d-bb47-2e619b2bcc2c","path":"GET /","queries":3,"ms":7.52} 
+[2026-11-11 09:25:31] local.DEBUG: db.query {"requestId":"626f8a75-2aed-44d8-9c46-f946433efe82","n":1,"ms":8.26,"sql":"select count(*) as \"aggregate\" from \"migrations\"","connection":"pgsql"} 
+[2026-11-11 09:25:31] local.INFO: db.summary {"requestId":"626f8a75-2aed-44d8-9c46-f946433efe82","path":"GET api/health","queries":1,"ms":8.26} 
+[2026-11-11 10:07:57] local.DEBUG: db.query {"requestId":"391ebfc1-5ab7-4973-91fc-50d1e26a94c3","n":1,"ms":5.84,"sql":"select exists (select 1 from pg_class c, pg_namespace n where n.nspname = current_schema() and c.relname = 'migrations' and c.relkind in ('r', 'p') and n.oid = c.relnamespace)","connection":"pgsql"} 
+[2026-11-11 10:07:57] local.DEBUG: db.query {"requestId":"391ebfc1-5ab7-4973-91fc-50d1e26a94c3","n":2,"ms":0.41,"sql":"select exists (select 1 from pg_class c, pg_namespace n where n.nspname = current_schema() and c.relname = 'migrations' and c.relkind in ('r', 'p') and n.oid = c.relnamespace)","connection":"pgsql"} 
+[2026-11-11 10:07:57] local.DEBUG: db.query {"requestId":"391ebfc1-5ab7-4973-91fc-50d1e26a94c3","n":3,"ms":0.46,"sql":"select \"migration\" from \"migrations\" order by \"batch\" asc, \"migration\" asc","connection":"pgsql"} 
+[2026-11-11 10:07:57] local.DEBUG: db.query {"requestId":"391ebfc1-5ab7-4973-91fc-50d1e26a94c3","n":4,"ms":0.11,"sql":"select \"migration\" from \"migrations\" order by \"batch\" asc, \"migration\" asc","connection":"pgsql"} 
+[2026-11-11 10:07:57] local.INFO: db.summary {"requestId":"391ebfc1-5ab7-4973-91fc-50d1e26a94c3","path":"console","queries":4,"ms":6.82} 
+[2026-11-11 10:08:17] local.DEBUG: db.query {"requestId":"528f51e1-c8e7-4ee5-b7bb-cdc431c59a41","n":1,"ms":6.33,"sql":"select count(*) as \"aggregate\" from \"migrations\"","connection":"pgsql"} 
+[2026-11-11 10:08:17] local.INFO: db.summary {"requestId":"528f51e1-c8e7-4ee5-b7bb-cdc431c59a41","path":"GET api/health","queries":1,"ms":6.33} 

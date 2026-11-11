@@ -48,13 +48,14 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 | 道具の版をそろえる | リポジトリのルート | `mise install` | mise | nodenv・nvm・Volta（mise に一本化したため） |
 | 解説を見る | claude.ai | AI が Artifact に載せたリンク（一覧は `agents/notes.local.md`）。手元で見るなら、リポジトリのルートで `python3 -m http.server 8765 -d explanations` → `http://localhost:8765/` | claude.ai のアカウント | `file://` で直接開く（ブラウザによって Mermaid の読み込みが止まるため） |
 | 解説を Artifact に載せる形に写す | リポジトリのルート | `python3 -I explanations/tools/to-artifact.py <元の HTML> <会話の作業用フォルダ>/artifacts/<ファイル名>` | python3 | 元の HTML をそのまま載せる（骨組みのタグと Mermaid の script が二重になるため） |
-| セットアップ | 【記入】 | 【記入】 | 【必要な環境と設定】 | 【記入】 |
-| 起動 | 【記入】 | 【記入】 | 【記入】 | 【記入】 |
-| テスト | 【記入】 | 【全体・対象別の実行方法】 | 【接続先・データなど】 | 【記入】 |
-| 静的検査 | 【記入】 | 【記入】 | 【記入】 | 【例：`npx eslint` を直接使わない（設定と対象がずれるため）】 |
-| ビルド | 【記入】 | 【対象外ならその旨】 | 【記入】 | 【記入】 |
-
-> 記入例（テスト）：リポジトリのルート｜`bun test`（全体）・`bun test tests/unit/books`（対象別）｜DB が起動している（`docker compose up -d db`）｜`npx vitest`（設定と版がずれるため）
+| セットアップ | リポジトリのルート | ① `docker compose build app` ② `docker compose up -d --wait` ③ `docker compose run --rm app composer install` ④（初めての PC だけ・人が実行）`cp backend/.env.example backend/.env` → `docker compose run --rm app php artisan key:generate` ⑤ `docker compose run --rm app php artisan migrate` | Docker。④の秘密の値のファイルは、AI は作らない・読まない | 手元の PHP・Composer（D-011。版と拡張がそろわないため）。`php.new` のスクリプト・Laravel Boost（`backend/` に AI 向けの指示が置かれるが、方針と合わないので入れない） |
+| 起動 | リポジトリのルート | `docker compose up -d --wait` → API は `http://127.0.0.1:8000/api/health`、メールの受信箱は `http://127.0.0.1:58025`。止めるのは `docker compose stop` | Docker | `php artisan serve`（compose の環境変数を子のプロセスに渡さず、`.env` の SQLite につながるため）。`docker compose down -v`（DB の中身も消える。作り直すときだけ） |
+| テスト | リポジトリのルート | `docker compose run --rm app ./vendor/bin/pest`（全体）・`docker compose run --rm app ./vendor/bin/pest tests/Feature/HealthTest.php`（対象別） | db が起動している。テスト用の DB `matching_test` に流れる（違えば `tests/TestCase.php` が止める） | SQLite のメモリ DB（D-010）。手元の PHP で `php artisan test`（手元に PHP がない） |
+| 静的検査・整形 | リポジトリのルート | `docker compose run --rm app ./vendor/bin/phpstan analyse --memory-limit=1G`（Larastan・レベル 5）・`docker compose run --rm app ./vendor/bin/pint --test`（整形の確かめ）・`docker compose run --rm app ./vendor/bin/pint`（整形する） | なし | ― |
+| 流れた SQL を見る | リポジトリのルート | `tail -n 20 backend/storage/logs/sql-$(date -u +%F).log`（日付は UTC） | app が起動していて、`APP_ENV=local` | `php artisan db:show`・`docker compose config`（接続の設定や秘密の値をまとめて出すため、AI は使わない） |
+| DB に入る | リポジトリのルート | `docker compose exec db psql -U postgres -d matching_dev`（テスト用は `-d matching_test`） | db が起動している | ― |
+| ブランチを切り替えたあと | リポジトリのルート | `docker compose restart app` | ― | 切り替え先に `backend/` がないと、動いているサーバーのフォルダが一度消えて、API がエラーを返し続けるため |
+| ビルド | ― | 対象外（デプロイしない。画面は 03b で決める） | ― | ― |
 
 未記入のコマンドは推測して実行しない。必要な操作について確認する。
 
