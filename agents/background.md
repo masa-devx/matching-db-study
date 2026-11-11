@@ -15,10 +15,11 @@
 
 | 項目 | 決めたこと | 理由 |
 | --- | --- | --- |
-| 種類 | 学習用（アウトプット）。Issue・プラン・PR は使わない | 理解を深めるのが目的 |
-| ブランチ | `main`：ハーネス（ルール・スキル・AGENTS.md・このファイル）と docs/ を直すときだけ。直したら `legacy-repo` → `refactored-repo` の順に取り込む。`legacy-repo`（main から作る）：解説のページを作る・素朴に作る・記録の 9-1・9-2。`refactored-repo`（legacy-repo から作る）：一歩ごとに `legacy-repo` を取り込んでから直す・記録の 9-3・9-4 | 汚いコードと直したコードを両方残し、`git diff legacy-repo refactored-repo` で比べられるように |
+| 種類 | 学習用（アウトプット）。Issue と PR を使う（ひな形は `.github/`）。プラン（`agents/plans/`）は使わず、Issue の本文で足りるようにする | 機能をタスクに分けて、区切りごとに見直せるように |
+| 最初の範囲 | 00 環境・01 会員とプロフィール・01b 登録とログイン（メールアドレスの確認つき）・02 いいね・03 マッチ・03b 画面・04 検索と一覧・05 メッセージ・06 ブロックと退会・07 有料会員（有料かどうかだけ）を素朴に作り切る。そのあとに直す・05b・05c・07b（一般とプラチナ）・08〜12。リリース（どこに出すか）はあとで決める | 最低限動くものを先に作り、問題がたまった状態から直す |
+| ブランチ | `main`：ハーネス（ルール・スキル・AGENTS.md・このファイル）と docs/ を直すときだけ。直したら `legacy-repo` → `refactored-repo` の順に取り込む。`legacy-repo`（main から作る）：解説のページを作る・素朴に作る・記録の 9-1・9-2。作業は `legacy/<Issue の番号>-<名前>` で行い、PR で取り込む。`refactored-repo`（legacy-repo から作る）：`legacy-repo` を取り込んでから直す・記録の 9-3・9-4。作業は `refactor/<Issue の番号>-<名前>` で行い、PR で取り込む | 汚いコードと直したコードを両方残し、`git diff legacy-repo refactored-repo` で比べられるように |
 | コードを書く人 | AI が書く。人は解説を読んで理解してから「実装して」と言う | 一気に作らず、理解しながら進めたい |
-| 進め方 | 一歩ずつ。要件を決める（`docs/requirements/<機能>.md`）→ `explain-step`（解説と図）→ 理解する → 素朴に作る（Fat Controller・テストなし）→ `explain-change` → 問題を測る → 今の振る舞いを固定するテストを足す → 直す → もう一度測る → `explain-change`（docs/decisions.md に1行足す） | AGENTS.md の「作業の流れ」 |
+| 進め方 | 機能ごとに Issue → 要件を決める（`docs/requirements/<機能>.md`）→ `explain-step`（解説と図）→ 理解する → 素朴に作る（DB → API → フロントの順に PR）→ `explain-change`（素朴な版と測った問題）。最初の範囲を作り切ったら、改善の Issue → 固定するテスト → 直す → もう一度測る → `explain-change`（docs/decisions.md に1行足す） | AGENTS.md の「作業の流れ」 |
 | 解説の置き場 | `explanations/`（HTML・Mermaid の図）。目次は `explanations/index.html`（00〜11 の一歩） | ブラウザで後から見返せるように |
 | 解説の見方 | `python3 -m http.server 8765 -d explanations` → `http://localhost:8765/` | `file://` だと図が出ないことがある |
 | GitHub | public で作った（masa-devx/matching-db-study） | 学習の記録として見せられるように |

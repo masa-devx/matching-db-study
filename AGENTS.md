@@ -75,11 +75,11 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 
 ### 作業の流れ
 
-1. 一歩ずつ進める。新しい一歩に入る前に、その機能の要件（[docs/requirements/](docs/requirements/)）を質問しながら決め、[explain-step](agents/skills/explain-step/SKILL.md) で解説と図を作る。「実装して」と言われるまで実装しない
-2. 一歩の中は、**素朴に作る → 問題を測る → 今の振る舞いを固定するテストを足す → 直す → もう一度測る** の順に進める。素朴に作る段階ではテストを書かない。直す前に必ずテストを足し（要件 ID に対応させる）、直したあとも通ることを確かめる。00（環境）・03b・05b（画面）は、この形を取らなくてよい
-3. 素朴な版を作ったあとと、直したあとの2回、[explain-change](agents/skills/explain-change/SKILL.md) で書いたコードを解説し、その一歩のページに記録する。直したあとは [docs/decisions.md](docs/decisions.md) に1行足す
+1. 一歩（機能）ごとに Issue を立てる（`.github/ISSUE_TEMPLATE/feature.md`）。本文のタスクは「DB・テーブル設計」「バックエンド API」「フロントエンド」の見出しに分け、表はその機能に必要なものだけ作る。入る前に要件（[docs/requirements/](docs/requirements/)）を質問しながら決め、[explain-step](agents/skills/explain-step/SKILL.md) で解説と図を作る。「実装して」と言われるまで実装しない
+2. 最初の範囲（[background.md](agents/background.md) の「最初の範囲」）は、`legacy-repo` で**素朴に作り切る**（Fat Controller・テストなし）。ブランチは `legacy/<Issue の番号>-<名前>`、PR は見出しごとに1つ（DB → API → フロント）で `legacy-repo` へ。機能ができたら [explain-change](agents/skills/explain-change/SKILL.md) で 9-1・9-2（素朴な版と、測った問題）を記録する
+3. 作り切ったら、測った問題ごとに改善の Issue（`.github/ISSUE_TEMPLATE/refactor.md`）を立て、`refactored-repo` で直す。ブランチは `refactor/<Issue の番号>-<名前>`。**今の振る舞いを固定するテストを足す（要件 ID に対応させる）→ 直す → もう一度測る** の順に進め、explain-change で 9-3・9-4 を記録し、[docs/decisions.md](docs/decisions.md) に1行足す。00（環境）・03b（画面）・05b は、素朴な版と直した版に分けなくてよい
 4. 区切りごとに、[review](agents/skills/review/SKILL.md) の手順で見直す（実装の会話を持たないサブエージェントに、差分と確かめたいことを渡す）
-5. コミット・push は、頼まれたときだけ行う
+5. コミット・push・Issue・PR の作成は、頼まれたときだけ行う
 
 ### 依頼の範囲
 
@@ -87,7 +87,7 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 - 業務で分からないことを題材にするときは、実務のコード・プロダクト名・社名・お客さまのデータを持ち込まない。仕組みだけを、自分で作った例で再現する
 - 取り消せる細かな判断は妥当な仮定を置いて進め、仕様・データ・本番環境に関わる判断は確認する
 - 返事がないことを承認とみなさない
-- コミット・push・PR の作成は、頼まれたときだけ行う
+- コミット・push・Issue・PR の作成は、頼まれたときだけ行う
 - 秘密の値のファイル（`.env` など）を読まない。値をログ・エラー・テストの出力に出さない。見本の `.env.example` は読んでよい
 
 ### 応答と報告
