@@ -1,0 +1,41 @@
+# 手元の開発で使う DB とメールの受信箱。本番では使わない
+# 起動: docker compose up -d ／ 止める: docker compose stop（down -v は DB の中身も消す）
+name: matching-db-study
+
+services:
+  db:
+    image: postgres:18.6
+    # ポートは手元の PC からだけ開ける（127.0.0.1）。5432 は手元の PostgreSQL とぶつかるので 55432 にする
+    ports:
+      - "127.0.0.1:55432:5432"
+    environment:
+      # 手元だけの、捨ててよい値。外に開かないので秘密の値として扱わない
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      # 開発用の DB。テスト用（matching_test）は docker/db/init の SQL で作る
+      POSTGRES_DB: matching_dev
+    # クエリごとの回数・時間を集める拡張（pg_stat_statements）を読み込む
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_stat_statements
+      -c pg_stat_statements.track=all
+    volumes:
+      # PostgreSQL 18 のイメージは、/var/lib/postgresql に置くのが決まり
+      - db-data:/var/lib/postgresql
+      # ボリュームが空のとき（最初の1回）だけ流れる
+      - ./docker/db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d matching_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit:v1.33.1
+    # 1025・8025 は手元ですでに使われているので、ずらす
+    ports:
+      - "127.0.0.1:51025:1025" # SMTP（Laravel がメールを送る先）
+      - "127.0.0.1:58025:8025" # 受信箱の画面
+
+volumes:
+  db-data:
