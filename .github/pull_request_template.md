@@ -1,9 +1,10 @@
 ## 課題
 
-<!-- 見出しの途中の PR は Refs、その Issue の最後の PR は Closes -->
-Refs #
+<!-- 子 Issue を1つ閉じる PR。行き先が legacy-repo・refactored-repo なので、Closes では自動で閉じない。マージのあとに子 Issue を手で閉じる -->
+Closes #
+親 Issue：#
 段階：素朴に作る（legacy）／直す（refactor）
-見出し：DB・テーブル設計／バックエンド API／フロントエンド
+領域：DB・テーブル設計／バックエンド API／フロントエンド／固定するテスト
 
 ## 何を変えたか
 

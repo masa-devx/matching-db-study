@@ -1,8 +1,8 @@
 ---
-name: 機能（素朴に作る）
-about: 機能を足す。最初は Fat Controller・テストなしで作る（legacy-repo）
+name: 機能（親）
+about: 1つの機能をまとめる親 Issue。作業は子 Issue（DB・API・フロント）に分ける
 title: "【番号】【機能名】"
-labels: ["legacy"]
+labels: ["parent", "legacy"]
 ---
 
 ## 何を作るか
@@ -13,28 +13,14 @@ labels: ["legacy"]
 
 - 要件：`docs/requirements/` の【機能】.md（FR-001〜）
 - 解説：`explanations/` の【番号】-【名前】.html
+- マイルストーン：M1 レガシーで作り切る／M3 追加機能
 
-## タスク
+## 子 Issue
 
-<!-- その機能に必要なものだけを書く。表は一気に作らない。見出しごとに PR を分ける（DB → API → フロント） -->
-
-### DB・テーブル設計
-
-- [ ] マイグレーション：【表の名前】（列・型・制約・インデックス）
-- [ ] Model とリレーション
-- [ ] `docs/data-model.md` に表を足す
-
-### バックエンド API
-
-- [ ] ルートとコントローラ（Fat Controller）
-- [ ] curl で動きを確かめる
-- [ ] `docs/api.md` に API を足す
-
-### フロントエンド
-
-<!-- 03b より前の機能では消す -->
-- [ ] 画面と API の呼び出し
-- [ ] 型（`docs/api.md` に合わせる）
+<!-- 「Create sub-issue」で作る。その機能に必要なものだけ。表は一気に作らない。順番は DB → API → フロント -->
+- 【番号】【機能名】：DB・テーブル設計
+- 【番号】【機能名】：バックエンド API
+- 【番号】【機能名】：フロントエンド（03b より前の機能では作らない）
 
 ## 学ぶこと
 
@@ -46,4 +32,4 @@ labels: ["legacy"]
 
 ## メモ
 
-<!-- ブランチは legacy-repo から legacy/<この Issue の番号>-<名前> を作る -->
+<!-- 親 Issue は作業をしない。子 Issue がすべて閉じたら閉じる -->

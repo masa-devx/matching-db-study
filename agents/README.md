@@ -69,6 +69,7 @@ agents/ の目次。作業内容に合うルールを読み、スキルで進め
 | --- | --- |
 | 実装の前に、一歩ぶんの解説と図を explanations/ に作る | [explain-step](skills/explain-step/SKILL.md) |
 | 実装のあとに、書いたコードを解説して、その一歩のページに記録する | [explain-change](skills/explain-change/SKILL.md) |
+| 機能や改善の親 Issue と子 Issue を作り、マイルストーンと Project につなぐ | [issue-plan](skills/issue-plan/SKILL.md) |
 | 一歩を小さなタスクに分け、確認を取ってから Google カレンダーに入れる | [study-calendar](skills/study-calendar/SKILL.md) |
 | 差分をレビューする（PR 前の自己点検を含む）、完了を判断する | [review](skills/review/SKILL.md) |
 | 雛形を写した直後に、【記入】を順番に埋める | [harness-setup](skills/harness-setup/SKILL.md) |
