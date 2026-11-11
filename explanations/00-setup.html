@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>00 環境を作る</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0;
+    --card: #f6f8fa; --accent: #0969da; --ok: #1a7f37; --warn: #9a6700;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d;
+      --card: #151b23; --accent: #4493f8; --ok: #3fb950; --warn: #d29922;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d;
+    --card: #151b23; --accent: #4493f8; --ok: #3fb950; --warn: #d29922;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; line-height: 1.8; }
+  main { max-width: 920px; margin: 0 auto; padding: 24px 16px 80px; }
+  a { color: var(--accent); }
+  h1 { font-size: 1.6rem; margin: 8px 0 4px; }
+  h2 { font-size: 1.25rem; margin-top: 40px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 1.05rem; margin-top: 24px; }
+  .meta { color: var(--muted); font-size: .9rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
+  .point { border-left: 4px solid var(--accent); }
+  .warn { border-left: 4px solid var(--warn); }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--card); white-space: nowrap; }
+  code { background: var(--card); padding: 1px 5px; border-radius: 4px; font-size: .9em; }
+  pre:not(.mermaid) { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; line-height: 1.5; }
+  pre.mermaid { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; text-align: center; }
+  details { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; margin: 8px 0; }
+  summary { cursor: pointer; font-weight: 600; }
+  .status { display: inline-block; padding: 0 8px; border-radius: 10px; font-size: .8rem; border: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<main>
+  <p class="meta"><a href="index.html">← 目次へ</a></p>
+  <h1>00 環境を作る</h1>
+  <p class="meta">作成: 2026-11-11 ／ 状態: <span class="status">解説だけ</span> ／ Issue: <a href="https://github.com/masa-devx/matching-db-study/issues/1">#1</a></p>
+
+  <div class="card point">
+    <strong>この一歩でできるようになること</strong>
+    <ul>
+      <li>手元で PostgreSQL（開発用とテスト用）とメールの受信箱（Mailpit）を Docker で動かせる</li>
+      <li>Laravel の API から PostgreSQL につなぎ、マイグレーションで表を作れる</li>
+      <li>API を1回叩いたときに流れた SQL と、その数・時間をログで見られる</li>
+    </ul>
+  </div>
+
+  <h2>1. 何を作るか</h2>
+  <p>機能はまだ作りません。01 から先の一歩で「Eloquent で書く → 流れた SQL を見る → 測って直す」ができるように、土台を作ります。</p>
+  <table>
+    <tr><th>作るもの</th><th>置き場</th><th>何のため</th></tr>
+    <tr><td>PostgreSQL 18（DB を2つ：開発用・テスト用）</td><td><code>compose.yaml</code></td><td>開発で触るデータと、テストで消すデータを分ける</td></tr>
+    <tr><td>Mailpit（メールの受信箱）</td><td><code>compose.yaml</code></td><td>01b のメールアドレスの確認で、外にメールを出さずに受け取る</td></tr>
+    <tr><td>Laravel（API）</td><td><code>backend/</code></td><td>01 から先の機能を作る</td></tr>
+    <tr><td>SQL のログ</td><td><code>backend/app/Support/Logging/</code></td><td>流れた SQL・時間・回数を見る（N+1 を見つける）</td></tr>
+    <tr><td>Pest・Larastan・Pint</td><td><code>backend/</code></td><td>直す段階のテストと、静的検査・整形</td></tr>
+  </table>
+  <p>子 Issue：<a href="https://github.com/masa-devx/matching-db-study/issues/2">#2 DB（Docker）</a> → <a href="https://github.com/masa-devx/matching-db-study/issues/3">#3 バックエンド（Laravel）</a> → <a href="https://github.com/masa-devx/matching-db-study/issues/4">#4 主要コマンドと解説の記録</a></p>
+
+  <h2>2. 先に知っておく言葉</h2>
+  <table>
+    <tr><th>言葉</th><th>意味（1〜2文）</th></tr>
+    <tr><td>Docker・コンテナ</td><td>アプリを、手元の PC から切り離した箱（コンテナ）の中で動かす仕組み。PostgreSQL を手元に入れずに、決まった版で動かせる</td></tr>
+    <tr><td>Docker Compose</td><td>複数のコンテナ（DB・Mailpit）を <code>compose.yaml</code> 1つに書いて、まとめて起動・停止する道具</td></tr>
+    <tr><td>ボリューム</td><td>コンテナを消してもデータを残すための置き場。消すと DB の中身も消える</td></tr>
+    <tr><td>マイグレーション</td><td>表の作り方・変え方を、順番つきのファイルで残す仕組み。どこまで流したかは <code>migrations</code> という表に記録される</td></tr>
+    <tr><td>artisan</td><td>Laravel のコマンド（<code>php artisan migrate</code> など）</td></tr>
+    <tr><td>Eloquent</td><td>Laravel の ORM。PHP のコードから SQL を組み立てて流す</td></tr>
+    <tr><td>クエリログ（<code>DB::listen</code>）</td><td>Laravel が SQL を流すたびに、その SQL・値・時間を受け取れる仕組み。これをログに出す</td></tr>
+    <tr><td>EXPLAIN</td><td>PostgreSQL が SQL をどう実行するか（実行計画）を見る命令。<code>EXPLAIN (ANALYZE, BUFFERS)</code> は実際に実行して、時間と読んだページ数も出す</td></tr>
+    <tr><td><code>pg_stat_statements</code></td><td>PostgreSQL の拡張。クエリごとの回数・合計時間を集める。04 から先で「どのクエリが重いか」を探すのに使う</td></tr>
+    <tr><td>テスト用の DB</td><td>テストのたびに中身を消して作り直す DB。開発用と分けないと、テストで開発のデータが消える</td></tr>
+    <tr><td><code>pdo_pgsql</code></td><td>PHP から PostgreSQL につなぐための拡張。これがないと Laravel は PostgreSQL につなげない</td></tr>
+  </table>
+
+  <h2>3. 図で見る</h2>
+  <p>1枚目は、手元の PC で何がどこで動くか。2枚目は、API を1回叩いたときに SQL がログに出るまでの流れです。</p>
+  <pre class="mermaid">
+flowchart LR
+  subgraph PC["手元の PC（mise で版をそろえる）"]
+    CURL["curl"] --> API["Laravel の API<br>php artisan serve<br>ポート 8000"]
+    PEST["Pest のテスト"]
+    API --> LOG["SQL のログ<br>storage/logs"]
+  end
+  subgraph DOCKER["Docker（compose.yaml）"]
+    DEV[("PostgreSQL 18<br>matching_dev")]
+    TEST[("PostgreSQL 18<br>matching_test")]
+    MAIL["Mailpit<br>SMTP 51025<br>画面 58025"]
+  end
+  API -->|"ポート 55432"| DEV
+  PEST -->|"ポート 55432"| TEST
+  API -.->|"01b から"| MAIL
+  </pre>
+  <pre class="mermaid">
+sequenceDiagram
+  participant C as curl
+  participant L as Laravel のコントローラ
+  participant E as Eloquent
+  participant DB as PostgreSQL
+  participant G as SQL のログ
+  C->>L: GET /api/health
+  L->>E: 数を数える
+  E->>DB: select count(*) from migrations
+  DB-->>E: 結果
+  E-->>G: DB::listen で SQL・値・時間を受け取る
+  L-->>C: JSON を返す
+  Note over G: 1回の API で何本の SQL が流れたかも残す
+  </pre>
+
+  <h2>4. 設計の選択肢を比べる</h2>
+  <h3>テスト用の DB をどう用意するか</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. 1つのコンテナに DB を2つ（<code>matching_dev</code>・<code>matching_test</code>）</td><td>コンテナが1つで軽い。版が必ず同じ。起動のときの SQL で2つ目の DB を作るだけ</td><td>テストが重くなると、開発の DB と同じ箱の力を取り合う</td><td>1人で学ぶ・テストが少ないうち</td></tr>
+    <tr><td>B. コンテナを2つ（開発用・テスト用）</td><td>完全に分かれる。テスト用をメモリの上（tmpfs）に置いて速くできる</td><td>コンテナとポートが増える</td><td>テストが増えて遅くなったとき</td></tr>
+    <tr><td>C. テストは SQLite のメモリ DB</td><td>速い。Docker が要らない</td><td>ロック・UNIQUE・型・<code>EXPLAIN</code> の動きが PostgreSQL と違い、確かめたいことが確かめられない（D-010）</td><td>DB の動きに関係しないテストだけのとき</td></tr>
+  </table>
+  <div class="card point"><strong>この一歩で選ぶもの</strong>：A。1人の学習でテストも少ないうちは、軽くて版がそろう形がよい。テストが遅くなったら B に移す（そのときに decisions.md に1行足す）。</div>
+
+  <h3>流れた SQL をどう見るか</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. <code>DB::listen</code> でログに出す</td><td>Laravel だけで書ける。1回の API で流れた SQL の数を数えられる。どの環境でも同じ</td><td>自分で書く。値（バインド）に個人情報が入るので、手元だけにする</td><td>API だけのうち（00〜03）</td></tr>
+    <tr><td>B. Telescope</td><td>画面でリクエストごとの SQL・時間が見える</td><td>入れるものが増える。記録用の表ができる</td><td>あとで、画面で追いたくなったとき</td></tr>
+    <tr><td>C. PostgreSQL のログ（<code>log_min_duration_statement</code>）と <code>pg_stat_statements</code></td><td>どのアプリから来た SQL も見える。遅いもの・回数の多いものを集計できる</td><td>どの API から来たかが分かりにくい</td><td>04 から先の、重いクエリを探すとき</td></tr>
+  </table>
+  <div class="card point"><strong>この一歩で選ぶもの</strong>：A を作り、C の <code>pg_stat_statements</code> も最初から有効にしておく。A は「この API で何本流れたか」、C は「全体でどれが重いか」を見るので、両方あると 04 から先で困らない。</div>
+
+  <h2>5. 見本（小さく）</h2>
+  <p>00 は環境なので、素朴な版と直した版に分けません。要点だけです。</p>
+  <pre><code># compose.yaml（要点）
+services:
+  db:
+    image: postgres:18
+    ports: ["55432:5432"]          # 手元の 5432 とぶつからないように
+    environment:
+      POSTGRES_DB: matching_dev
+    command: postgres -c shared_preload_libraries=pg_stat_statements
+    volumes:
+      - db-data:/var/lib/postgresql
+      - ./docker/db/init:/docker-entrypoint-initdb.d   # matching_test を作る SQL
+  mailpit:
+    image: axllent/mailpit
+    ports: ["51025:1025", "58025:8025"]  # 1025・8025 は手元でもう使われている
+volumes:
+  db-data:</code></pre>
+  <pre><code>// backend/app/Support/Logging/QueryLogger.php（要点）
+public static function register(): void
+{
+    if (! app()->environment('local')) {
+        return;                     // 値に個人情報が入るので、手元だけ
+    }
+    DB::listen(function (QueryExecuted $query) {
+        Log::channel('sql')->debug('sql', [
+            'sql' => $query->sql,
+            'ms' => $query->time,
+            'count' => ++self::$count,  // 1回のリクエストで何本目か
+        ]);
+    });
+}</code></pre>
+  <p>読み方：<code>ports</code> の左が手元の PC のポート、右がコンテナの中のポート。<code>docker-entrypoint-initdb.d</code> の SQL は、ボリュームが空のとき（最初の1回）だけ流れる。<code>DB::listen</code> は、Laravel が SQL を流すたびに呼ばれる。値（<code>bindings</code>）はログに出さず、SQL の形・時間・本数だけを出す。</p>
+
+  <h2>6. どう確かめるか</h2>
+  <table>
+    <tr><th>確かめること</th><th>やり方</th><th>成功</th></tr>
+    <tr><td>コンテナが動く</td><td><code>docker compose up -d</code> → <code>docker compose ps</code></td><td>db と mailpit が動いている</td></tr>
+    <tr><td>DB が2つある</td><td><code>docker compose exec db psql -U postgres -l</code></td><td><code>matching_dev</code> と <code>matching_test</code> がある</td></tr>
+    <tr><td><code>pg_stat_statements</code> が使える</td><td><code>CREATE EXTENSION pg_stat_statements;</code> のあと <code>SELECT count(*) FROM pg_stat_statements;</code></td><td>エラーにならない</td></tr>
+    <tr><td>Laravel が PostgreSQL につながる</td><td><code>php artisan migrate</code> → <code>php artisan migrate:status</code></td><td>最初のマイグレーションが「Ran」</td></tr>
+    <tr><td>SQL がログに出る</td><td><code>curl localhost:8000/api/health</code> → <code>storage/logs/sql-*.log</code> を見る</td><td>流れた SQL・時間・本数が出ている。値は出ていない</td></tr>
+    <tr><td>テストがテスト用の DB で動く</td><td>Pest の見本のテストを流したあと、<code>matching_dev</code> のデータが消えていないか見る</td><td>テストが通り、開発の DB はそのまま</td></tr>
+    <tr><td>静的検査・整形</td><td>Larastan と Pint を流す</td><td>エラーなし</td></tr>
+    <tr><td>Mailpit</td><td>ブラウザで <code>http://localhost:58025</code></td><td>受信箱の画面が開く</td></tr>
+  </table>
+  <p>コマンドは、動いたものだけを AGENTS.md の「主要コマンド」に書きます（#4）。</p>
+
+  <h2>7. 気をつけること（罠）</h2>
+  <div class="card warn"><ul>
+    <li><strong>新しい Laravel は、最初から SQLite につながる設定</strong>になっている。接続先を <code>pgsql</code> に変えないと、PostgreSQL を使っているつもりで SQLite に書いてしまう</li>
+    <li><strong>テストが開発用の DB を消す</strong>：テストの設定（<code>phpunit.xml</code> とテスト用の環境変数のファイル）で接続先を <code>matching_test</code> にしないと、<code>RefreshDatabase</code> が開発の DB を作り直してしまう</li>
+    <li><strong><code>php artisan config:cache</code> を手元で使わない</strong>：設定が固まり、テストのときもテスト用の接続先に切り替わらなくなる</li>
+    <li><strong>手元の PHP に <code>pdo_pgsql</code> がない</strong>：今の Homebrew の PHP には入っていない。mise で入れる PHP に入っているかを、最初に <code>php -m</code> で確かめる</li>
+    <li><strong>ポートがぶつかる</strong>：1025・8025 は手元ですでに使われているので、Mailpit は 51025・58025 にする。PostgreSQL も手元の 5432 と分けて 55432 にする</li>
+    <li><strong><code>docker compose down -v</code> は DB の中身を消す</strong>（<code>-v</code> がボリュームも消す）。止めるだけなら <code>down</code> か <code>stop</code></li>
+    <li><strong>SQL のログに値を出さない</strong>：メールアドレスやパスワードのハッシュが入る。値は出さず、手元だけで動かす</li>
+    <li><strong>秘密の値のファイル</strong>（Laravel の環境変数のファイル）はコミットしない。AI は中身を読まない。見本のファイルには名前だけを書く</li>
+  </ul></div>
+
+  <h2>8. 理解を確かめる6つの問い</h2>
+  <p>先に自分で答えてから、開いて見る。</p>
+  <details><summary>なぜそうするのか？（なぜ DB を Docker で、しかもテスト用を分けるのか）</summary><p>版を決めて、だれの PC でも同じ PostgreSQL を動かすため。テスト用を分けるのは、テストが毎回 DB を作り直すので、開発のデータを消さないため。SQL のログを最初から入れるのは、01 から先で「Eloquent の裏で何本の SQL が流れたか」を毎回見るため。</p></details>
+  <details><summary>ほかの方法は？なぜ選ばなかったか？</summary><p>手元に PostgreSQL を直接入れる方法は、版がずれやすく、消して作り直すのが面倒。Laravel Sail（すべて Docker）は手元を汚さないが、コマンドが長く遅くなる。テストを SQLite にする方法は速いが、ロックや UNIQUE の動きが違い、この学習で確かめたいことが確かめられない。</p></details>
+  <details><summary>弱点は？</summary><p>Docker が動いていないと何もできない。1つのコンテナに DB を2つ置くので、テストが重くなると開発の DB も遅くなる。<code>DB::listen</code> は自分で書くので、書き方を間違えると本番で個人情報をログに出すおそれがある（手元だけにして防ぐ）。</p></details>
+  <details><summary>問題が起きたら、どう調べて直すか？</summary><p>つながらない → <code>docker compose ps</code> で動いているか、ポートが 55432 か、接続先が <code>pgsql</code> か、<code>php -m</code> に <code>pdo_pgsql</code> があるかの順に見る。テスト用の DB ができていない → 初期化の SQL はボリュームが空のときだけ流れるので、ボリュームを作り直すか、手で <code>CREATE DATABASE</code> する。SQL がログに出ない → 環境が <code>local</code> か、ログのチャンネルの設定を見る。</p></details>
+  <details><summary>データが10倍・100倍になったら？</summary><p>00 ではデータはほぼない。ただ、04 で大量のデータを入れると、1つのコンテナの DB を開発とテストで取り合う。そのときは案 B（テスト用のコンテナを分けて tmpfs に置く）に移す。<code>pg_stat_statements</code> は、データが増えたときに重いクエリを探す入口になる。</p></details>
+  <details><summary>Eloquent でどんな SQL が流れ、どう直したか？ Rails（ActiveRecord）・Prisma ならどう書くか？</summary>
+    <p>00 では直すものはない。「流れた SQL を見る方法」を ORM ごとに並べる。</p>
+    <table>
+      <tr><th>ORM</th><th>流れた SQL を見る</th><th>1本の SQL の形を見る</th><th>実行計画</th></tr>
+      <tr><td>Eloquent</td><td><code>DB::listen</code>・Telescope・Debugbar</td><td><code>->toSql()</code>・<code>->toRawSql()</code></td><td><code>->explain()</code></td></tr>
+      <tr><td>Rails（ActiveRecord）</td><td>ログ（<code>ActiveRecord::Base.logger</code>）・bullet（N+1 の検知）</td><td><code>.to_sql</code></td><td><code>.explain</code>（7.1 以降は <code>:analyze</code> も）</td></tr>
+      <tr><td>Prisma</td><td><code>log: ['query']</code> の設定</td><td>（ない。ログで見る）</td><td>生の SQL で <code>EXPLAIN</code> を流す</td></tr>
+    </table>
+  </details>
+
+  <h2>9. 実装の記録</h2>
+  <p class="meta">00 は素朴な版と直した版に分けず、実装したあとに explain-change がここに1つの記録として書く。</p>
+  <p>【まだ実装していない】</p>
+</main>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+  const dark = document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
+</script>
+</body>
+</html>
