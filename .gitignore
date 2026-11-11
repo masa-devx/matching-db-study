@@ -11,7 +11,10 @@ secrets/
 # Claude Code の手元だけの設定（許可した操作の記録など）
 .claude/settings.local.json
 
-# 【記入】言語・フレームワークの生成物（記入例: Node.js）
+# 生成物（PHP・Laravel と Node・React）。Laravel・Vite が作る .gitignore も、それぞれのフォルダに置く
+vendor/
+.phpunit.cache/
+.phpunit.result.cache
 node_modules/
 dist/
 coverage/

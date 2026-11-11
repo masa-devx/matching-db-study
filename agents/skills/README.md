@@ -18,8 +18,10 @@
 ```text
 /study-calendar（予定を入れる）
   → /explain-step（解説を読む）
-  → 「実装して」（テストを先に書いて実装）
-  → /explain-change（記録を読む）
+  → 「実装して」（素朴に作る：Fat Controller・テストなし）
+  → /explain-change（素朴な版と、測った問題を記録）
+  → 「直して」（振る舞いを固定するテストを足して直し、もう一度測る）
+  → /explain-change（前と後の数字を記録）
   → /review（区切りごとに見直す）
 ```
 

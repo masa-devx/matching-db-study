@@ -13,30 +13,35 @@
 | 項目 | 決めたこと | 理由 |
 | --- | --- | --- |
 | 種類 | 学習用（アウトプット）。Issue・プラン・PR は使わない | 理解を深めるのが目的 |
-| 技術 | Go＋sqlc＋PostgreSQL | SQL を自分で書くので、JOIN・ロック・実行計画がそのまま身につく。ActiveRecord や Prisma は SQL を隠す（Prisma は中間テーブルが隠れることがあり、FOR UPDATE に生の SQL が要る） |
-| ORM の扱い | ORM は使わない。各一歩の解説で「ActiveRecord で書くと何が違うか」を比べる | ORM の便利さと罠（N+1・includes と joins）も説明できるようにする |
+| 技術 | Laravel（API）＋PostgreSQL。画面は React＋TypeScript＋Vite | 仕事で使ってきた ORM（Eloquent）で書き、裏で流れる SQL を見て直す経験を、測った事実として残す。09（楽観ロック）・10（止めずに変えるマイグレーション）は道具に頼らず自分で作るので、仕組みを説明できる |
+| 状態の管理 | まず React の Context。描き直しが気になったら Zustand に移す（目安は 05 のあと）。TanStack Query は使わない | 標準の仕組みの限界を体験してから移すと、移した理由を説明できる |
+| ORM の扱い | Eloquent を使う。各一歩で「流れた SQL → 問題 → 直し方 → 前と後の数字」を残す。問い 6 で Rails（ActiveRecord）・Prisma ならどう書くかを短く並べる | ORM の便利さと罠（N+1・with と join）を、どの ORM でも説明できるようにする |
+| 画面 | 00〜03 は API だけ。04 の前に「React を足す」一歩（03b）を入れる | DB を学ぶ時間を先に取り、画面が学びにつながる一歩（04・05・08・09）から使う |
+| API の型 | OpenAPI は使わない。フロントの型は手で書き、API の返す形に合わせる | 道具を増やさない。ずれはテストで見つける |
+| バックエンドの作り方 | 最初は Laravel を入れたときの形の MVC・Fat Controller（Laravel 5 系のころの書き方）。テストも性能も考えずに作り、一歩ごとに測って直す。Laravel は最新を使う（5 系は保守が終わり、PHP 8.5 で動かないため） | 古いコードを引き継いで直す力を、前と後の数字つきで説明できるようにする |
 | コードを書く人 | AI が書く。人は解説を読んで理解してから「実装して」と言う | 一気に作らず、理解しながら進めたい |
-| 進め方 | 一歩ずつ。`explain-step`（解説と図）→ 理解する → 実装（テストを先に）→ `explain-change`（書いたコードを解説して記録） | AGENTS.md の「作業の流れ」 |
+| 進め方 | 一歩ずつ。`explain-step`（解説と図）→ 理解する → 素朴に作る（Fat Controller・テストなし）→ `explain-change` → 問題を測る → 今の振る舞いを固定するテストを足す → 直す → もう一度測る → `explain-change` | AGENTS.md の「作業の流れ」 |
 | 解説の置き場 | `explanations/`（HTML・Mermaid の図）。目次は `explanations/index.html`（00〜10 の一歩） | ブラウザで後から見返せるように |
 | 解説の見方 | `python3 -m http.server 8765 -d explanations` → `http://localhost:8765/` | `file://` だと図が出ないことがある |
-| GitHub | あとで | 学習用 |
+| GitHub | public で作った（masa-devx/matching-db-study） | 学習の記録として見せられるように |
 
 ## まだ決めていないこと
 
 - **仕様のページ**（`explanations/spec.html`）を作るか。作るなら、全体の機能・決まり・全体の ER 図・状態の遷移・用語をここにまとめ、一歩のページはそこから変えた分だけ書く。`explain-step` は作る前に読み、`explain-change` は実装のあとに更新する
-- **画面を作るか**。おすすめは、API と DB だけ（確かめるのはテストと curl）。DB を学ぶのが目的なので、範囲を絞る
 - AGENTS.md の技術スタック・ディレクトリ構成・主要コマンドの【記入】（`harness-setup` で埋める）
 
 ## 一歩ずつの目次（explanations/index.html と同じ）
 
 | 番号 | 一歩 | 学ぶこと |
 | --- | --- | --- |
-| 00 | 環境を作る | PostgreSQL（Docker）・マイグレーション・sqlc の流れ |
+| 00 | 環境を作る | PostgreSQL（Docker）・Laravel のマイグレーション・流れた SQL を見る方法 |
 | 01 | 会員とプロフィール | 主キー・データの型・NOT NULL・CHECK・1対1 |
 | 02 | いいね | 中間テーブル・自分の表どうしの多対多・UNIQUE で二重を防ぐ |
 | 03 | マッチ | 自己結合（お互いにいいね）・INNER と LEFT JOIN |
+| 03b | React を足す | Vite・API を呼ぶ・Context で状態を持つ・CORS |
 | 04 | 検索と一覧 | 複合インデックス・EXPLAIN・OFFSET とカーソル・大量のデータ |
 | 05 | メッセージ | 相手ごとの最新の1件（ウィンドウ関数）・N+1 |
+| 05b | Context から Zustand に移す | Context の描き直しの範囲・Zustand で必要な部品だけ描き直す |
 | 06 | ブロックと退会 | NOT EXISTS・論理削除と再登録・部分インデックス |
 | 07 | 有料プランとキャンペーン | 購入した時の価格を残す・有効期間・1人1回を UNIQUE で守る |
 | 08 | 決済の通知 | 状態の遷移・トランザクション・冪等性 |
@@ -52,7 +57,7 @@
 3. 弱点は
 4. 問題が起きたら、どう調べて直すか
 5. データが10倍・100倍になったら
-6. ORM（ActiveRecord など）で書くと、何が違うか
+6. Eloquent でどんな SQL が流れ、どう直したか。Rails（ActiveRecord）・Prisma ならどう書くか
 
 ## 参考にするノート（リポジトリの外・読むだけ。このリポジトリからは書き換えない）
 

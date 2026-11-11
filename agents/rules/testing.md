@@ -1,27 +1,24 @@
 ---
 paths:
-  # 【記入】テストとテストの設定の場所に合わせる。合わないと、このルールは読み込まれない
-  - "tests/**"
-  - "e2e/**"
-  - "vitest.config.*"
-  - "playwright.config.*"
+  - "backend/tests/**"
+  - "backend/phpunit.xml"
+  - "frontend/src/**/*.test.*"
+  - "frontend/vitest.config.*"
 ---
 
 # 単体/E2Eの切り分けと骨抜き禁止
 
 ## 種別と実行コマンド
 
-【記入】使うツール・置き場所・実行コマンド。コマンドは AGENTS.md の「主要コマンド」と同じものを書く。
+実行コマンドは AGENTS.md の「主要コマンド」と同じものを書く。
 
 | 種別 | ツール | 置き場所 | 実行 | 何を守るか |
 | --- | --- | --- | --- | --- |
-| 単体 | 【記入】 | 【記入】 | 【記入】 | ロジックの境界値・異常系 |
-| 結合 | 【記入】 | 【記入】 | 【記入】 | DB や API をまたぐ制御 |
-| E2E | 【記入】 | 【記入】 | 【記入】 | 主要フロー・認可・状態遷移 |
+| 単体 | Pest・Vitest（画面） | `backend/tests/Unit/`（`app/` の構造を再現）・`frontend/src/**/*.test.tsx` | 【記入】 | ロジックの境界値・異常系 |
+| 結合 | Pest（テスト用の PostgreSQL に対して実行） | `backend/tests/Feature/` | 【記入】 | DB や API をまたぐ制御 |
+| E2E | 03b（React を足す）で決める | 03b で決める | 03b で決める | 主要フロー・認可・状態遷移 |
 
-> 記入例：単体｜Vitest｜`tests/unit/`（src の構造を再現）｜`npx vitest run`。E2E｜Playwright｜`tests/e2e/`｜`npx playwright test`
-
-- 単体の置き場所は、実装のパスと対応づける（記入例: `src/lib/tax.ts` → `tests/unit/lib/tax.test.ts`）
+- 単体の置き場所は、実装のパスと対応づける（例: `app/Actions/Likes/CreateLike.php` → `tests/Unit/Actions/Likes/CreateLikeTest.php`）
 - E2Eは実行前にシードデータの投入とアプリ起動が要る（後述）
 
 ## 単体とE2Eの切り分け
@@ -46,7 +43,7 @@ E2Eは、固定のシードデータを入れたデータベースに対して�
 テストユーザーと権限の違いを確かめるためのデータを、あらかじめ用意しておく。
 
 - シードは1つの定義に集約し、テスト内で独自のマジック値を作らない
-  （【記入】シードの置き場所。記入例: `tests/e2e/seed-data.md` と `db/seed.sql`）
+  （`backend/database/seeders/` と `backend/database/factories/`）
 - 最低限用意する: 権限ごとのログインユーザー（管理者・一般など固定メール＋固定ID）、
   他人のデータが見えないことを確かめるための「別の持ち主のデータ」
 - 実行の流れ: シード投入 → アプリ起動 → E2E 実行

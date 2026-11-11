@@ -1,15 +1,15 @@
 ---
 paths:
-  # 【記入】実装コードの場所に合わせる。合わないと、このルールは読み込まれない
-  - "src/**"
+  - "backend/app/**"
+  - "backend/config/logging.php"
 ---
 
 # 構造化・要約・秘密値禁止
 
 ## ルール
 
-1. 業務コードで標準出力のログ（記入例: console.log / console.error）を直接使わない。
-   ログは共通関数を経由する（【記入】共通関数の場所。記入例: `src/lib/logging/`）。
+1. 業務コードで標準出力のログ（PHP の `echo`・`var_dump`・`error_log`・`dd`、画面の `console.log`）を直接使わない。
+   ログは共通関数を経由する（`backend/app/Support/Logging/`。SQL のログ（`DB::listen`）もここに置く）。
    直書きすると requestId の付与とマスク処理を迂回してしまうため
 2. ラップするのは外部IO・副作用・失敗しうる処理だけ（DB・外部API・
    通知送信）。純粋関数はラップしない（ノイズになるだけ）
@@ -32,7 +32,7 @@ paths:
 | err | { name, message, stack } に整形 |
 | ms | 所要時間 |
 
-【記入】ログを集める先（記入例: 本番は Cloudflare のログ・Sentry、手元は標準出力）
+ログを集める先：手元だけ（`backend/storage/logs/` と標準出力）。デプロイしないので、Sentry などは使わない
 
 ## 秘密値をログに流さない
 

@@ -28,28 +28,32 @@
 <main>
   <h1>DB 設計の学習ノート（マッチングアプリ）</h1>
   <p>マッチングアプリ（会員・いいね・マッチ・メッセージ・有料プラン）を題材に、テーブル設計・JOIN・中間テーブル・インデックス・同時更新を、作って確かめる。実在のサービスのコード・名前・データは使わない。</p>
-  <p class="meta">技術: Go ＋ sqlc ＋ PostgreSQL。1つの一歩ごとに、explain-step で解説を作り、理解してから実装し、explain-change で記録する。</p>
+  <p class="meta">技術: Laravel（API）＋ PostgreSQL、画面は React（03b から）。1つの一歩ごとに、explain-step で解説を作り、理解してから実装し、explain-change で記録する。</p>
 
   <h2>進め方</h2>
   <pre class="mermaid">
 flowchart LR
   A["explain-step<br>解説と図を作る"] --> B["読んで理解する<br>6つの問いに答える"]
-  B --> C["実装を頼む<br>（テストを先に）"]
-  C --> D["explain-change<br>書いたコードを解説・記録"]
-  D --> E["次の一歩へ"]
+  B --> C["素朴に作る<br>Fat Controller・テストなし"]
+  C --> D["explain-change<br>素朴な版と測った問題を記録"]
+  D --> F["テストを足して直す<br>もう一度測る"]
+  F --> G["explain-change<br>前と後の数字を記録"]
+  G --> E["次の一歩へ"]
   E --> A
   </pre>
 
   <h2>一歩ずつの目次</h2>
-  <p class="meta">状態: 未着手／解説だけ／実装済み。ページができたら、名前をリンクにする。</p>
+  <p class="meta">状態: 未着手／解説だけ／素朴な版まで／実装済み。ページができたら、名前をリンクにする。</p>
   <table>
     <tr><th>番号</th><th>一歩</th><th>学ぶこと</th><th>状態</th></tr>
-    <tr><td>00</td><td>環境を作る</td><td>PostgreSQL（Docker）・マイグレーション・sqlc の流れ</td><td>未着手</td></tr>
+    <tr><td>00</td><td>環境を作る</td><td>PostgreSQL（Docker）・Laravel のマイグレーション・流れた SQL を見る方法</td><td>未着手</td></tr>
     <tr><td>01</td><td>会員とプロフィール</td><td>主キー・データの型・NOT NULL・CHECK・1対1</td><td>未着手</td></tr>
     <tr><td>02</td><td>いいね</td><td>中間テーブル・自分の表どうしの多対多・UNIQUE で二重を防ぐ</td><td>未着手</td></tr>
     <tr><td>03</td><td>マッチ</td><td>自己結合（お互いにいいね）・INNER と LEFT JOIN</td><td>未着手</td></tr>
+    <tr><td>03b</td><td>React を足す</td><td>Vite・API を呼ぶ・Context で状態を持つ・CORS</td><td>未着手</td></tr>
     <tr><td>04</td><td>検索と一覧</td><td>複合インデックス・EXPLAIN・OFFSET とカーソル・大量のデータ</td><td>未着手</td></tr>
     <tr><td>05</td><td>メッセージ</td><td>相手ごとの最新の1件（ウィンドウ関数）・N+1</td><td>未着手</td></tr>
+    <tr><td>05b</td><td>Context から Zustand に移す</td><td>Context の描き直しの範囲・Zustand で必要な部品だけ描き直す</td><td>未着手</td></tr>
     <tr><td>06</td><td>ブロックと退会</td><td>NOT EXISTS・論理削除と再登録・部分インデックス</td><td>未着手</td></tr>
     <tr><td>07</td><td>有料プランとキャンペーン</td><td>購入した時の価格を残す・有効期間・1人1回を UNIQUE で守る</td><td>未着手</td></tr>
     <tr><td>08</td><td>決済の通知</td><td>状態の遷移・トランザクション・冪等性</td><td>未着手</td></tr>

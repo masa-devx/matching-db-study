@@ -1,6 +1,4 @@
 # 新しい worktree に写す、Git の管理外のファイル（.gitignore と同じ書き方）
 # wt と claude -w が、中身を読まずにファイルごと写す。Git の管理外のものだけが対象
-# 【記入】このプロジェクトで使う秘密の値のファイルに合わせる
-.env
-.env.local
-.dev.vars
+backend/.env
+backend/.env.testing

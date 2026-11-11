@@ -8,18 +8,17 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 
 ## 技術スタック
 
-【記入】言語・フレームワーク・主要な依存関係と、その版。版は `mise.toml` とロックファイルを正とする。
+版は `mise.toml` とロックファイル（`backend/composer.lock`・`frontend/package-lock.json`）を正とする。「入れたときの最新」と書いたものは、入れたあとにロックファイルの版を書く。
 
 | 種類 | 使うもの | 版 | 選んだ理由（短く） |
 | --- | --- | --- | --- |
-| 言語・実行環境 | 【記入】 | 【記入】 | 【記入】 |
-| フレームワーク | 【記入】 | 【記入】 | 【記入】 |
-| DB・ORM | 【記入】 | 【記入】 | 【記入】 |
-| テスト | 【記入】 | 【記入】 | 【記入】 |
-| 静的検査・整形 | 【記入】 | 【記入】 | 【記入】 |
-| デプロイ先 | 【記入】 | ― | 【記入】 |
-
-> 記入例：言語・実行環境｜TypeScript・Bun｜5.9・1.4｜型と速い起動。フレームワーク｜Hono｜4｜API と画面を1つで書ける。
+| 言語・実行環境 | PHP（手元・mise）・Node（手元・mise）・Docker | PHP 8.5・Node 26.13.0 | 手元で動かすとコマンドが速い。DB だけ Docker |
+| フレームワーク | Laravel（API）・React＋TypeScript＋Vite（03b から） | 入れたときの最新・React 19 | 仕事で使ってきた形で、Eloquent の裏の SQL を確かめる |
+| DB・ORM | PostgreSQL（Docker compose）・Eloquent | 18・Laravel と同じ | 流れた SQL は `DB::listen` でログに出し、`->explain()` で実行計画を見る |
+| 状態の管理（画面） | React の Context → Zustand（05b から） | React と同じ・入れたときの最新 | 標準の限界を体験してから移す。TanStack Query・OpenAPI は使わない |
+| テスト | Pest（バックエンド。テスト用の PostgreSQL に対して実行）・Vitest（画面） | 入れたときの最新 | SQLite ではロックや UNIQUE の動きが違うため、本物の PostgreSQL で確かめる |
+| 静的検査・整形 | Larastan（PHPStan）・Pint・ESLint・Prettier | 入れたときの最新 | 型の抜けと書き方のずれを機械で見つける |
+| デプロイ先 | なし（手元だけ） | ― | 学習用 |
 
 ここには結論だけを書く。
 
@@ -29,8 +28,10 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 
 | パス | 責務 |
 | --- | --- |
-| 【記入】 | 実装コード（例：`src/features/<機能>/`・`src/lib/`） |
-| 【記入】 | テストコード（例：`tests/unit/`・`tests/e2e/`） |
+| backend/ | Laravel（API）。Laravel の標準の形のまま（`app/Models`・`app/Http/Controllers`・`app/Http/Resources`・`database/migrations`） |
+| backend/tests/ | Pest のテスト。`Unit/`（ロジック）・`Feature/`（DB と API をまたぐもの） |
+| frontend/ | React（03b から）。テストは `src/**/*.test.tsx` |
+| compose.yaml | PostgreSQL（開発用とテスト用） |
 | explanations/ | 一歩ごとの解説と図（HTML）。目次は index.html、ひな形は _template.html |
 | agents/ | 開発ルール（rules/）・手順（skills/） |
 | .claude/ | Claude Code 向けの権限・フック・レビュー役。rules・skills は agents/ へのリンク |
@@ -74,8 +75,8 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 ### 作業の流れ
 
 1. 一歩ずつ進める。新しい一歩に入る前に、[explain-step](agents/skills/explain-step/SKILL.md) で解説と図を作り、「実装して」と言われるまで実装しない
-2. 確かめたいことは、先にテストで書き、失敗することを確かめてから実装する
-3. 一歩の実装が終わったら、[explain-change](agents/skills/explain-change/SKILL.md) で書いたコードを解説し、その一歩のページに記録する
+2. 一歩の中は、**素朴に作る → 問題を測る → 今の振る舞いを固定するテストを足す → 直す → もう一度測る** の順に進める。素朴に作る段階ではテストを書かない。直す前に必ずテストを足し、直したあとも通ることを確かめる。00（環境）・03b・05b（画面）は、この形を取らなくてよい
+3. 素朴な版を作ったあとと、直したあとの2回、[explain-change](agents/skills/explain-change/SKILL.md) で書いたコードを解説し、その一歩のページに記録する
 4. 区切りごとに、[review](agents/skills/review/SKILL.md) の手順で見直す（実装の会話を持たないサブエージェントに、差分と確かめたいことを渡す）
 5. コミット・push は、頼まれたときだけ行う
 

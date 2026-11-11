@@ -1,13 +1,13 @@
 ---
 paths:
-  # 【記入】スキーマ・マイグレーション・DB を触るコードの場所に合わせる。合わないと、このルールは読み込まれない
-  - "prisma/**"
-  - "src/features/**/*.repository.ts"
+  - "backend/database/**"
+  - "backend/app/Models/**"
+  - "compose.yaml"
 ---
 
 # マイグレーション規律と守備範囲
 
-【記入】使う DB・ORM・マイグレーションの道具（記入例: PostgreSQL 17・Prisma）。コマンドは AGENTS.md の「主要コマンド」に書く。
+PostgreSQL 18（Docker）・Eloquent・Laravel のマイグレーション。コマンドは AGENTS.md の「主要コマンド」に書く。
 
 ## マイグレーション規律
 

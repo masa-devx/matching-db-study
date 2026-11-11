@@ -21,9 +21,9 @@ if (!targetsProd) process.exit(0);
 
 const writeSql =
   /\b(INSERT|UPDATE|DELETE|MERGE|UPSERT|TRUNCATE|DROP|ALTER|CREATE|GRANT|REVOKE|COPY)\b/i;
-// 【記入】使うマイグレーション・シードの道具に合わせる（記入例: Prisma・Drizzle Kit・package.json の db:* スクリプト）
+// Laravel の artisan のマイグレーション・シード・DB を消すコマンド
 const writeTool =
-  /\bprisma\s+(migrate\s+(deploy|dev|reset)|db\s+(push|execute|seed))\b|\bdrizzle-kit\s+(push|migrate)\b|\bdb:(seed|push|migrate|reset)\b/;
+  /\bartisan\s+(migrate(:fresh|:reset|:refresh|:rollback|:install)?|db:(wipe|seed)|schema:dump)(?=\s|$)/;
 // SQLをファイルや標準入力から渡すと中身を確かめられないため、本番では止める
 const opaqueSql = /(^|\s)(-f|--file)\s|<\s*\S+\.sql\b/;
 
