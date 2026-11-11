@@ -1,5 +1,4 @@
 # このリポジトリで使う道具の版。版は正確に書く（全体の設定の "lts" に任せない）
-# PHP はバックエンド（Laravel）、Node は画面（React・03b から）で使う。PostgreSQL は Docker で動かす
+# Node は画面（React・03b から）で使う。PHP と PostgreSQL は Docker で動かす（compose.yaml）
 [tools]
-php = "8.5.12"
 node = "26.13.0"
