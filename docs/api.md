@@ -23,8 +23,8 @@ API の正本。作る前にここに設計を書き、確かめてもらって�
 | 番号 | メソッドとパス | 中身 | 状態 |
 | --- | --- | --- | --- |
 | 00 | `GET /api/health` | 動いているかと、DB につながるか | 実装済み |
-| 01 | `GET /api/users/{id}/profile` | 相手のプロフィールを見る | 確定（素朴な版を作り直し中・#18） |
-| 01 | `PUT /api/users/{id}/profile` | プロフィールを編集する | 確定（素朴な版を作り直し中・#18） |
+| 01 | `GET /api/users/{id}/profile` | 相手のプロフィールを見る | 実装済み（素朴な版） |
+| 01 | `PUT /api/users/{id}/profile` | プロフィールを編集する | 実装済み（素朴な版） |
 
 ## 00 環境
 
@@ -51,15 +51,16 @@ API の正本。作る前にここに設計を書き、確かめてもらって�
 | 入力 | パスの `id`（整数） | 同じ |
 | 応答（成功） | `200`。会員（`users` の行）の中に `profile`（`profiles` の行）が入った形。`password`・`remember_token` だけは `#[Hidden]` で隠れる | `200`。決めた項目だけを返す（下の例） |
 | 応答（失敗） | `404`：その会員がいない（`{"message": "No query results for model [App\\Models\\User] 999"}`）。プロフィールがない会員は、`"profile": null` で `200` | `404`：その会員がいない（`{"message": "会員が見つかりません"}`） |
-| 流れる SQL の目安 | 2本（`select * from users where id = ? limit 1` と、`select * from profiles where user_id = ?`） | 2本以内（NFR-001） |
+| 流れる SQL の目安 | 2本（`select * from users where id = ? limit 1` と、`select * from profiles where user_id in (?)`） | 2本以内（NFR-001） |
 | curl の例 | `curl http://127.0.0.1:8000/api/users/1/profile` | 同じ |
 
 素朴な版の書き方（Laravel 5 系のころによくある形）：
 
 ```php
 $user = User::findOrFail($id);
-$user->profile;   // ここで2本目の SQL が流れ、応答に profile が入る
+$user->load('profile');   // ここで2本目の SQL が流れ、応答に profile が入る
 return $user;
+// 初めは $user->profile; と書く案だったが、Larastan に「何もしていない式」と指摘されたので load() にした
 ```
 
 素朴な版の応答の例（**メールアドレス・確認用の文字・生年月日も返してしまう**。FR-002 を守れていない）：
