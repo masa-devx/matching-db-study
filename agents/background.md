@@ -19,6 +19,7 @@
 | 画面 | 00〜03 は API だけ。04 の前に「React を足す」一歩（03b）を入れる | DB を学ぶ時間を先に取り、画面が学びにつながる一歩（04・05・08・09）から使う |
 | API の型 | OpenAPI は使わない。フロントの型は手で書き、API の返す形に合わせる | 道具を増やさない。ずれはテストで見つける |
 | バックエンドの作り方 | 最初は Laravel を入れたときの形の MVC・Fat Controller（Laravel 5 系のころの書き方）。テストも性能も考えずに作り、一歩ごとに測って直す。Laravel は最新を使う（5 系は保守が終わり、PHP 8.5 で動かないため） | 古いコードを引き継いで直す力を、前と後の数字つきで説明できるようにする |
+| ブランチ | `main`：ハーネス（ルール・スキル・AGENTS.md・このファイル）を直すときだけ。直したら `legacy-repo` → `refactored-repo` の順に取り込む。`legacy-repo`（main から作る）：解説のページを作る・素朴に作る・記録の 9-1・9-2。`refactored-repo`（legacy-repo から作る）：一歩ごとに `legacy-repo` を取り込んでから直す・記録の 9-3・9-4 | 汚いコードと直したコードを両方残し、`git diff legacy-repo refactored-repo` で比べられるように |
 | コードを書く人 | AI が書く。人は解説を読んで理解してから「実装して」と言う | 一気に作らず、理解しながら進めたい |
 | 進め方 | 一歩ずつ。`explain-step`（解説と図）→ 理解する → 素朴に作る（Fat Controller・テストなし）→ `explain-change` → 問題を測る → 今の振る舞いを固定するテストを足す → 直す → もう一度測る → `explain-change` | AGENTS.md の「作業の流れ」 |
 | 解説の置き場 | `explanations/`（HTML・Mermaid の図）。目次は `explanations/index.html`（00〜10 の一歩） | ブラウザで後から見返せるように |
