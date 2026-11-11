@@ -33,7 +33,9 @@
         <env name="DB_CONNECTION" value="pgsql" force="true"/>
         <env name="DB_DATABASE" value="matching_test" force="true"/>
         <env name="DB_URL" value="" force="true"/>
-        <env name="MAIL_MAILER" value="array"/>
+        <!-- compose の環境変数（smtp・mailpit）より優先させる。DB と同じく <server> と force="true" の両方で書く -->
+        <server name="MAIL_MAILER" value="array" force="true"/>
+        <env name="MAIL_MAILER" value="array" force="true"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>

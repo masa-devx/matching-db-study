@@ -4,11 +4,16 @@ use Illuminate\Support\Facades\DB;
 
 use function Pest\Laravel\getJson;
 
-// テストが開発用の DB（matching_dev）を作り直さないことを守る。
-// phpunit.xml の force="true" を外すと、compose の環境変数の matching_dev につながり、このテストが落ちる
-it('テストはテスト用の PostgreSQL（matching_test）につながる', function () {
-    expect(DB::connection()->getDriverName())->toBe('pgsql')
-        ->and(DB::connection()->getDatabaseName())->toBe('matching_test');
+// テストが開発用の DB（matching_dev）を作り直すのを止めるのは、tests/TestCase.php の安全装置（設定の値を見る）。
+// このテストは、設定の値ではなく、実際につながっている DB を PostgreSQL に聞いて確かめる
+it('テストは実際にテスト用の PostgreSQL（matching_test）につながっている', function () {
+    $actual = DB::selectOne('select current_database() as name')->name;
+
+    expect($actual)->toBe('matching_test');
+});
+
+it('テストのメールは送らずに、メモリにためる', function () {
+    expect(config('mail.default'))->toBe('array');
 });
 
 it('/api/health は DB につながり、マイグレーションの数を返す', function () {
