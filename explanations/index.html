@@ -57,11 +57,13 @@ flowchart LR
     <tr><td>05b</td><td>Context から Zustand に移す</td><td>Context の描き直しの範囲・Zustand で必要な部品だけ描き直す</td><td>未着手</td></tr>
     <tr><td>05c</td><td>Firestore と比べる</td><td>同じ「相手ごとの最新の1件」を Firebase Emulator（手元の Firestore）で作る。JOIN がないのでデータを重ねて持つ・読んだ回数で料金が決まる・リアルタイムに届く</td><td>未着手</td></tr>
     <tr><td>06</td><td>ブロックと退会</td><td>NOT EXISTS・論理削除と再登録・部分インデックス</td><td>未着手</td></tr>
-    <tr><td>07</td><td>有料プランとキャンペーン</td><td>購入した時の価格を残す・有効期間・1人1回を UNIQUE で守る</td><td>未着手</td></tr>
+    <tr><td>07</td><td>有料会員</td><td>有料かどうかで機能を分ける・購入した時の価格を残す・有効期間</td><td>未着手</td></tr>
+    <tr><td>07b</td><td>プランを増やす</td><td>素朴な版の「有料かどうか」の真偽値を、一般とプラチナに分ける。プランの表と「プランごとにできること」の表に直し、あとから増える前提の設計を前と後で比べる</td><td>未着手</td></tr>
     <tr><td>08</td><td>決済の通知</td><td>状態の遷移・トランザクション・冪等性</td><td>未着手</td></tr>
     <tr><td>09</td><td>同時更新</td><td>楽観ロック・悲観ロック・デッドロック</td><td>未着手</td></tr>
     <tr><td>10</td><td>止めずに変えるマイグレーション</td><td>列の追加・名前の変更の手順・ロック</td><td>未着手</td></tr>
     <tr><td>11</td><td>DB を引っ越す</td><td>手元の PostgreSQL どうしで、ダンプと戻し方・止める時間・移している間に書かれたデータの扱いを試す。クラウド（AWS など）に載せるかは、あとで決める</td><td>未着手</td></tr>
+    <tr><td>12</td><td>管理画面</td><td>`admin/`（Laravel と React）。管理者と会員の権限の分け方・だれが何を見たかを残す監査ログ・大量のメッセージの一覧と N+1</td><td>未着手</td></tr>
   </table>
 </main>
 <script type="module">

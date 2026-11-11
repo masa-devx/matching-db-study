@@ -20,12 +20,13 @@
 | ブランチ | `main`：ハーネス（ルール・スキル・AGENTS.md・このファイル）と docs/ を直すときだけ。直したら `legacy-repo` → `refactored-repo` の順に取り込む。`legacy-repo`（main から作る）：解説のページを作る・素朴に作る・記録の 9-1・9-2。作業は `legacy/<Issue の番号>-<名前>` で行い、PR で取り込む。`refactored-repo`（legacy-repo から作る）：`legacy-repo` を取り込んでから直す・記録の 9-3・9-4。作業は `refactor/<Issue の番号>-<名前>` で行い、PR で取り込む | 汚いコードと直したコードを両方残し、`git diff legacy-repo refactored-repo` で比べられるように |
 | コードを書く人 | AI が書く。人は解説を読んで理解してから「実装して」と言う | 一気に作らず、理解しながら進めたい |
 | 進め方 | 機能ごとに Issue → 要件を決める（`docs/requirements/<機能>.md`）→ `explain-step`（解説と図）→ 理解する → 素朴に作る（DB → API → フロントの順に PR）→ `explain-change`（素朴な版と測った問題）。最初の範囲を作り切ったら、改善の Issue → 固定するテスト → 直す → もう一度測る → `explain-change`（docs/decisions.md に1行足す） | AGENTS.md の「作業の流れ」 |
-| 解説の置き場 | `explanations/`（HTML・Mermaid の図）。目次は `explanations/index.html`（00〜11 の一歩） | ブラウザで後から見返せるように |
+| 解説の置き場 | `explanations/`（HTML・Mermaid の図）。目次は `explanations/index.html`（00〜12 の一歩） | ブラウザで後から見返せるように |
 | 解説の見方 | `python3 -m http.server 8765 -d explanations` → `http://localhost:8765/` | `file://` だと図が出ないことがある |
 | GitHub | public で作った（masa-devx/matching-db-study） | 学習の記録として見せられるように |
 
 ## まだ決めていないこと
 
+- キャンペーン（1人1回の割引など）を入れるか・どこに入れるか（入れるなら「1人1回を UNIQUE で守る」を学ぶ）
 - AGENTS.md の主要コマンドの【記入】（00 で Laravel を入れて動かしてから埋める）
 - docs/product.md の【記入】（`harness-setup` の手順 1 で、質問しながら埋める）
 
@@ -44,11 +45,13 @@
 | 05b | Context から Zustand に移す | Context の描き直しの範囲・Zustand で必要な部品だけ描き直す |
 | 05c | Firestore と比べる | 同じ「相手ごとの最新の1件」を Firebase Emulator（手元の Firestore）で作る。JOIN がないのでデータを重ねて持つ・読んだ回数で料金が決まる・リアルタイムに届く |
 | 06 | ブロックと退会 | NOT EXISTS・論理削除と再登録・部分インデックス |
-| 07 | 有料プランとキャンペーン | 購入した時の価格を残す・有効期間・1人1回を UNIQUE で守る |
+| 07 | 有料会員 | 有料かどうかで機能を分ける・購入した時の価格を残す・有効期間 |
+| 07b | プランを増やす | 素朴な版の「有料かどうか」の真偽値を、一般とプラチナに分ける。プランの表と「プランごとにできること」の表に直し、あとから増える前提の設計を前と後で比べる |
 | 08 | 決済の通知 | 状態の遷移・トランザクション・冪等性 |
 | 09 | 同時更新 | 楽観ロック・悲観ロック・デッドロック |
 | 10 | 止めずに変えるマイグレーション | 列の追加・名前の変更の手順・ロック |
 | 11 | DB を引っ越す | 手元の PostgreSQL どうしで、ダンプと戻し方・止める時間・移している間に書かれたデータの扱いを試す。クラウド（AWS など）に載せるかは、あとで決める |
+| 12 | 管理画面 | `admin/`（Laravel と React）。管理者と会員の権限の分け方・だれが何を見たかを残す監査ログ・大量のメッセージの一覧と N+1 |
 
 ## 理解を確かめる6つの問い
 
