@@ -56,6 +56,7 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 | DB に入る | リポジトリのルート | `docker compose exec db psql -U postgres -d matching_dev`（テスト用は `-d matching_test`） | db が起動している | ― |
 | ブランチを切り替えたあと | リポジトリのルート | `docker compose restart app` | ― | 切り替え先に `backend/` がないと、動いているサーバーのフォルダが一度消えて、API がエラーを返し続けるため |
 | CI | GitHub（PR と push で自動） | `.github/workflows/backend.yml`（`legacy-repo` にある）。中身と決まりは [docs/ci.md](docs/ci.md)。結果は `gh pr checks <番号>` で見る | ― | CI の設定を緩めて通す（レベルを下げる・対象から外す） |
+| エディタの補完のファイルを作る | リポジトリのルート | `docker compose run --rm app php artisan ide-helper:models --nowrite`（`backend/_ide_helper_models.php` に書き出す。git には入らない） | db が起動している（列を DB から読む） | `--write`（Model のファイルに `@property` を書き込む。長くなり、マイグレーションとずれるため。quality-types.md） |
 | ビルド | ― | 対象外（デプロイしない。画面は 03b で決める） | ― | ― |
 
 未記入のコマンドは推測して実行しない。必要な操作について確認する。

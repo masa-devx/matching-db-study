@@ -42,7 +42,8 @@ paths:
   /** @return Collection<int, User> */
   ```
 
-- Model の列の型は、`@property` で Model の上に書く。手で写さず、Laravel IDE Helper（`barryvdh/laravel-ide-helper`）でマイグレーションから作る（同じ事実を2か所に手で書かないため。architecture.md の SSoT）。マイグレーションを変えたら作り直す
+- Model の列の型（`@property`）と、Eloquent の魔法のメソッド（`where〇〇()` など）の `@method` は、**Model には書かない**。型の確かめは、Larastan がマイグレーションと Eloquent の仕組みから推し量る。エディタの補完が要るときは、Laravel IDE Helper で別のファイル（`backend/_ide_helper_models.php`。git に入れない）に書き出す。Model に書くと長くなり、マイグレーションと同じ事実が2か所になって、作り直し忘れでずれるため（architecture.md の SSoT）
+- Model に手で書くのは、リレーションの戻り値（`@return HasOne<Profile, $this>`）など、Larastan が推し量れない型だけ
 - `mixed` は、本当に何でも来るところ（`$request->all()` の中身など）だけにする
 - 型を書いても PHP は実行するときに確かめるので、型が合わないと `TypeError` になる。素朴な版でも、型を書いたら、curl で動きを確かめ直す
 
