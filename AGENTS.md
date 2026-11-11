@@ -45,7 +45,8 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 | 操作 | 実行場所 | コマンド・参照先 | 前提条件 | 使わないもの（理由） |
 | --- | --- | --- | --- | --- |
 | 道具の版をそろえる | リポジトリのルート | `mise install` | mise | nodenv・nvm・Volta（mise に一本化したため） |
-| 解説を見る | リポジトリのルート | `python3 -m http.server 8765 -d explanations` → ブラウザで `http://localhost:8765/` | python3 | `file://` で直接開く（ブラウザによって Mermaid の読み込みが止まるため） |
+| 解説を見る | claude.ai | AI が Artifact に載せたリンク（一覧は `agents/notes.local.md`）。手元で見るなら、リポジトリのルートで `python3 -m http.server 8765 -d explanations` → `http://localhost:8765/` | claude.ai のアカウント | `file://` で直接開く（ブラウザによって Mermaid の読み込みが止まるため） |
+| 解説を Artifact に載せる形に写す | リポジトリのルート | `python3 -I explanations/tools/to-artifact.py <元の HTML> <会話の作業用フォルダ>/artifacts/<ファイル名>` | python3 | 元の HTML をそのまま載せる（骨組みのタグと Mermaid の script が二重になるため） |
 | セットアップ | 【記入】 | 【記入】 | 【必要な環境と設定】 | 【記入】 |
 | 起動 | 【記入】 | 【記入】 | 【記入】 | 【記入】 |
 | テスト | 【記入】 | 【全体・対象別の実行方法】 | 【接続先・データなど】 | 【記入】 |
