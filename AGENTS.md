@@ -32,6 +32,7 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 | backend/tests/ | Pest のテスト。`Unit/`（ロジック）・`Feature/`（DB と API をまたぐもの） |
 | frontend/ | React（03b から）。テストは `src/**/*.test.tsx` |
 | compose.yaml | PostgreSQL（開発用とテスト用） |
+| docs/ | 何を作るか（product.md・requirements/）と、なぜそうしたか（decisions.md）。目次は docs/README.md |
 | explanations/ | 一歩ごとの解説と図（HTML）。目次は index.html、ひな形は _template.html |
 | agents/ | 開発ルール（rules/）・手順（skills/） |
 | .claude/ | Claude Code 向けの権限・フック・レビュー役。rules・skills は agents/ へのリンク |
@@ -74,9 +75,9 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 
 ### 作業の流れ
 
-1. 一歩ずつ進める。新しい一歩に入る前に、[explain-step](agents/skills/explain-step/SKILL.md) で解説と図を作り、「実装して」と言われるまで実装しない
-2. 一歩の中は、**素朴に作る → 問題を測る → 今の振る舞いを固定するテストを足す → 直す → もう一度測る** の順に進める。素朴に作る段階ではテストを書かない。直す前に必ずテストを足し、直したあとも通ることを確かめる。00（環境）・03b・05b（画面）は、この形を取らなくてよい
-3. 素朴な版を作ったあとと、直したあとの2回、[explain-change](agents/skills/explain-change/SKILL.md) で書いたコードを解説し、その一歩のページに記録する
+1. 一歩ずつ進める。新しい一歩に入る前に、その機能の要件（[docs/requirements/](docs/requirements/)）を質問しながら決め、[explain-step](agents/skills/explain-step/SKILL.md) で解説と図を作る。「実装して」と言われるまで実装しない
+2. 一歩の中は、**素朴に作る → 問題を測る → 今の振る舞いを固定するテストを足す → 直す → もう一度測る** の順に進める。素朴に作る段階ではテストを書かない。直す前に必ずテストを足し（要件 ID に対応させる）、直したあとも通ることを確かめる。00（環境）・03b・05b（画面）は、この形を取らなくてよい
+3. 素朴な版を作ったあとと、直したあとの2回、[explain-change](agents/skills/explain-change/SKILL.md) で書いたコードを解説し、その一歩のページに記録する。直したあとは [docs/decisions.md](docs/decisions.md) に1行足す
 4. 区切りごとに、[review](agents/skills/review/SKILL.md) の手順で見直す（実装の会話を持たないサブエージェントに、差分と確かめたいことを渡す）
 5. コミット・push は、頼まれたときだけ行う
 

@@ -16,6 +16,8 @@ description: 実装の前に、次の一歩（機能・テーマ）の解説を�
 ## 2. 前提を読む
 
 - AGENTS.md と、関係するルール（DB なら [database.md](../../rules/database.md)）
+- [docs/product.md](../../../docs/product.md)（不変条件・用語）と、この一歩の機能の要件（`docs/requirements/<機能>.md`）。要件がまだ「確定」でなければ、解説を作る前に質問しながら決める（ひな形は `docs/requirements/template.md`）。用語は product.md の名前に合わせる
+- [docs/decisions.md](../../../docs/decisions.md)。前の判断と矛盾しないようにする
 - [background.md](../../background.md)（決めたこと・まだ決めていないこと）。そこにある「DB と API 設計のノート」（置き場所は `agents/notes.local.md`）の19章の対応表で、この一歩に関係する章だけを読み、言葉と具体例をそろえる。ノートにある個人的な話は、ページに書かない
 - それまでの一歩のページ（`explanations/<番号>-*.html`）の「決めたこと」と「実装の記録」。前の決定と矛盾しないようにする
 - 今のコード・マイグレーション（あれば）。今のテーブルを図に含める

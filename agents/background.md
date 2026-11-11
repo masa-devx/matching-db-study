@@ -9,31 +9,24 @@
 - 読んだ知識だけでなく、**作って、測って、確かめた事実**として語れるようにする。深く突っ込まれても、なぜ・ほかの方法・弱点・問題が起きたら、まで答えられるようにする
 - 題材は、よくあるマッチングアプリ（会員・いいね・マッチ・メッセージ・有料プラン・キャンペーン）。**実務のコード・仕様書・データ・社名・サービス名は持ち込まない**。仕組みだけを、自分の理解で作り直す
 
-## 決めたこと
+## 決めたこと（作業の決まり）
+
+技術・設計を選んだ理由は [docs/decisions.md](../docs/decisions.md)、何を作るかは [docs/product.md](../docs/product.md) と [docs/requirements/](../docs/requirements/) を正とする。ここには作業の決まりだけを書く。
 
 | 項目 | 決めたこと | 理由 |
 | --- | --- | --- |
 | 種類 | 学習用（アウトプット）。Issue・プラン・PR は使わない | 理解を深めるのが目的 |
-| 技術 | Laravel（API）＋PostgreSQL。画面は React＋TypeScript＋Vite | 仕事で使ってきた ORM（Eloquent）で書き、裏で流れる SQL を見て直す経験を、測った事実として残す。09（楽観ロック）・10（止めずに変えるマイグレーション）は道具に頼らず自分で作るので、仕組みを説明できる |
-| 状態の管理 | まず React の Context。描き直しが気になったら Zustand に移す（目安は 05 のあと）。TanStack Query は使わない | 標準の仕組みの限界を体験してから移すと、移した理由を説明できる |
-| ORM の扱い | Eloquent を使う。各一歩で「流れた SQL → 問題 → 直し方 → 前と後の数字」を残す。問い 6 で Rails（ActiveRecord）・Prisma ならどう書くかを短く並べる | ORM の便利さと罠（N+1・with と join）を、どの ORM でも説明できるようにする |
-| 画面 | 00〜03 は API だけ。04 の前に「React を足す」一歩（03b）を入れる | DB を学ぶ時間を先に取り、画面が学びにつながる一歩（04・05・08・09）から使う |
-| API の型 | OpenAPI は使わない。フロントの型は手で書き、API の返す形に合わせる | 道具を増やさない。ずれはテストで見つける |
-| バックエンドの作り方 | 最初は Laravel を入れたときの形の MVC・Fat Controller（Laravel 5 系のころの書き方）。テストも性能も考えずに作り、一歩ごとに測って直す。Laravel は最新を使う（5 系は保守が終わり、PHP 8.5 で動かないため） | 古いコードを引き継いで直す力を、前と後の数字つきで説明できるようにする |
-| ブランチ | `main`：ハーネス（ルール・スキル・AGENTS.md・このファイル）を直すときだけ。直したら `legacy-repo` → `refactored-repo` の順に取り込む。`legacy-repo`（main から作る）：解説のページを作る・素朴に作る・記録の 9-1・9-2。`refactored-repo`（legacy-repo から作る）：一歩ごとに `legacy-repo` を取り込んでから直す・記録の 9-3・9-4 | 汚いコードと直したコードを両方残し、`git diff legacy-repo refactored-repo` で比べられるように |
+| ブランチ | `main`：ハーネス（ルール・スキル・AGENTS.md・このファイル）と docs/ を直すときだけ。直したら `legacy-repo` → `refactored-repo` の順に取り込む。`legacy-repo`（main から作る）：解説のページを作る・素朴に作る・記録の 9-1・9-2。`refactored-repo`（legacy-repo から作る）：一歩ごとに `legacy-repo` を取り込んでから直す・記録の 9-3・9-4 | 汚いコードと直したコードを両方残し、`git diff legacy-repo refactored-repo` で比べられるように |
 | コードを書く人 | AI が書く。人は解説を読んで理解してから「実装して」と言う | 一気に作らず、理解しながら進めたい |
-| 進め方 | 一歩ずつ。`explain-step`（解説と図）→ 理解する → 素朴に作る（Fat Controller・テストなし）→ `explain-change` → 問題を測る → 今の振る舞いを固定するテストを足す → 直す → もう一度測る → `explain-change` | AGENTS.md の「作業の流れ」 |
+| 進め方 | 一歩ずつ。要件を決める（`docs/requirements/<機能>.md`）→ `explain-step`（解説と図）→ 理解する → 素朴に作る（Fat Controller・テストなし）→ `explain-change` → 問題を測る → 今の振る舞いを固定するテストを足す → 直す → もう一度測る → `explain-change`（docs/decisions.md に1行足す） | AGENTS.md の「作業の流れ」 |
 | 解説の置き場 | `explanations/`（HTML・Mermaid の図）。目次は `explanations/index.html`（00〜11 の一歩） | ブラウザで後から見返せるように |
 | 解説の見方 | `python3 -m http.server 8765 -d explanations` → `http://localhost:8765/` | `file://` だと図が出ないことがある |
 | GitHub | public で作った（masa-devx/matching-db-study） | 学習の記録として見せられるように |
-| 認証 | 01b の素朴な版は自分で書いたトークン（`users` の列に平文）、直した版は Sanctum の API トークン。03b の素朴な版は画面で sessionStorage に置き、直した版は Sanctum の SPA 認証（Cookie）に移す。JWT は使わない | 素朴な形の危うさ（なりすまし・平文・XSS で盗まれる）を試してから直す |
-| メッセージの DB | 05 は PostgreSQL。05c で同じものを Firebase Emulator（手元の Firestore。クラウドのアカウントは使わない）で作って比べる | RDB とドキュメント DB の違いを、同じ題材で説明できるようにする |
-| インフラ | デプロイはしない。11 で DB の引っ越しを手元で試す。クラウドに載せるかは、すべての一歩のあとに決める | お金と秘密の値の管理を増やさない |
 
 ## まだ決めていないこと
 
-- **仕様のページ**（`explanations/spec.html`）を作るか。作るなら、全体の機能・決まり・全体の ER 図・状態の遷移・用語をここにまとめ、一歩のページはそこから変えた分だけ書く。`explain-step` は作る前に読み、`explain-change` は実装のあとに更新する
-- AGENTS.md の技術スタック・ディレクトリ構成・主要コマンドの【記入】（`harness-setup` で埋める）
+- AGENTS.md の主要コマンドの【記入】（00 で Laravel を入れて動かしてから埋める）
+- docs/product.md の【記入】（`harness-setup` の手順 1 で、質問しながら埋める）
 
 ## 一歩ずつの目次（explanations/index.html と同じ）
 
