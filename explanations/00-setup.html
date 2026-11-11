@@ -46,7 +46,7 @@
 <main>
   <p class="meta"><a href="index.html">← 目次へ</a></p>
   <h1>00 環境を作る</h1>
-  <p class="meta">作成: 2026-11-11 ／ 状態: <span class="status">解説だけ</span> ／ Issue: <a href="https://github.com/masa-devx/matching-db-study/issues/1">#1</a></p>
+  <p class="meta">作成: 2026-11-11 ／ 状態: <span class="status">実装済み</span> ／ Issue: <a href="https://github.com/masa-devx/matching-db-study/issues/1">#1</a></p>
 
   <div class="card point">
     <strong>この一歩でできるようになること</strong>
@@ -217,7 +217,113 @@ public static function register(): void
 
   <h2>9. 実装の記録</h2>
   <p class="meta">00 は素朴な版と直した版に分けず、実装したあとに explain-change がここに1つの記録として書く。</p>
-  <p>【まだ実装していない】</p>
+  <p class="meta">記録: 2026-11-11 ／ PR: <a href="https://github.com/masa-devx/matching-db-study/pull/5">#5 DB（Docker）</a>・<a href="https://github.com/masa-devx/matching-db-study/pull/6">#6 バックエンド（Laravel）</a>・#4 主要コマンドと記録</p>
+
+  <h3>書いたもの</h3>
+  <table>
+    <tr><th>ファイル</th><th>役割</th></tr>
+    <tr><td><code>compose.yaml</code></td><td>3つのコンテナ：<code>app</code>（PHP 8.5.12・ポート 8000）・<code>db</code>（PostgreSQL 18.6・55432）・<code>mailpit</code>（v1.33.1・51025／58025）。ポートは <code>127.0.0.1</code> にだけ開ける</td></tr>
+    <tr><td><code>docker/php/Dockerfile</code></td><td>PHP 8.5.12 に <code>pdo_pgsql</code>・<code>intl</code>・<code>zip</code> と Composer 2.11.2 を足す</td></tr>
+    <tr><td><code>docker/db/init/01-create-test-db.sql</code></td><td>テスト用の <code>matching_test</code> を作り、両方の DB で <code>pg_stat_statements</code> を有効にする</td></tr>
+    <tr><td><code>backend/</code></td><td>Laravel 13.42.0。<code>install:api</code> で API のルートを入れた（Sanctum も入るが、素朴な版では使わない）</td></tr>
+    <tr><td><code>backend/app/Support/Logging/QueryLogger.php</code></td><td>流れた SQL を1本ずつと、リクエストごとの本数・時間で <code>storage/logs/sql-日付.log</code> に書く。値は書かない。手元だけ</td></tr>
+    <tr><td><code>backend/routes/api.php</code></td><td><code>GET /api/health</code>：つながっている DB の名前とマイグレーションの数</td></tr>
+    <tr><td><code>backend/phpunit.xml</code>・<code>backend/tests/TestCase.php</code></td><td>テストをテスト用の DB とメモリのメールで動かす設定と、違う DB につながっていたら止める安全装置</td></tr>
+    <tr><td><code>backend/tests/Feature/HealthTest.php</code></td><td>見本のテスト3つ</td></tr>
+    <tr><td><code>backend/phpstan.neon</code></td><td>Larastan（レベル 5）の設定</td></tr>
+  </table>
+
+  <h3>実装した形（解説の図から変わったところ）</h3>
+  <p>PHP も Docker の中で動かす形になりました（D-011）。手元の PC には PHP がなくても動きます。</p>
+  <pre class="mermaid">
+flowchart LR
+  subgraph PC["手元の PC"]
+    CURL["curl・ブラウザ"]
+    LOGF["backend/storage/logs<br>sql-日付.log"]
+  end
+  subgraph DOCKER["Docker（compose.yaml）"]
+    APP["app：PHP 8.5.12<br>組み込みサーバー<br>ポート 8000"]
+    DEV[("db：matching_dev")]
+    TEST[("db：matching_test")]
+    MAIL["mailpit<br>51025・58025"]
+  end
+  CURL -->|"127.0.0.1:8000"| APP
+  APP -->|"db:5432"| DEV
+  APP -.->|"テストのときだけ"| TEST
+  APP -.->|"01b から"| MAIL
+  APP -->|"同じフォルダを共有"| LOGF
+  </pre>
+
+  <h3>大事な行の読み方</h3>
+  <p><strong>① 接続先は環境変数で渡す</strong>（<code>compose.yaml</code>）</p>
+  <pre><code>environment:
+  DB_CONNECTION: pgsql
+  DB_HOST: db          # コンテナの名前で届く
+  DB_DATABASE: matching_dev</code></pre>
+  <p>Laravel は、環境変数があると <code>.env</code> の値より優先します。秘密の値のファイルを触らずに、つなぎ先を PostgreSQL にできます。</p>
+
+  <p><strong>② <code>php artisan serve</code> を使わない</strong>（<code>compose.yaml</code>）</p>
+  <pre><code>command: sh -c "cd public &amp;&amp; exec php -S 0.0.0.0:8000 ../vendor/.../server.php"</code></pre>
+  <p><code>artisan serve</code> は、決まった環境変数しか子のプロセスに渡さず、<code>.env</code> を読み直します。そのため ① が届かず、API が SQLite につながっていました。<code>artisan serve</code> が中で使う PHP の組み込みサーバーを直接起動しています。<code>server.php</code> は「今いるフォルダ」を <code>public/</code> として扱うので、先に <code>cd public</code> します。</p>
+
+  <p><strong>③ テストの接続先は <code>&lt;server&gt;</code> でも上書きする</strong>（<code>phpunit.xml</code>）</p>
+  <pre><code>&lt;server name="DB_DATABASE" value="matching_test" force="true"/&gt;
+&lt;env    name="DB_DATABASE" value="matching_test" force="true"/&gt;</code></pre>
+  <p>Laravel は環境変数を <code>$_SERVER</code> から先に読み、Docker の環境変数（<code>matching_dev</code>）は <code>$_SERVER</code> に入っています。<code>&lt;env&gt;</code> は <code>$_SERVER</code> を変えないので、<code>&lt;env&gt;</code> だけだとテストが <code>matching_dev</code> につながりました。メールの送り先（<code>MAIL_MAILER</code>）も同じ書き方にしています。</p>
+
+  <p><strong>④ 安全装置</strong>（<code>tests/TestCase.php</code>）</p>
+  <pre><code>if ($connection !== 'pgsql' || $database !== 'matching_test') {
+    throw new RuntimeException('テストはテスト用の DB だけで動かす…');
+}</code></pre>
+  <p>テストのたびに、アプリを作った直後（<code>RefreshDatabase</code> が表を消すより前）に、つながる先を確かめます。③ を間違えても、開発用の DB を消しません。</p>
+
+  <p><strong>⑤ SQL のログは値を書かない</strong>（<code>QueryLogger.php</code>）</p>
+  <pre><code>DB::listen(function (QueryExecuted $query): void {
+    self::$count++;
+    Log::channel('sql')->debug('db.query', [
+        'n' => self::$count, 'ms' => $query->time, 'sql' => $query->sql, ...
+    ]);
+});</code></pre>
+  <p><code>$query->bindings</code>（値）は書きません。メールアドレスやパスワードのハッシュが入るためです。<code>self::$count</code> で、1回のリクエストで何本目の SQL かを数えます。PHP の組み込みサーバーは1リクエストごとに最初から動くので、数はリクエストごとに 0 に戻ります。</p>
+
+  <h3>実際に流れる SQL</h3>
+  <p><code>GET /api/health</code> を1回叩いたときのログ（値は出ていない）：</p>
+  <pre><code>local.DEBUG: db.query   {"requestId":"9bad2ff1-…","n":1,"ms":4.26,"sql":"select count(*) as \"aggregate\" from \"migrations\"","connection":"pgsql"}
+local.INFO:  db.summary {"requestId":"9bad2ff1-…","path":"GET api/health","queries":1,"ms":4.26}</code></pre>
+  <p>マイグレーションは、Laravel のひな形の3つ（<code>users</code>・<code>cache</code>・<code>jobs</code>）と、<code>install:api</code> が足した <code>personal_access_tokens</code> の4つ。<code>matching_dev</code> と <code>matching_test</code> の両方に流れています。</p>
+
+  <h3>テストで確かめたこと</h3>
+  <table>
+    <tr><th>テスト</th><th>確かめること</th><th>結果</th></tr>
+    <tr><td>テストは実際にテスト用の PostgreSQL（matching_test）につながっている</td><td>設定の値ではなく、<code>select current_database()</code> で PostgreSQL に聞く</td><td>通った</td></tr>
+    <tr><td>テストのメールは送らずに、メモリにためる</td><td><code>mail.default</code> が <code>array</code>。直す前の設定（<code>&lt;env&gt;</code> だけ）では落ちることを確かめた</td><td>通った</td></tr>
+    <tr><td>/api/health は DB につながり、マイグレーションの数を返す</td><td>応答の JSON が <code>status</code>・<code>database</code>・<code>migrations</code> と一致する</td><td>通った</td></tr>
+  </table>
+  <p>実行の結果：<code>3 passed (5 assertions)</code>。Larastan（レベル 5）はエラーなし、Pint は 30 ファイルすべて PASS。</p>
+  <p>安全装置は、<code>phpunit.xml</code> の DB 名をありもしない名前にしたときと、<code>&lt;server&gt;</code> を外したときの両方で、<code>RuntimeException</code> で止まることを確かめました。<code>&lt;server&gt;</code> を外して流したときは、<code>matching_dev</code> に置いた目印の表が消えずに残りました。</p>
+
+  <h3>数字</h3>
+  <p>00 は性能の一歩ではないので、比べる数字はありません。目安として、<code>/api/health</code> の SQL は1本・4〜7ms でした。</p>
+
+  <h3>解説から変えたこと</h3>
+  <table>
+    <tr><th>解説のとき</th><th>実装</th><th>理由</th></tr>
+    <tr><td>PHP は手元（mise）で動かす</td><td>PHP も Docker の <code>app</code> で動かす（D-011）</td><td>手元の PHP は部品が足りず起動しなかった。Intel 用の Homebrew と Rosetta の上で組み立てるのは、時間がかかり失敗しやすい</td></tr>
+    <tr><td><code>php artisan serve</code> で起動する</td><td>PHP の組み込みサーバーを直接起動する</td><td><code>artisan serve</code> では compose の環境変数が届かない</td></tr>
+    <tr><td>罠：「手元の PHP に <code>pdo_pgsql</code> がない」</td><td>実際は、手元の PHP そのものが動いていなかった</td><td>確かめ方が足りなかった。拡張ではなく、起動の時点でエラーになっていた</td></tr>
+    <tr><td>テストの接続先は <code>phpunit.xml</code> の <code>&lt;env&gt;</code> で切り替える</td><td><code>&lt;server&gt;</code> と <code>&lt;env&gt;</code> の両方＋安全装置</td><td><code>&lt;env&gt;</code> だけでは、テストが開発用の DB を作り直した（データはまだなく、失われたものはない）。ルールにも足した（<code>agents/rules/testing.md</code>）</td></tr>
+    <tr><td>選択肢（テスト用の DB は1つのコンテナに2つ・SQL は <code>DB::listen</code>＋<code>pg_stat_statements</code>）</td><td>そのまま</td><td>―</td></tr>
+  </table>
+
+  <h3>気になる点（直していない）</h3>
+  <ul>
+    <li>失敗した SQL は、値ごと <code>laravel.log</code> と JSON の応答（<code>APP_DEBUG=true</code>）に出る。<code>DB::listen</code> は成功した SQL にしか呼ばれないため。01b（会員登録）で扱う</li>
+    <li>ログで値が伏せられるのは、値を <code>?</code>（bindings）で渡したときだけ。SQL の文に値を直に書くと、そのまま残る</li>
+    <li>まとめの行の <code>path</code> に生のパスが入る。パスワード再設定のように、パスにトークンを含むルートを足すときに見直す</li>
+    <li><code>/api/health</code> は、マイグレーションの前だと 500 を返す</li>
+    <li>手元の秘密の値のファイルは、まだ SQLite の設定のまま。compose の環境変数で上書きしているので動く</li>
+    <li>ブランチを切り替えて <code>backend/</code> が一度消えると、動いているサーバーがエラーを返し続ける。<code>docker compose restart app</code> で直る（主要コマンドに書いた）</li>
+  </ul>
 </main>
 <script type="module">
   import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
