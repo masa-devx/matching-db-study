@@ -86,14 +86,23 @@
   </table>
 
   <h2>3. 図で見る</h2>
-  <p>1枚目は素朴な版の表、2枚目は直した版の表です。3枚目は、おかしな値をどこで断るかの流れです（都道府県の例。身長の範囲はアプリだけで守るので、DB の段はない）。</p>
+  <p>素朴な版も直した版も、<code>users</code>（アカウント：ログインのための情報）と <code>profiles</code>（その会員についての情報：性別・生年月日・ニックネームなど）に分けます（D-015）。1枚目は素朴な版、2枚目は直した版の表です。3枚目は、おかしな値をどこで断るかの流れです（都道府県の例。身長の範囲はアプリだけで守るので、DB の段はない）。</p>
   <pre class="mermaid">
 erDiagram
+  USERS ||--o{ PROFILES : "user_id で指すだけ。守りなし"
   USERS {
     bigint id PK
-    varchar name "表示名。何文字でも入る"
     varchar email UK
     varchar password "bcrypt のハッシュ"
+    timestamp email_verified_at "NULL 可"
+    varchar verification_token "01b。平文"
+    timestamp created_at "時間帯なし"
+    timestamp updated_at "時間帯なし"
+  }
+  PROFILES {
+    bigint id PK
+    bigint user_id "外部キーも UNIQUE もない"
+    varchar nickname "NULL 可。何文字でも入る"
     varchar gender "male でも M でも入る"
     varchar birthday "日付を文字で持つ"
     varchar prefecture "東京都 でも 東京 でも入る"
@@ -106,8 +115,8 @@ erDiagram
   </pre>
   <pre class="mermaid">
 erDiagram
-  GENDERS ||--o{ USERS : "性別"
   USERS ||--o| PROFILES : "1人に0か1つ"
+  GENDERS ||--o{ PROFILES : "性別"
   PREFECTURES ||--o{ PROFILES : "住んでいる所"
   GENDERS {
     smallint code PK "1 男性・2 女性・3 その他・9 回答しない"
@@ -120,15 +129,16 @@ erDiagram
   }
   USERS {
     bigint id PK
-    varchar email UK "NOT NULL"
+    varchar email UK "NOT NULL。小文字にそろえる"
     varchar password "NOT NULL。bcrypt"
-    smallint gender_code FK "NOT NULL。genders.code"
-    date birthdate "NOT NULL。CHECK 1900-01-01 以降"
+    timestamptz email_verified_at "NULL なら未確認"
     timestamptz created_at
     timestamptz updated_at
   }
   PROFILES {
     bigint user_id PK, FK "users.id。消えたら一緒に消える"
+    smallint gender_code FK "NOT NULL。genders.code"
+    date birthdate "NOT NULL。CHECK 1900-01-01 以降"
     varchar nickname "NOT NULL。CHECK 1〜20文字"
     smallint prefecture_code FK "NULL 可。prefectures.code"
     smallint height_cm "NULL 可。範囲 120〜220 はアプリで守る"
@@ -149,15 +159,14 @@ flowchart LR
   </pre>
 
   <h2>4. 設計の選択肢を比べる</h2>
-  <h3>① 1対1 をどう作るか</h3>
+  <h3>① 会員とプロフィールを、どう分けるか</h3>
   <table>
     <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
-    <tr><td>A. 1つの表（<code>users</code>）に全部入れる（素朴な版）</td><td>JOIN が要らない。作るのが速い</td><td>ログインに使う列と、相手に見せる列が混ざる。一覧で読むたびに全部の列を読む。見せてはいけない列を返しやすい</td><td>列が少なく、見せ方も1つのとき</td></tr>
-    <tr><td>B. <code>profiles</code> に分け、<code>user_id</code> を主キー兼外部キーにする</td><td>1人に2つのプロフィールを、表の作りとして作れない（主キーは重ならないため）。余計な列がない</td><td>読むときに JOIN か、もう1本の SQL が要る</td><td>1対1 がずっと変わらないとき</td></tr>
-    <tr><td>C. <code>profiles</code> に分け、自分の <code>id</code> と、UNIQUE の <code>user_id</code> を持つ</td><td>あとで「1人に複数」に変えやすい（UNIQUE を外すだけ）</td><td>列が1つ余計。UNIQUE を付け忘れると、1対1 が壊れる</td><td>将来、1対多になりそうなとき</td></tr>
+    <tr><td>A. 1つの表（<code>users</code>）に全部入れる</td><td>JOIN が要らない。作るのが速い</td><td>ログインに使う列と、相手に見せる列が混ざる。よく変わる列の更新で、行まるごとを写す（表がふくらむ）。見せてはいけない列を返しやすい</td><td>列が少なく、見せ方も1つのとき</td></tr>
+    <tr><td>B. <code>profiles</code> に分け、<code>user_id</code> を主キー兼外部キーにする</td><td>1人に2つのプロフィールを、表の作りとして作れない（主キーは重ならないため）。会員が消えたら一緒に消せる。余計な列がない</td><td>読むときに JOIN か、もう1本の SQL が要る</td><td>1対1 がずっと変わらないとき</td></tr>
+    <tr><td>C. <code>profiles</code> に分け、自分の <code>id</code> と <code>user_id</code> を持つ</td><td>あとで「1人に複数」に変えやすい</td><td>列が1つ余計。<code>user_id</code> に外部キーと UNIQUE を付け忘れると、1対1 が壊れる（素朴な版はこの「付け忘れ」の形）</td><td>将来、1対多になりそうなとき</td></tr>
   </table>
-  <div class="card point"><strong>この一歩で選ぶもの</strong>：直した版は B。プロフィールは会員ごとに1つで、増えることはない。主キーで1対1 を守るので、UNIQUE の付け忘れも起きない。</div>
-
+  <div class="card point"><strong>この一歩で選ぶもの</strong>：素朴な版は C の形で、外部キーも UNIQUE も付けない（以前の形に近づけ、「分けたのに守りがない」問題を測る）。直した版は B。プロフィールは会員ごとに1つで増えないので、主キーで1対1 を守る。性別と生年月日も <code>profiles</code> に置き、04 の検索の条件（性別・生年月日・都道府県・身長）を1つの表にそろえる（表をまたぐ複合インデックスは作れないため）。</div>
   <h3>② 選べる値（性別・都道府県）をどう持つか</h3>
   <table>
     <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
@@ -178,34 +187,46 @@ flowchart LR
   <div class="card point"><strong>この一歩で選ぶもの</strong>：直した版は C。「アプリを通らない書き込みでも壊れてはいけないか」が Yes のもの（範囲・必須・1対1・メールアドレスの重なり）は DB にも持たせる（database.md の決まり）。身長の範囲（120〜220）は、ありえない値が入っても表示が変になるだけなので、DB では型（<code>smallint</code>）だけを守り、範囲はバックエンドで守る（D-013）。18歳以上は、CHECK に「今日の日付」が使えないので、アプリ（01b の登録）で確かめる。フロントエンドの確かめだけでは、curl で API を直接呼べば通ってしまうので守れない。</div>
 
   <h2>5. 見本：素朴な版と直した版</h2>
-  <h3>素朴な版（Fat Controller・テストなし）</h3>
-  <pre><code>// マイグレーション：users に文字の列を足す（制約なし）
-$table->string('gender')->nullable();
-$table->string('birthday')->nullable();
-$table->string('height')->nullable();
+  <h3>素朴な版（Fat Controller）</h3>
+  <pre><code>// マイグレーション：profiles を作る（外部キーも UNIQUE もない・文字の列・制約なし）
+Schema::create('profiles', function (Blueprint $table) {
+    $table->id();
+    $table->unsignedBigInteger('user_id');
+    $table->string('nickname')->nullable();
+    $table->string('height')->nullable();
+});
 
-// User.php
+// Profile.php
 protected $guarded = [];   // どの列でも一括代入できる
 
-// routes/api.php
-Route::get('/users/{id}/profile', function ($id) {
-    return User::findOrFail($id);          // 全部の列を返す
-});
-Route::put('/users/{id}/profile', function (Request $request, $id) {
+// ProfileController
+public function show(int $id): User
+{
     $user = User::findOrFail($id);
-    $user->fill($request->all())->save();  // 送られた値を全部入れる
+    $user->load('profile');                 // 2本目の SQL。全部の列を返す
     return $user;
-});</code></pre>
+}
+public function update(Request $request, int $id): Profile
+{
+    $profile = Profile::where('user_id', $id)->first();   // なければ null
+    $profile->fill($request->all());                     // 送られた値を全部入れる
+    $profile->save();
+    return $profile;
+}</code></pre>
   <div class="card warn"><ul>
     <li><strong>おかしな値が入る</strong>：<code>height = "abc"</code>・<code>gender = "M"</code>・<code>birthday = "2026-13-45"</code> がそのまま保存される（FR-006〜009・012）</li>
-    <li><strong>見せてはいけないものを返す</strong>：生年月日とメールアドレスが応答に入る（FR-002）。パスワードは Laravel の <code>$hidden</code> で隠れるが、たまたま隠れているだけ</li>
-    <li><strong>変えてはいけないものが変わる</strong>：<code>gender</code>・<code>birthday</code>・<code>email</code>、<code>password</code> まで送れば書き換わる（FR-010）</li>
-    <li><strong>年齢が出せない</strong>：生年月日が文字なので、<code>'1995/4/1'</code> と <code>'1995-04-01'</code> が混ざり、年齢で絞る・並べる SQL が書けない</li>
+    <li><strong>見せてはいけないものを返す</strong>：メールアドレス・確認用の文字（01b）・生年月日が応答に入る（FR-002）。パスワードは <code>#[Hidden]</code> で隠れるが、たまたま書いてあるだけ</li>
+    <li><strong>変えてはいけないものが変わる</strong>：<code>gender</code>・<code>birthday</code>、さらに <code>user_id</code> まで送れば書き換わり、プロフィールを他人に移せる（FR-010・011）</li>
+    <li><strong>分けたのに守りがない</strong>：1人に2つのプロフィール・いない会員を指すプロフィールが入る。会員を消してもプロフィールが残る（FR-011）</li>
+    <li><strong>年齢が出せない</strong>：生年月日が文字なので、年齢で絞る・並べる SQL が書けない</li>
   </ul></div>
   <h3>直した版</h3>
   <pre><code>// マイグレーション：profiles を分け、型と制約を DB に持たせる
 Schema::create('profiles', function (Blueprint $table) {
     $table->foreignId('user_id')->primary()->constrained()->cascadeOnDelete();
+    $table->smallInteger('gender_code');
+    $table->foreign('gender_code')->references('code')->on('genders');
+    $table->date('birthdate');
     $table->string('nickname', 20);
     $table->smallInteger('prefecture_code')->nullable();
     $table->foreign('prefecture_code')->references('code')->on('prefectures');
@@ -231,9 +252,9 @@ $user->profile()->update($data);   // 性別・生年月日は受け取らない
     <tr><td>① 素朴な版で問題を見る</td><td>
       <ul>
         <li>curl で <code>height="abc"</code>・<code>gender="M"</code>・<code>birthday="2026-13-45"</code> を送り、保存されることを見る</li>
-        <li>curl で <code>email</code>・<code>password</code> を送り、書き換わることを見る</li>
-        <li><code>GET</code> の応答に、生年月日とメールアドレスが入っていることを見る</li>
-        <li><code>psql</code> で直接、同じ会員のプロフィールの重なり・おかしな値を入れてみて、入ってしまうことを見る</li>
+        <li>curl で <code>gender</code>・<code>birthday</code>・<code>user_id</code> を送り、書き換わる（プロフィールを他人に移せる）ことを見る</li>
+        <li><code>GET</code> の応答に、メールアドレス・確認用の文字・生年月日が入っていることを見る</li>
+        <li><code>psql</code> で直接、同じ会員の2つ目のプロフィール・いない会員を指すプロフィール・おかしな値を入れてみて、入ってしまうことを見る。会員を消して、プロフィールが残ることを見る</li>
         <li>SQL のログで、<code>GET</code>・<code>PUT</code> の1回に何本流れるかを数える</li>
         <li>要件 FR-001〜014 のうち、いくつ守れていないかを数える</li>
       </ul></td></tr>
@@ -256,8 +277,8 @@ $user->profile()->update($data);   // 性別・生年月日は受け取らない
 
   <h2>8. 理解を確かめる6つの問い</h2>
   <p>先に自分で答えてから、開いて見る。</p>
-  <details><summary>なぜそうするのか？（なぜ表を分け、型と制約を DB に持たせるのか）</summary><p>ログインに使うもの（メールアドレス・パスワード・変えない性別と生年月日）と、相手に見せて自分で変えるもの（表示名・身長など）は、使う場面も変える人も違うので分ける。型と制約を DB に持たせるのは、アプリを通らない書き込み（シード・手で流す SQL・別の API の書き忘れ）でも、おかしな値を入れないため。利用者に分かる言葉で返すのはアプリのバリデーション、最後の守りは DB、と役目を分ける。</p></details>
-  <details><summary>ほかの方法は？なぜ選ばなかったか？</summary><p>1つの表のまま（案 A）は JOIN が要らないが、見せてはいけない列を返しやすく、列が増えるほど一覧が重くなる。<code>profiles</code> に自分の <code>id</code> を持たせる案（案 C）は、1対多 に変えやすいが、プロフィールは増えないので、UNIQUE の付け忘れの危険のほうが大きい。性別・都道府県を <code>smallint</code>＋CHECK にする案は小さく速いが、性別は値が増える見込みがあり、増やすたびに CHECK を変えるマイグレーションが要る。ENUM 型は値を消す・並べ替えるのが重い。そこでマスタの表にした。身長の範囲は、壊れても困らないので DB の CHECK にしなかった。</p></details>
+  <details><summary>なぜそうするのか？（なぜ表を分け、型と制約を DB に持たせるのか）</summary><p>アカウント（メールアドレス・パスワード・確認）と、その会員についての情報（性別・生年月日・ニックネーム・身長など）は、使う処理・更新の多さ・守り方が違うので分ける。性別と生年月日を <code>profiles</code> に置くと、04 の検索の条件が1つの表にそろい、複合インデックスを1つ作れる。型と制約を DB に持たせるのは、アプリを通らない書き込み（シード・手で流す SQL・別の API の書き忘れ）でも、おかしな値を入れないため。利用者に分かる言葉で返すのはアプリのバリデーション、最後の守りは DB、と役目を分ける。</p></details>
+  <details><summary>ほかの方法は？なぜ選ばなかったか？</summary><p>1つの表（案 A）は JOIN が要らないが、見せてはいけない列を返しやすく、よく変わる列の更新で行まるごとを写すので表がふくらむ。<code>profiles</code> に自分の <code>id</code> を持たせる案（案 C）は、1対多 に変えやすいが、プロフィールは増えないので、外部キーと UNIQUE の付け忘れの危険のほうが大きい（素朴な版で、実際に1人に2つ・みなしごの行ができた）。性別と生年月日を <code>users</code> に置く案は、登録の確かめが <code>users</code> だけで済むが、検索の条件が2つの表に分かれる。性別・都道府県を <code>smallint</code>＋CHECK にする案は小さく速いが、性別は値が増える見込みがあり、増やすたびに CHECK を変えるマイグレーションが要る。ENUM 型は値を消す・並べ替えるのが重い。そこでマスタの表にした。身長の範囲は、壊れても困らないので DB の CHECK にしなかった。</p></details>
   <details><summary>弱点は？</summary><p>読むときに JOIN か2本目の SQL が要る（一覧で会員ごとにプロフィールを読むと N+1 になる。05 で扱う）。身長の範囲はアプリにしかないので、シードや手で流す SQL では、ありえない値が入りうる。性別・都道府県の名前を出すには、マスタの表との JOIN（か、もう1本の SQL）が要る。</p></details>
   <details><summary>問題が起きたら、どう調べて直すか？</summary><p>おかしな値が見つかったら、まず読み取りの SQL で、同じような行がどれだけあるかを数える（例：<code>height</code> が数字だけでない行）。原因の書き込み（どの API・シード・手の SQL か）を SQL のログと <code>laravel.log</code> で探す。直すときは、データを直す → 制約を足す、の順に、新しいマイグレーションで進める（流したマイグレーションは書き換えない）。制約に断られたときは、エラーの制約の名前（<code>profiles_prefecture_code_foreign</code>・<code>profiles_nickname_length_check</code>）から、どの決まりかが分かる。</p></details>
   <details><summary>データが10倍・100倍になったら？</summary><p>会員が 20人 → 2000人 → 2万人 になっても、主キーで1人を引く SQL は、インデックスで一瞬で終わる。重くなるのは一覧と検索（04）で、そのときに <code>smallint</code> で持っていることが効く（インデックスが小さい）。文字で持っていたら、検索のたびにゆれ（<code>'東京'</code> と <code>'東京都'</code>）を吸収する重い SQL が要る。表を直すマイグレーションは、行が多いほど時間がかかり、その間ロックがかかる（10 で扱う）。</p></details>
@@ -274,82 +295,93 @@ $user->profile()->update($data);   // 性別・生年月日は受け取らない
   <h2>9. 実装の記録</h2>
   <p class="meta">素朴な版のあと（9-1・9-2）と、直したあと（9-3・9-4）に、explain-change が書く。</p>
   <h3>9-1. 素朴な版</h3>
-  <p class="meta">記録: 2026-11-11 ／ PR: <a href="https://github.com/masa-devx/matching-db-study/pull/11">#11 DB・テーブル設計</a>・<a href="https://github.com/masa-devx/matching-db-study/pull/12">#12 バックエンド API</a></p>
+  <p class="meta">記録: 2026-11-12（作り直し） ／ PR: <a href="https://github.com/masa-devx/matching-db-study/pull/11">#11</a>・<a href="https://github.com/masa-devx/matching-db-study/pull/12">#12</a>（初めの形）→ <a href="https://github.com/masa-devx/matching-db-study/pull/19">#19</a>（users と profiles に分けた）・<a href="https://github.com/masa-devx/matching-db-study/pull/21">#21</a>（型と CI）</p>
+  <p>初めは <code>users</code> 1つに全部を持たせましたが、以前の形に近づけるため、<code>users</code>（アカウント）と <code>profiles</code>（その会員についての情報）に分けて作り直しました（D-015）。流したマイグレーションは書き換えず、新しいマイグレーションで「作る → 写す → 消す」の順に進めています。</p>
   <h4>書いたもの</h4>
   <table>
     <tr><th>ファイル</th><th>役割</th></tr>
-    <tr><td><code>backend/database/migrations/2026_11_11_112231_add_profile_columns_to_users_table.php</code></td><td><code>users</code> に <code>gender</code>・<code>birthday</code>・<code>prefecture</code>・<code>height</code>・<code>introduction</code>・<code>image</code> を足す。すべて文字で、NULL を許し、制約なし</td></tr>
-    <tr><td><code>backend/app/Models/User.php</code></td><td><code>$guarded = []</code> でどの列でも一括代入できる。<code>password</code> は <code>hashed</code> のまま</td></tr>
-    <tr><td><code>backend/database/factories/UserFactory.php</code>・<code>seeders/DatabaseSeeder.php</code></td><td>会員 20人（1人目は <code>test@example.com</code>）。プロフィールも文字で入れる</td></tr>
-    <tr><td><code>backend/public/images/avatars/demo-1.svg</code>〜<code>demo-6.svg</code></td><td>デモ用のプロフィール画像（色と形だけの絵）</td></tr>
-    <tr><td><code>backend/app/Http/Controllers/ProfileController.php</code></td><td><code>show</code>：1人を探してそのまま返す。<code>update</code>：送られたものを全部入れて保存する</td></tr>
-    <tr><td><code>backend/routes/api.php</code></td><td><code>GET</code>・<code>PUT /api/users/{id}/profile</code></td></tr>
+    <tr><td><code>backend/database/migrations/2026_11_11_112231_add_profile_columns_to_users_table.php</code></td><td>初めの形：<code>users</code> にプロフィールの列を、文字で足した</td></tr>
+    <tr><td><code>backend/database/migrations/2026_11_11_143154_split_profiles_from_users_table.php</code></td><td>作り直し：①<code>profiles</code> を作る（自分の <code>id</code>・外部キーも UNIQUE もない <code>user_id</code>・文字の列）②<code>users</code> から20人分を写す（<code>name</code> は <code>nickname</code> へ）③<code>users</code> からプロフィールの列と <code>name</code> を消す</td></tr>
+    <tr><td><code>backend/app/Models/Profile.php</code>・<code>User.php</code></td><td><code>$guarded = []</code>。<code>User::profile()</code>（hasOne）・<code>Profile::user()</code>（belongsTo）。リレーションの戻り値は PHPDoc（<code>@return HasOne&lt;Profile, $this&gt;</code>）</td></tr>
+    <tr><td><code>backend/database/factories/ProfileFactory.php</code>・<code>UserFactory.php</code>・<code>seeders/DatabaseSeeder.php</code></td><td>会員 20人を、アカウントとプロフィールを一緒に作る</td></tr>
+    <tr><td><code>backend/app/Http/Controllers/ProfileController.php</code></td><td><code>show(int $id): User</code>：会員を探してプロフィールを読み込んで返す。<code>update(Request $request, int $id): Profile</code>：<code>user_id</code> でプロフィールを探して、送られたものを全部入れる</td></tr>
   </table>
 
   <h4>大事な行の読み方</h4>
-  <p><strong>① 今ある表に列を足す</strong>（マイグレーション）</p>
-  <pre><code>Schema::table('users', function (Blueprint $table) {
-    $table->string('height')->nullable();   // varchar(255)。身長も文字で持つ
-});</code></pre>
-  <p><code>Schema::create</code> ではなく <code>Schema::table</code> なので、新しい表を作らず <code>alter table "users" add column ...</code> が流れる。型は文字、制約はなし。</p>
-
-  <p><strong>② 一括代入の守りを外す</strong>（<code>User.php</code>）</p>
-  <pre><code>#[Hidden(['password', 'remember_token'])]
-class User extends Authenticatable
-{
-    protected $guarded = [];   // 守る列がない</code></pre>
-  <p><code>$guarded</code> は「一括代入させない列」の一覧で、空なので全部の列に入る。<code>#[Hidden]</code> は JSON にするときに隠す列で、書いた2つ以外（<code>email</code>・<code>birthday</code>）はそのまま出る。</p>
-
-  <p><strong>③ 送られたものを全部入れる</strong>（<code>ProfileController::update</code>）</p>
-  <pre><code>$user = User::findOrFail($id);   // いなければ 404
-$user->fill($request->all());    // 送られた JSON を全部、同じ名前の列に入れる
-$user->save();                   // 変わった列だけを update する
-return $user;                    // Model をそのまま JSON にする</code></pre>
-  <p><code>fill()</code> は値を入れるだけで、DB に書くのは <code>save()</code>。入力の確かめも、だれが編集してよいかの確かめも、どこにもない。</p>
+  <p><strong>① 作る → 写す → 消す</strong>（作り直しのマイグレーション）</p>
+  <pre><code>Schema::create('profiles', ...);                    // ① 作る
+DB::statement('INSERT INTO profiles (user_id, nickname, ...)
+               SELECT id, name, ... FROM users');  // ② 写す
+Schema::table('users', fn ($t) =&gt; $t-&gt;dropColumn([...]));   // ③ 消す</code></pre>
+  <p>先に消すと、データがなくなる。写したあとに消すことで、20人分のプロフィールを失わずに表を分けた。<code>down()</code>（元に戻す処理）も書いた。</p>
+  <p><strong>② 外部キーも UNIQUE もない <code>user_id</code></strong></p>
+  <pre><code>$table-&gt;unsignedBigInteger('user_id');   // ただの整数の列</code></pre>
+  <p>DB は、<code>users</code> とつながっていることを知らない。だから、1人に2つ・いない会員を指す・会員を消しても残る、が起きる。</p>
+  <p><strong>③ <code>user_id</code> で探して、全部入れる</strong>（<code>ProfileController::update</code>）</p>
+  <pre><code>$profile = Profile::where('user_id', $id)-&gt;first();   // なければ null
+$profile-&gt;fill($request-&gt;all());                     // user_id も入る
+$profile-&gt;save();</code></pre>
+  <p>プロフィールがなければ <code>null</code> に書こうとして <code>500</code>。<code>user_id</code> も一括代入で入るので、プロフィールを別の会員に移せる。</p>
 
   <h4>実際に流れる SQL</h4>
   <table>
     <tr><th>API</th><th>SQL（ログから）</th><th>本数</th></tr>
-    <tr><td><code>GET /api/users/1/profile</code></td><td><code>select * from "users" where "users"."id" = ? limit 1</code></td><td>1本</td></tr>
-    <tr><td><code>PUT /api/users/3/profile</code></td><td>上と同じ <code>select</code> ＋ <code>update "users" set "email" = ?, ... where "id" = ?</code>（変わった列だけ）</td><td>2本</td></tr>
+    <tr><td><code>GET /api/users/1/profile</code></td><td><code>select * from "users" where "users"."id" = ? limit 1</code>・<code>select * from "profiles" where "profiles"."user_id" in (1)</code></td><td>2本</td></tr>
+    <tr><td><code>PUT /api/users/3/profile</code></td><td><code>select * from "profiles" where "user_id" = ? limit 1</code>・<code>update "profiles" set ... where "id" = ?</code></td><td>2本</td></tr>
   </table>
+  <p><code>profiles.user_id</code> にはインデックスがないので、<code>user_id</code> で探すたびに <code>profiles</code> を頭から全部読む（20人ではすぐ終わる。04 で大量のデータを入れて測る）。</p>
 
   <h4>解説から変えたこと</h4>
-  <p>なし（素朴な版は、5章の見本どおり）。</p>
+  <table>
+    <tr><th>解説のとき</th><th>実装</th><th>理由</th></tr>
+    <tr><td>素朴な版は <code>users</code> 1つ</td><td><code>users</code> と <code>profiles</code> に分けた（守りはなし）</td><td>以前の形に近づけ、「分けたのに守りがない」問題を測るため（D-015）</td></tr>
+    <tr><td>直した版の性別と生年月日は <code>users</code></td><td><code>profiles</code> に置く（予定）</td><td>04 の検索の条件を1つの表にそろえ、複合インデックスを作れるようにするため（D-015）</td></tr>
+    <tr><td><code>GET</code> は <code>$user-&gt;profile;</code></td><td><code>$user-&gt;load('profile')</code></td><td>Larastan に「何もしていない式」と指摘されたため。SQL は <code>in (1)</code> の形になった</td></tr>
+    <tr><td>型は書かない（素朴な版）</td><td><code>declare(strict_types=1)</code>・<code>int $id</code>・戻り値の型（PHPStan レベル 6）</td><td>素朴な版から型を書くと決めたため（D-016）</td></tr>
+  </table>
   <h3>9-2. 測った問題と数字</h3>
-  <h4>おかしな値が入るか（DB に直接・API から）</h4>
+  <h4>API から（curl）</h4>
   <table>
     <tr><th>確かめたこと</th><th>結果</th><th>要件</th></tr>
-    <tr><td>DB に直接、会員 2 に <code>height='abc'</code>・<code>gender='M'</code>・<code>birthday='2026-13-45'</code>・<code>prefecture='東京'</code></td><td><strong>入った</strong></td><td>FR-012</td></tr>
-    <tr><td><code>PUT</code> で <code>height:"abc"</code>・<code>prefecture:"とうきょう"</code></td><td><code>200</code>。<strong>保存された</strong></td><td>FR-007・008</td></tr>
-    <tr><td><code>PUT</code> で21文字の名前</td><td><code>200</code>。21文字のまま保存</td><td>FR-006</td></tr>
-    <tr><td><code>PUT</code> で <code>gender</code>・<code>birthday</code>・<code>email</code>・<code>password</code></td><td><code>200</code>。<strong>全部書き換わった</strong>（パスワードはハッシュ化されて入る）</td><td>FR-010</td></tr>
-    <tr><td><code>GET</code> の応答</td><td><code>email</code>・<code>birthday</code> が返る（<code>password</code> は <code>#[Hidden]</code> で隠れる）。年齢は返らない</td><td>FR-001〜003</td></tr>
-    <tr><td><code>PUT</code> で空の名前（<code>"name": ""</code>）</td><td><strong><code>500</code></strong>。Laravel が空の文字を <code>null</code> に変え（<code>ConvertEmptyStringsToNull</code>）、ひな形の <code>users.name</code> の NOT NULL に DB が断った（<code>SQLSTATE[23502]</code>）。何も保存されないが、応答に SQL のエラーが出る</td><td>FR-006（直した版は <code>422</code>）</td></tr>
-    <tr><td>同じメールアドレスの会員を DB に入れる</td><td>ひな形の <code>users_email_unique</code> で<strong>断られた</strong></td><td>FR-013</td></tr>
+    <tr><td><code>GET</code> の応答</td><td>会員の中に <code>profile</code>。<strong>メールアドレス・確認用の文字（<code>verification_token</code>）・生年月日</strong>も返る。年齢は返らない</td><td>FR-001〜003</td></tr>
+    <tr><td><code>GET</code> で他人の確認用の文字</td><td>会員 5 に <code>secret-abc</code> を入れると、そのまま見えた（01b の確認を、他人が済ませられる）</td><td>FR-002</td></tr>
+    <tr><td><code>GET /api/users/999/profile</code>・<code>abc</code></td><td><code>404</code>・<code>500</code>（<code>int $id</code> に <code>"abc"</code> が来て <code>TypeError</code>）</td><td>FR-004</td></tr>
+    <tr><td><code>PUT</code> で <code>height:"abc"</code>・空のニックネーム・<code>gender</code>・<code>birthday</code></td><td><code>200</code>。全部保存。<strong>空のニックネームは NULL で保存された</strong>（初めの形では、ひな形の <code>users.name</code> の NOT NULL で <code>500</code> だった。分けたことで守りがなくなった）</td><td>FR-006・008・010</td></tr>
+    <tr><td><code>PUT</code> で21文字</td><td><code>200</code>。21文字のまま</td><td>FR-006</td></tr>
+    <tr><td><code>PUT</code> で <code>{"user_id": 2}</code></td><td><code>200</code>。<strong>会員 3 のプロフィールが会員 2 のものになった</strong>（会員 2 は2つ、会員 3 は0。会員 3 を <code>GET</code> すると <code>"profile": null</code>）</td><td>FR-010・011</td></tr>
+    <tr><td><code>PUT</code> で <code>email</code>（<code>profiles</code> にない列）・いない会員</td><td>どちらも <code>500</code></td><td>―</td></tr>
+  </table>
+  <h4>DB に直接（psql）</h4>
+  <table>
+    <tr><th>確かめたこと</th><th>結果</th><th>要件</th></tr>
+    <tr><td>会員 2 に <code>height='abc'</code>・<code>gender='M'</code>・<code>birthday='2026-13-45'</code>・<code>prefecture='東京'</code>（初めの形で入れ、分けるときにそのまま写った）</td><td><strong>入った</strong>。表を分けたあとも、列は文字のまま</td><td>FR-012</td></tr>
+    <tr><td>会員を作り、プロフィールを作って、会員を消す（トランザクションの中で試して取り消した）</td><td><strong>プロフィールが残った</strong>（もういない会員を指すみなしごの行）</td><td>FR-011</td></tr>
+    <tr><td>同じメールアドレスの会員を入れる</td><td>ひな形の <code>users_email_unique</code> で<strong>断られた</strong></td><td>FR-013</td></tr>
+    <tr><td><code>password</code> の形</td><td>20人とも <code>$2y$</code> で始まる</td><td>FR-014</td></tr>
+    <tr><td><code>profiles</code> の制約</td><td>主キーと NOT NULL だけ。<code>user_id</code> に外部キー・UNIQUE・インデックスがない</td><td>FR-011</td></tr>
   </table>
   <h4>文字の生年月日で起きること</h4>
   <table>
     <tr><th>SQL</th><th>結果</th></tr>
-    <tr><td><code>select count(*) from users where birthday::date &lt;= current_date - interval '30 years'</code>（30歳以上を数える）</td><td><strong>エラー</strong>：<code>date/time field value out of range: "2026-13-45"</code>。1行でもおかしな値があると、年齢で絞る SQL が全部失敗する（04 の検索が書けない）</td></tr>
-    <tr><td><code>select '1995/4/1' &lt; '1995-04-01'</code></td><td><strong>偽</strong>。文字として1文字ずつ比べるので、日付として正しく比べられない</td></tr>
+    <tr><td><code>birthday::date &lt;= current_date - interval '30 years'</code>（30歳以上を数える）</td><td><strong>エラー</strong>：<code>date/time field value out of range: "2026-13-45"</code>。1行でもおかしな値があると、年齢で絞る SQL が全部失敗する</td></tr>
+    <tr><td><code>'1995/4/1' &lt; '1995-04-01'</code></td><td><strong>偽</strong>。文字として1文字ずつ比べるので、日付として正しく比べられない</td></tr>
   </table>
   <h4>数字</h4>
   <table>
-    <tr><th>測ったもの</th><th>素朴な版（前）</th></tr>
-    <tr><td>守れている要件</td><td><strong>5 / 14</strong>（FR-004・005・011・013・014）</td></tr>
-    <tr><td>守れていない要件</td><td>FR-001〜003（返す形）・006〜010（入力の確かめ）・012（DB の制約）</td></tr>
-    <tr><td><code>GET</code> 1回の SQL</td><td>1本（NFR-001 の「2本以内」は守れている）</td></tr>
-    <tr><td><code>PUT</code> 1回の SQL</td><td>2本</td></tr>
-    <tr><td>DB に直接入れたおかしな値のうち、断られたもの</td><td>0 / 4（身長・性別・生年月日・都道府県）</td></tr>
+    <tr><th>測ったもの</th><th>初めの形（users 1つ）</th><th>作り直し（users と profiles）</th></tr>
+    <tr><td>守れている要件</td><td>5 / 14</td><td><strong>4 / 14</strong>（FR-004・005・013・014）。FR-011（1人にプロフィールは1つ）が、分けたことで守れなくなった</td></tr>
+    <tr><td><code>GET</code> 1回の SQL</td><td>1本</td><td>2本（NFR-001 の「2本以内」は守れている）</td></tr>
+    <tr><td><code>PUT</code> 1回の SQL</td><td>2本</td><td>2本</td></tr>
+    <tr><td>DB に直接入れたおかしな値のうち、断られたもの</td><td>0 / 4</td><td>0 / 4（列は文字のまま）</td></tr>
   </table>
-  <p>FR-011（1人にプロフィールは1つ）は、表が1つなので2つ目ができる余地がなく、守れていることにした。FR-009（自己紹介は 500文字まで）は試していないが、確かめる場所がないので守れていないと数えた。</p>
+  <p>FR-009（自己紹介は 500文字まで）は試していないが、確かめる場所がないので守れていないと数えた。</p>
   <h4>気になる点（直していない）</h4>
   <ul>
-    <li>空の名前のときの <code>500</code> の応答に、SQL のエラー（と、送った値）がそのまま出る。00 のレビューの P2 で予想していたもの</li>
-    <li>表にない列の名前（例：<code>nickname</code>）を送っても <code>500</code> になる（<code>$guarded = []</code> は列があるかを確かめないため）</li>
+    <li>空のニックネームのとき、初めの形は <code>500</code>（DB が守った）、作り直しのあとは保存されてしまう。分けたときに、ひな形の NOT NULL の守りを写さなかったため</li>
+    <li><code>hasOne</code> は、1人にプロフィールが2つあるとき、どちらか1つを返す（どちらになるかは決まっていない）</li>
+    <li><code>500</code> の応答に、エラーの中身（SQL・送った値）がそのまま出る（<code>APP_DEBUG=true</code>）</li>
     <li>他人の <code>id</code> でも書き換えられる（01b で直す）</li>
-    <li>確かめに使った会員 3 の都道府県は、元の値を控えておらず「北海道」に戻した</li>
+    <li>確かめに使った会員 3 の都道府県は、初めの確かめで元の値を控えておらず「北海道」にした（作り直しの確かめでは、控えた値で戻した）</li>
   </ul>
   <h3>9-3. 足したテスト</h3>
   <p>【まだ実装していない】</p>
