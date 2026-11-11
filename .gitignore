@@ -24,3 +24,8 @@ coverage/
 
 # 手元だけのメモ（個人のパスなど）
 *.local.md
+
+# Laravel が自動で作るもの（main には backend/ の .gitignore がないため、ここでも外す）
+backend/storage/logs/*.log
+backend/bootstrap/cache/*.php
+backend/storage/framework/views/*.php
