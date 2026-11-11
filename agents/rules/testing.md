@@ -81,6 +81,9 @@ await expect(createInvoice(input)).rejects.toThrow(InvoiceValidationError);
 - 新しいケースは既存テストの横に足す。既存テストの入力を新しいケースに書き換えない。
   既存テストの削除・スキップには理由を書く
 
+- compose の `environment` で渡した変数を、テストで別の値にするときは、`phpunit.xml` に `<server>` と `force="true"` の `<env>` の両方で書く
+  （Laravel は `$_SERVER` から先に読み、Docker の環境変数は `$_SERVER` に入る。`<env>` は `$_SERVER` を変えないので、
+  片方だけだと compose の値が勝つ。00 で DB の接続先とメールの送り先の2回、テストが開発用の設定のまま動いた）
 - E2Eでアプリ内部のAPI応答をモックしない（結合を確かめるのがE2Eの仕事）
 - 一部だけ実行する指定・飛ばす指定（記入例: `.only` / `.skip`）を残したままコミットしない
 - 新規テストは先にRed（失敗）を確認してから実装する
