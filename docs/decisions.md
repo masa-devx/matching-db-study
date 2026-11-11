@@ -19,6 +19,7 @@
 | D-008 | 有効 | メッセージは PostgreSQL（05）。05c で同じものを Firebase Emulator（手元の Firestore）で作って比べる | 最初から Firestore・解説で比べるだけ | RDB とドキュメント DB の違いを、同じ題材で説明できるようにする。Emulator ならクラウドのアカウントと秘密の鍵が要らない | ― |
 | D-009 | 有効 | デプロイしない。11 で DB の引っ越しを手元で試す。クラウドに載せるかは、すべての一歩のあとに決める | AWS（RDS）に載せる | お金と秘密の値の管理を増やさない | ― |
 | D-010 | 有効 | テストは本物の PostgreSQL に対して実行する（Pest） | SQLite のメモリ DB | SQLite ではロックや UNIQUE の動きが違い、確かめたいことが確かめられない | ― |
+| D-011 | 有効 | PHP も Docker（`compose.yaml` の `app`）で動かす。PHP 8.5＋`pdo_pgsql`＋Composer。artisan・composer・テストはコンテナの中で動かす | 手元の PHP を mise で組み立てる・Homebrew の PHP を直す | 手元の PHP は部品が足りず動かなかった。Intel 用の Homebrew と Rosetta の上で組み立てると、時間がかかり失敗しやすい。DB と同じ箱にそろえると、だれの PC でも同じ版で動く | 00（[#3](https://github.com/masa-devx/matching-db-study/issues/3)） |
 
 ## 一歩で決めたこと
 

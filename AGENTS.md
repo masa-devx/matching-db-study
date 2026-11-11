@@ -12,7 +12,7 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 
 | 種類 | 使うもの | 版 | 選んだ理由（短く） |
 | --- | --- | --- | --- |
-| 言語・実行環境 | PHP（手元・mise）・Node（手元・mise）・Docker | PHP 8.5・Node 26.13.0 | 手元で動かすとコマンドが速い。DB だけ Docker |
+| 言語・実行環境 | PHP（Docker の `app`）・Node（手元・mise。03b から）・Docker | PHP 8.5・Node 26.13.0 | PHP と DB を Docker にそろえ、だれの PC でも同じ版で動かす（D-011） |
 | フレームワーク | Laravel（API）・React＋TypeScript＋Vite（03b から） | 入れたときの最新・React 19 | 仕事で使ってきた形で、Eloquent の裏の SQL を確かめる |
 | DB・ORM | PostgreSQL（Docker compose）・Eloquent | 18・Laravel と同じ | 流れた SQL は `DB::listen` でログに出し、`->explain()` で実行計画を見る |
 | 状態の管理（画面） | React の Context → Zustand（05b から） | React と同じ・入れたときの最新 | 標準の限界を体験してから移す。TanStack Query・OpenAPI は使わない |
@@ -31,7 +31,8 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 | backend/ | Laravel（API）。Laravel の標準の形のまま（`app/Models`・`app/Http/Controllers`・`app/Http/Resources`・`database/migrations`） |
 | backend/tests/ | Pest のテスト。`Unit/`（ロジック）・`Feature/`（DB と API をまたぐもの） |
 | frontend/ | React（03b から）。テストは `src/**/*.test.tsx` |
-| compose.yaml | PostgreSQL（開発用とテスト用） |
+| compose.yaml | PHP（`app`）・PostgreSQL（開発用とテスト用）・Mailpit |
+| docker/ | コンテナの作り方（`php/Dockerfile`）と、DB を最初に作る SQL（`db/init/`） |
 | docs/ | 何を作るか（product.md・requirements/）と、なぜそうしたか（decisions.md）。目次は docs/README.md |
 | explanations/ | 一歩ごとの解説と図（HTML）。目次は index.html、ひな形は _template.html |
 | agents/ | 開発ルール（rules/）・手順（skills/） |
