@@ -1,0 +1,11 @@
+# Larastan（PHPStan を Laravel 向けにしたもの）の設定
+# レベルは 5 から始める。素朴な版（Fat Controller）でも通る強さにして、直す段階で上げる
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: 5
+    paths:
+        - app
+        - routes
+        - tests
