@@ -1,6 +1,6 @@
 ---
 name: study-calendar
-description: 一歩（00〜10）を小さなタスクに分け、タイトルとやることの詳細を作り、確認を取ってから Google カレンダーに入れる。「カレンダーに入れて」「02 の予定を作って」「学習の予定を立てて」「study-calendar」と言われたとき、explain-step・explain-change の終わりに「入れる」と答えられたときに使う。
+description: 一歩（00〜11）を小さなタスクに分け、タイトルとやることの詳細を作り、確認を取ってから Google カレンダーに入れる。「カレンダーに入れて」「02 の予定を作って」「学習の予定を立てて」「study-calendar」と言われたとき、explain-step・explain-change の終わりに「入れる」と答えられたときに使う。
 ---
 
 # 一歩を分けて、カレンダーに入れる
