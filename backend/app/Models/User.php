@@ -6,6 +6,7 @@ namespace App\Models;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -22,6 +23,16 @@ class User extends Authenticatable
      * @var list<string>
      */
     protected $guarded = [];
+
+    /**
+     * その会員についての情報（D-015）。素朴な版の DB には 1対1 の守りがないので、2つ以上あっても1つだけを返す
+     *
+     * @return HasOne<Profile, $this>
+     */
+    public function profile(): HasOne
+    {
+        return $this->hasOne(Profile::class);
+    }
 
     /**
      * Get the attributes that should be cast.
