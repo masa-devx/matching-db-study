@@ -3,6 +3,33 @@
 name: matching-db-study
 
 services:
+  app:
+    build: ./docker/php
+    # リポジトリ全体を /app に置く。Laravel は /app/backend
+    volumes:
+      - .:/app
+      - composer-cache:/root/.composer/cache
+    ports:
+      - "127.0.0.1:8000:8000"
+    # 接続先は環境変数で渡す。Laravel は、環境変数があると .env の値より優先する
+    # どれも手元だけの捨ててよい値（db と同じ）。秘密の値（APP_KEY など）はここに書かない
+    environment:
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_DATABASE: matching_dev
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      MAIL_MAILER: smtp
+      MAIL_HOST: mailpit
+      MAIL_PORT: "1025"
+    # php artisan serve は環境変数の多くを子のプロセスに渡さず .env を読み直すので、上の接続先が届かない。
+    # そのため、artisan serve が中で使う PHP の組み込みサーバーを直接起動する（server.php は今いるフォルダを public として扱う）
+    command: sh -c "cd public && exec php -S 0.0.0.0:8000 ../vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php"
+    depends_on:
+      db:
+        condition: service_healthy
+
   db:
     image: postgres:18.6
     # ポートは手元の PC からだけ開ける（127.0.0.1）。5432 は手元の PostgreSQL とぶつかるので 55432 にする
@@ -39,3 +66,4 @@ services:
 
 volumes:
   db-data:
+  composer-cache:
