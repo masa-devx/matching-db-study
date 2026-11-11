@@ -1,0 +1,105 @@
+# バックエンド（Laravel）の CI。中身と決まりは docs/ci.md（D-017）
+name: backend
+
+on:
+  pull_request:
+    branches: [legacy-repo, refactored-repo]
+    paths:
+      - "backend/**"
+      - "compose.yaml"
+      - ".github/workflows/backend.yml"
+  push:
+    branches: [legacy-repo, refactored-repo, "legacy/**", "refactor/**"]
+    paths:
+      - "backend/**"
+      - "compose.yaml"
+      - ".github/workflows/backend.yml"
+
+# 同じブランチで続けて push したら、前の実行は止める
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: backend
+
+env:
+  PHP_VERSION: "8.5"
+  PHP_EXTENSIONS: pdo_pgsql, intl, zip
+
+jobs:
+  pint:
+    name: 整形の確かめ（Pint）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: ${{ env.PHP_EXTENSIONS }}
+          coverage: none
+      - uses: actions/cache@v4
+        with:
+          path: backend/vendor
+          key: vendor-${{ runner.os }}-${{ env.PHP_VERSION }}-${{ hashFiles('backend/composer.lock') }}
+      - run: composer install --no-interaction --no-progress --prefer-dist
+      - run: ./vendor/bin/pint --test
+
+  phpstan:
+    name: 静的解析（PHPStan）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: ${{ env.PHP_EXTENSIONS }}
+          coverage: none
+      - uses: actions/cache@v4
+        with:
+          path: backend/vendor
+          key: vendor-${{ runner.os }}-${{ env.PHP_VERSION }}-${{ hashFiles('backend/composer.lock') }}
+      - run: composer install --no-interaction --no-progress --prefer-dist
+      - run: ./vendor/bin/phpstan analyse --memory-limit=1G --no-progress
+
+  pest:
+    name: テスト（Pest）
+    runs-on: ubuntu-latest
+    services:
+      # テスト用の DB。名前は phpunit.xml と同じ matching_test。CI の中だけで使う捨ての値
+      postgres:
+        image: postgres:18.6
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: matching_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d matching_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      # 接続先。phpunit.xml が DB_CONNECTION・DB_DATABASE を上書きするので、ここはホストなどだけ
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: ${{ env.PHP_EXTENSIONS }}
+          coverage: none
+      - uses: actions/cache@v4
+        with:
+          path: backend/vendor
+          key: vendor-${{ runner.os }}-${{ env.PHP_VERSION }}-${{ hashFiles('backend/composer.lock') }}
+      - run: composer install --no-interaction --no-progress --prefer-dist
+      # アプリの鍵は、CI の中でその場で作る（本物の秘密の値は使わない）
+      - run: cp .env.example .env && php artisan key:generate --no-interaction
+      - run: ./vendor/bin/pest

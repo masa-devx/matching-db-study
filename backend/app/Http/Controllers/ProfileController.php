@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
 use App\Models\Profile;
@@ -14,7 +16,7 @@ use Illuminate\Http\Request;
  */
 class ProfileController extends Controller
 {
-    public function show($id)
+    public function show(int $id): User
     {
         $user = User::findOrFail($id);
         $user->load('profile');   // ここで2本目の SQL が流れ、応答に profile が入る
@@ -22,7 +24,7 @@ class ProfileController extends Controller
         return $user;
     }
 
-    public function update(Request $request, $id)
+    public function update(Request $request, int $id): Profile
     {
         $profile = Profile::where('user_id', $id)->first();   // 見つからなければ null
         $profile->fill($request->all());
