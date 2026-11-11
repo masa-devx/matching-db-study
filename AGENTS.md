@@ -55,6 +55,7 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 | 流れた SQL を見る | リポジトリのルート | `tail -n 20 backend/storage/logs/sql-$(date -u +%F).log`（日付は UTC） | app が起動していて、`APP_ENV=local` | `php artisan db:show`・`docker compose config`（接続の設定や秘密の値をまとめて出すため、AI は使わない） |
 | DB に入る | リポジトリのルート | `docker compose exec db psql -U postgres -d matching_dev`（テスト用は `-d matching_test`） | db が起動している | ― |
 | ブランチを切り替えたあと | リポジトリのルート | `docker compose restart app` | ― | 切り替え先に `backend/` がないと、動いているサーバーのフォルダが一度消えて、API がエラーを返し続けるため |
+| CI | GitHub（PR と push で自動） | `.github/workflows/backend.yml`（`legacy-repo` にある）。中身と決まりは [docs/ci.md](docs/ci.md)。結果は `gh pr checks <番号>` で見る | ― | CI の設定を緩めて通す（レベルを下げる・対象から外す） |
 | ビルド | ― | 対象外（デプロイしない。画面は 03b で決める） | ― | ― |
 
 未記入のコマンドは推測して実行しない。必要な操作について確認する。
@@ -72,6 +73,7 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 | 実装・設計の変更 | [architecture.md](agents/rules/architecture.md) |
 | 振る舞いの変更・テストの追加 | [testing.md](agents/rules/testing.md) |
 | 構造化ログの実装・変更 | [logging.md](agents/rules/logging.md) |
+| PHP のコードを書く・変える | [quality-types.md](agents/rules/quality-types.md) |
 | DB・マイグレーションの作成・変更 | [database.md](agents/rules/database.md) |
 
 レビューは [review](agents/skills/review/SKILL.md) の手順で行う。矛盾する指示や未確定の仕様は、該当箇所を示して確認する。

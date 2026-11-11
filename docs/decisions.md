@@ -20,6 +20,8 @@
 | D-009 | 有効 | デプロイしない。11 で DB の引っ越しを手元で試す。クラウドに載せるかは、すべての一歩のあとに決める | AWS（RDS）に載せる | お金と秘密の値の管理を増やさない | ― |
 | D-010 | 有効 | テストは本物の PostgreSQL に対して実行する（Pest） | SQLite のメモリ DB | SQLite ではロックや UNIQUE の動きが違い、確かめたいことが確かめられない | ― |
 | D-011 | 有効 | PHP も Docker（`compose.yaml` の `app`）で動かす。PHP 8.5＋`pdo_pgsql`＋Composer。artisan・composer・テストはコンテナの中で動かす | 手元の PHP を mise で組み立てる・Homebrew の PHP を直す | 手元の PHP は部品が足りず動かなかった。Intel 用の Homebrew と Rosetta の上で組み立てると、時間がかかり失敗しやすい。DB と同じ箱にそろえると、だれの PC でも同じ版で動く | 00（[#3](https://github.com/masa-devx/matching-db-study/issues/3)） |
+| D-016 | 有効 | 準備 | 素朴な版（`legacy-repo`）から、PHP の型を書く。`declare(strict_types=1)`・引数と戻り値とプロパティの言語の型・配列やリレーションの中身は PHPDoc・Model の列の型は Laravel IDE Helper でマイグレーションから作る。PHPStan（Larastan）のレベルは、`legacy-repo` が 6、`refactored-repo` は直す一歩ごとに上げて最後は 9 | 素朴な版は型を書かず、直す段階で足す（Laravel 5 系のころの形に近い） | 関数の型と PHPDoc で管理する書き方に、早くから慣れる。素朴な版でもレベル 8（NULL の扱い）は見ないので、「`null` に書こうとして `500`」のような素朴な版の問題は残して測れる | [quality-types.md](../agents/rules/quality-types.md) |
+| D-017 | 有効 | 準備 | CI は GitHub Actions。PR と push で、整形の確かめ（Pint）・静的解析（PHPStan）・テスト（Pest。GitHub の上の PostgreSQL 18.6）を別々のジョブで動かす。設定は `legacy-repo` に置く。CI が通らない PR はマージしない | CI を使わず手元だけで確かめる・Docker のイメージを CI でも作る | 手元で忘れても、毎回同じ確かめが動く。Docker のイメージを作り直すと遅いので、PHP は setup-php で用意する。`main` には `backend/` がないので `legacy-repo` に置く | [ci.md](ci.md) |
 
 ## 一歩で決めたこと
 
