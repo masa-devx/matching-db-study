@@ -29,7 +29,7 @@ API の正本。作る前に設計を書き、確かめてもらってから実�
 | [01b](01b-auth.md) | `POST /api/users` | 登録する | 実装済み（レガシー版） |
 | [01b](01b-auth.md) | `GET /api/email-verifications/{token}`（改善版は `GET /api/users/{id}/email-verification/{hash}`） | メールアドレスを確認する（確認のメールのリンク） | 実装済み（レガシー版） |
 | [01b](01b-auth.md) | `POST /api/email-verifications`（改善版は `POST /api/me/email-verification`） | 確認のメールをもう一度送る | 実装済み（レガシー版） |
-| [01b](01b-auth.md) | `POST /api/auth/login` | ログインする | 確定 |
-| [01b](01b-auth.md) | `GET /api/me` | 自分の情報を見る | 確定 |
-| [01b](01b-auth.md) | `POST /api/auth/logout` | ログアウトする | 確定 |
+| [01b](01b-auth.md) | `POST /api/auth/login` | ログインする | 実装済み（レガシー版） |
+| [01b](01b-auth.md) | `GET /api/me` | 自分の情報を見る | 実装済み（レガシー版） |
+| [01b](01b-auth.md) | `POST /api/auth/logout` | ログアウトする | 実装済み（レガシー版） |
 | [01b](01b-auth.md) | `POST /api/auth/refresh`（改善版だけ） | トークンを取り替える | 確定 |
