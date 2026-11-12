@@ -1,0 +1,66 @@
+{
+  "operations": [
+    {
+      "title": "相手を探す（2ページ目。<code>GET /api/users?gender=male&amp;age_min=25&amp;age_max=35&amp;prefecture[]=…&amp;height_min=170&amp;page=2</code>）",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "23本（1ページ20人のとき）",
+          "code": "$me = Profile::where('user_id', $payload->sub)->first();\n$likedIds = Like::where('from_user_id', $payload->sub)->pluck('to_user_id');\n$users = User::whereNotNull('email_verified_at')\n    ->where('id', '!=', $payload->sub)\n    ->whereNotIn('id', $likedIds)\n    ->whereHas('profile', function ($q) use ($request, $gender) {\n        $q->where('gender', $gender);\n        $q->where('birthday', '<=', now()->subYears(25)->format('Y-m-d'));\n        $q->where('birthday', '>', now()->subYears(36)->format('Y-m-d'));\n        $q->whereIn('prefecture', $request->input('prefecture'));\n        $q->where('height', '>=', $request->input('height_min'));\n    })\n    ->orderBy('last_login_at', 'desc')\n    ->offset(($page - 1) * 20)->limit(20)\n    ->get();\nforeach ($users as $user) {\n    $user->profile;   // 1人ずつ読む\n}",
+          "sql": "-- ① 自分のプロフィール（性別の既定を決める）\nselect * from \"profiles\"\nwhere \"user_id\" = 23 limit 1;\n\n-- ② いいねした相手を全部 PHP に持ってくる\nselect \"to_user_id\" from \"likes\"\nwhere \"from_user_id\" = 23;\n\n-- ③ 本体。②の ID を全部 not in に並べる\nselect * from \"users\"\nwhere \"email_verified_at\" is not null\n  and \"id\" != 23\n  and \"id\" not in (5, 7)\n  and exists (\n    select * from \"profiles\"\n    where \"users\".\"id\" = \"profiles\".\"user_id\"\n      and \"gender\" = 'male'\n      -- 生年月日も身長も文字として比べる\n      and \"birthday\" <= '2001-11-12'\n      and \"birthday\" > '1990-11-12'\n      and \"prefecture\" in ('東京都', '神奈川県')\n      and \"height\" >= '170')\norder by \"last_login_at\" desc\nlimit 20 offset 20;\n\n-- ④ 1人ごとにプロフィールを読む（20回）\nselect * from \"profiles\"\nwhere \"user_id\" = 101 limit 1;",
+          "notes": [
+            "<code>whereHas()</code> は <code>exists (select * from profiles …)</code> になる。条件は <code>profiles</code> にあるのに、取ってくるのは <code>users</code> なので、表示に使うプロフィールを ④ でもう一度読む（1＋N）",
+            "<code>\"height\" >= '170'</code> は文字の比べ。<code>'99'</code> は <code>'170'</code> より「大きい」（先頭の <code>9</code> と <code>1</code> を比べる）ので、身長 99 の会員も出る",
+            "<code>order by \"last_login_at\" desc</code> だけで、同じ時刻の並びが決まらない。PostgreSQL は <code>desc</code> のとき <code>NULL</code> を先頭に置くので、まだ一度もログインしていない会員が最初に出る",
+            "<code>offset 20</code> は、飛ばす20人も読んでから捨てる。100ページ目なら 1,980人を読んで捨てる",
+            "応答は <code>User</code> をそのまま返すので、メールアドレスと <code>verification_token</code> も出る"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版",
+          "count": "2本",
+          "code_label": "PHP（クエリビルダー）",
+          "code": "$gender = $c['gender'] ?? $me->profile->oppositeGenderCode();  // ①\n$rows = DB::table('users as u')                                   // ②\n    ->join('profiles as p', 'p.user_id', '=', 'u.id')\n    ->whereNotNull('u.email_verified_at')\n    ->where('u.id', '<>', $me->id)\n    ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('likes as l')\n        ->where('l.from_user_id', $me->id)->whereColumn('l.to_user_id', 'u.id'))\n    ->where('p.gender_code', $gender)\n    ->whereBetween('p.birthdate', [$oldest, $youngest])\n    ->whereIn('p.prefecture_code', $c['prefectures'])\n    ->where('p.height_cm', '>=', $c['height_min'])\n    ->when($cursor, fn ($q) => $q->whereRaw(\n        '(u.last_login_at, u.id) < (?, ?)', [$cursor['at'], $cursor['id']]))\n    ->orderByDesc('u.last_login_at')->orderByDesc('u.id')\n    ->limit(21)   // 1人多く読んで、続きがあるかを知る\n    ->select('u.id', 'p.nickname', 'p.birthdate', 'p.prefecture_code',\n             'p.height_cm', 'p.image', 'u.last_login_at')\n    ->get();",
+          "sql": "-- ① 自分のプロフィール（性別の既定を決める）\nselect * from \"profiles\"\nwhere \"user_id\" = 23 limit 1;\n\n-- ② 本体。1本で絞り込み・除く・並び・続き\nselect \"u\".\"id\", \"p\".\"nickname\", \"p\".\"birthdate\",\n       \"p\".\"prefecture_code\", \"p\".\"height_cm\",\n       \"p\".\"image\", \"u\".\"last_login_at\"\nfrom \"users\" as \"u\"\ninner join \"profiles\" as \"p\"\n  on \"p\".\"user_id\" = \"u\".\"id\"\nwhere \"u\".\"email_verified_at\" is not null\n  and \"u\".\"id\" <> 23\n  -- いいねした相手は DB の中で除く\n  and not exists (\n    select 1 from \"likes\" as \"l\"\n    where \"l\".\"from_user_id\" = 23\n      and \"l\".\"to_user_id\" = \"u\".\"id\")\n  and \"p\".\"gender_code\" = 1\n  -- 年齢の幅を、生年月日の幅（date）に直して比べる\n  and \"p\".\"birthdate\" between '1990-11-13' and '2001-11-12'\n  and \"p\".\"prefecture_code\" in (13, 14)\n  and \"p\".\"height_cm\" >= 170\n  -- カーソル：前のページの最後の人より「あと」\n  and (u.last_login_at, u.id) < ('2026-11-12 08:00:00', 101)\norder by \"u\".\"last_login_at\" desc, \"u\".\"id\" desc\nlimit 21;",
+          "notes": [
+            "一覧に出す列を JOIN で一緒に取るので、1人ごとの SQL がない。件数が増えても2本のまま（NFR-SEARCH-001）",
+            "<code>not exists</code> は、いいねが何千件あっても SQL の長さが変わらない。<code>likes</code> の <code>(from_user_id, to_user_id)</code> の UNIQUE のインデックスで、1人ごとに1回探すだけで済む",
+            "<code>(last_login_at, id) &lt; (…)</code> は「時刻が前、または同じ時刻で ID が小さい」。ID で並びを必ず決めるので、続きで重ならず抜けない（FR-SEARCH-006・008）",
+            "<code>users (last_login_at, id)</code> のインデックスを後ろから読めば、新しい順に読みながら条件に合う21人が見つかったところで止まる。ページが深くなっても、飛ばす行を読まない",
+            "<code>last_login_at</code> は <code>NOT NULL</code>（登録した時刻を最初の値にする）にして、NULL が先頭に出る問題をなくす"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "ログインしたときに、最終ログインを書き換える（<code>POST /api/auth/login</code> の中）",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "1本（ログインの2本に足す）",
+          "code": "$user->last_login_at = now();\n$user->save();",
+          "sql": "-- updated_at も一緒に変わる\nupdate \"users\"\nset \"last_login_at\" = '2026-11-12 09:00:00',\n    \"updated_at\" = '2026-11-12 09:23:58'\nwhere \"id\" = 23;",
+          "notes": [
+            "<code>save()</code> は <code>updated_at</code> も書き換える。「会員の情報が最後に変わった時刻」が、ログインのたびに変わってしまう",
+            "時刻は PHP で作って送る（アプリのサーバーの時計）"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版",
+          "count": "1本（ログインの2本に足す）",
+          "code_label": "PHP（クエリビルダー）",
+          "code": "DB::table('users')\n    ->where('id', $user->id)\n    ->update(['last_login_at' => DB::raw('now()')]);",
+          "sql": "-- 最終ログインだけを変える\nupdate \"users\"\nset \"last_login_at\" = now()\nwhere \"id\" = 23;",
+          "notes": [
+            "<code>updated_at</code> を変えない。時刻は DB の <code>now()</code> にそろえる（並びの基準を1つの時計にする）",
+            "ログインのたびに <code>users</code> の行と、<code>last_login_at</code> のインデックスが書き換わる。2万人なら気にしなくてよいが、書き込みが増えるほど、インデックスを持つ重さが出る"
+          ]
+        }
+      ]
+    }
+  ]
+}

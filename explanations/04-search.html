@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>04 検索と一覧</title>
+<link rel="stylesheet" href="assets/page.css">
+</head>
+<body>
+<main>
+  <p class="meta"><a href="index.html">← 目次へ</a></p>
+  <h1>04 検索と一覧</h1>
+  <p class="meta">作成: 2026-11-12 ／ 状態: <span class="status">解説だけ</span> ／ Issue: <a href="https://github.com/masa-devx/matching-db-study/issues/42">#42</a> ／ 要件: <code>docs/requirements/search.md</code>（FR-SEARCH-001〜011・NFR-SEARCH-001）・<code>docs/requirements/screens.md</code>（FR-UI-015〜018）</p>
+
+  <div class="card point">
+    <strong>この一歩でできるようになること</strong>
+    <ul>
+      <li>いくつもの条件（等しい・範囲・IN）と「いいねした相手を除く」を1本の SQL にまとめ、NOT EXISTS と <code>whereNotIn</code> の違いを説明できる</li>
+      <li>OFFSET のページ送りが、深いほど読む行が増え、途中でだれかがログインすると重なる・抜けることと、カーソル（最後の人の時刻と ID）で直す方法を説明できる</li>
+      <li>実行計画で、どの表を全部読み、何行を捨てたかを読み、インデックスを1つ足したときの違いを、2万人のデータで確かめられる</li>
+    </ul>
+  </div>
+
+  <h2>1. 何を作るか</h2>
+  <p>会員が、性別・年齢の幅・都道府県（1つ以上）・身長の幅で相手を絞り込み、最近ログインした人から順に、20人ずつ見られるようにします。画面は検索のタブで、写真の2列のカードを、下までスクロールすると続きが出る形にします。03b までは、相手を URL（<code>/users/5</code>）で開くしかありませんでした。</p>
+  <table>
+    <tr><th>子 Issue</th><th>作るもの</th><th>要件</th></tr>
+    <tr><td><a href="https://github.com/masa-devx/matching-db-study/issues/43">#43</a> DB</td><td><code>users</code> に最終ログインの列（<code>last_login_at</code>）・試しの会員 2万人のシーダー</td><td>FR-SEARCH-011・制約（2万人）</td></tr>
+    <tr><td><a href="https://github.com/masa-devx/matching-db-study/issues/44">#44</a> API</td><td><code>GET /api/users</code>（絞り込み・除く・並び・続き）・ログインで最終ログインを書き換える</td><td>FR-SEARCH-001〜011・NFR-SEARCH-001</td></tr>
+    <tr><td><a href="https://github.com/masa-devx/matching-db-study/issues/45">#45</a> 画面</td><td>検索のタブ（<code>/search</code>）・2列のカード・絞り込み・下までスクロールで続き</td><td>FR-UI-015〜018</td></tr>
+  </table>
+  <p>出さない相手：自分・もういいねした相手・メールアドレスを確認していない会員。性別を選ばなければ、自分と違う性別を出します。速さの目標は置かず、実行計画・SQL の本数・時間・画面の表示速度は記録だけします。ブロックした相手を除くのは 06 です。</p>
+
+  <h2>2. 先に知っておく言葉</h2>
+  <table>
+    <tr><th>言葉</th><th>意味（1〜2文）</th></tr>
+    <tr><td>絞り込みの条件（等しい・範囲・IN）</td><td><code>gender_code = 1</code>（等しい）、<code>birthdate between … and …</code>（範囲）、<code>prefecture_code in (13, 14)</code>（どれか）。インデックスがどう効くかは、条件の種類で変わる。</td></tr>
+    <tr><td>OFFSET</td><td><code>limit 20 offset 40</code> は「先頭から40行を飛ばして、20行を返す」。飛ばす40行も読んでから捨てるので、ページが深いほど読む行が増える。</td></tr>
+    <tr><td>カーソル（keyset）</td><td>「前のページの最後の人」の並びの値（最終ログインと ID）を覚えておき、次は「それよりあと」から読む方法。何ページ目でも、飛ばす行を読まない。</td></tr>
+    <tr><td>NOT EXISTS</td><td>「サブクエリに1行もなければ、その行を残す」条件。<code>not exists (select 1 from likes where from = 自分 and to = 相手)</code> で「いいねしていない相手」になる。</td></tr>
+    <tr><td><code>whereHas()</code></td><td>Eloquent で「リレーション先に条件に合う行がある」を書く方法。SQL は <code>exists (select * from profiles where users.id = profiles.user_id and …)</code>（相関サブクエリ）になる。</td></tr>
+    <tr><td>複合インデックス</td><td>2つ以上の列をこの順で並べたインデックス。<code>(last_login_at, id)</code> なら、最終ログインで並べ、同じ時刻は ID で並べたものになる。</td></tr>
+    <tr><td>実行計画</td><td>DB が SQL をどう動かすかの手順。<code>EXPLAIN (ANALYZE, BUFFERS)</code> で、実際に動かして、段ごとの行数・時間・読んだページ数を見る。</td></tr>
+    <tr><td><code>NULLS FIRST</code></td><td>PostgreSQL は、<code>order by … desc</code> のとき、NULL を先頭に置く。最終ログインが NULL（一度もログインしていない）の会員が、いちばん上に出る。</td></tr>
+    <tr><td>シーダー</td><td>試しのデータを DB に入れるプログラム（<code>database/seeders/</code>）。2万人を、性別・年齢・都道府県・身長をばらつかせて作る。</td></tr>
+    <tr><td>IntersectionObserver</td><td>ブラウザの仕組みで、「ある要素が画面に入った」ことを知らせる。一覧のいちばん下に目印を置き、見えたら続きを読む。</td></tr>
+    <tr><td>LCP・CLS</td><td>Lighthouse の数字。LCP はいちばん大きい要素（写真など）が出るまでの時間、CLS は読み込み中に並びがずれた量。画像の大きさを決めておかないと、CLS が増える。</td></tr>
+  </table>
+
+  <h2>3. 図で見る</h2>
+  <p>1枚目は、検索で使う表（新しく足す列は <code>users.last_login_at</code> だけ）。左がレガシー版の型、右の注記が改善版の型です。</p>
+  <pre class="mermaid">
+erDiagram
+  users ||--o| profiles : "検索の条件は profiles、並びは users"
+  users ||--o{ likes : "いいねした相手を除く"
+  users {
+    bigint id PK
+    timestamp email_verified_at "NULL なら出さない"
+    timestamp last_login_at "新しく足す。改善版は NOT NULL と (last_login_at, id) のインデックス"
+  }
+  profiles {
+    bigint user_id "改善版は PK 兼 FK"
+    varchar gender "改善版は gender_code smallint"
+    varchar birthday "改善版は birthdate date"
+    varchar prefecture "改善版は prefecture_code smallint（1〜47）"
+    varchar height "改善版は height_cm smallint"
+    varchar nickname
+    varchar image
+  }
+  likes {
+    bigint from_user_id "UK（to_user_id と組で）"
+    bigint to_user_id
+  }
+  </pre>
+
+  <p>2枚目は、1回の検索で、レガシー版と改善版がどこで何をするか。レガシー版は PHP と DB を何度も行き来し、改善版は DB の中の1本で済ませます。</p>
+  <pre class="mermaid">
+flowchart TB
+  REQ["GET /api/users（条件と page または cursor）"] --> ME["自分のプロフィールを読む（性別の既定）"]
+  ME --> L1
+  ME --> I1
+  subgraph LEG["レガシー版（23本）"]
+    L1["いいねした相手の ID を全部 PHP に持ってくる"] --> L2["本体：not in に ID を並べ、whereHas で絞る、offset で飛ばす"]
+    L2 --> L3["20人それぞれのプロフィールを1本ずつ読む"]
+  end
+  subgraph IMP["改善版（2本）"]
+    I1["本体：JOIN と not exists で絞り、カーソルの続きから 21人"] --> I2["21人目があれば、続きのカーソルを作る"]
+  end
+  L3 --> RES["20人を返す"]
+  I2 --> RES
+  </pre>
+
+  <p>3枚目は、OFFSET で続きを読むあいだに、まだ見ていない会員がログインしたとき。並びの上に1人入るので、全員が1つずつ下にずれ、1ページ目の最後の人が2ページ目にもう一度出ます。カーソルなら「最後の人よりあと」から読むので、ずれません（新しくログインした人は、1ページ目を読み直すまで出ない）。</p>
+  <pre class="mermaid">
+sequenceDiagram
+  participant A as 会員 A（画面）
+  participant API as API
+  participant Z as 会員 Z
+  A->>API: 1ページ目（offset 0）
+  API-->>A: 1〜20番目（20番目は C）
+  Z->>API: ログイン（最終ログインがいちばん新しくなる）
+  Note over API: 並びの先頭に Z が入り、C は 21番目にずれる
+  A->>API: 2ページ目（offset 20）
+  API-->>A: 21〜40番目（先頭に C がもう一度出る）
+  Note over A,API: カーソルなら「C の時刻と ID よりあと」から読むので、C は出ない
+  </pre>
+
+  <h2>4. 設計の選択肢を比べる</h2>
+  <h3>続きの読み方（ページ送り）</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. OFFSET（<code>?page=2</code>。レガシー版）</td><td>書くのが簡単。何ページ目にでも飛べる</td><td>深いほど、飛ばす行を読んで捨てる。途中で並びが変わると、重なる・抜ける（図3）</td><td>行がほとんど変わらない一覧・管理画面のページ番号</td></tr>
+    <tr><td>B. カーソル（<code>?cursor=…</code>。改善版）</td><td>何ページ目でも、読む行が同じくらい。並びが変わっても、見た人がもう一度出ない</td><td>任意のページに飛べない。並びの列に、必ず並びが決まる組（時刻と ID）が要る</td><td>下までスクロールで続きが出る一覧（今回）</td></tr>
+    <tr><td>C. ページ番号と全件の数（<code>count(*)</code>）</td><td>「全 1,234人」と、何ページあるかを見せられる</td><td>毎回、条件に合う全員を数える SQL がもう1本要る。数えるのは件数に比例して重い</td><td>件数を見せたいとき。今回は見せない</td></tr>
+  </table>
+  <h3>もういいねした相手を除く</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. ID を PHP に持ってきて <code>whereNotIn</code>（レガシー版）</td><td>Eloquent で素直に書ける</td><td>SQL が2本になり、いいねが 1,000件なら <code>not in (…1,000個…)</code> の長い SQL になる</td><td>除く相手が、いつも数件だけのとき</td></tr>
+    <tr><td>B. <code>not exists</code>（改善版）</td><td>1本の中で済み、いいねの数が増えても SQL が変わらない。<code>likes</code> の UNIQUE のインデックスで1回ずつ探す</td><td>クエリビルダーの書き方が少し長い</td><td>今回。06 のブロック（された相手も除く）も同じ形で足せる</td></tr>
+    <tr><td>C. <code>left join likes … where l.id is null</code></td><td>NOT EXISTS と同じ結果。JOIN に慣れていれば読みやすい</td><td>つなぐ相手が2行以上あると行が増える（今回は UNIQUE で1行まで）。意図が「除く」だと読み取りにくい</td><td>JOIN した相手の列も使うとき</td></tr>
+  </table>
+  <h3>インデックス</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. なし（レガシー版）</td><td>書き込みが軽い</td><td>毎回、条件に合う全員を読んで並べ替える（2万人ならまだ速い）</td><td>会員が少ないとき</td></tr>
+    <tr><td>B. 並びのインデックス <code>users (last_login_at, id)</code>（改善版）</td><td>新しい順に読みながら、条件に合う21人が見つかったら止まる。カーソルの続きにも、そのまま使える</td><td>条件がきびしい（合う人が少ない）と、見つかるまでたくさん読む。0人なら最後まで読む</td><td>条件がゆるく、合う人が多い検索（性別だけ・年齢の幅が広い）</td></tr>
+    <tr><td>C. 絞り込みの複合インデックス <code>profiles (gender_code, birthdate)</code></td><td>条件がきびしい検索で、合う人だけを先に集められる</td><td>集めたあとに並べ替える（Sort）。並びと条件の表が違うので、両方を1つのインデックスにはできない</td><td>条件がきびしい検索が多いとき</td></tr>
+  </table>
+  <div class="card point"><strong>この一歩で選ぶもの</strong>：レガシー版は、OFFSET・<code>whereNotIn</code>・インデックスなし・文字の列のままで作る（測る問題を出すため）。改善版は、カーソル・<code>not exists</code>・並びのインデックス B を選ぶ。下までスクロールする一覧ではページ番号が要らず、続きで同じ人が出ないことを守れるのはカーソルだけだから。C は、2万人で「条件がきびしいとき」と「0人のとき」の実行計画を測り、B だけで足りないと分かったら足す（先に両方を張らない）。</div>
+
+  <h2>5. 見本：レガシー版と改善版</h2>
+  <h3>レガシー版（Fat Controller・テストなし）</h3>
+  <pre><code class="language-php">// app/Http/Controllers/UserController.php の index()（JWT を読む6行は5か所目の写し）
+$me = Profile::where('user_id', $payload-&gt;sub)-&gt;first();
+$gender = $request-&gt;input('gender', $me-&gt;gender === 'male' ? 'female' : 'male');
+$likedIds = Like::where('from_user_id', $payload-&gt;sub)-&gt;pluck('to_user_id');
+
+$users = User::whereNotNull('email_verified_at')
+    -&gt;where('id', '!=', $payload-&gt;sub)
+    -&gt;whereNotIn('id', $likedIds)
+    -&gt;whereHas('profile', function ($q) use ($request, $gender) {
+        $q-&gt;where('gender', $gender);
+        if ($request-&gt;filled('height_min')) {
+            $q-&gt;where('height', '&gt;=', $request-&gt;input('height_min'));   // 文字で比べる
+        }
+        // 年齢・都道府県も同じように if を並べる
+    })
+    -&gt;orderBy('last_login_at', 'desc')
+    -&gt;offset(($request-&gt;input('page', 1) - 1) * 20)-&gt;limit(20)
+    -&gt;get();
+foreach ($users as $user) { $user-&gt;profile; }   // 1人ずつ読む
+return response()-&gt;json($users);</code></pre>
+  <div class="card warn"><ul>
+    <li><strong>SQL が 23本</strong>：自分のプロフィール・いいねの ID・本体・20人のプロフィール（1＋N）</li>
+    <li><strong>文字で比べる</strong>：<code>height &gt;= '170'</code> では <code>'99'</code> も通る。生年月日も、<code>'1995/4/1'</code> や <code>'2026-13-45'</code> のような形の違う値は、正しく比べられない</li>
+    <li><strong>並びが決まらない</strong>：最終ログインだけで並べるので、同じ時刻の人の順が毎回変わることがある。NULL（一度もログインしていない人）がいちばん上に出る</li>
+    <li><strong>OFFSET</strong>：深いページほど読む行が増え、途中でログインした人がいると、同じ人がもう一度出る（図3）</li>
+    <li><strong>入力を確かめない</strong>：<code>age_min=abc</code> は <code>subYears()</code> で例外になり、<code>page=0</code> は <code>offset -20</code> で SQL のエラーになり、どちらも 500 になる見込み</li>
+    <li><strong>出しすぎ</strong>：<code>User</code> をそのまま返すので、メールアドレス・<code>verification_token</code>・生年月日が出る</li>
+  </ul></div>
+
+  <h3>改善版</h3>
+  <pre><code class="language-php">// app/Http/Controllers/UserSearchController.php（入力は SearchUsersRequest、認証はミドルウェア）
+public function index(SearchUsersRequest $request): JsonResponse
+{
+    $me = $request-&gt;user();
+    $c = $request-&gt;validated();
+    $cursor = SearchCursor::decode($c['cursor'] ?? null);   // 最後の人の時刻と ID
+
+    $rows = UserSearchQuery::build($me, $c, $cursor)-&gt;limit(21)-&gt;get();   // 5章の SQL の ②
+
+    $page = $rows-&gt;take(20);
+    $next = $rows-&gt;count() &gt; 20 ? SearchCursor::encode($page-&gt;last()) : null;
+
+    return response()-&gt;json([
+        'data' =&gt; SearchResultResource::collection($page),   // 年齢は birthdate から計算。メールは出さない
+        'next_cursor' =&gt; $next,                                // null なら「これで全員」
+    ]);
+}</code></pre>
+  <p>大事なのは3つです。① 21人を読んで、21人目がいるかで「続きがあるか」を知る（全員を数えない）。② 次のカーソルは、返した20人の最後の人の <code>last_login_at</code> と <code>id</code> から作る。③ SQL を作るところ（<code>UserSearchQuery</code>）を分けておくと、06 でブロックの <code>not exists</code> を1つ足すだけで済む。</p>
+
+  <h3>画面（レガシー版と改善版の違い）</h3>
+  <pre><code class="language-tsx">// レガシー版 src/SearchPage.tsx：スクロールのたびに高さを調べ、page を1つ進める
+useEffect(() =&gt; {
+  const onScroll = () =&gt; {
+    if (window.innerHeight + window.scrollY &gt;= document.body.offsetHeight - 100) setPage((p) =&gt; p + 1)
+  }
+  window.addEventListener('scroll', onScroll)   // 読み込み中でも何度も進む。外すのを忘れる
+}, [])
+useEffect(() =&gt; {
+  fetch(`${api}/api/users?page=${page}&amp;${query}`, { headers }).then((r) =&gt; r.json())
+    .then((d) =&gt; setUsers((u) =&gt; [...u, ...d]))   // 同じ人がもう一度出ても、そのまま足す
+}, [page])
+// 条件は useState だけに持つので、相手のプロフィールから戻ると消える（FR-UI-016）
+
+// 改善版：一覧のいちばん下の目印が見えたら、next_cursor で続きを読む。条件は URL（?gender=…）に持つ
+const ref = useRef&lt;HTMLDivElement&gt;(null)
+useEffect(() =&gt; {
+  const io = new IntersectionObserver(([e]) =&gt; { if (e.isIntersecting &amp;&amp; next &amp;&amp; !loading) loadMore(next) })
+  if (ref.current) io.observe(ref.current)
+  return () =&gt; io.disconnect()
+}, [next, loading])</code></pre>
+  <p>カードの写真は、<code>aspect-ratio</code> で枠の大きさを先に決め、<code>loading="lazy"</code> で画面に近づいてから読みます。大きさを決めないと、写真が届くたびにカードの高さが変わり、CLS が増えます。</p>
+
+  <h3>Eloquent が発行する SQL（レガシー版と改善版を並べる）</h3>
+  <p>左がレガシー版、右が改善版です。SQL は Laravel に作らせて確かめたもので（列がまだないので、どれも <code>DB::pretend()</code> で、流さずに SQL だけを取り出した）、例は会員 23（さくら）が、男性・25〜35歳・東京都と神奈川県・身長 170 以上で、2ページ目を見る場合です。中身は <code>explanations/sql/04-search.json</code> にあり、<code>explanations/tools/compare-block.py</code> で作り直せます。</p>
+  <p class="meta">ログ（<code>sql-*.log</code>）では、値は <code>?</code> になり、別に渡されます（プリペアドステートメント）。読みやすいよう、ここでは値を入れて、行を分けて書きました。</p>
+  <!-- compare: sql/04-search.json -->
+  <h4>相手を探す（2ページ目。<code>GET /api/users?gender=male&amp;age_min=25&amp;age_max=35&amp;prefecture[]=…&amp;height_min=170&amp;page=2</code>）</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">23本（1ページ20人のとき）</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$me = Profile::where('user_id', $payload-&gt;sub)-&gt;first();
+$likedIds = Like::where('from_user_id', $payload-&gt;sub)-&gt;pluck('to_user_id');
+$users = User::whereNotNull('email_verified_at')
+    -&gt;where('id', '!=', $payload-&gt;sub)
+    -&gt;whereNotIn('id', $likedIds)
+    -&gt;whereHas('profile', function ($q) use ($request, $gender) {
+        $q-&gt;where('gender', $gender);
+        $q-&gt;where('birthday', '&lt;=', now()-&gt;subYears(25)-&gt;format('Y-m-d'));
+        $q-&gt;where('birthday', '&gt;', now()-&gt;subYears(36)-&gt;format('Y-m-d'));
+        $q-&gt;whereIn('prefecture', $request-&gt;input('prefecture'));
+        $q-&gt;where('height', '&gt;=', $request-&gt;input('height_min'));
+    })
+    -&gt;orderBy('last_login_at', 'desc')
+    -&gt;offset(($page - 1) * 20)-&gt;limit(20)
+    -&gt;get();
+foreach ($users as $user) {
+    $user-&gt;profile;   // 1人ずつ読む
+}</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① 自分のプロフィール（性別の既定を決める）
+select * from "profiles"
+where "user_id" = 23 limit 1;
+
+-- ② いいねした相手を全部 PHP に持ってくる
+select "to_user_id" from "likes"
+where "from_user_id" = 23;
+
+-- ③ 本体。②の ID を全部 not in に並べる
+select * from "users"
+where "email_verified_at" is not null
+  and "id" != 23
+  and "id" not in (5, 7)
+  and exists (
+    select * from "profiles"
+    where "users"."id" = "profiles"."user_id"
+      and "gender" = 'male'
+      -- 生年月日も身長も文字として比べる
+      and "birthday" &lt;= '2001-11-12'
+      and "birthday" &gt; '1990-11-12'
+      and "prefecture" in ('東京都', '神奈川県')
+      and "height" &gt;= '170')
+order by "last_login_at" desc
+limit 20 offset 20;
+
+-- ④ 1人ごとにプロフィールを読む（20回）
+select * from "profiles"
+where "user_id" = 101 limit 1;</code></pre>
+      <ul><li><code>whereHas()</code> は <code>exists (select * from profiles …)</code> になる。条件は <code>profiles</code> にあるのに、取ってくるのは <code>users</code> なので、表示に使うプロフィールを ④ でもう一度読む（1＋N）</li><li><code>"height" >= '170'</code> は文字の比べ。<code>'99'</code> は <code>'170'</code> より「大きい」（先頭の <code>9</code> と <code>1</code> を比べる）ので、身長 99 の会員も出る</li><li><code>order by "last_login_at" desc</code> だけで、同じ時刻の並びが決まらない。PostgreSQL は <code>desc</code> のとき <code>NULL</code> を先頭に置くので、まだ一度もログインしていない会員が最初に出る</li><li><code>offset 20</code> は、飛ばす20人も読んでから捨てる。100ページ目なら 1,980人を読んで捨てる</li><li>応答は <code>User</code> をそのまま返すので、メールアドレスと <code>verification_token</code> も出る</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版<span class="count">2本</span></p>
+      <pre><code class="language-php" data-label="PHP（クエリビルダー）">$gender = $c['gender'] ?? $me-&gt;profile-&gt;oppositeGenderCode();  // ①
+$rows = DB::table('users as u')                                   // ②
+    -&gt;join('profiles as p', 'p.user_id', '=', 'u.id')
+    -&gt;whereNotNull('u.email_verified_at')
+    -&gt;where('u.id', '&lt;&gt;', $me-&gt;id)
+    -&gt;whereNotExists(fn ($q) =&gt; $q-&gt;select(DB::raw(1))-&gt;from('likes as l')
+        -&gt;where('l.from_user_id', $me-&gt;id)-&gt;whereColumn('l.to_user_id', 'u.id'))
+    -&gt;where('p.gender_code', $gender)
+    -&gt;whereBetween('p.birthdate', [$oldest, $youngest])
+    -&gt;whereIn('p.prefecture_code', $c['prefectures'])
+    -&gt;where('p.height_cm', '&gt;=', $c['height_min'])
+    -&gt;when($cursor, fn ($q) =&gt; $q-&gt;whereRaw(
+        '(u.last_login_at, u.id) &lt; (?, ?)', [$cursor['at'], $cursor['id']]))
+    -&gt;orderByDesc('u.last_login_at')-&gt;orderByDesc('u.id')
+    -&gt;limit(21)   // 1人多く読んで、続きがあるかを知る
+    -&gt;select('u.id', 'p.nickname', 'p.birthdate', 'p.prefecture_code',
+             'p.height_cm', 'p.image', 'u.last_login_at')
+    -&gt;get();</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① 自分のプロフィール（性別の既定を決める）
+select * from "profiles"
+where "user_id" = 23 limit 1;
+
+-- ② 本体。1本で絞り込み・除く・並び・続き
+select "u"."id", "p"."nickname", "p"."birthdate",
+       "p"."prefecture_code", "p"."height_cm",
+       "p"."image", "u"."last_login_at"
+from "users" as "u"
+inner join "profiles" as "p"
+  on "p"."user_id" = "u"."id"
+where "u"."email_verified_at" is not null
+  and "u"."id" &lt;&gt; 23
+  -- いいねした相手は DB の中で除く
+  and not exists (
+    select 1 from "likes" as "l"
+    where "l"."from_user_id" = 23
+      and "l"."to_user_id" = "u"."id")
+  and "p"."gender_code" = 1
+  -- 年齢の幅を、生年月日の幅（date）に直して比べる
+  and "p"."birthdate" between '1990-11-13' and '2001-11-12'
+  and "p"."prefecture_code" in (13, 14)
+  and "p"."height_cm" &gt;= 170
+  -- カーソル：前のページの最後の人より「あと」
+  and (u.last_login_at, u.id) &lt; ('2026-11-12 08:00:00', 101)
+order by "u"."last_login_at" desc, "u"."id" desc
+limit 21;</code></pre>
+      <ul><li>一覧に出す列を JOIN で一緒に取るので、1人ごとの SQL がない。件数が増えても2本のまま（NFR-SEARCH-001）</li><li><code>not exists</code> は、いいねが何千件あっても SQL の長さが変わらない。<code>likes</code> の <code>(from_user_id, to_user_id)</code> の UNIQUE のインデックスで、1人ごとに1回探すだけで済む</li><li><code>(last_login_at, id) &lt; (…)</code> は「時刻が前、または同じ時刻で ID が小さい」。ID で並びを必ず決めるので、続きで重ならず抜けない（FR-SEARCH-006・008）</li><li><code>users (last_login_at, id)</code> のインデックスを後ろから読めば、新しい順に読みながら条件に合う21人が見つかったところで止まる。ページが深くなっても、飛ばす行を読まない</li><li><code>last_login_at</code> は <code>NOT NULL</code>（登録した時刻を最初の値にする）にして、NULL が先頭に出る問題をなくす</li></ul>
+    </section>
+  </div>
+  <h4>ログインしたときに、最終ログインを書き換える（<code>POST /api/auth/login</code> の中）</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">1本（ログインの2本に足す）</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$user-&gt;last_login_at = now();
+$user-&gt;save();</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- updated_at も一緒に変わる
+update "users"
+set "last_login_at" = '2026-11-12 09:00:00',
+    "updated_at" = '2026-11-12 09:23:58'
+where "id" = 23;</code></pre>
+      <ul><li><code>save()</code> は <code>updated_at</code> も書き換える。「会員の情報が最後に変わった時刻」が、ログインのたびに変わってしまう</li><li>時刻は PHP で作って送る（アプリのサーバーの時計）</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版<span class="count">1本（ログインの2本に足す）</span></p>
+      <pre><code class="language-php" data-label="PHP（クエリビルダー）">DB::table('users')
+    -&gt;where('id', $user-&gt;id)
+    -&gt;update(['last_login_at' =&gt; DB::raw('now()')]);</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- 最終ログインだけを変える
+update "users"
+set "last_login_at" = now()
+where "id" = 23;</code></pre>
+      <ul><li><code>updated_at</code> を変えない。時刻は DB の <code>now()</code> にそろえる（並びの基準を1つの時計にする）</li><li>ログインのたびに <code>users</code> の行と、<code>last_login_at</code> のインデックスが書き換わる。2万人なら気にしなくてよいが、書き込みが増えるほど、インデックスを持つ重さが出る</li></ul>
+    </section>
+  </div>
+  <!-- /compare -->
+  <table>
+    <tr><th>操作</th><th>レガシー版</th><th>改善版</th><th>違いのもと</th></tr>
+    <tr><td>探す（1ページ20人）</td><td>23本（自分・いいねの ID・本体・20人のプロフィール）</td><td>2本（自分・本体）</td><td>表示に使う列を JOIN で一緒に取る。除く相手を DB の中（<code>not exists</code>）で決める</td></tr>
+    <tr><td>続きを読む</td><td>23本。<code>offset</code> が増えるほど、読んで捨てる行が増える</td><td>2本。カーソルの条件が1つ増えるだけ</td><td>OFFSET とカーソル</td></tr>
+    <tr><td>ログイン</td><td>3本（会員・プロフィール・最終ログインの update）</td><td>3本（同じ。update は最終ログインだけ）</td><td><code>save()</code> は <code>updated_at</code> も変える</td></tr>
+  </table>
+  <p>設計（<code>docs/api/04-search.md</code>）はまだないので、この本数は API の子 Issue（#44）の設計で「流れる SQL の目安」として書き、合わせる。</p>
+
+  <h2>6. どう確かめるか</h2>
+  <table>
+    <tr><th>段階</th><th>確かめること</th></tr>
+    <tr><td>① レガシー版で問題を見る</td><td>
+      <ul>
+        <li>FR-SEARCH-001〜011 を1つずつ試し、守れている・守れていないを記録する（コンテナの中で JWT を作って呼ぶ）</li>
+        <li>SQL のログで、1回の検索の本数（20人なら 23本の見込み）</li>
+        <li>2万人で <code>EXPLAIN (ANALYZE, BUFFERS)</code>：ゆるい条件（性別だけ）・きびしい条件（年齢の幅が狭い・都道府県1つ・身長）・0人になる条件の3つ × 1ページ目と深い続き（<code>offset 5000</code>）</li>
+        <li>身長 <code>'99'</code>・生年月日 <code>'1995/4/1'</code> の会員を入れて、条件に合わないのに出るか</li>
+        <li>1ページ目を読んだあとに、ほかの会員をログインさせて、2ページ目に同じ人が出るか（FR-SEARCH-008）</li>
+        <li>一度もログインしていない会員が、いちばん上に出るか</li>
+        <li>画面：Lighthouse（スマホ・<code>npm run build</code> と <code>npm run preview</code>）の LCP・CLS、Network の本数、続きを何度も読んだときに同じ人が出るか</li>
+      </ul>
+    </td></tr>
+    <tr><td>② 振る舞いを固定するテスト</td><td>要件 ID を名前に入れる。例：<code>FR-SEARCH-004 もういいねした相手は出ない</code>・<code>FR-SEARCH-006 最終ログインが新しい順に並ぶ</code>・<code>FR-SEARCH-008 続きを読むあいだにログインした人がいても、重ならない</code>（レガシー版では落ちる）・<code>NFR-SEARCH-001 件数が増えても SQL の本数が増えない</code>（クエリの数を数える）</td></tr>
+    <tr><td>③ 改善したあとに比べる数字</td><td>1回の SQL の本数（23 → 2）・3つの条件 × 2つの深さの実行時間と読んだページ数（<code>Buffers</code>）・<code>Rows Removed by Filter</code>・守れている要件の数・LCP と CLS</td></tr>
+  </table>
+
+  <h2>7. 気をつけること（罠）</h2>
+  <div class="card warn"><ul>
+    <li><strong>LIMIT は「見つかるまで読む」</strong>：並びのインデックスで読むとき、条件に合う人が少ない・いないと、最後まで読む。合う人が多い条件だけで測ると、遅い場合が隠れる（0人の条件でも測る）</li>
+    <li><strong>年齢の境目</strong>：「25〜35歳」は、生年月日が「今日から36年前の翌日」〜「今日から25年前」。誕生日の当日を含むかどうかで1日ずれる。「今日」は日本時間で決める（サーバーは UTC）</li>
+    <li><strong>並びには、必ず決まる列を足す</strong>：最終ログインだけだと、同じ時刻の人の順が毎回変わり、カーソルでも重なる・抜ける。ID を2つ目に足す</li>
+    <li><strong>NULL の位置</strong>：<code>desc</code> では NULL が先頭。<code>NOT NULL</code> にするか、<code>nulls last</code> を書く</li>
+    <li><strong>空の IN</strong>：都道府県を選ばなかったときに <code>whereIn('prefecture', [])</code> を呼ぶと、Laravel は <code>0 = 1</code>（だれも出ない）を作る。選ばなかったら条件を付けない</li>
+    <li><strong>カーソルは読める</strong>：base64 にした時刻と ID は、だれでも中身を読み、書き換えられる。書き換えても、見られるのは同じ検索の結果だけなので、ここでは隠さない（入力として形だけ確かめる）</li>
+    <li><strong>Lighthouse は開発サーバーで測らない</strong>：<code>npm run dev</code> は、ビルドしていない JS を何十本も配るので遅く出る。<code>npm run build</code> のあと <code>npm run preview</code> で測る</li>
+    <li><strong>2万人を毎回作り直さない</strong>：シーダーは開発用の DB だけに流す。テスト用の DB では、テストごとに数人だけ作る</li>
+  </ul></div>
+
+  <h2>8. 理解を確かめる6つの問い</h2>
+  <p>先に自分で答えてから、開いて見る。</p>
+  <details><summary>なぜそうするのか？</summary><p>下までスクロールすると続きが出る一覧では、ページ番号は要らず、「一度見た人がもう一度出ない」ことのほうが大事。OFFSET は、続きを読むあいだにだれかがログインすると並びがずれ、同じ人が出る。カーソルは「前のページの最後の人よりあと」から読むので、ずれない。いいねした相手は、PHP に ID を持ってくると件数に比例して SQL が長くなるので、<code>not exists</code> で DB の中で除く。レガシー版で、23本の SQL・文字の比べ・NULL が先頭・OFFSET のずれを実際に起こして測ってから直す。</p></details>
+  <details><summary>ほかの方法は？なぜ選ばなかったか？</summary><p>ページ番号と全件の数（<code>count(*)</code>）は、件数を見せられるが、毎回もう1本、条件に合う全員を数える SQL が要り、今回の画面では件数を見せない。<code>left join … is null</code> は <code>not exists</code> と同じ結果になるが、「除く」という意図が読み取りにくい。絞り込みの複合インデックス <code>profiles (gender_code, birthdate)</code> は、条件がきびしい検索に効くが、並びの列が別の表（<code>users</code>）にあるので、集めたあとに並べ替えが要る。どちらが効くかは条件で変わるので、先に並びのインデックスだけを張って測る。</p></details>
+  <details><summary>弱点は？</summary><p>カーソルは、任意のページ（10ページ目など）に飛べない。新しくログインした人は、1ページ目を読み直すまで出ない。並びのインデックスは、条件がきびしい・0人のときに、たくさん読む。ログインのたびに <code>users</code> とインデックスが書き換わるので、ログインがとても多いと書き込みが重くなる。カーソルの中身（時刻と ID）は画面から読める。</p></details>
+  <details><summary>問題が起きたら、どう調べて直すか？</summary><p>「検索が遅い」と言われたら、遅い条件を聞き、<code>pg_stat_statements</code> で平均と最大を見る。その条件で <code>EXPLAIN (ANALYZE, BUFFERS)</code> を取り、<code>Seq Scan</code>・<code>Rows Removed by Filter</code>・<code>Sort</code>・<code>Buffers</code> の read を見る。条件に合う人が少ないのに並びのインデックスで読み続けていれば、絞り込みの複合インデックスを足して、同じ条件で前と後を比べる。「同じ人が2回出る」なら、並びに ID が入っているか、OFFSET を使っていないかを見る。</p></details>
+  <details><summary>データが10倍・100倍になったら？</summary><p>20万人なら、カーソルと並びのインデックスで、ゆるい条件は今と同じくらいで返る。OFFSET は深いページほど遅くなる（5,000人目なら 5,000行を読んで捨てる）。200万人になると、きびしい条件・0人の条件で並びのインデックスを読み続けるのが重くなるので、よく使う条件に合わせた複合インデックスや、部分インデックス（確認済みの会員だけ）を測って足す。それでも足りなければ、検索だけを別の仕組み（検索用の表や検索エンジン）に分ける。いいねが 1人数千件になっても、<code>not exists</code> は UNIQUE のインデックスで1回ずつ探すだけなので変わらない。</p></details>
+  <details><summary>Eloquent でどんな SQL が流れ、どう直したか？ Rails（ActiveRecord）・Prisma ならどう書くか？</summary>
+    <table>
+      <tr><th></th><th>Eloquent で流れる SQL → 問題</th><th>直し方</th><th>Rails（ActiveRecord）</th><th>Prisma</th></tr>
+      <tr><td>条件</td><td><code>whereHas('profile', …)</code> → <code>exists (select * from profiles …)</code>。表示用のプロフィールを、もう一度1人ずつ読む（1＋N）</td><td><code>join</code> で一緒に取る</td><td><code>User.joins(:profile).where(profiles: { gender_code: 1 })</code></td><td><code>user.findMany({ where: { profile: { genderCode: 1 } }, include: { profile: true } })</code>（既定では、プロフィールを別の SQL で取ることがある）</td></tr>
+      <tr><td>除く</td><td><code>pluck</code> → <code>whereNotIn</code>。ID の数だけ長い SQL</td><td><code>whereNotExists</code></td><td><code>where.not(id: Like.where(from_user_id: me).select(:to_user_id))</code>（サブクエリになる）</td><td><code>where: { receivedLikes: { none: { fromUserId: me } } }</code>（<code>not exists</code> になる）</td></tr>
+      <tr><td>続き</td><td><code>offset()-&gt;limit()</code> → 深いほど読んで捨てる</td><td><code>whereRaw('(last_login_at, id) &lt; (?, ?)')</code>・<code>cursorPaginate()</code></td><td><code>where('(last_login_at, id) &lt; (?, ?)', at, id).order(last_login_at: :desc, id: :desc).limit(21)</code></td><td><code>findMany({ cursor: { id }, skip: 1, take: 20, orderBy: [{ lastLoginAt: 'desc' }, { id: 'desc' }] })</code></td></tr>
+    </table>
+    <p>Laravel の <code>cursorPaginate()</code> は、並びの列からカーソルを自動で作るが、別の表の列（<code>users.last_login_at</code>）で並べて JOIN するときは、列の名前の書き方に気をつける。ここでは、仕組みを見えるようにするため、<code>whereRaw</code> で書く。</p>
+  </details>
+
+  <h2>9. 実装の記録</h2>
+  <p class="meta">レガシー版のあと（9-1・9-2）と、改善したあと（9-3・9-4）に、explain-change が書く。</p>
+  <h3>9-1. レガシー版</h3>
+  <p>まだ実装していない。</p>
+  <h3>9-2. 測った問題と数字</h3>
+  <p>まだ実装していない。</p>
+  <h3>9-3. 足したテスト</h3>
+  <p>まだ実装していない。</p>
+  <h3>9-4. 改善版と、前と後の数字</h3>
+  <p>まだ実装していない。</p>
+</main>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+  // page.js が選んだ表示（data-scheme）に合わせる。なければ端末の設定
+  const scheme = document.documentElement.dataset.scheme;
+  const dark = scheme ? scheme.startsWith("dark") : (document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches));
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/page.js"></script>
+</body>
+</html>
