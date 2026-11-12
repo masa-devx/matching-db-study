@@ -16,13 +16,13 @@ export default function HomePage(props: any) {
       return
     }
     // 読み込み中・失敗・401 は考えない（StrictMode なので、開発中は2本ずつ呼ばれる）
-    // 自分の id を知るために /api/me を呼び、そのあとプロフィールを呼ぶ（2本が順に流れる）
+    // 自分の public_id（#46）を知るために /api/me を呼び、そのあとプロフィールを呼ぶ（2本が順に流れる）
     fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me`, {
       headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
     })
       .then((r) => r.json())
       .then((u) =>
-        fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/users/${u.id}/profile`, {
+        fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/users/${u.public_id}`, {
           headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
         }),
       )
@@ -48,7 +48,7 @@ export default function HomePage(props: any) {
   const save = async (e: any) => {
     e.preventDefault()
     // 入力を確かめない。API も確かめないので、何でも入る
-    const res = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/users/${me.id}/profile`, {
+    const res = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/users/${me.public_id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',

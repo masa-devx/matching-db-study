@@ -20,9 +20,9 @@ Route::get('/health', function () {
     ]);
 });
 
-// 01 会員とプロフィール（docs/api/01-members.md）
-Route::get('/users/{id}/profile', [ProfileController::class, 'show']);
-Route::put('/users/{id}/profile', [ProfileController::class, 'update']);
+// 01 会員とプロフィール（docs/api/01-members.md）。#46 で、パスを UUID（public_id）にし、/profile を外した
+Route::get('/users/{publicId}', [ProfileController::class, 'show']);
+Route::put('/users/{publicId}', [ProfileController::class, 'update']);
 
 // 01b 登録とメールアドレスの確認（docs/api/01b-auth.md）。レガシー版は、だれでも使える
 Route::post('/users', [UserController::class, 'store']);

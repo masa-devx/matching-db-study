@@ -3,7 +3,8 @@ import { useNavigate, useParams } from 'react-router'
 
 // レガシー版（03b）。相手のプロフィール。取る・持つ・見せる・決まりを、全部この部品に書く
 export default function UserPage() {
-  const { id } = useParams()
+  // #46：URL の会員の ID は UUID（public_id）
+  const { publicId } = useParams()
   const [user, setUser] = useState<any>(null)
   const [liked, setLiked] = useState(false)
   const [message, setMessage] = useState('')
@@ -17,13 +18,13 @@ export default function UserPage() {
       return
     }
     // 読み込み中・失敗は考えない。すぐ別の人に移ると、前の人の応答があとから上書きする
-    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/users/${id}/profile`, {
+    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/users/${publicId}`, {
       headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
     })
       .then((r) => r.json())
       .then(setUser)
     // もういいねしたかは、開いたときには分からない（その API がない）。押すまで「いいね」のまま
-  }, [id])
+  }, [publicId])
 
   const like = () => {
     fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me/likes`, {
@@ -33,7 +34,7 @@ export default function UserPage() {
         Accept: 'application/json',
         Authorization: `Bearer ${sessionStorage.getItem('token')}`,
       },
-      body: JSON.stringify({ user_id: Number(id) }),
+      body: JSON.stringify({ user_id: publicId }),
     })
       .then((r) => r.json())
       .then((d) => {
