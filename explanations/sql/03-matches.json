@@ -1,0 +1,92 @@
+{
+  "operations": [
+    {
+      "title": "いいねを送る（<code>POST /api/me/likes</code>）。会員 5 が、先に送ってくれていた会員 23 に送り返す",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "3本",
+          "code": "Like::create([\n    'from_user_id' => $payload->sub,   // 5\n    'to_user_id' => $request->input('user_id'), // 23\n]);\n$reverse = Like::where('from_user_id', 23)\n    ->where('to_user_id', 5)->first();\nif ($reverse) {\n    UserMatch::create([\n        'user1_id' => 5,    // 送り返した人\n        'user2_id' => 23,   // 先に送った人\n    ]);\n}",
+          "sql": "-- ① いいねを入れる（すぐ確定する）\ninsert into \"likes\"\n  (\"from_user_id\", \"to_user_id\",\n   \"updated_at\", \"created_at\")\nvalues (5, 23,\n  '2026-11-12 06:01:05',\n  '2026-11-12 06:01:05')\nreturning \"id\";\n\n-- ② 逆向きのいいねがあるか\nselect * from \"likes\"\nwhere \"from_user_id\" = 23\n  and \"to_user_id\" = 5\nlimit 1;\n\n-- ③ あればマッチを入れる\ninsert into \"user_matches\"\n  (\"user1_id\", \"user2_id\",\n   \"updated_at\", \"created_at\")\nvalues (5, 23,\n  '2026-11-12 06:01:05',\n  '2026-11-12 06:01:05')\nreturning \"id\";\n-- 逆向きがなければ③は流れない（2本）",
+          "notes": [
+            "トランザクションがないので、①②③は1本ずつ確定する。②と③の間に、相手の同じ処理が入りこめる",
+            "<code>user_matches</code> に組の UNIQUE がないので、同時にお互いへ送ると、(5, 23) と (23, 5) の2行が入りうる",
+            "自分あてのいいね（5 から 5）は、②で自分の行そのものが見つかり、自分とのマッチができてしまう"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版",
+          "count": "4本＋ガード1本",
+          "code": "DB::transaction(function () use ($me, $targetId) {\n    $ids = DB::table('users')\n        ->whereIn('id', [$me->id, $targetId])\n        ->orderBy('id')->lockForUpdate()\n        ->pluck('id');        // 2つ読めなければ 404\n    $inserted = DB::table('likes')->insertOrIgnore([...]);\n    // 0 なら 409\n    $mutual = DB::table('likes')\n        ->where('from_user_id', $targetId)\n        ->where('to_user_id', $me->id)->exists();\n    if ($mutual) {\n        DB::table('user_matches')->insertOrIgnore([\n            'user1_id' => min($me->id, $targetId),\n            'user2_id' => max($me->id, $targetId),\n            'created_at' => now(),\n        ]);\n    }\n});",
+          "sql": "begin;\n\n-- ① 2人の会員の行を、ID の小さい順にロック\n--    （いなければ 404）\nselect \"id\" from \"users\"\nwhere \"id\" in (5, 23)\norder by \"id\" asc\nfor update;\n\n-- ② いいねを入れる（二重なら 0行 → 409）\ninsert into \"likes\"\n  (\"from_user_id\", \"to_user_id\", \"created_at\")\nvalues (5, 23, '2026-11-12 06:01:05')\non conflict do nothing;\n\n-- ③ 逆向きのいいねがあるか\nselect exists(\n  select * from \"likes\"\n  where \"from_user_id\" = 23\n    and \"to_user_id\" = 5\n) as \"exists\";\n\n-- ④ あればマッチ（小さい ID を user1_id に）\ninsert into \"user_matches\"\n  (\"user1_id\", \"user2_id\", \"created_at\")\nvalues (5, 23, '2026-11-12 06:01:05')\non conflict do nothing;\n\ncommit;",
+          "notes": [
+            "①の <code>for update</code> で、同じ2人についての送信は1つずつ順に進む。相手は自分のコミットを待ってから③を読むので、マッチが抜けない",
+            "ロックを取る順を ID の小さい順にそろえると、2人が同時にお互いへ送ってもデッドロックにならない",
+            "④は組の UNIQUE（<code>user1_id &lt; user2_id</code> の CHECK つき）が最後の守り。ロックを忘れたコードがあっても、2行にはならない",
+            "<code>begin</code>・<code>commit</code> はログに出ないので、手で書き足した"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "マッチした相手の一覧（<code>GET /api/me/matches</code>）。会員 23 のマッチ",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "1＋N 本",
+          "code": "$user_matches = UserMatch::where('user1_id', $me)\n    ->orWhere('user2_id', $me)\n    ->orderBy('created_at', 'desc')\n    ->get();\nforeach ($user_matches as $m) {\n    $partner = $m->user1_id == $me\n        ? $m->user2_id : $m->user1_id;\n    $profile = Profile::where(\n        'user_id', $partner\n    )->first();\n}",
+          "sql": "-- ① 自分が入っているマッチ（1本）\nselect * from \"user_matches\"\nwhere \"user1_id\" = 23\n   or \"user2_id\" = 23\norder by \"created_at\" desc;\n\n-- ② マッチ1件ごとに、相手のプロフィール\nselect * from \"profiles\"\nwhere \"user_id\" = 5 limit 1;\n-- マッチが100件なら、②が100本",
+          "notes": [
+            "<code>user_matches</code> にインデックスがないので、①は表を全部読む",
+            "(5, 23) と (23, 5) の2行があると、同じ相手が2回出る",
+            "相手を選ぶ（<code>user1_id</code> か <code>user2_id</code> か）のを PHP でしている"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版（JOIN）",
+          "count": "1本＋ガード1本",
+          "code": "DB::table('user_matches as m')\n    ->join('profiles as p', 'p.user_id', '=',\n        DB::raw(\"case when m.user1_id = $me\n            then m.user2_id else m.user1_id end\"))\n    ->where(fn ($q) => $q\n        ->where('m.user1_id', $me)\n        ->orWhere('m.user2_id', $me))\n    ->orderByDesc('m.created_at')\n    ->select('p.user_id', 'p.nickname',\n        'p.birthdate', 'p.image',\n        'm.created_at as matched_at')\n    ->get();",
+          "sql": "select \"p\".\"user_id\", \"p\".\"nickname\",\n       \"p\".\"birthdate\", \"p\".\"image\",\n       \"m\".\"created_at\" as \"matched_at\"\nfrom \"user_matches\" as \"m\"\n-- 組の「自分でないほう」のプロフィール\ninner join \"profiles\" as \"p\"\n  on \"p\".\"user_id\" = case\n       when m.user1_id = 23 then m.user2_id\n       else m.user1_id end\n-- 自分が組のどちら側にいてもよい\nwhere (\"m\".\"user1_id\" = 23\n    or \"m\".\"user2_id\" = 23)\norder by \"m\".\"created_at\" desc;",
+          "notes": [
+            "<code>user1_id</code> は UNIQUE <code>(user1_id, user2_id)</code> の先頭、<code>user2_id</code> は専用のインデックスで探す。OR の両側にインデックスがあると、PostgreSQL は <code>BitmapOr</code> で2つを合わせる",
+            "INNER JOIN なので、プロフィールのない相手は出ない（改善版はプロフィールが必ずある前提。なければ LEFT JOIN にする）",
+            "<code>$me</code> を <code>DB::raw()</code> に直接入れているのは見本だから。実装では <code>?</code> で渡す（整数にそろえたうえでも）"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "送った相手の一覧と「マッチ済み」の印（<code>GET /api/me/likes</code>）。会員 23 が 5・6 に送っている",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "1＋2N 本",
+          "code": "$likes = Like::where('from_user_id', $me)\n    ->orderBy('created_at', 'desc')->get();\nforeach ($likes as $like) {\n    $profile = Profile::where(\n        'user_id', $like->to_user_id\n    )->first();\n    $matched = Like::where(\n        'from_user_id', $like->to_user_id\n    )->where('to_user_id', $me)->exists();\n}",
+          "sql": "-- ① 送ったいいね（1本）\nselect * from \"likes\"\nwhere \"from_user_id\" = 23\norder by \"created_at\" desc;\n\n-- ② いいね1件ごとに2本（02 の1本＋印の1本）\nselect * from \"profiles\"\nwhere \"user_id\" = 6 limit 1;\nselect exists(\n  select * from \"likes\"\n  where \"from_user_id\" = 6\n    and \"to_user_id\" = 23\n) as \"exists\";\n\nselect * from \"profiles\"\nwhere \"user_id\" = 5 limit 1;\nselect exists(\n  select * from \"likes\"\n  where \"from_user_id\" = 5\n    and \"to_user_id\" = 23\n) as \"exists\";\n-- いいねが100件なら、合計201本",
+          "notes": [
+            "開発用の DB で本当に流して集めた（会員 23 のいいねは2件なので5本）",
+            "印は <code>user_matches</code> ではなく、逆向きのいいねから決めている。マッチが抜けていても「マッチ済み」と出る（正が2つある）",
+            "02 の N+1 に、1件ごとの <code>exists</code> がもう1本ずつ増える"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版（JOIN）",
+          "count": "1本＋ガード1本",
+          "code": "DB::table('likes as l')\n    ->join('profiles as p',\n        'p.user_id', '=', 'l.to_user_id')\n    ->leftJoin('user_matches as m', function ($j) {\n        $j->on('m.user1_id', '=', DB::raw(\n              'least(l.from_user_id, l.to_user_id)'))\n          ->on('m.user2_id', '=', DB::raw(\n              'greatest(l.from_user_id, l.to_user_id)'));\n    })\n    ->where('l.from_user_id', $me)\n    ->orderByDesc('l.created_at')\n    ->select(..., DB::raw(\n        'm.id is not null as matched'))\n    ->get();",
+          "sql": "select \"p\".\"user_id\", \"p\".\"nickname\",\n       \"p\".\"birthdate\", \"p\".\"image\",\n       \"l\".\"created_at\" as \"liked_at\",\n       m.id is not null as matched\nfrom \"likes\" as \"l\"\ninner join \"profiles\" as \"p\"\n  on \"p\".\"user_id\" = \"l\".\"to_user_id\"\n-- マッチがなくても、いいねの行を残す\nleft join \"user_matches\" as \"m\"\n  on \"m\".\"user1_id\"\n       = least(l.from_user_id, l.to_user_id)\n and \"m\".\"user2_id\"\n       = greatest(l.from_user_id, l.to_user_id)\nwhere \"l\".\"from_user_id\" = 23\norder by \"l\".\"created_at\" desc;",
+          "notes": [
+            "LEFT JOIN なので、マッチしていない 6 の行も残り、<code>m.id</code> が <code>null</code> → <code>matched</code> が偽になる。INNER JOIN にすると 6 が一覧から消える",
+            "<code>least</code>・<code>greatest</code> で、いいねの2人を「小さい ID・大きい ID」に並べ替えて、<code>user_matches</code> の組の UNIQUE で探す",
+            "<code>user_matches</code> の条件は ON に書く。WHERE に <code>m.created_at &gt; …</code> のように書くと、マッチのない行が消えて INNER と同じになる"
+          ]
+        }
+      ]
+    }
+  ]
+}

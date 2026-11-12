@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>03 マッチ</title>
+<link rel="stylesheet" href="assets/page.css">
+</head>
+<body>
+<main>
+  <p class="meta"><a href="index.html">← 目次へ</a></p>
+  <h1>03 マッチ</h1>
+  <p class="meta">作成: 2026-11-12 ／ 状態: <span class="status">解説だけ</span> ／ Issue: <a href="https://github.com/masa-devx/matching-db-study/issues/29">#29</a> ／ 要件: <code>docs/requirements/matches.md</code>（FR-MATCH-001〜010・NFR-MATCH-001〜003）</p>
+
+  <div class="card point">
+    <strong>この一歩でできるようになること</strong>
+    <ul>
+      <li>向きのない組（A と B）を1行で持ち、「小さい ID を先に」の CHECK と組の UNIQUE で「1組に1つ」を DB に守らせる理由を説明できる</li>
+      <li>自己結合・INNER JOIN・LEFT JOIN で、結果の行がどう変わるかを説明できる（LEFT JOIN の相手の条件は ON に書く）</li>
+      <li>「書いてから相手の行を読む」処理が同時に来たとき、トランザクションなしでは二重に、トランザクションだけではマッチが抜けることと、ロックで順番に進める直し方を説明できる</li>
+    </ul>
+  </div>
+
+  <h2>1. 何を作るか</h2>
+  <p>お互いにいいねした会員どうしを「マッチ」にします。いいねを送り返したその場で「マッチしました」と分かり、マッチした相手の一覧と、送った相手の「マッチ済み」の印も見られるようにします。05 のメッセージは、マッチした相手にだけ送れる（不変条件 6）ので、その土台になります。</p>
+  <table>
+    <tr><th>作るもの</th><th>中身</th><th>要件</th><th>子 Issue</th></tr>
+    <tr><td>マッチの表</td><td>組の2人・いつマッチしたか</td><td>FR-MATCH-003・010・NFR-MATCH-002</td><td><a href="https://github.com/masa-devx/matching-db-study/issues/30">#30</a></td></tr>
+    <tr><td>送ったときのマッチ</td><td>相手からのいいねがあればマッチを作り、応答で「マッチしたか」を返す</td><td>FR-MATCH-001〜004・NFR-MATCH-003</td><td><a href="https://github.com/masa-devx/matching-db-study/issues/31">#31</a></td></tr>
+    <tr><td>マッチした相手の一覧</td><td>新しい順に、相手の ID・ニックネーム・年齢・画像・マッチした日時</td><td>FR-MATCH-005・007〜009・NFR-MATCH-001</td><td>#31</td></tr>
+    <tr><td>送った一覧の印</td><td>02 の送った一覧に「マッチ済み」を足す</td><td>FR-MATCH-006・NFR-MATCH-001</td><td>#31</td></tr>
+  </table>
+  <p>API のパス（マッチの一覧は <code>GET /api/me/matches</code> の予定）と応答の形は、子 Issue #31 の最初に <code>docs/api/03-matches.md</code> に書き、確かめてもらってから作ります。</p>
+
+  <h2>2. 先に知っておく言葉</h2>
+  <table>
+    <tr><th>言葉</th><th>意味（1〜2文）</th></tr>
+    <tr><td>自己結合</td><td>同じ表を、別の名前（<code>likes as l1</code>・<code>likes as l2</code>）を付けて2回使い、行どうしをつなぐこと。「A から B」の行と「B から A」の行を1行に並べられる。</td></tr>
+    <tr><td>INNER JOIN</td><td>両方の表に相手が見つかった行だけを残す結合。相手がいない行は結果から消える。</td></tr>
+    <tr><td>LEFT JOIN</td><td>左の表の行は全部残し、右の表に相手がなければ右の列を <code>null</code> で埋める結合。「マッチしていない相手も一覧に出す」ときに使う。</td></tr>
+    <tr><td>向きのない組</td><td>「A と B」と「B と A」を同じものとみなす組。いいね（A から B）には向きがあるが、マッチにはない。小さい ID を先に並べると、1通りの書き方にそろう。</td></tr>
+    <tr><td><code>least</code>・<code>greatest</code></td><td>PostgreSQL の関数。並べた値のうち、一番小さい・一番大きいものを返す。<code>least(23, 5)</code> は 5。組を「小さい ID・大きい ID」に並べ替えるのに使う。</td></tr>
+    <tr><td>READ COMMITTED</td><td>PostgreSQL の標準の分離レベル。SQL を1本流すたびに、その時点で<strong>コミット済み</strong>の行を見る。ほかのトランザクションがまだコミットしていない行は見えない。</td></tr>
+    <tr><td>行ロック（<code>FOR UPDATE</code>）</td><td><code>select … for update</code> で読んだ行を、トランザクションが終わるまで押さえる。同じ行を押さえようとした別のトランザクションは、終わるまで待つ。Laravel では <code>lockForUpdate()</code>。</td></tr>
+    <tr><td>デッドロック</td><td>2つのトランザクションが、お互いが押さえた行を待ち合って、どちらも進めなくなること。PostgreSQL は見つけると片方をエラー（<code>40P01</code>）にする。押さえる順をそろえると起きない。</td></tr>
+    <tr><td><code>BitmapOr</code></td><td>実行計画の段の1つ。<code>a = ? or b = ?</code> のとき、<code>a</code> のインデックスと <code>b</code> のインデックスで見つけた行を合わせる。片方にでもインデックスがないと、表を全部読む。</td></tr>
+  </table>
+
+  <h2>3. 図で見る</h2>
+  <p>1枚目は表の関係です。2枚目は、2人が同時にお互いへいいねを送ったときに、書き方ごとにマッチが何行できるか。3枚目は、改善版でいいねを送るときの順番です。</p>
+  <pre class="mermaid">
+erDiagram
+  USERS ||--o{ LIKES : "送る（from_user_id）"
+  USERS ||--o{ LIKES : "もらう（to_user_id）"
+  USERS ||--o{ USER_MATCHES : "組の小さいほう（user1_id）"
+  USERS ||--o{ USER_MATCHES : "組の大きいほう（user2_id）"
+  USERS ||--o| PROFILES : "1対1"
+  USERS {
+    bigint id PK
+    varchar email UK
+  }
+  LIKES {
+    bigint id PK
+    bigint from_user_id FK "UNIQUE の先頭"
+    bigint to_user_id FK
+    timestamp created_at
+  }
+  USER_MATCHES {
+    bigint id PK
+    bigint user1_id FK "改善版：小さい ID。UNIQUE の先頭"
+    bigint user2_id FK "改善版：大きい ID。インデックス"
+    timestamp created_at "マッチした日時"
+  }
+  PROFILES {
+    bigint user_id PK
+    varchar nickname
+    date birthdate
+  }
+  </pre>
+  <p class="meta"><code>USER_MATCHES</code> の改善版は、<code>(user1_id, user2_id)</code> の UNIQUE・<code>user1_id &lt; user2_id</code> の CHECK・<code>user2_id</code> のインデックス・2つの列から <code>users.id</code> への外部キー（<code>ON DELETE CASCADE</code>）を持つ。レガシー版は <code>id</code>・<code>user1_id</code>（送り返した人）・<code>user2_id</code>（先に送っていた人）・日時だけで、制約もインデックスもない。<code>LIKES</code> と <code>PROFILES</code> は改善版の形（02・01）。</p>
+  <pre class="mermaid">
+sequenceDiagram
+  participant A as A のリクエスト（A から B）
+  participant B as B のリクエスト（B から A）
+  participant D as DB
+  Note over A,D: レガシー版：トランザクションなし（1本ずつすぐ確定）
+  A->>D: いいね A から B を入れる（確定）
+  B->>D: いいね B から A を入れる（確定）
+  A->>D: B から A はあるか → ある
+  B->>D: A から B はあるか → ある
+  A->>D: マッチ (A, B) を入れる
+  B->>D: マッチ (B, A) を入れる
+  Note over D: マッチが2行（UNIQUE がなく、向きもそろっていない）
+  Note over A,D: トランザクションで包むだけ（READ COMMITTED）
+  A->>D: begin・いいね A から B（まだコミットしていない）
+  B->>D: begin・いいね B から A（まだコミットしていない）
+  A->>D: B から A はあるか → 見えない
+  B->>D: A から B はあるか → 見えない
+  A->>D: commit
+  B->>D: commit
+  Note over D: いいねは両方あるのに、マッチが0行
+  Note over A,D: 改善版：2人の行を ID の小さい順にロック
+  A->>D: begin・users の A と B を for update
+  B->>D: begin・users の A と B を for update（A が終わるまで待つ）
+  A->>D: いいね A から B・B から A はあるか → ない・commit
+  D-->>B: ロックが取れる
+  B->>D: いいね B から A・A から B はあるか → ある（A は確定済み）
+  B->>D: マッチ（小さい ID, 大きい ID）を入れる・commit
+  Note over D: マッチがちょうど1行
+  </pre>
+  <pre class="mermaid">
+flowchart TD
+  S["いいねを送る"] --> AUTH{"ログインしていて<br>確認済みか"}
+  AUTH -->|"いいえ"| E401["401 か 403"]
+  AUTH -->|"はい"| SELF{"相手は自分か"}
+  SELF -->|"はい"| E422["422"]
+  SELF -->|"いいえ"| LOCK["begin<br>2人の users の行を<br>ID の小さい順に for update"]
+  LOCK -->|"2行読めない"| E404["404（rollback）"]
+  LOCK -->|"2行読めた"| INS["likes に入れる<br>on conflict do nothing"]
+  INS -->|"0行"| E409["409（rollback）"]
+  INS -->|"1行"| REV{"相手から自分への<br>いいねはあるか"}
+  REV -->|"ない"| N["commit<br>201・マッチしたか＝偽"]
+  REV -->|"ある"| M["user_matches に入れる<br>（小さい ID, 大きい ID）<br>on conflict do nothing"]
+  M --> Y["commit<br>201・マッチしたか＝真"]
+  </pre>
+
+  <h2>4. 設計の選択肢を比べる</h2>
+  <h3>マッチの持ち方</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. 表を持たず、毎回 <code>likes</code> を自己結合する</td><td>正（本当の値）が <code>likes</code> の1つだけで、二重もずれも起きない。表が増えない</td><td>一覧のたびに結合が走る。05 のメッセージが「どのマッチか」を指す ID がない。解除・マッチの状態を持てない</td><td>マッチを読むだけで、ほかの表から指さないとき</td></tr>
+    <tr><td>B. <code>user_matches</code> に向きつきで2行（A から B・B から A）</td><td>一覧は <code>user_id = 自分</code> の1本のインデックスで済み、相手の列が決まっている</td><td>2行をいつも一緒に書き・消す必要があり、片方だけ残ると壊れる。行の数が2倍</td><td>一覧の読み込みがとても多く、書き込みを1か所にまとめられるとき</td></tr>
+    <tr><td>C. <code>user_matches</code> に1行。小さい ID を <code>user1_id</code> に（CHECK <code>user1_id &lt; user2_id</code>＋組の UNIQUE）</td><td>「1組に1行」を DB が守る。(B, A) は CHECK で入らない。05 から <code>user_matches.id</code> を指せる</td><td>一覧は「どちらかの列が自分」の OR になり、インデックスが2つ要る。相手の列を CASE で選ぶ</td><td>向きのない組を持つとき（友だち・マッチ・対戦の組）</td></tr>
+  </table>
+  <div class="card point"><strong>この一歩で選ぶもの</strong>：改善版は C。レガシー版は、C と同じ1行の形だが順の決まりがなく（送り返した人を <code>user1_id</code> に入れる）、UNIQUE も CHECK もインデックスもない。改善版は、先に行の向きをそろえ、重なった行を消してから制約を足す（01・02 と同じ「先に直してから制約」の手順）。</div>
+
+  <h3>同時にお互いへ送ったときの守り方</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. トランザクションなし（レガシー版）</td><td>書くのが簡単。1本ずつすぐ確定するので、どちらかは必ず相手のいいねを見る（0行にはならない）</td><td>両方が相手のいいねを見ると、マッチが2行になる。いいねを入れたあとに落ちると、マッチだけ抜ける</td><td>使わない</td></tr>
+    <tr><td>B. トランザクションで包むだけ</td><td>いいねとマッチが、そろって入るか、そろって入らないかになる</td><td>READ COMMITTED では、相手のまだコミットしていないいいねが見えない。両方が「ない」と読んで、マッチが0行になる（2枚目の図）</td><td>同時に来ない処理だけ</td></tr>
+    <tr><td>C. トランザクション＋2人の <code>users</code> の行を ID の小さい順に <code>FOR UPDATE</code>＋組の UNIQUE</td><td>同じ2人の処理が1つずつ進むので、抜けも二重もない。ロックで会員がいるかも確かめられる。UNIQUE が最後の守りになる</td><td>同じ会員への送信が重なると、少し待つ。<code>users</code> の行を書き換えるほかの処理も待たされる</td><td>「読んでから書く」を、ある組について順番にしたいとき</td></tr>
+    <tr><td>D. 分離レベルを SERIALIZABLE にして、失敗したらやり直す</td><td>書き方を変えずに、順番に流したのと同じ結果になる</td><td>失敗（<code>40001</code>）のやり直しを、呼ぶ側すべてに書く必要がある。混んでくると失敗が増える</td><td>守りたい決まりが多く、ロックの場所を決めきれないとき</td></tr>
+  </table>
+  <div class="card point"><strong>この一歩で選ぶもの</strong>：改善版は C。ロックするのは「組」についての行がまだない（いいねもマッチもこれから入る）ので、すでにある2人の <code>users</code> の行を押さえる。押さえる順を ID の小さい順にそろえて、デッドロックを防ぐ。<code>pg_advisory_xact_lock</code>（行ではなく番号を押さえる）でも同じことができるが、会員がいるかを同時に確かめられる <code>FOR UPDATE</code> にする。ロックの種類の比べ方は 09 で深める。</div>
+
+  <h3>ほかに決めること</h3>
+  <table>
+    <tr><th>決めること</th><th>改善版</th><th>理由</th></tr>
+    <tr><td>表と列の名前</td><td>表は <code>user_matches</code>（Model は <code>UserMatch</code>）。列は <code>user1_id</code>・<code>user2_id</code>（レガシー版も同じ）</td><td><code>match</code> は PHP の予約語なので Model を <code>UserMatch</code> にし、表もそれにそろえる（Laravel が Model から探す名前と同じなので、<code>$table</code> を書かずに済む）。列は意味を持たない番号にして、レガシー版（送り返した人が先）と改善版（小さい ID が先）で入れ方が変わっても、名前とずれないようにする。決まりは CHECK（<code>user_matches_user1</code>）とコメントで示す</td></tr>
+    <tr><td>「マッチ済み」の印の正</td><td><code>user_matches</code> を正にして、送った一覧から LEFT JOIN する</td><td>印を逆向きのいいねから決めると、正が2つになる。マッチが抜けたときに、印と一覧が食い違う。05 のメッセージも <code>user_matches</code> を見る</td></tr>
+    <tr><td>03 より前の「お互いのいいね」</td><td>改善版のマイグレーションで、<code>likes</code> の自己結合からマッチを埋める（<code>insert … select … on conflict do nothing</code>）</td><td>レガシー版の同時の送信で抜けたマッチも、ここで埋まる</td></tr>
+    <tr><td>自分とのマッチ</td><td>CHECK <code>user1_id &lt; user2_id</code> で入らない</td><td>レガシー版は、自分あてのいいねが自分の行を「逆向き」として見つけ、自分とのマッチができる。02 の CHECK（自分あてのいいね）とあわせて、二重に止める</td></tr>
+    <tr><td>会員を消したとき</td><td>2つの列から <code>users.id</code> への外部キー（<code>ON DELETE CASCADE</code>）</td><td>FR-MATCH-010。06 の退会で論理削除にするなら、CASCADE は働かない（06 で考える）</td></tr>
+    <tr><td>マッチの一覧の取り方</td><td>JOIN で1本（<code>user_matches</code> と <code>profiles</code>）</td><td>NFR-MATCH-001。<code>with()</code> は「自分でないほう」をリレーションにしにくい（組のどちら側かが行ごとに違う）</td></tr>
+  </table>
+
+  <h2>5. 見本：レガシー版と改善版</h2>
+  <h3>レガシー版（Fat Controller・テストなし）</h3>
+  <pre><code class="language-php">// マイグレーション：組の2人と日時だけ。UNIQUE・CHECK・外部キー・インデックスなし
+Schema::create('user_matches', function (Blueprint $table) {
+    $table-&gt;id();
+    $table-&gt;unsignedBigInteger('user1_id');   // 送り返した人
+    $table-&gt;unsignedBigInteger('user2_id');   // 先に送っていた人
+    $table-&gt;timestamps();
+});
+
+// LikeController::store に足す（02 の Like::create のすぐあと）
+$reverse = Like::where('from_user_id', $request-&gt;input('user_id'))
+    -&gt;where('to_user_id', $payload-&gt;sub)-&gt;first();
+$matched = false;
+if ($reverse) {
+    UserMatch::create(['user1_id' =&gt; $payload-&gt;sub, 'user2_id' =&gt; $request-&gt;input('user_id')]);
+    $matched = true;
+}
+return response()-&gt;json(array_merge($like-&gt;toArray(), ['matched' =&gt; $matched]), 201);</code></pre>
+  <div class="card warn"><ul>
+    <li><strong>二重のマッチ</strong>：トランザクションも組の UNIQUE もないので、同時にお互いへ送ると (A, B) と (B, A) の2行が入りうる。一覧に同じ相手が2回出る</li>
+    <li><strong>自分とのマッチ</strong>：02 のレガシー版は自分あてのいいねを入れる。そのあと「自分から自分へのいいね」（今入れた行）が逆向きとして見つかり、自分とのマッチができる</li>
+    <li><strong>途中で落ちる</strong>：いいねを入れたあと、マッチを入れる前に落ちると、お互いにいいねしているのにマッチがない</li>
+    <li><strong>一覧</strong>：<code>user_matches</code> にインデックスがなく、<code>user1_id = ? or user2_id = ?</code> は表を全部読む。相手のプロフィールは1件ごとに読む（1＋N 本）</li>
+    <li><strong>印</strong>：送った一覧の印を、1件ごとに逆向きのいいねを読んで決める（1＋2N 本）。<code>user_matches</code> と食い違っても気づかない</li>
+    <li><strong>会員を消す</strong>：外部キーがないので、マッチが残る</li>
+  </ul></div>
+  <h3>改善版</h3>
+  <pre><code class="language-php">// マイグレーション：先に行を直す（向きをそろえる → 重なりと自分とのマッチを消す）
+DB::statement('update user_matches set user1_id = user2_id, user2_id = user1_id where user1_id &gt; user2_id');
+DB::statement('delete from user_matches a using user_matches b
+    where a.user1_id = b.user1_id and a.user2_id = b.user2_id and a.id &gt; b.id');
+DB::statement('delete from user_matches where user1_id = user2_id');
+// 次に制約を足す
+Schema::table('user_matches', function (Blueprint $table) {
+    $table-&gt;unique(['user1_id', 'user2_id']);
+    $table-&gt;index('user2_id');
+    $table-&gt;foreign('user1_id')-&gt;references('id')-&gt;on('users')-&gt;cascadeOnDelete();
+    $table-&gt;foreign('user2_id')-&gt;references('id')-&gt;on('users')-&gt;cascadeOnDelete();
+});
+// user1_id には小さい ID を入れる（違反すると、エラーに CHECK の名前 user_matches_user1 が出る）
+DB::statement('alter table user_matches add constraint user_matches_user1 check (user1_id &lt; user2_id)');
+// 最後に、抜けていたマッチを likes の自己結合で埋める
+DB::statement('insert into user_matches (user1_id, user2_id, created_at)
+    select l1.from_user_id, l1.to_user_id, greatest(l1.created_at, l2.created_at)
+    from likes l1
+    join likes l2 on l2.from_user_id = l1.to_user_id and l2.to_user_id = l1.from_user_id
+    where l1.from_user_id &lt; l1.to_user_id
+    on conflict do nothing');</code></pre>
+  <p>大事なのは順番です。向きがそろっていない行や重なった行が残っていると、UNIQUE と CHECK を足す <code>alter table</code> が失敗します。PostgreSQL の <code>update … set user1_id = user2_id, user2_id = user1_id</code> は、右側に<strong>書き換える前の値</strong>を使うので、1本で入れ替えられます。最後の <code>insert … select</code> は自己結合で、「<code>l1</code> が A から B、<code>l2</code> が B から A」の組を探します。<code>l1.from_user_id &lt; l1.to_user_id</code> で、同じ組を2回数えないようにしています。送る処理（トランザクションとロック）は、下の SQL の並びの1つ目にあります。</p>
+
+  <h3>Eloquent が発行する SQL（レガシー版と改善版を並べる）</h3>
+  <p>左がレガシー版、右が改善版です。SQL は Laravel に作らせて確かめたもので（<code>user_matches</code> の表はまだないので、レガシー版の送った一覧のほかは <code>DB::pretend()</code> で、流さずに SQL だけを取り出した）、例は会員 23（さくら）が会員 5・6 にいいねしていて、5 が 23 に送り返す場合です。中身は <code>explanations/sql/03-matches.json</code> にあり、<code>explanations/tools/compare-block.py</code> で作り直せます。</p>
+  <p class="meta">ログ（<code>sql-*.log</code>）では、値は <code>?</code> になり、別に渡されます（プリペアドステートメント）。読みやすいよう、ここでは値を入れて、行を分けて書きました。</p>
+  <!-- compare: sql/03-matches.json -->
+  <h4>いいねを送る（<code>POST /api/me/likes</code>）。会員 5 が、先に送ってくれていた会員 23 に送り返す</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">3本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">Like::create([
+    'from_user_id' =&gt; $payload-&gt;sub,   // 5
+    'to_user_id' =&gt; $request-&gt;input('user_id'), // 23
+]);
+$reverse = Like::where('from_user_id', 23)
+    -&gt;where('to_user_id', 5)-&gt;first();
+if ($reverse) {
+    UserMatch::create([
+        'user1_id' =&gt; 5,    // 送り返した人
+        'user2_id' =&gt; 23,   // 先に送った人
+    ]);
+}</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① いいねを入れる（すぐ確定する）
+insert into "likes"
+  ("from_user_id", "to_user_id",
+   "updated_at", "created_at")
+values (5, 23,
+  '2026-11-12 06:01:05',
+  '2026-11-12 06:01:05')
+returning "id";
+
+-- ② 逆向きのいいねがあるか
+select * from "likes"
+where "from_user_id" = 23
+  and "to_user_id" = 5
+limit 1;
+
+-- ③ あればマッチを入れる
+insert into "user_matches"
+  ("user1_id", "user2_id",
+   "updated_at", "created_at")
+values (5, 23,
+  '2026-11-12 06:01:05',
+  '2026-11-12 06:01:05')
+returning "id";
+-- 逆向きがなければ③は流れない（2本）</code></pre>
+      <ul><li>トランザクションがないので、①②③は1本ずつ確定する。②と③の間に、相手の同じ処理が入りこめる</li><li><code>user_matches</code> に組の UNIQUE がないので、同時にお互いへ送ると、(5, 23) と (23, 5) の2行が入りうる</li><li>自分あてのいいね（5 から 5）は、②で自分の行そのものが見つかり、自分とのマッチができてしまう</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版<span class="count">4本＋ガード1本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">DB::transaction(function () use ($me, $targetId) {
+    $ids = DB::table('users')
+        -&gt;whereIn('id', [$me-&gt;id, $targetId])
+        -&gt;orderBy('id')-&gt;lockForUpdate()
+        -&gt;pluck('id');        // 2つ読めなければ 404
+    $inserted = DB::table('likes')-&gt;insertOrIgnore([...]);
+    // 0 なら 409
+    $mutual = DB::table('likes')
+        -&gt;where('from_user_id', $targetId)
+        -&gt;where('to_user_id', $me-&gt;id)-&gt;exists();
+    if ($mutual) {
+        DB::table('user_matches')-&gt;insertOrIgnore([
+            'user1_id' =&gt; min($me-&gt;id, $targetId),
+            'user2_id' =&gt; max($me-&gt;id, $targetId),
+            'created_at' =&gt; now(),
+        ]);
+    }
+});</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">begin;
+
+-- ① 2人の会員の行を、ID の小さい順にロック
+--    （いなければ 404）
+select "id" from "users"
+where "id" in (5, 23)
+order by "id" asc
+for update;
+
+-- ② いいねを入れる（二重なら 0行 → 409）
+insert into "likes"
+  ("from_user_id", "to_user_id", "created_at")
+values (5, 23, '2026-11-12 06:01:05')
+on conflict do nothing;
+
+-- ③ 逆向きのいいねがあるか
+select exists(
+  select * from "likes"
+  where "from_user_id" = 23
+    and "to_user_id" = 5
+) as "exists";
+
+-- ④ あればマッチ（小さい ID を user1_id に）
+insert into "user_matches"
+  ("user1_id", "user2_id", "created_at")
+values (5, 23, '2026-11-12 06:01:05')
+on conflict do nothing;
+
+commit;</code></pre>
+      <ul><li>①の <code>for update</code> で、同じ2人についての送信は1つずつ順に進む。相手は自分のコミットを待ってから③を読むので、マッチが抜けない</li><li>ロックを取る順を ID の小さい順にそろえると、2人が同時にお互いへ送ってもデッドロックにならない</li><li>④は組の UNIQUE（<code>user1_id &lt; user2_id</code> の CHECK つき）が最後の守り。ロックを忘れたコードがあっても、2行にはならない</li><li><code>begin</code>・<code>commit</code> はログに出ないので、手で書き足した</li></ul>
+    </section>
+  </div>
+  <h4>マッチした相手の一覧（<code>GET /api/me/matches</code>）。会員 23 のマッチ</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">1＋N 本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$user_matches = UserMatch::where('user1_id', $me)
+    -&gt;orWhere('user2_id', $me)
+    -&gt;orderBy('created_at', 'desc')
+    -&gt;get();
+foreach ($user_matches as $m) {
+    $partner = $m-&gt;user1_id == $me
+        ? $m-&gt;user2_id : $m-&gt;user1_id;
+    $profile = Profile::where(
+        'user_id', $partner
+    )-&gt;first();
+}</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① 自分が入っているマッチ（1本）
+select * from "user_matches"
+where "user1_id" = 23
+   or "user2_id" = 23
+order by "created_at" desc;
+
+-- ② マッチ1件ごとに、相手のプロフィール
+select * from "profiles"
+where "user_id" = 5 limit 1;
+-- マッチが100件なら、②が100本</code></pre>
+      <ul><li><code>user_matches</code> にインデックスがないので、①は表を全部読む</li><li>(5, 23) と (23, 5) の2行があると、同じ相手が2回出る</li><li>相手を選ぶ（<code>user1_id</code> か <code>user2_id</code> か）のを PHP でしている</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版（JOIN）<span class="count">1本＋ガード1本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">DB::table('user_matches as m')
+    -&gt;join('profiles as p', 'p.user_id', '=',
+        DB::raw("case when m.user1_id = $me
+            then m.user2_id else m.user1_id end"))
+    -&gt;where(fn ($q) =&gt; $q
+        -&gt;where('m.user1_id', $me)
+        -&gt;orWhere('m.user2_id', $me))
+    -&gt;orderByDesc('m.created_at')
+    -&gt;select('p.user_id', 'p.nickname',
+        'p.birthdate', 'p.image',
+        'm.created_at as matched_at')
+    -&gt;get();</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">select "p"."user_id", "p"."nickname",
+       "p"."birthdate", "p"."image",
+       "m"."created_at" as "matched_at"
+from "user_matches" as "m"
+-- 組の「自分でないほう」のプロフィール
+inner join "profiles" as "p"
+  on "p"."user_id" = case
+       when m.user1_id = 23 then m.user2_id
+       else m.user1_id end
+-- 自分が組のどちら側にいてもよい
+where ("m"."user1_id" = 23
+    or "m"."user2_id" = 23)
+order by "m"."created_at" desc;</code></pre>
+      <ul><li><code>user1_id</code> は UNIQUE <code>(user1_id, user2_id)</code> の先頭、<code>user2_id</code> は専用のインデックスで探す。OR の両側にインデックスがあると、PostgreSQL は <code>BitmapOr</code> で2つを合わせる</li><li>INNER JOIN なので、プロフィールのない相手は出ない（改善版はプロフィールが必ずある前提。なければ LEFT JOIN にする）</li><li><code>$me</code> を <code>DB::raw()</code> に直接入れているのは見本だから。実装では <code>?</code> で渡す（整数にそろえたうえでも）</li></ul>
+    </section>
+  </div>
+  <h4>送った相手の一覧と「マッチ済み」の印（<code>GET /api/me/likes</code>）。会員 23 が 5・6 に送っている</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">1＋2N 本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$likes = Like::where('from_user_id', $me)
+    -&gt;orderBy('created_at', 'desc')-&gt;get();
+foreach ($likes as $like) {
+    $profile = Profile::where(
+        'user_id', $like-&gt;to_user_id
+    )-&gt;first();
+    $matched = Like::where(
+        'from_user_id', $like-&gt;to_user_id
+    )-&gt;where('to_user_id', $me)-&gt;exists();
+}</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① 送ったいいね（1本）
+select * from "likes"
+where "from_user_id" = 23
+order by "created_at" desc;
+
+-- ② いいね1件ごとに2本（02 の1本＋印の1本）
+select * from "profiles"
+where "user_id" = 6 limit 1;
+select exists(
+  select * from "likes"
+  where "from_user_id" = 6
+    and "to_user_id" = 23
+) as "exists";
+
+select * from "profiles"
+where "user_id" = 5 limit 1;
+select exists(
+  select * from "likes"
+  where "from_user_id" = 5
+    and "to_user_id" = 23
+) as "exists";
+-- いいねが100件なら、合計201本</code></pre>
+      <ul><li>開発用の DB で本当に流して集めた（会員 23 のいいねは2件なので5本）</li><li>印は <code>user_matches</code> ではなく、逆向きのいいねから決めている。マッチが抜けていても「マッチ済み」と出る（正が2つある）</li><li>02 の N+1 に、1件ごとの <code>exists</code> がもう1本ずつ増える</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版（JOIN）<span class="count">1本＋ガード1本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">DB::table('likes as l')
+    -&gt;join('profiles as p',
+        'p.user_id', '=', 'l.to_user_id')
+    -&gt;leftJoin('user_matches as m', function ($j) {
+        $j-&gt;on('m.user1_id', '=', DB::raw(
+              'least(l.from_user_id, l.to_user_id)'))
+          -&gt;on('m.user2_id', '=', DB::raw(
+              'greatest(l.from_user_id, l.to_user_id)'));
+    })
+    -&gt;where('l.from_user_id', $me)
+    -&gt;orderByDesc('l.created_at')
+    -&gt;select(..., DB::raw(
+        'm.id is not null as matched'))
+    -&gt;get();</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">select "p"."user_id", "p"."nickname",
+       "p"."birthdate", "p"."image",
+       "l"."created_at" as "liked_at",
+       m.id is not null as matched
+from "likes" as "l"
+inner join "profiles" as "p"
+  on "p"."user_id" = "l"."to_user_id"
+-- マッチがなくても、いいねの行を残す
+left join "user_matches" as "m"
+  on "m"."user1_id"
+       = least(l.from_user_id, l.to_user_id)
+ and "m"."user2_id"
+       = greatest(l.from_user_id, l.to_user_id)
+where "l"."from_user_id" = 23
+order by "l"."created_at" desc;</code></pre>
+      <ul><li>LEFT JOIN なので、マッチしていない 6 の行も残り、<code>m.id</code> が <code>null</code> → <code>matched</code> が偽になる。INNER JOIN にすると 6 が一覧から消える</li><li><code>least</code>・<code>greatest</code> で、いいねの2人を「小さい ID・大きい ID」に並べ替えて、<code>user_matches</code> の組の UNIQUE で探す</li><li><code>user_matches</code> の条件は ON に書く。WHERE に <code>m.created_at &gt; …</code> のように書くと、マッチのない行が消えて INNER と同じになる</li></ul>
+    </section>
+  </div>
+  <!-- /compare -->
+  <table>
+    <tr><th>操作</th><th>レガシー版</th><th>改善版</th><th>違いのもと</th></tr>
+    <tr><td>送る（マッチしたとき）</td><td>3本（しないときは2本）・トランザクションなし</td><td>4本＋ガード1本（<code>begin</code>〜<code>commit</code>）</td><td>2人の行のロック（会員がいるかもここで見る）・<code>on conflict do nothing</code> が2つ</td></tr>
+    <tr><td>マッチの一覧（N 件）</td><td>1＋N 本</td><td>1本＋ガード1本</td><td>ループの中の <code>first()</code> → <code>profiles</code> との JOIN</td></tr>
+    <tr><td>送った一覧（いいね N 件）</td><td>1＋2N 本</td><td>1本＋ガード1本</td><td>1件ごとの <code>profiles</code> と <code>exists</code> → INNER JOIN と LEFT JOIN</td></tr>
+  </table>
+  <div class="card warn"><strong>要確認</strong>：02 の設計（<code>docs/api/02-likes.md</code>）では、改善版の送るの目安を「3本以内（自分を読む・相手がいるか・<code>insert</code>）」としていた。マッチを足すと、ガードを含めて5本になる（ロック・<code>insert</code>・逆向きの <code>exists</code>・マッチの <code>insert</code>）。03 の API の設計（#31）で、目安を書き直す。</div>
+
+  <h2>6. どう確かめるか</h2>
+  <table>
+    <tr><th>段階</th><th>確かめること</th></tr>
+    <tr><td>① レガシー版で問題を見る</td><td>
+      <ul>
+        <li>A から B、B から A の順に送る → 2回目の応答の <code>matched</code> と、<code>user_matches</code> の行の数。片方だけなら 0行か</li>
+        <li>自分あてに送る → 自分とのマッチ（<code>user1_id = user2_id</code>）ができるか。いない会員あて → マッチはできないか</li>
+        <li>まだいいねしていない組を 100組用意し、組ごとに A から B と B から A を同時に送る（<code>curl</code> を2つ並べて走らせる）→ マッチが 0行・1行・2行になった組の数</li>
+        <li>検査の SQL を流す：「お互いにいいねしているのにマッチがない組」（<code>likes</code> の自己結合に <code>user_matches</code> を LEFT JOIN して <code>m.id is null</code>）と、「同じ組が2行以上」（<code>least</code>・<code>greatest</code> で並べ替えて <code>group by … having count(*) &gt; 1</code>）</li>
+        <li>マッチを 1・10・100件、送ったいいねを 1・10・100件にして一覧を呼ぶ → SQL のログの本数（1＋N・1＋2N になるか）</li>
+        <li><code>EXPLAIN (ANALYZE, BUFFERS)</code> で <code>where user1_id = ? or user2_id = ?</code> を見る（シードでマッチを1万件ほど入れ、トランザクションの中で試して取り消す）→ <code>Seq Scan</code> と読んだ行</li>
+        <li>会員を DB で消す → マッチが残り、相手の一覧に出るか</li>
+      </ul>
+    </td></tr>
+    <tr><td>② 振る舞いを固定するテスト</td><td><code>FR-MATCH-001 お互いにいいねするとマッチになる</code>・<code>FR-MATCH-002 片方だけのいいねではマッチにならない</code>・<code>FR-MATCH-003 1組のマッチは1つだけ</code>（2つの DB の接続で、同時にお互いへ送る）・<code>FR-MATCH-004 いいねに失敗したら、マッチもできない</code>・<code>FR-MATCH-005 マッチした相手の一覧を見られる</code>（自分が先に送った相手も、後から送った相手も出る）・<code>FR-MATCH-006 送った一覧に「マッチ済み」の印が付く</code>・<code>FR-MATCH-010 会員が消えたら、その会員のマッチも消える</code>・<code>NFR-MATCH-001 一覧の SQL は3本以内</code>（マッチを1件と20件にして、本数が同じか）</td></tr>
+    <tr><td>③ 改善したあとに比べる数字</td><td>100組を同時に送ったときの内わけ（2行になった組の数 → 0組。0行になった組の数 → 0組）・検査の SQL で見つかった組の数（→ 0）・マッチの一覧の SQL の本数（1＋N → 1）・送った一覧の本数（1＋2N → 1）・<code>or</code> の EXPLAIN の段と読んだ行（<code>Seq Scan</code> → <code>BitmapOr</code>）と時間・守れている要件の数（○/13 → 13/13）</td></tr>
+  </table>
+
+  <h2>7. 気をつけること（罠）</h2>
+  <div class="card warn"><ul>
+    <li><strong>LEFT JOIN の相手の表の条件を WHERE に書くと、INNER JOIN と同じになる</strong>：<code>where m.created_at &gt; …</code> と書くと、<code>m</code> が <code>null</code> の行（マッチしていない相手）が消える。相手の条件は ON に書く</li>
+    <li><strong>トランザクションで包むだけでは、マッチが抜ける</strong>：READ COMMITTED では、相手のまだコミットしていないいいねは見えない。「書いてから相手の行を読む」処理は、包むだけでは守れない。ロックで順番にするか、SERIALIZABLE にする</li>
+    <li><strong>ロックの順をそろえないと、デッドロックになる</strong>：A は「A → B」、B は「B → A」の順に押さえると、待ち合って止まる。いつも ID の小さい順に押さえる（<code>order by id … for update</code>）</li>
+    <li><strong>組の UNIQUE だけでは、(B, A) を止められない</strong>：<code>(user1_id, user2_id)</code> の UNIQUE は (A, B) と (B, A) を別の値とみなす。CHECK <code>user1_id &lt; user2_id</code> とセットで、向きを1つにそろえる</li>
+    <li><strong>OR の片側にしかインデックスがないと、表を全部読む</strong>：<code>user1_id = ? or user2_id = ?</code> は、UNIQUE（<code>user1_id</code> が先頭）だけでは足りない。<code>user2_id</code> にもインデックスを足すと <code>BitmapOr</code> になる。または2本の SQL を <code>union all</code> でつなぐ</li>
+    <li><strong>正を2つ持たない</strong>：印を逆向きのいいねから、一覧を <code>user_matches</code> から作ると、マッチが抜けたときに画面どうしが食い違う。どちらを正にするかを決めて、そこから読む</li>
+    <li><strong>マッチを作る場所を1つにする</strong>：シードや手で流す SQL でマッチを作ると、ロックの約束が守られない。そのときの最後の守りが、組の UNIQUE と CHECK</li>
+    <li><strong>02 のレガシー版の穴が、03 に広がる</strong>：自分あてのいいねが入ると、自分とのマッチもできる。前の一歩の制約の抜けは、あとの一歩の不具合として出る</li>
+  </ul></div>
+
+  <h2>8. 理解を確かめる6つの問い</h2>
+  <p>先に自分で答えてから、開いて見る。</p>
+  <details><summary>なぜそうするのか？</summary><p>マッチは「A と B」の向きのない組なので、小さい ID を <code>user1_id</code> にそろえて1行で持つ。そろえておけば、組の UNIQUE が「1組に1行」をそのまま守れ、CHECK <code>user1_id &lt; user2_id</code> で (B, A) と自分とのマッチも入らない。表に持つのは、05 のメッセージが <code>user_matches.id</code> を指せるようにするため。送るときは、2人の <code>users</code> の行を ID の小さい順にロックしてから「相手からのいいねがあるか」を読む。トランザクションで包むだけだと、READ COMMITTED では相手のコミット前のいいねが見えず、同時に送るとマッチが抜けるからだ。</p></details>
+  <details><summary>ほかの方法は？なぜ選ばなかったか？</summary><p>表を持たずに <code>likes</code> の自己結合で毎回求める案は、正が1つで二重もずれもないが、05 で「どのマッチか」を指す ID がなく、一覧のたびに結合が走る。向きつきで2行持つ案は、一覧が速いが、2行をいつもそろえて書き・消す必要がある。同時の守りは、SERIALIZABLE でやり直す案もあるが、失敗のやり直しを呼ぶ側すべてに書く必要があり、ここでは「同じ2人の処理を順番にする」ロックのほうが、何を守っているかがはっきりする。<code>pg_advisory_xact_lock</code> でも順番にできるが、会員がいるかも一緒に確かめられる <code>FOR UPDATE</code> を選んだ。</p></details>
+  <details><summary>弱点は？</summary><p>一覧が「どちらかの列が自分」の OR になり、インデックスが2つ（UNIQUE の <code>user1_id</code> 先頭と、<code>user2_id</code>）要る。相手の列を CASE で選ぶので、SQL が読みにくい。<code>users</code> の行のロックは、人気のある会員に同時に多くのいいねが来ると、その会員の行で待ちが並ぶ（その会員の行を書き換えるほかの処理も待つ）。<code>FOR UPDATE</code> は、外部キーの確かめ（いいねを入れるときに相手の <code>users</code> の行へかかる <code>FOR KEY SHARE</code>）ともぶつかるので、ほかの会員からその会員へのいいねも待たされる。<code>FOR NO KEY UPDATE</code> なら外部キーの確かめとはぶつからず、同じ組の処理どうしは順番になる（ロックの強さの違いは 09 で比べる）。<code>least</code>・<code>greatest</code> と CASE を忘れたコードは、正しく組を探せない。</p></details>
+  <details><summary>問題が起きたら、どう調べて直すか？</summary><p>「マッチしたのに一覧に出ない」と言われたら、検査の SQL（<code>likes</code> の自己結合に <code>user_matches</code> を LEFT JOIN して <code>m.id is null</code>）で、お互いにいいねしているのにマッチがない組を数える。あれば、同時の送信で抜けている（トランザクションだけでロックがない）。「同じ相手が2回出る」なら、<code>least</code>・<code>greatest</code> で並べ替えて <code>group by … having count(*) &gt; 1</code> で重なりを探す。直すときは、行を直してから UNIQUE と CHECK を足し、抜けた組を自己結合で埋める。デッドロック（<code>40P01</code>）がログに出たら、ロックを取る順がそろっているかを見る。</p></details>
+  <details><summary>データが10倍・100倍になったら？</summary><p>マッチは、いいねより少ないが、会員が増えるほど増える。インデックスがないと、マッチの一覧も、送った一覧の印（LEFT JOIN）も、<code>user_matches</code> を全部読む。<code>user2_id</code> のインデックスと組の UNIQUE があれば、どちらも数行を読むだけで済む。一覧の件数が増えたら、04 でページ送り（カーソル）を入れる。そのとき OR の並べ替えが重くなれば、2本の SQL を <code>union all</code> でつなぐ形に変えることを考える。同時に多くのいいねを受ける会員がいれば、ロックの待ちを測り、番号のロック（<code>pg_advisory_xact_lock</code>）で組ごとに押さえる形も比べる。</p></details>
+  <details><summary>Eloquent でどんな SQL が流れ、どう直したか？ Rails（ActiveRecord）・Prisma ならどう書くか？</summary>
+    <table>
+      <tr><th></th><th>Laravel（Eloquent）</th><th>Rails（ActiveRecord）</th><th>Prisma</th></tr>
+      <tr><td>流れていた SQL（レガシー版）</td><td>送る：<code>insert into likes</code> → <code>select * from likes … limit 1</code> → <code>insert into user_matches</code>（トランザクションなし）。一覧：<code>user_matches</code> を OR で全部読み、マッチ1件ごとに <code>profiles</code>（1＋N）。送った一覧：1件ごとに <code>profiles</code> と <code>exists</code>（1＋2N）</td><td>ループで <code>Profile.find_by</code>・<code>Like.exists?</code> を呼ぶと同じ N+1</td><td>ループで <code>findFirst</code> を呼ぶと同じ N+1</td></tr>
+      <tr><td>同時の守り</td><td><code>DB::transaction()</code> の中で <code>-&gt;orderBy('id')-&gt;lockForUpdate()</code>＋<code>insertOrIgnore()</code></td><td><code>transaction do User.where(id: ids).order(:id).lock.to_a … end</code>＋<code>insert_all(…, unique_by: …)</code></td><td><code>$transaction</code> の中で <code>$queryRaw`select … for update`</code>（行ロックの書き方が API にない）＋<code>createMany({ skipDuplicates: true })</code></td></tr>
+      <tr><td>自己結合（抜けたマッチを探す・埋める）</td><td><code>DB::table('likes as l1')-&gt;join('likes as l2', …)</code></td><td><code>Like.joins("join likes l2 on l2.from_user_id = likes.to_user_id and l2.to_user_id = likes.from_user_id")</code></td><td>リレーションの条件（<code>toUser: { sentLikes: { some: { toUserId: me } } }</code>）なら <code>exists</code> の形になる。結合そのものは <code>$queryRaw</code></td></tr>
+      <tr><td>印つきの送った一覧</td><td><code>leftJoin('user_matches as m', …)</code>＋<code>m.id is not null as matched</code>（1本）</td><td><code>left_joins</code>（関連があるとき）か、<code>joins("left join user_matches …")</code>＋<code>select</code></td><td><code>include</code> で別のクエリにまとめて読み、アプリで印を付ける（JOIN にはならない）</td></tr>
+    </table>
+  </details>
+
+  <h2>9. 実装の記録</h2>
+  <p class="meta">レガシー版のあと（9-1・9-2）と、改善したあと（9-3・9-4）に、explain-change が書く。</p>
+  <h3>9-1. レガシー版</h3>
+  <p>まだ実装していない。</p>
+  <h3>9-2. 測った問題と数字</h3>
+  <p>まだ実装していない。</p>
+  <h3>9-3. 足したテスト</h3>
+  <p>まだ実装していない。</p>
+  <h3>9-4. 改善版と、前と後の数字</h3>
+  <p>まだ実装していない。</p>
+</main>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+  // page.js が選んだ表示（data-scheme）に合わせる。なければ端末の設定
+  const scheme = document.documentElement.dataset.scheme;
+  const dark = scheme ? scheme.startsWith("dark") : (document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches));
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/page.js"></script>
+</body>
+</html>
