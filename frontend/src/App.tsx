@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { NavLink, Navigate, Route, Routes } from 'react-router'
 import './App.css'
 import HomePage from './HomePage'
+import LikesPage from './LikesPage'
 import LoginPage from './LoginPage'
+import MessagesPage from './MessagesPage'
 import RegisterPage from './RegisterPage'
 import UserPage from './UserPage'
 
@@ -18,10 +20,11 @@ export default function App() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/home" element={<HomePage setToken={setToken} />} />
       <Route path="/users/:id" element={<UserPage />} />
-      {/* 検索（/search）は 04、メッセージ（/messages）は 05 で作る。それまでは「準備中」 */}
+      <Route path="/likes" element={<LikesPage />} />
+      {/* マッチした相手は、メッセージのタブで見る（マッチだけの画面は作らない） */}
+      <Route path="/messages" element={<MessagesPage />} />
+      {/* 検索（/search）は 04 で作る。それまでは「準備中」 */}
       <Route path="/search" element={<p className="soon">検索は、04 で作ります</p>} />
-      <Route path="/messages" element={<p className="soon">メッセージは、05 で作ります</p>} />
-      {/* /likes・/matches は #37 で足す */}
       <Route path="*" element={<p>ページが見つかりません</p>} />
     </Routes>
   )
