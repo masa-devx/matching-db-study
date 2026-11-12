@@ -33,7 +33,7 @@ flowchart LR
     <tr><td>01b</td><td><a href="01b-auth.html">認証と認可</a></td><td>パスワードのハッシュ・JWT と取り替え用のトークン・メールアドレスの確認・ログインの回数制限・トランザクション・認証と認可の違い。レガシー版は 30日の JWT を JSON で返し、改善版は 15分の JWT と取り替え用のトークンを HttpOnly の Cookie に置く（D-014）</td><td>レガシー版まで</td></tr>
     <tr><td>02</td><td><a href="02-likes.html">いいね</a></td><td>中間テーブル・自分の表どうしの多対多・UNIQUE で二重を防ぐ</td><td>レガシー版まで</td></tr>
     <tr><td>03</td><td><a href="03-matches.html">マッチ</a></td><td>自己結合（お互いにいいね）・INNER と LEFT JOIN</td><td>レガシー版まで</td></tr>
-    <tr><td>03b</td><td><a href="03b-react.html">React を足す</a></td><td>Vite・API との通信・Context で状態を持つ・コンポーネント設計・テスト・開発効率・CORS。レガシー版はひな形のままのスパゲティコード（1画面に1つの大きな部品）でトークンを sessionStorage に置き、改善版は container／presenter に分け、HttpOnly の Cookie に移して XSS への強さを比べる（docs/frontend.md）</td><td>解説だけ</td></tr>
+    <tr><td>03b</td><td><a href="03b-react.html">React を足す</a></td><td>Vite・API との通信・Context で状態を持つ・コンポーネント設計・テスト・開発効率・CORS。レガシー版はひな形のままのスパゲティコード（1画面に1つの大きな部品）でトークンを sessionStorage に置き、改善版は container／presenter に分け、HttpOnly の Cookie に移して XSS への強さを比べる（docs/frontend.md）</td><td>レガシー版まで</td></tr>
     <tr><td>04</td><td>検索と一覧</td><td>複合インデックス・EXPLAIN・OFFSET とカーソル・大量のデータ。画面の表示速度（長い一覧・Web Vitals・バンドルの大きさ）も、同じ一覧で測る</td><td>未着手</td></tr>
     <tr><td>05</td><td>メッセージ</td><td>相手ごとの最新の1件（ウィンドウ関数）・N+1</td><td>未着手</td></tr>
     <tr><td>05b</td><td>Context から Zustand に移す</td><td>Context の描き直しの範囲・Zustand で必要な部品だけ描き直す</td><td>未着手</td></tr>

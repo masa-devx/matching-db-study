@@ -10,7 +10,7 @@
 <main>
   <p class="meta"><a href="index.html">← 目次へ</a></p>
   <h1>03b React を足す</h1>
-  <p class="meta">作成: 2026-11-12 ／ 状態: <span class="status">解説だけ</span> ／ Issue: <a href="https://github.com/masa-devx/matching-db-study/issues/34">#34</a> ／ 要件: <code>docs/requirements/screens.md</code>（FR-UI-001〜014・NFR-UI-001〜003）</p>
+  <p class="meta">作成: 2026-11-12 ／ 状態: <span class="status">レガシー版まで</span> ／ Issue: <a href="https://github.com/masa-devx/matching-db-study/issues/34">#34</a> ／ 要件: <code>docs/requirements/screens.md</code>（FR-UI-001〜014・NFR-UI-001〜003）</p>
 
   <div class="card point">
     <strong>この一歩でできるようになること</strong>
@@ -30,7 +30,7 @@
     <tr><td>自分のプロフィール</td><td><code>/home</code></td><td><code>GET /api/me</code>・<code>GET</code>／<code>PUT /api/users/{id}/profile</code>・<code>POST /api/auth/logout</code></td><td>FR-UI-005・012</td><td rowspan="2"><a href="https://github.com/masa-devx/matching-db-study/issues/36">#36</a></td></tr>
     <tr><td>相手のプロフィール</td><td><code>/users/:id</code></td><td><code>GET /api/users/{id}/profile</code>・<code>POST /api/me/likes</code></td><td>FR-UI-006〜008</td></tr>
     <tr><td>送ったいいね</td><td><code>/likes</code></td><td><code>GET /api/me/likes</code></td><td>FR-UI-009</td><td rowspan="2"><a href="https://github.com/masa-devx/matching-db-study/issues/37">#37</a></td></tr>
-    <tr><td>マッチ</td><td><code>/matches</code></td><td><code>GET /api/me/matches</code></td><td>FR-UI-010</td></tr>
+    <tr><td>メッセージ（マッチした相手。05 からトーク画面へ）</td><td><code>/messages</code></td><td><code>GET /api/me/matches</code></td><td>FR-UI-010</td></tr>
   </table>
   <p>どの画面にも関わるもの：ログインしていないときの移動（FR-UI-011）・読み込み中と失敗の表示（FR-UI-013）・メールアドレスを確認していないときの案内（FR-UI-014）・スマホの幅（NFR-UI-001）・キーボードでの操作（NFR-UI-002）・API の送り先（NFR-UI-003）。</p>
 
@@ -314,9 +314,153 @@ export function ProfileCard({ profile, liked, matched, onLike }: Props) {
   <h2>9. 実装の記録</h2>
   <p class="meta">レガシー版のあと（9-1・9-2）と、改善したあと（9-3・9-4）に、explain-change が書く。</p>
   <h3>9-1. レガシー版</h3>
-  <p>まだ実装していない。</p>
+  <p class="meta">記録: 2026-11-12 ／ PR: <a href="https://github.com/masa-devx/matching-db-study/pull/39">#39</a>（土台・ログイン・登録。#35）・<a href="https://github.com/masa-devx/matching-db-study/pull/40">#40</a>（プロフィール・いいね。#36）・<a href="https://github.com/masa-devx/matching-db-study/pull/41">#41</a>（送ったいいね・メッセージのタブ。#37）／ 要件: <code>docs/requirements/screens.md</code></p>
+  <h4>書いたもの</h4>
+  <table>
+    <tr><th>ファイル</th><th>役割</th></tr>
+    <tr><td><code>frontend/</code>（ひな形）</td><td><code>npm create vite@latest</code> の <code>react-ts</code>。足したのは <code>react-router</code> と Biome（lint と整形）。ひな形の oxlint は外した</td></tr>
+    <tr><td><code>frontend/src/main.tsx</code></td><td><code>BrowserRouter</code> で全体を包む</td></tr>
+    <tr><td><code>frontend/src/App.tsx</code></td><td>画面の切り替え。ログインしていなければ真ん中の1列、していれば四角の枠と下のタブ（検索・いいね・メッセージ・ホーム）</td></tr>
+    <tr><td><code>frontend/src/LoginPage.tsx</code>・<code>RegisterPage.tsx</code></td><td>送る・トークンを置く・失敗を見せる・移るを、1つの部品に書く</td></tr>
+    <tr><td><code>frontend/src/HomePage.tsx</code>（180行・いちばん大きい）</td><td>ホーム（<code>/home</code>）。自分のプロフィールを見る・直す・ログアウト</td></tr>
+    <tr><td><code>frontend/src/UserPage.tsx</code></td><td>相手のプロフィール（<code>/users/:id</code>）。いいねのボタンと、マッチしたときの画面</td></tr>
+    <tr><td><code>frontend/src/LikesPage.tsx</code>・<code>MessagesPage.tsx</code></td><td>送ったいいね（<code>/likes</code>）と、マッチした相手（<code>/messages</code>）の一覧。メッセージの画面は、送ったいいねの画面を写して作った</td></tr>
+    <tr><td><code>frontend/src/index.css</code>・<code>App.css</code>（519行）</td><td>すべての画面のクラスを、この2枚に書く。色・余白・文字の値は、変数にせずそのまま書く</td></tr>
+    <tr><td><code>frontend/.env.example</code>・<code>README.md</code>・<code>biome.json</code></td><td><code>VITE_API_URL</code> の見本・コマンド・整形の決まり（2文字の字下げ・シングルクォート・セミコロンなし）</td></tr>
+  </table>
+
+  <h4>大事な行の読み方</h4>
+  <p><strong>① ログインしているかを、トークンがあるかだけで決める</strong>（<code>App.tsx</code>）</p>
+  <pre><code class="language-tsx">const [token, setToken] = useState&lt;string | null&gt;(sessionStorage.getItem('token'))
+// …
+if (!token) {
+  return (&lt;div className="app"&gt;&lt;main className="main"&gt;{routes}&lt;/main&gt;&lt;/div&gt;)
+}
+return (&lt;div className="shell"&gt;&lt;div className="frame"&gt;…&lt;nav className="tabs"&gt;…&lt;/nav&gt;&lt;/div&gt;&lt;/div&gt;)</code></pre>
+  <p>最初に sessionStorage を1回だけ読み、あとは <code>setToken</code> で切り替える。ログインの画面とホームの画面に <code>setToken</code> を props で渡すので、ログインとログアウトのたびに枠が変わる。トークンの期限が切れていても、文字があれば「ログインしている」と見なす。</p>
+
+  <p><strong>② 送り先とトークンを、呼ぶところごとに書く</strong>（どの画面も同じ形）</p>
+  <pre><code class="language-tsx">fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me/likes`, {
+  headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+})
+  .then((r) =&gt; r.json())
+  .then(setLikes)</code></pre>
+  <p>送り先の1行は14か所、トークンの読み出しは13か所にある。<code>r.ok</code> を見ないので、<code>401</code> や <code>500</code> の JSON もそのまま一覧として置こうとする。つながらないとき（API が止まっている）は、<code>fetch</code> の失敗をだれも受けず、画面は <code>null</code>（何も出ない）のまま。</p>
+
+  <p><strong>③ いいねの応答のステータスを見ない</strong>（<code>UserPage.tsx</code>）</p>
+  <pre><code class="language-tsx">.then((r) =&gt; r.json())
+.then((d) =&gt; {
+  setLiked(true)
+  if (d.matched) { setMatched(true) } else { setMessage('いいねしました') }
+})</code></pre>
+  <p>2回目のいいねは、API が <code>500</code>（いいねの UNIQUE の違反）を返す。本文に <code>matched</code> がないので、画面には「いいねしました」と出る（9-2）。</p>
+
+  <p><strong>④ 自分のプロフィールは、2本を順に呼ぶ</strong>（<code>HomePage.tsx</code>）</p>
+  <pre><code class="language-tsx">fetch(`${api}/api/me`, …)
+  .then((r) =&gt; r.json())
+  .then((u) =&gt; fetch(`${api}/api/users/${u.id}/profile`, …))
+  .then((r) =&gt; r.json())
+  .then((u) =&gt; { setMe(u); setForm(u.profile ?? {}) })</code></pre>
+  <p>自分の id を知るために <code>/api/me</code> を呼び、その答えでプロフィールを呼ぶ。1本目が終わるまで2本目は出ない。開発中は <code>StrictMode</code> が <code>useEffect</code> を2回動かすので、4本に見える（コードを読んで分かったこと。Network では数えていない）。</p>
+
+  <p><strong>⑤ 四角の枠の中だけをスクロールする</strong>（<code>App.css</code>）</p>
+  <pre><code class="language-css">.frame { position: relative; display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+.frame-main { flex: 1; overflow-y: auto; }   /* 画面の中身だけがスクロールする */
+.tabs { display: flex; flex-shrink: 0; }     /* タブは枠の下に残る */
+@media (min-width: 768px) { .frame { max-width: 600px; height: calc(100dvh - 48px); margin: 24px auto; border: 1px solid #dee2e6; border-radius: 16px; } }
+@media (min-width: 1024px) { .frame { max-width: 640px; } }</code></pre>
+  <p>タブを画面に固定（<code>position: fixed</code>）せず、枠の縦の並び（flex）のいちばん下に置く。マッチの画面は <code>position: absolute</code> にして、枠（<code>position: relative</code>）の中いっぱいに出す。</p>
+
+  <h4>画面が呼ぶ API</h4>
+  <table>
+    <tr><th>画面</th><th>開いたとき</th><th>操作したとき</th></tr>
+    <tr><td>ホーム</td><td><code>GET /api/me</code> → <code>GET /api/users/{id}/profile</code>（順に2本）</td><td>保存：<code>PUT /api/users/{id}/profile</code>。ログアウト：<code>POST /api/auth/logout</code>（応答を待たずにトークンを消す）</td></tr>
+    <tr><td>相手のプロフィール</td><td><code>GET /api/users/{id}/profile</code></td><td>いいね：<code>POST /api/me/likes</code></td></tr>
+    <tr><td>送ったいいね</td><td><code>GET /api/me/likes</code>（API の中で 1＋2N 本の SQL）</td><td>―</td></tr>
+    <tr><td>メッセージ</td><td><code>GET /api/me/matches</code>（API の中で 1＋N 本の SQL）</td><td>―</td></tr>
+  </table>
+
+  <h4>図：作った画面と枠</h4>
+  <pre class="mermaid">flowchart LR
+  subgraph OUT["ログインしていない（真ん中に幅 480px の1列）"]
+    LOGIN["/login"] --- REG["/register"]
+  end
+  subgraph FRAME["ログインしたあと（四角の枠。スマホは画面いっぱい・タブレット 600px・PC 640px）"]
+    direction TB
+    MAIN["枠の中身（ここだけスクロール）"]
+    TABS["タブ：検索・いいね・メッセージ・ホーム"]
+    MAIN --- TABS
+  end
+  LOGIN -->|"ログインできた"| HOME["/home（ログアウトはいちばん下）"]
+  TABS --> SEARCH["/search（04 まで準備中）"]
+  TABS --> LIKES["/likes"]
+  TABS --> MSG["/messages（マッチした相手）"]
+  TABS --> HOME
+  LIKES -->|"行を押す"| USER["/users/:id"]
+  MSG -->|"行を押す（05 からはトーク画面）"| USER
+  HOME -->|"ログアウト"| LOGIN</pre>
+
+  <h4>解説から変えたこと</h4>
+  <table>
+    <tr><th>変えたこと</th><th>理由</th></tr>
+    <tr><td>自分のプロフィールのパスを <code>/me</code> から <code>/home</code> に</td><td>会話で決めた（ログインしたあとの最初の画面を「ホーム」と呼ぶ）</td></tr>
+    <tr><td>上のリンクをやめ、四角の枠と下のタブにした。タブは左から 検索・いいね・メッセージ・ホーム。ログアウトはホームのいちばん下</td><td>会話で決めた（ネイティブアプリのような形。どの幅でも同じ形にし、枠の幅だけを変える）</td></tr>
+    <tr><td>マッチだけの画面（<code>/matches</code>）を作らず、メッセージのタブ（<code>/messages</code>）でマッチした相手を見る</td><td>会話で決めた（05 で、相手を押すとトーク画面に移る）</td></tr>
+    <tr><td>lint と整形を ESLint・Prettier ではなく Biome にした</td><td>いまの Vite のひな形が oxlint だったので、会話で決め直した</td></tr>
+    <tr><td>5章の見本にある「同じ <code>.button</code> を2回書いて、あとが勝つ」は、起きていない</td><td>同じセレクタを2回書いた所は0。代わりに、あとから足した節（<code>.like-button</code>・<code>.button-white</code> など）が同じ値をまた書いていて、色の値の直書きは <code>App.css</code> と <code>index.css</code> で43か所ある</td></tr>
+  </table>
+  <p>要件（<code>screens.md</code>）は、作った形に合わせて main で直した（<code>/home</code>・メッセージのタブ・四角の枠・ログアウトの場所）。</p>
+
+  <h4>気になる点（直していない）</h4>
+  <ul>
+    <li><strong>API</strong>：<code>GET /api/users/{id}/profile</code> は、ログインしていなくても、メールアドレスと <code>verification_token</code> を返す（01 で作った API）</li>
+    <li><strong>API</strong>：<code>500</code> の本文に、SQL・DB のホスト名・例外の場所が出る（<code>APP_DEBUG</code> が開発用のため）。画面はそれを読まないが、開発者ツールでは見える</li>
+    <li>マッチの画面のグラデーションに、決めた色にない <code>#f06595</code> を1つ使った</li>
+    <li>画像に <code>alt</code> がない（6か所）。読み上げで、何の画像か分からない</li>
+    <li>03 の重複のマッチがあると、メッセージのタブに同じ相手が2行出て、React の <code>key</code> が重なる</li>
+  </ul>
+
   <h3>9-2. 測った問題と数字</h3>
-  <p>まだ実装していない。</p>
+  <p class="meta">記録: 2026-11-12 ／ 画面の動きは、ユーザーがブラウザで確かめた（登録 → Mailpit → ログイン → 再読み込み → 失敗の表示 → ログアウト、プロフィールの保存、いいねとマッチ、2つの一覧、幅の切り替え）。API の応答は、コンテナの中で JWT を作って、画面と同じ <code>Origin: http://localhost:5173</code> を付けて確かめた（鍵とトークンは出していない）</p>
+  <h4>要件ごと（○ 守れている・× 守れていない）</h4>
+  <table>
+    <tr><th>要件</th><th>結果</th><th>確かめ方</th></tr>
+    <tr><td>FR-UI-001 ログインできる</td><td>○ <code>/home</code> に移り、再読み込みしても残る</td><td>ブラウザ</td></tr>
+    <tr><td>FR-UI-002 ログインに失敗したら分かる</td><td>× API の言葉（「メールアドレスが違います」「パスワードが違います」）をそのまま出すので、そのメールアドレスが登録されているかが分かる</td><td>ブラウザ</td></tr>
+    <tr><td>FR-UI-003 登録できる</td><td>○「確認のメールを送りました」</td><td>ブラウザ</td></tr>
+    <tr><td>FR-UI-004 登録の入力の誤りが分かる</td><td>× API が入力を確かめない。同じメールアドレスは <code>500</code> で、画面は「登録できませんでした」だけ</td><td>ブラウザ・コード</td></tr>
+    <tr><td>FR-UI-005 自分のプロフィールを見て直せる</td><td>○</td><td>ブラウザ</td></tr>
+    <tr><td>FR-UI-006 相手のプロフィールを見られる</td><td>○（年齢は年の引き算なので、誕生日の前だと1歳多い）</td><td>ブラウザ・コード</td></tr>
+    <tr><td>FR-UI-007 いいねを送れる。マッチしたら分かる</td><td>○ 押すと「マッチしました！」の画面。ボタンは「いいね済み」</td><td>ブラウザ</td></tr>
+    <tr><td>FR-UI-008 もういいねした相手には送れない</td><td>× 開き直すとボタンは「いいね」に戻る。押すと API は <code>500</code>（本文に <code>matched</code> がない）で、画面は「いいねしました」</td><td>API（<code>500</code> を確かめた）・コード</td></tr>
+    <tr><td>FR-UI-009 送ったいいねの一覧</td><td>○ 会員 46 の一覧は香織（5）の1件で、<code>matched: true</code> →「マッチ済み」</td><td>ブラウザ・API</td></tr>
+    <tr><td>FR-UI-010 メッセージのタブでマッチした相手</td><td>○ 香織の1件</td><td>ブラウザ・API</td></tr>
+    <tr><td>FR-UI-011 ログインしていないと見られない</td><td>× <code>/login</code> には移るが、ログインのあとは開こうとした画面ではなく <code>/home</code> に移る。守りは4つの画面に1つずつ書き写してある</td><td>ブラウザ・コード</td></tr>
+    <tr><td>FR-UI-012 ログアウトできる</td><td>○ <code>/login</code> に移り、戻るボタンでもホームは見られない（サーバーは何もしないので、消す前に写したトークンは30日使える）</td><td>ブラウザ</td></tr>
+    <tr><td>FR-UI-013 読み込み中と失敗が分かる</td><td>× 読み込み中の表示がない。<code>fetch</code> の失敗をだれも受けないので、API が止まると画面は何も出ないまま。壊れたトークンでは <code>/api/me</code> が <code>500</code></td><td>API・コード（API を止めた画面は見ていない）</td></tr>
+    <tr><td>FR-UI-014 メールアドレスを確認していない会員に促す</td><td>× ログインの API が確認を見ないので、確認していなくても全部の画面が使える</td><td>コード</td></tr>
+    <tr><td>NFR-UI-001 375〜1280px で使える</td><td>○ 四角の枠は、スマホは画面いっぱい・タブレット 600px・PC 640px</td><td>ブラウザ</td></tr>
+    <tr><td>NFR-UI-002 ラベルがあり、キーボードで送れる</td><td>○ 入力はすべて <code>&lt;label&gt;</code> で包み、Enter で送れる（画像の <code>alt</code> はない）</td><td>コード</td></tr>
+    <tr><td>NFR-UI-003 送り先は1か所で決める</td><td>× 環境変数は1つだが、読み出しと既定の値を14か所に書き写した</td><td>数えた</td></tr>
+  </table>
+  <p><strong>守れている要件：10 / 17</strong>（FR-UI 8 / 14・NFR-UI 2 / 3）。「コード」とだけ書いたものは、コードを読んで分かったことで、画面では試していない。</p>
+
+  <h4>コードの数字（改善したあとに比べる）</h4>
+  <table>
+    <tr><th>測ったもの</th><th>レガシー版</th><th>改善の目安</th></tr>
+    <tr><td>いちばん大きい部品の行の数</td><td>180行（<code>HomePage.tsx</code>）。次は <code>UserPage.tsx</code> の105行</td><td>container と presenter に分けて小さくする</td></tr>
+    <tr><td><code>any</code> の数</td><td>10</td><td>0</td></tr>
+    <tr><td>API の送り先を書いた場所</td><td>14（7ファイル）</td><td>1</td></tr>
+    <tr><td>トークンを読み出す場所</td><td>13</td><td>0（Cookie にする）</td></tr>
+    <tr><td>ログインの守りを書いた場所</td><td>4画面</td><td>1（<code>RequireAuth</code>）</td></tr>
+    <tr><td>年齢の計算を書いた場所</td><td>4</td><td>1（正しい計算で）</td></tr>
+    <tr><td>応答のステータスを見ている <code>fetch</code></td><td>10本のうち2本（ログイン・登録）</td><td>すべて（API を呼ぶところで受ける）</td></tr>
+    <tr><td>色の値を直書きした所</td><td>43（<code>App.css</code> 40・<code>index.css</code> 3）。決めた色にないものが1つ</td><td>0（<code>tokens.css</code> の変数だけ）</td></tr>
+    <tr><td>同じセレクタを2回書いた所</td><td>0</td><td>0</td></tr>
+    <tr><td><code>npm run lint</code>（Biome 2.6.7）</td><td>エラー15・警告11（<code>any</code> 10・画像の <code>alt</code> なし 6・ボタンの <code>type</code> なし 4・<code>useEffect</code> の依存の抜け 4・<code>!</code> 1・SVG の title なし 1）</td><td>0</td></tr>
+    <tr><td><code>npm run build</code> の大きさ</td><td>JS 271.39 kB（gzip 84.59 kB）・CSS 5.48 kB（gzip 1.64 kB）</td><td>比べるだけ（速さは 04 の一覧で測る）</td></tr>
+  </table>
+  <p>Network の本数（<code>StrictMode</code> で2回になるか）・XSS でトークンが読めるか（Console で <code>sessionStorage.getItem('token')</code>）・すばやく別の人に移ったときの上書きは、まだ数えていない。改善する段階で、固定するテストを書く前に確かめる。</p>
   <h3>9-3. 足したテスト</h3>
   <p>まだ実装していない。</p>
   <h3>9-4. 改善版と、前と後の数字</h3>
