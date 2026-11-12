@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Models\Profile;
+use App\Models\User;
 use App\Models\UserMatch;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
@@ -16,6 +17,7 @@ use Illuminate\Http\Request;
  * だれが見るかは、AuthController::me() の JWT の処理を写して決める（これで4か所目）。
  * user_matches にインデックスがないので OR は表を全部読み、相手のプロフィールは1件ごとに読む（1＋N 本）。
  * 同じ組が2行あれば、同じ相手が2回出る。改善する段階で、要件 ID のテストにする。
+ * #46 で、相手を public_id（UUID）で返すようにした（1件ごとに1本増え、1＋2N 本）。
  */
 class UserMatchController extends Controller
 {
@@ -41,8 +43,10 @@ class UserMatchController extends Controller
             $partnerId = $match->user1_id == $me ? $match->user2_id : $match->user1_id;
             // マッチ1件ごとに1本（N+1）。相手が消えても、マッチの行は残る
             $profile = Profile::where('user_id', $partnerId)->first();
+            // #46：画面がユーザー詳細へのリンクに使うので、相手の public_id を返す。1件ごとにもう1本
+            $publicId = User::where('id', $partnerId)->value('public_id');
             $result[] = [
-                'user_id' => $partnerId,
+                'user_id' => $publicId,
                 'nickname' => $profile?->nickname,
                 'birthday' => $profile?->birthday,   // 年齢ではなく生年月日をそのまま返す
                 'image' => $profile?->image,

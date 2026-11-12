@@ -16,13 +16,13 @@
     <strong>この一歩でできるようになること</strong>
     <ul>
       <li>いくつもの条件（等しい・範囲・IN）と「いいねした相手を除く」を1本の SQL にまとめ、NOT EXISTS と <code>whereNotIn</code> の違いを説明できる</li>
-      <li>OFFSET のページ送りが、深いほど読む行が増え、途中でだれかがログインすると重なる・抜けることと、カーソル（最後の人の時刻と ID）で直す方法を説明できる</li>
+      <li>OFFSET のページ送りが、深いほど読む行が増え、途中でだれかがログインすると重なる・抜けることと、カーソル（最後の人の時刻と <code>public_id</code>）で直す方法を説明できる</li>
       <li>実行計画で、どの表を全部読み、何行を捨てたかを読み、インデックスを1つ足したときの違いを、2万人のデータで確かめられる</li>
     </ul>
   </div>
 
   <h2>1. 何を作るか</h2>
-  <p>会員が、性別・年齢の幅・都道府県（1つ以上）・身長の幅で相手を絞り込み、最近ログインした人から順に、20人ずつ見られるようにします。画面は検索のタブで、写真の2列のカードを、下までスクロールすると続きが出る形にします。03b までは、相手を URL（<code>/users/5</code>）で開くしかありませんでした。</p>
+  <p>会員が、性別・年齢の幅・都道府県（1つ以上）・身長の幅で相手を絞り込み、最近ログインした人から順に、20人ずつ見られるようにします。画面は検索のタブで、写真の2列のカードを、下までスクロールすると続きが出る形にします。03b までは、相手を URL（<code>/users/&lt;public_id&gt;</code>。#46 で UUID にした）で開くしかありませんでした。</p>
   <table>
     <tr><th>子 Issue</th><th>作るもの</th><th>要件</th></tr>
     <tr><td><a href="https://github.com/masa-devx/matching-db-study/issues/43">#43</a> DB</td><td><code>users</code> に最終ログインの列（<code>last_login_at</code>）・試しの会員 2万人のシーダー</td><td>FR-SEARCH-011・制約（2万人）</td></tr>
@@ -36,10 +36,10 @@
     <tr><th>言葉</th><th>意味（1〜2文）</th></tr>
     <tr><td>絞り込みの条件（等しい・範囲・IN）</td><td><code>gender_code = 1</code>（等しい）、<code>birthdate between … and …</code>（範囲）、<code>prefecture_code in (13, 14)</code>（どれか）。インデックスがどう効くかは、条件の種類で変わる。</td></tr>
     <tr><td>OFFSET</td><td><code>limit 20 offset 40</code> は「先頭から40行を飛ばして、20行を返す」。飛ばす40行も読んでから捨てるので、ページが深いほど読む行が増える。</td></tr>
-    <tr><td>カーソル（keyset）</td><td>「前のページの最後の人」の並びの値（最終ログインと ID）を覚えておき、次は「それよりあと」から読む方法。何ページ目でも、飛ばす行を読まない。</td></tr>
+    <tr><td>カーソル（keyset）</td><td>「前のページの最後の人」の並びの値（最終ログインと <code>public_id</code>）を覚えておき、次は「それよりあと」から読む方法。何ページ目でも、飛ばす行を読まない。</td></tr>
     <tr><td>NOT EXISTS</td><td>「サブクエリに1行もなければ、その行を残す」条件。<code>not exists (select 1 from likes where from = 自分 and to = 相手)</code> で「いいねしていない相手」になる。</td></tr>
     <tr><td><code>whereHas()</code></td><td>Eloquent で「リレーション先に条件に合う行がある」を書く方法。SQL は <code>exists (select * from profiles where users.id = profiles.user_id and …)</code>（相関サブクエリ）になる。</td></tr>
-    <tr><td>複合インデックス</td><td>2つ以上の列をこの順で並べたインデックス。<code>(last_login_at, id)</code> なら、最終ログインで並べ、同じ時刻は ID で並べたものになる。</td></tr>
+    <tr><td>複合インデックス</td><td>2つ以上の列をこの順で並べたインデックス。<code>(last_login_at, public_id)</code> なら、最終ログインで並べ、同じ時刻は <code>public_id</code> で並べたものになる。</td></tr>
     <tr><td>実行計画</td><td>DB が SQL をどう動かすかの手順。<code>EXPLAIN (ANALYZE, BUFFERS)</code> で、実際に動かして、段ごとの行数・時間・読んだページ数を見る。</td></tr>
     <tr><td><code>NULLS FIRST</code></td><td>PostgreSQL は、<code>order by … desc</code> のとき、NULL を先頭に置く。最終ログインが NULL（一度もログインしていない）の会員が、いちばん上に出る。</td></tr>
     <tr><td>シーダー</td><td>試しのデータを DB に入れるプログラム（<code>database/seeders/</code>）。2万人を、性別・年齢・都道府県・身長をばらつかせて作る。</td></tr>
@@ -55,8 +55,9 @@ erDiagram
   users ||--o{ likes : "いいねした相手を除く"
   users {
     bigint id PK
+    uuid public_id UK "URL と一覧で会員を指す（#46）"
     timestamp email_verified_at "NULL なら出さない"
-    timestamp last_login_at "新しく足す。改善版は NOT NULL と (last_login_at, id) のインデックス"
+    timestamp last_login_at "新しく足す。改善版は NOT NULL と (last_login_at, public_id) のインデックス"
   }
   profiles {
     bigint user_id "改善版は PK 兼 FK"
@@ -102,7 +103,7 @@ sequenceDiagram
   Note over API: 並びの先頭に Z が入り、C は 21番目にずれる
   A->>API: 2ページ目（offset 20）
   API-->>A: 21〜40番目（先頭に C がもう一度出る）
-  Note over A,API: カーソルなら「C の時刻と ID よりあと」から読むので、C は出ない
+  Note over A,API: カーソルなら「C の時刻と public_id よりあと」から読むので、C は出ない
   </pre>
 
   <h2>4. 設計の選択肢を比べる</h2>
@@ -124,7 +125,7 @@ sequenceDiagram
   <table>
     <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
     <tr><td>A. なし（レガシー版）</td><td>書き込みが軽い</td><td>毎回、条件に合う全員を読んで並べ替える（2万人ならまだ速い）</td><td>会員が少ないとき</td></tr>
-    <tr><td>B. 並びのインデックス <code>users (last_login_at, id)</code>（改善版）</td><td>新しい順に読みながら、条件に合う21人が見つかったら止まる。カーソルの続きにも、そのまま使える</td><td>条件がきびしい（合う人が少ない）と、見つかるまでたくさん読む。0人なら最後まで読む</td><td>条件がゆるく、合う人が多い検索（性別だけ・年齢の幅が広い）</td></tr>
+    <tr><td>B. 並びのインデックス <code>users (last_login_at, public_id)</code>（改善版）</td><td>新しい順に読みながら、条件に合う21人が見つかったら止まる。カーソルの続きにも、そのまま使える</td><td>条件がきびしい（合う人が少ない）と、見つかるまでたくさん読む。0人なら最後まで読む</td><td>条件がゆるく、合う人が多い検索（性別だけ・年齢の幅が広い）</td></tr>
     <tr><td>C. 絞り込みの複合インデックス <code>profiles (gender_code, birthdate)</code></td><td>条件がきびしい検索で、合う人だけを先に集められる</td><td>集めたあとに並べ替える（Sort）。並びと条件の表が違うので、両方を1つのインデックスにはできない</td><td>条件がきびしい検索が多いとき</td></tr>
   </table>
   <div class="card point"><strong>この一歩で選ぶもの</strong>：レガシー版は、OFFSET・<code>whereNotIn</code>・インデックスなし・文字の列のままで作る（測る問題を出すため）。改善版は、カーソル・<code>not exists</code>・並びのインデックス B を選ぶ。下までスクロールする一覧ではページ番号が要らず、続きで同じ人が出ないことを守れるのはカーソルだけだから。C は、2万人で「条件がきびしいとき」と「0人のとき」の実行計画を測り、B だけで足りないと分かったら足す（先に両方を張らない）。</div>
@@ -178,7 +179,7 @@ public function index(SearchUsersRequest $request): JsonResponse
         'next_cursor' =&gt; $next,                                // null なら「これで全員」
     ]);
 }</code></pre>
-  <p>大事なのは3つです。① 21人を読んで、21人目がいるかで「続きがあるか」を知る（全員を数えない）。② 次のカーソルは、返した20人の最後の人の <code>last_login_at</code> と <code>id</code> から作る。③ SQL を作るところ（<code>UserSearchQuery</code>）を分けておくと、06 でブロックの <code>not exists</code> を1つ足すだけで済む。</p>
+  <p>大事なのは3つです。① 21人を読んで、21人目がいるかで「続きがあるか」を知る（全員を数えない）。② 次のカーソルは、返した20人の最後の人の <code>last_login_at</code> と <code>public_id</code> から作る（カーソルにも連番の <code>id</code> を出さない。D-022）。③ SQL を作るところ（<code>UserSearchQuery</code>）を分けておくと、06 でブロックの <code>not exists</code> を1つ足すだけで済む。</p>
 
   <h3>画面（レガシー版と改善版の違い）</h3>
   <pre><code class="language-tsx">// レガシー版 src/SearchPage.tsx：スクロールのたびに高さを調べ、page を1つ進める
@@ -274,10 +275,10 @@ $rows = DB::table('users as u')                                   // ②
     -&gt;whereIn('p.prefecture_code', $c['prefectures'])
     -&gt;where('p.height_cm', '&gt;=', $c['height_min'])
     -&gt;when($cursor, fn ($q) =&gt; $q-&gt;whereRaw(
-        '(u.last_login_at, u.id) &lt; (?, ?)', [$cursor['at'], $cursor['id']]))
-    -&gt;orderByDesc('u.last_login_at')-&gt;orderByDesc('u.id')
+        '(u.last_login_at, u.public_id) &lt; (?, ?)', [$cursor['at'], $cursor['public_id']]))
+    -&gt;orderByDesc('u.last_login_at')-&gt;orderByDesc('u.public_id')
     -&gt;limit(21)   // 1人多く読んで、続きがあるかを知る
-    -&gt;select('u.id', 'p.nickname', 'p.birthdate', 'p.prefecture_code',
+    -&gt;select('u.public_id', 'p.nickname', 'p.birthdate', 'p.prefecture_code',
              'p.height_cm', 'p.image', 'u.last_login_at')
     -&gt;get();</code></pre>
       <p class="arrow">↓ 発行される SQL</p>
@@ -286,7 +287,7 @@ select * from "profiles"
 where "user_id" = 23 limit 1;
 
 -- ② 本体。1本で絞り込み・除く・並び・続き
-select "u"."id", "p"."nickname", "p"."birthdate",
+select "u"."public_id", "p"."nickname", "p"."birthdate",
        "p"."prefecture_code", "p"."height_cm",
        "p"."image", "u"."last_login_at"
 from "users" as "u"
@@ -305,10 +306,10 @@ where "u"."email_verified_at" is not null
   and "p"."prefecture_code" in (13, 14)
   and "p"."height_cm" &gt;= 170
   -- カーソル：前のページの最後の人より「あと」
-  and (u.last_login_at, u.id) &lt; ('2026-11-12 08:00:00', 101)
-order by "u"."last_login_at" desc, "u"."id" desc
+  and (u.last_login_at, u.public_id) &lt; ('2026-11-12 08:00:00', '01a1cfd1-9822-7205-b069-c72f2d33f8a3')
+order by "u"."last_login_at" desc, "u"."public_id" desc
 limit 21;</code></pre>
-      <ul><li>一覧に出す列を JOIN で一緒に取るので、1人ごとの SQL がない。件数が増えても2本のまま（NFR-SEARCH-001）</li><li><code>not exists</code> は、いいねが何千件あっても SQL の長さが変わらない。<code>likes</code> の <code>(from_user_id, to_user_id)</code> の UNIQUE のインデックスで、1人ごとに1回探すだけで済む</li><li><code>(last_login_at, id) &lt; (…)</code> は「時刻が前、または同じ時刻で ID が小さい」。ID で並びを必ず決めるので、続きで重ならず抜けない（FR-SEARCH-006・008）</li><li><code>users (last_login_at, id)</code> のインデックスを後ろから読めば、新しい順に読みながら条件に合う21人が見つかったところで止まる。ページが深くなっても、飛ばす行を読まない</li><li><code>last_login_at</code> は <code>NOT NULL</code>（登録した時刻を最初の値にする）にして、NULL が先頭に出る問題をなくす</li></ul>
+      <ul><li>一覧に出す列を JOIN で一緒に取るので、1人ごとの SQL がない。件数が増えても2本のまま（NFR-SEARCH-001）</li><li><code>not exists</code> は、いいねが何千件あっても SQL の長さが変わらない。<code>likes</code> の <code>(from_user_id, to_user_id)</code> の UNIQUE のインデックスで、1人ごとに1回探すだけで済む</li><li><code>(last_login_at, public_id) &lt; (…)</code> は「時刻が前、または同じ時刻で <code>public_id</code> が小さい」。UNIQUE の <code>public_id</code> で並びを必ず決めるので、続きで重ならず抜けない（FR-SEARCH-006・008）</li><li><code>users (last_login_at, public_id)</code> のインデックスを後ろから読めば、新しい順に読みながら条件に合う21人が見つかったところで止まる。ページが深くなっても、飛ばす行を読まない</li><li><code>last_login_at</code> は <code>NOT NULL</code>（登録した時刻を最初の値にする）にして、NULL が先頭に出る問題をなくす</li></ul>
     </section>
   </div>
   <h4>ログインしたときに、最終ログインを書き換える（<code>POST /api/auth/login</code> の中）</h4>
@@ -369,10 +370,10 @@ where "id" = 23;</code></pre>
   <div class="card warn"><ul>
     <li><strong>LIMIT は「見つかるまで読む」</strong>：並びのインデックスで読むとき、条件に合う人が少ない・いないと、最後まで読む。合う人が多い条件だけで測ると、遅い場合が隠れる（0人の条件でも測る）</li>
     <li><strong>年齢の境目</strong>：「25〜35歳」は、生年月日が「今日から36年前の翌日」〜「今日から25年前」。誕生日の当日を含むかどうかで1日ずれる。「今日」は日本時間で決める（サーバーは UTC）</li>
-    <li><strong>並びには、必ず決まる列を足す</strong>：最終ログインだけだと、同じ時刻の人の順が毎回変わり、カーソルでも重なる・抜ける。ID を2つ目に足す</li>
+    <li><strong>並びには、必ず決まる列を足す</strong>：最終ログインだけだと、同じ時刻の人の順が毎回変わり、カーソルでも重なる・抜ける。<code>public_id</code>（UNIQUE）を2つ目に足す。連番の <code>id</code> にすると、カーソルの中身から会員の番号が分かる</li>
     <li><strong>NULL の位置</strong>：<code>desc</code> では NULL が先頭。<code>NOT NULL</code> にするか、<code>nulls last</code> を書く</li>
     <li><strong>空の IN</strong>：都道府県を選ばなかったときに <code>whereIn('prefecture', [])</code> を呼ぶと、Laravel は <code>0 = 1</code>（だれも出ない）を作る。選ばなかったら条件を付けない</li>
-    <li><strong>カーソルは読める</strong>：base64 にした時刻と ID は、だれでも中身を読み、書き換えられる。書き換えても、見られるのは同じ検索の結果だけなので、ここでは隠さない（入力として形だけ確かめる）</li>
+    <li><strong>カーソルは読める</strong>：base64 にした時刻と <code>public_id</code> は、だれでも中身を読み、書き換えられる。書き換えても、見られるのは同じ検索の結果だけなので、ここでは隠さない（入力として形だけ確かめる）</li>
     <li><strong>Lighthouse は開発サーバーで測らない</strong>：<code>npm run dev</code> は、ビルドしていない JS を何十本も配るので遅く出る。<code>npm run build</code> のあと <code>npm run preview</code> で測る</li>
     <li><strong>2万人を毎回作り直さない</strong>：シーダーは開発用の DB だけに流す。テスト用の DB では、テストごとに数人だけ作る</li>
   </ul></div>
@@ -389,7 +390,7 @@ where "id" = 23;</code></pre>
       <tr><th></th><th>Eloquent で流れる SQL → 問題</th><th>直し方</th><th>Rails（ActiveRecord）</th><th>Prisma</th></tr>
       <tr><td>条件</td><td><code>whereHas('profile', …)</code> → <code>exists (select * from profiles …)</code>。表示用のプロフィールを、もう一度1人ずつ読む（1＋N）</td><td><code>join</code> で一緒に取る</td><td><code>User.joins(:profile).where(profiles: { gender_code: 1 })</code></td><td><code>user.findMany({ where: { profile: { genderCode: 1 } }, include: { profile: true } })</code>（既定では、プロフィールを別の SQL で取ることがある）</td></tr>
       <tr><td>除く</td><td><code>pluck</code> → <code>whereNotIn</code>。ID の数だけ長い SQL</td><td><code>whereNotExists</code></td><td><code>where.not(id: Like.where(from_user_id: me).select(:to_user_id))</code>（サブクエリになる）</td><td><code>where: { receivedLikes: { none: { fromUserId: me } } }</code>（<code>not exists</code> になる）</td></tr>
-      <tr><td>続き</td><td><code>offset()-&gt;limit()</code> → 深いほど読んで捨てる</td><td><code>whereRaw('(last_login_at, id) &lt; (?, ?)')</code>・<code>cursorPaginate()</code></td><td><code>where('(last_login_at, id) &lt; (?, ?)', at, id).order(last_login_at: :desc, id: :desc).limit(21)</code></td><td><code>findMany({ cursor: { id }, skip: 1, take: 20, orderBy: [{ lastLoginAt: 'desc' }, { id: 'desc' }] })</code></td></tr>
+      <tr><td>続き</td><td><code>offset()-&gt;limit()</code> → 深いほど読んで捨てる</td><td><code>whereRaw('(last_login_at, public_id) &lt; (?, ?)')</code>・<code>cursorPaginate()</code></td><td><code>where('(last_login_at, public_id) &lt; (?, ?)', at, pid).order(last_login_at: :desc, public_id: :desc).limit(21)</code></td><td><code>findMany({ cursor: { publicId }, skip: 1, take: 20, orderBy: [{ lastLoginAt: 'desc' }, { publicId: 'desc' }] })</code></td></tr>
     </table>
     <p>Laravel の <code>cursorPaginate()</code> は、並びの列からカーソルを自動で作るが、別の表の列（<code>users.last_login_at</code>）で並べて JOIN するときは、列の名前の書き方に気をつける。ここでは、仕組みを見えるようにするため、<code>whereRaw</code> で書く。</p>
   </details>

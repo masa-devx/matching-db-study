@@ -19,7 +19,7 @@ export default function App() {
       <Route path="/login" element={<LoginPage setToken={setToken} />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/home" element={<HomePage setToken={setToken} />} />
-      <Route path="/users/:id" element={<UserPage />} />
+      <Route path="/users/:publicId" element={<UserPage />} />
       <Route path="/likes" element={<LikesPage />} />
       {/* マッチした相手は、メッセージのタブで見る（マッチだけの画面は作らない） */}
       <Route path="/messages" element={<MessagesPage />} />
