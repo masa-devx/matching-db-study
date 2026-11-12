@@ -125,5 +125,5 @@
 
 - 解説：[../../explanations/01b-auth.html](../../explanations/01b-auth.html)（作ったら）
 - 図解：[認証とトークンの絵本](https://claude.ai/artifact/EW5HWFdTJgLd3JYewyP4bE)
-- API：[../api.md](../api.md) の「01b 認証と認可」（作ったら）
+- API：[../api/01b-auth.md](../api/01b-auth.md)
 - テスト：直す段階で、要件 ID を名前に入れて足す（例：`FR-AUTH-015 使ったあとの取り替え用のトークンが、もう一度使われたら止める`）

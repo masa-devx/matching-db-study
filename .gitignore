@@ -29,3 +29,6 @@ coverage/
 backend/storage/logs/*.log
 backend/bootstrap/cache/*.php
 backend/storage/framework/views/*.php
+# エディタの補完のファイル（ide-helper:models --nowrite で作る。quality-types.md）
+backend/_ide_helper.php
+backend/_ide_helper_models.php

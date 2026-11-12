@@ -78,5 +78,5 @@
 ## 関連する設計・テスト
 
 - 解説：[../../explanations/01-members.html](../../explanations/01-members.html)（作ったら）
-- API：[../api.md](../api.md) の「01 会員とプロフィール」（作ったら）
+- API：[../api/01-members.md](../api/01-members.md)
 - テスト：直す段階で、要件 ID を名前に入れて足す（例：`FR-006 表示名は 1〜20文字`）

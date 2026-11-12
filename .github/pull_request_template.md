@@ -32,5 +32,5 @@ Closes #
 - [ ] curl か画面で動きを確かめた
 - [ ] （直す段階）手元でテストが通る
 - [ ] review の手順で差分を見直した
-- [ ] 要件（`docs/requirements/`）・`docs/api.md`・`docs/data-model.md` を直した
+- [ ] 要件（`docs/requirements/`）・`docs/api/`・`docs/data-model.md` を直した
 - [ ] 解説のページに記録した（explain-change）
