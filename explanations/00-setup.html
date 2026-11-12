@@ -139,7 +139,7 @@ sequenceDiagram
   <div class="card point"><strong>この一歩で選ぶもの</strong>：A を作り、C の <code>pg_stat_statements</code> も最初から有効にしておく。A は「この API で何本流れたか」、C は「全体でどれが重いか」を見るので、両方あると 04 から先で困らない。</div>
 
   <h2>5. 見本（小さく）</h2>
-  <p>00 は環境なので、素朴な版と直した版に分けません。要点だけです。</p>
+  <p>00 は環境なので、レガシー版と直した版に分けません。要点だけです。</p>
   <pre><code># compose.yaml（要点）
 services:
   db:
@@ -216,7 +216,7 @@ public static function register(): void
   </details>
 
   <h2>9. 実装の記録</h2>
-  <p class="meta">00 は素朴な版と直した版に分けず、実装したあとに explain-change がここに1つの記録として書く。</p>
+  <p class="meta">00 はレガシー版と直した版に分けず、実装したあとに explain-change がここに1つの記録として書く。</p>
   <p class="meta">記録: 2026-11-11 ／ PR: <a href="https://github.com/masa-devx/matching-db-study/pull/5">#5 DB（Docker）</a>・<a href="https://github.com/masa-devx/matching-db-study/pull/6">#6 バックエンド（Laravel）</a>・#4 主要コマンドと記録</p>
 
   <h3>書いたもの</h3>
@@ -225,7 +225,7 @@ public static function register(): void
     <tr><td><code>compose.yaml</code></td><td>3つのコンテナ：<code>app</code>（PHP 8.5.12・ポート 8000）・<code>db</code>（PostgreSQL 18.6・55432）・<code>mailpit</code>（v1.33.1・51025／58025）。ポートは <code>127.0.0.1</code> にだけ開ける</td></tr>
     <tr><td><code>docker/php/Dockerfile</code></td><td>PHP 8.5.12 に <code>pdo_pgsql</code>・<code>intl</code>・<code>zip</code> と Composer 2.11.2 を足す</td></tr>
     <tr><td><code>docker/db/init/01-create-test-db.sql</code></td><td>テスト用の <code>matching_test</code> を作り、両方の DB で <code>pg_stat_statements</code> を有効にする</td></tr>
-    <tr><td><code>backend/</code></td><td>Laravel 13.42.0。<code>install:api</code> で API のルートを入れた（Sanctum も入るが、素朴な版では使わない）</td></tr>
+    <tr><td><code>backend/</code></td><td>Laravel 13.42.0。<code>install:api</code> で API のルートを入れた（Sanctum も入るが、レガシー版では使わない）</td></tr>
     <tr><td><code>backend/app/Support/Logging/QueryLogger.php</code></td><td>流れた SQL を1本ずつと、リクエストごとの本数・時間で <code>storage/logs/sql-日付.log</code> に書く。値は書かない。手元だけ</td></tr>
     <tr><td><code>backend/routes/api.php</code></td><td><code>GET /api/health</code>：つながっている DB の名前とマイグレーションの数</td></tr>
     <tr><td><code>backend/phpunit.xml</code>・<code>backend/tests/TestCase.php</code></td><td>テストをテスト用の DB とメモリのメールで動かす設定と、違う DB につながっていたら止める安全装置</td></tr>

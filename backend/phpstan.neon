@@ -1,10 +1,13 @@
 # Larastan（PHPStan を Laravel 向けにしたもの）の設定
-# レベルは 5 から始める。素朴な版（Fat Controller）でも通る強さにして、直す段階で上げる
+# レガシー版はレベル 6（D-016）。Fat Controller でも通る強さにして、直す段階で 9 に上げる
 includes:
     - vendor/larastan/larastan/extension.neon
 
 parameters:
     level: 6
+    # Model の casts() の中身をソースから読む（読まないと、PHPDoc の array<string, string> しか見ず、
+    # email_verified_at の 'datetime' などの型が分からない）
+    parseModelCastsMethod: true
     paths:
         - app
         - routes
