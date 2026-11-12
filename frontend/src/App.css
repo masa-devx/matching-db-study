@@ -517,3 +517,83 @@
   background: #d6336c;
   border-radius: 999px;
 }
+
+/* 04 検索（/search）。値は 03b と同じものをそのまま書く */
+.search-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.search-head .page-title {
+  margin: 0;
+}
+
+.search-form {
+  margin-bottom: 16px;
+  padding: 16px;
+}
+
+.search-range {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.pref-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.pref-list .chip {
+  font: inherit;
+  font-size: 14px;
+  color: #212529;
+  cursor: pointer;
+}
+
+.chip-on {
+  color: #fff !important;
+  background: #d6336c;
+  border-color: #d6336c;
+}
+
+.user-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.user-card {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  aspect-ratio: 3 / 4;
+  color: #fff;
+  text-decoration: none;
+  background: #dee2e6;
+  border-radius: 16px;
+}
+
+.user-card-caption {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 32px 12px 12px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.6));
+}
+
+.user-card-name {
+  font-weight: bold;
+}
+
+.user-card-sub {
+  font-size: 14px;
+}
