@@ -5,6 +5,9 @@ includes:
 
 parameters:
     level: 6
+    # Model の casts() の中身をソースから読む（読まないと、PHPDoc の array<string, string> しか見ず、
+    # email_verified_at の 'datetime' などの型が分からない）
+    parseModelCastsMethod: true
     paths:
         - app
         - routes

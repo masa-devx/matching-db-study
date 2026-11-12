@@ -11,7 +11,7 @@ use Illuminate\Http\Request;
 /**
  * 素朴な版（01）：Laravel 5 系のころの Fat Controller。
  * コントローラの中で Eloquent を直接使い、Model をそのまま JSON で返す。
- * 入力の確かめも、だれが編集できるかの確かめもしない（docs/api.md の「素朴な版」）。
+ * 入力の確かめも、だれが編集できるかの確かめもしない（docs/api/01-members.md の「素朴な版」）。
  * 表は users（アカウント）と profiles（その会員についての情報）に分かれている（D-015）。
  */
 class ProfileController extends Controller
