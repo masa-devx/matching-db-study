@@ -10,8 +10,9 @@ API の正本。作る前に設計を書き、確かめてもらってから実�
 
 | 決めること | 決まり |
 | --- | --- |
-| パスの名前 | `/api/` のあとに、複数形の名詞（`/users`・`/likes`）。動詞は使わない（例外：認証の `/api/auth/login`・`/api/auth/logout`・`/api/auth/refresh`。広く使われている名前で、作る・消すものの名詞にすると分かりにくいため）。持ち主の下にあるものは入れ子にする（`/users/{id}/profile`）。ログインした本人のものは `/me` の下に置く |
+| パスの名前 | `/api/` のあとに、複数形の名詞（`/users`・`/likes`）。動詞は使わない（例外：認証の `/api/auth/login`・`/api/auth/logout`・`/api/auth/refresh`。広く使われている名前で、作る・消すものの名詞にすると分かりにくいため）。持ち主の下にあるものは入れ子にする（`/rooms/{public_id}/messages`）。ログインした本人のものは `/me` の下に置く |
 | JSON のキー | `snake_case`（`user_id`・`height_cm`） |
+| URL で指す ID | 1つのもの（会員・05 のトークルームなど）は、その表の `public_id`（UUID v7。例 `019a6f2e-3c4d-7b8a-9e10-2f3a4b5c6d7e`）で指す。連番の `id` は URL に使わない。一覧の応答で相手を指す `user_id` も `public_id`（詳細へのリンクに使うため）。JWT の `sub` は中の `id` のまま（D-022） |
 | 成功のステータス | 読む・変える `200`／作る `201`／消す `204` |
 | 失敗のステータス | 入力がおかしい `422`／見つからない `404`／ログインしていない `401`／権限がない `403`／同じものが2つになる `409` |
 | エラーの形 | `{"message": "...", "errors": {"<項目>": ["..."]}}`（Laravel の標準の形）。`errors` は入力の誤り（`422`）のときだけ |
@@ -24,10 +25,10 @@ API の正本。作る前に設計を書き、確かめてもらってから実�
 | 番号 | メソッドとパス | 中身 | 状態 |
 | --- | --- | --- | --- |
 | [00](00-health.md) | `GET /api/health` | 動いているかと、DB につながるか | 実装済み |
-| [01](01-members.md) | `GET /api/users/{id}/profile` | 相手のプロフィールを見る | 実装済み（レガシー版） |
-| [01](01-members.md) | `PUT /api/users/{id}/profile` | プロフィールを編集する | 実装済み（レガシー版） |
+| [01](01-members.md) | `GET /api/users/{public_id}`（#46 までは `/api/users/{id}/profile`） | 相手のプロフィール（ユーザー詳細）を見る | 実装済み（レガシー版）。#46 の変更は案 |
+| [01](01-members.md) | `PUT /api/users/{public_id}`（#46 までは `/api/users/{id}/profile`。改善版は `PATCH /api/me`） | 自分のプロフィールを編集する | 実装済み（レガシー版）。#46 の変更は案 |
 | [01b](01b-auth.md) | `POST /api/users` | 登録する | 実装済み（レガシー版） |
-| [01b](01b-auth.md) | `GET /api/email-verifications/{token}`（改善版は `GET /api/users/{id}/email-verification/{hash}`） | メールアドレスを確認する（確認のメールのリンク） | 実装済み（レガシー版） |
+| [01b](01b-auth.md) | `GET /api/email-verifications/{token}`（改善版は `GET /api/users/{public_id}/email-verification/{hash}`） | メールアドレスを確認する（確認のメールのリンク） | 実装済み（レガシー版） |
 | [01b](01b-auth.md) | `POST /api/email-verifications`（改善版は `POST /api/me/email-verification`） | 確認のメールをもう一度送る | 実装済み（レガシー版） |
 | [01b](01b-auth.md) | `POST /api/auth/login` | ログインする | 実装済み（レガシー版） |
 | [01b](01b-auth.md) | `GET /api/me` | 自分の情報を見る | 実装済み（レガシー版） |

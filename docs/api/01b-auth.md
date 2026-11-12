@@ -57,7 +57,7 @@ return response()->json($user, 201);
 
 | 項目 | レガシー版（legacy-repo） | 改善版（refactored-repo） |
 | --- | --- | --- |
-| パス | `GET /api/email-verifications/{token}` | `GET /api/users/{id}/email-verification/{hash}?expires=…&signature=…`（`{hash}` はメールアドレスの SHA-1。Laravel の標準の形） |
+| パス | `GET /api/email-verifications/{token}` | `GET /api/users/{public_id}/email-verification/{hash}?expires=…&signature=…`（`{hash}` はメールアドレスの SHA-1。Laravel の標準の形） |
 | だれが使えるか | リンクを知っている人（**登録の応答や、01 のプロフィールの `GET` で、他人も確認用の文字を見られる**） | 署名が正しく、期限内のリンクを持つ人 |
 | 応答（成功） | `200` `{"message": "メールアドレスを確認しました"}`。開くたびに `email_verified_at` を今の時刻で書き換える | `200` `{"message": "メールアドレスを確認しました"}`。確認済みなら `200` `{"message": "確認済みです"}` で、何も変えない（FR-AUTH-006） |
 | 応答（失敗） | `404` `{"message": "確認のリンクが正しくありません"}`：その文字の会員がいない | `403`：署名が違う・期限（60分）が切れた・`{hash}` が合わない。`404`：その会員がいない |
@@ -194,3 +194,14 @@ return ['token' => $token];
 | `APP_KEY` を知っている人 | 好きな `sub` の JWT を作れる（だれにでもなりすませる。鍵を扱うので、AI は測っていない） | ― |
 | `SAKURA@example.test`（#15 で別の会員になったもの）でログイン | 大文字と小文字で別の会員としてログインする | FR-AUTH-003 |
 | `GET /api/me` を呼ぶたびに | DB を1本読む | NFR-AUTH-001 |
+
+## #46 で変えること（ID。状態：**案**）
+
+D-022。上の表は 01b で作った形のまま残し、ここに差分だけを書く。
+
+| 項目 | レガシー版（legacy-repo） | 改善版（refactored-repo） |
+| --- | --- | --- |
+| JWT の `sub` | 変えない（中の `id`）。分かるのは自分の番号だけで、それで他人のページは開けない | 同じ |
+| `GET /api/me` の応答 | `users` の行に `public_id` が足される。/home は、これを使って `PUT /api/users/{public_id}` を呼ぶ | `"user_id": "019a…"`（値が UUID） |
+| `POST /api/users` の応答 | `public_id` は出ない見込み（DB の既定の値で入るが、作ったあとに読み直さないため） | `"user_id": "019a…"`（作ったあとに読み直す） |
+| `public_id` を入れるところ | 書かない。DB の既定の値（`uuidv7()`）が入れる | 同じ |

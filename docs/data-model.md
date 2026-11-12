@@ -10,6 +10,8 @@
 
 01 では初め `users` 1つに全部を持っていたが、#18（PR #19）の新しいマイグレーションで `profiles` を作り、`users` のプロフィールの列と `name` を移して消した。
 
+#46 で、`users` に URL で会員を指すための `public_id`（UUID v7）を足す（D-022。案）。表どうしのつながりと JWT の `sub` は `bigint` の `id` のまま。
+
 ### ER 図
 
 ```mermaid
@@ -20,7 +22,8 @@ erDiagram
   USERS ||--o{ USER_MATCHES : "user1_id で指す（守りなし）"
   USERS ||--o{ USER_MATCHES : "user2_id で指す（守りなし）"
   USERS {
-    bigint id PK
+    bigint id PK "中で使う。つながりと JWT の sub"
+    uuid public_id UK "URL で会員を指す ID。既定は uuidv7()（#46）"
     varchar email UK
     timestamp email_verified_at "NULL 可。時間帯なし"
     varchar password "bcrypt のハッシュ"
@@ -62,7 +65,7 @@ erDiagram
 
 | 表 | 一歩 | 中身 | 制約 |
 | --- | --- | --- | --- |
-| `users` | 00（ひな形）・01・01b | アカウント（ログインのための情報） | 主キー `id`・`email` の UNIQUE（`users_email_unique`。大文字と小文字は区別する） |
+| `users` | 00（ひな形）・01・01b・#46 | アカウント（ログインのための情報） | 主キー `id`・`email` の UNIQUE（`users_email_unique`。大文字と小文字は区別する）・`public_id` の UNIQUE（`NOT NULL`・既定は `uuidv7()`。D-022） |
 | `profiles` | 01 | その会員についての情報 | 主キー `id` だけ。`user_id` に外部キーも UNIQUE もないので、1人に2つのプロフィール・ない会員を指すプロフィールができる |
 | `likes` | 02 | いいね（だれから・だれへ・いつ）。会員と会員をつなぐ中間テーブル | 主キー `id`・`(from_user_id, to_user_id)` の UNIQUE（`likes_from_user_id_to_user_id_unique`）だけ。外部キーがないので、ない会員を指せ、会員を消しても残る。自分から自分も入る。`to_user_id` から探すと表を全部読む |
 | `user_matches` | 03 | マッチ（お互いにいいねした2人の組と、いつ）。Model は `UserMatch`（`match` は PHP の予約語） | 主キー `id` だけ。同じ組が2行入り、(A, B) と (B, A) も両方入る。自分とのマッチ・ない会員を指すマッチも入り、会員を消しても残る。自分のマッチを探す `user1_id = ? or user2_id = ?` は表を全部読む |
@@ -77,7 +80,7 @@ Laravel のひな形が作った表（この学習では扱わない）：`passw
 | --- | --- | --- |
 | `genders` | 性別のマスタ（男性・女性・その他・回答しない） | 主キー `code`（`smallint`） |
 | `prefectures` | 都道府県のマスタ（JIS の都道府県コード 1〜47） | 主キー `code`（`smallint`） |
-| `users` | アカウント（メールアドレス・パスワード・確認した時刻） | メールアドレスは小文字にそろえて UNIQUE |
+| `users` | アカウント（メールアドレス・パスワード・確認した時刻） | メールアドレスは小文字にそろえて UNIQUE・`public_id`（UUID v7。URL で会員を指す ID）の UNIQUE。04 の検索のために `(last_login_at, public_id)` のインデックス |
 | `profiles` | その会員についての情報（性別・生年月日・ニックネーム・都道府県・身長・自己紹介・画像） | `user_id` が主キー兼外部キー（1対1）・`gender_code` → `genders.code`・`prefecture_code` → `prefectures.code` の外部キー・`birthdate` は `date`・ニックネームの長さの CHECK。身長は型だけ（範囲はアプリ。D-013） |
 | `likes` | いいね（02） | `(from_user_id, to_user_id)` の UNIQUE・2つの列から `users.id` への外部キー（`ON DELETE CASCADE`）・`from_user_id <> to_user_id` の CHECK・`to_user_id` のインデックス |
 | `user_matches` | マッチ（03）。1組を1行で持ち、`user1_id` に小さい ID を入れる | `(user1_id, user2_id)` の UNIQUE・`user1_id < user2_id` の CHECK（`user_matches_user1`）・`user2_id` のインデックス・2つの列から `users.id` への外部キー（`ON DELETE CASCADE`） |

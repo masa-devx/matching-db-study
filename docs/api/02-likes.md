@@ -139,3 +139,25 @@ $result[] = [
     'matched' => $matched,
 ];
 ```
+
+## #46 で変えること（ID。状態：**案**）
+
+D-022。上の表は 02・03 で作った形のまま残し、ここに差分だけを書く。測った結果（上の「レガシー版で起きること」）は、#46 のあとに測り直す。送る側は、これまでどおり JWT の `sub`（中の `id`）で決める。
+
+### `POST /api/me/likes`（いいねを送る）
+
+| 項目 | レガシー版（legacy-repo） | 改善版（refactored-repo） |
+| --- | --- | --- |
+| 入力（JSON） | `{"user_id": "019a…"}`（相手の `public_id`）。確かめない | `user_id`（必須・UUID の形・自分でない） |
+| 中の動き | `User::where('public_id', $request->input('user_id'))->value('id')` で相手の中の `id` を読んでから、02・03 の処理をする | 相手を `public_id` で読み、中の `id` で `for update`・`insert` する |
+| 応答（成功） | `201`。これまでどおり `likes` の行（`from_user_id`・`to_user_id` は中の `id`）と `"matched"` | `201` `{"user_id": "019a…", "liked_at": "…", "matched": true}` |
+| 応答（失敗） | **いない UUID は `500` の見込み**（中の `id` が `null` になり、`to_user_id` の NOT NULL に当たる。02 では `201` で入っていた）。**UUID の形でない文字（`5`・`"abc"`）も `500` の見込み**（`22P02`）。自分あては `201` のまま | `422`：形が違う・自分。`404`：いない |
+| 流れる SQL の目安 | 1本増える（相手の `id` を読む）。マッチしないとき3本・するとき4本 | 変わらない（相手を読む SQL を `for update` と一緒にする） |
+| curl の例 | `... -d '{"user_id":"<相手の public_id>"}'` | 同じ |
+
+### `GET /api/me/likes`（送った相手の一覧）
+
+| 項目 | レガシー版（legacy-repo） | 改善版（refactored-repo） |
+| --- | --- | --- |
+| 応答（成功） | 1件の `user_id` が、相手の `public_id`（UUID）になる（ユーザー詳細へのリンクに使う） | 同じ |
+| 流れる SQL の目安 | **1＋3N 本**の見込み（1件ごとに、相手の `public_id` を読む SQL が1本増える） | 変わらない（`users` も JOIN して `public_id` を一緒に取る） |
