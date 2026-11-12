@@ -10,7 +10,7 @@ API の正本。作る前に設計を書き、確かめてもらってから実�
 
 | 決めること | 決まり |
 | --- | --- |
-| パスの名前 | `/api/` のあとに、複数形の名詞（`/users`・`/likes`）。動詞は使わない。持ち主の下にあるものは入れ子にする（`/users/{id}/profile`） |
+| パスの名前 | `/api/` のあとに、複数形の名詞（`/users`・`/likes`）。動詞は使わない（例外：認証の `/api/auth/login`・`/api/auth/logout`・`/api/auth/refresh`。広く使われている名前で、作る・消すものの名詞にすると分かりにくいため）。持ち主の下にあるものは入れ子にする（`/users/{id}/profile`）。ログインした本人のものは `/me` の下に置く |
 | JSON のキー | `snake_case`（`user_id`・`height_cm`） |
 | 成功のステータス | 読む・変える `200`／作る `201`／消す `204` |
 | 失敗のステータス | 入力がおかしい `422`／見つからない `404`／ログインしていない `401`／権限がない `403`／同じものが2つになる `409` |
@@ -29,3 +29,7 @@ API の正本。作る前に設計を書き、確かめてもらってから実�
 | [01b](01b-auth.md) | `POST /api/users` | 登録する | 実装済み（レガシー版） |
 | [01b](01b-auth.md) | `GET /api/email-verifications/{token}`（改善版は `GET /api/users/{id}/email-verification/{hash}`） | メールアドレスを確認する（確認のメールのリンク） | 実装済み（レガシー版） |
 | [01b](01b-auth.md) | `POST /api/email-verifications`（改善版は `POST /api/me/email-verification`） | 確認のメールをもう一度送る | 実装済み（レガシー版） |
+| [01b](01b-auth.md) | `POST /api/auth/login` | ログインする | 案 |
+| [01b](01b-auth.md) | `GET /api/me` | 自分の情報を見る | 案 |
+| [01b](01b-auth.md) | `POST /api/auth/logout` | ログアウトする | 案 |
+| [01b](01b-auth.md) | `POST /api/auth/refresh`（改善版だけ） | トークンを取り替える | 案 |
