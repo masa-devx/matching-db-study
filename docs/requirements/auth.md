@@ -110,7 +110,7 @@
 ## 前提と要確認事項
 
 - 前提：JWT を作る道具は、Laravel 13 に対応しているかを確かめてから決める（候補：`php-open-source-saver/jwt-auth`・`firebase/php-jwt`）
-- 前提：01 のレガシー版のプロフィールの API（`/api/users/{id}/profile`）は、01b のレガシー版でも、だれでも使えるまま。認可は改善版で足す
+- 前提：01 のレガシー版のプロフィールの API（`/api/users/{id}/profile`。#46 で `/api/users/{public_id}`）は、01b のレガシー版でも、だれでも使えるまま。認可は改善版で足す
 - 前提：03b までは画面がないので、Cookie は curl の Cookie の保存（`-c`・`-b`）で確かめる
 - 要確認：なし
 
