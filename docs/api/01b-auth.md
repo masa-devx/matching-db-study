@@ -114,3 +114,79 @@ return ['message' => 'メールアドレスを確認しました'];
 | ない・あるメールアドレスで再送 | `404` と `200` で、登録されているかが分かる | FR-AUTH-007 |
 | DB の `users.verification_token` を見る | 平文で、期限がない | FR-AUTH-006 |
 | DB の `users.password` を見る | `$2y$` で始まる（守れている） | FR-AUTH-030 |
+
+## JWT の作り方（#16）
+
+| 項目 | レガシー版（legacy-repo） | 改善版（refactored-repo） |
+| --- | --- | --- |
+| 道具 | `firebase/php-jwt`（v7.2.1）。コントローラの中で `JWT::encode()`・`JWT::decode()` をそのつど書く | 同じ道具で、自分で書いたガード（`Auth::viaRequest()`）とミドルウェアにまとめる |
+| 鍵 | **Laravel の `APP_KEY` をそのまま使う**（`config('app.key')`）。暗号化や Cookie の鍵と同じなので、片方だけを取り替えられない | JWT 専用の `JWT_SECRET`（長い乱数）を、秘密の値のファイルで渡す。AI は書かない・読まない |
+| 有効期限 | 30日。止める仕組みなし | 15分 |
+| 中身（クレーム） | `sub`（会員の ID）・`email`・`nickname`・`iat`・`exp` | `sub`・`iat`・`exp`・`jti`・`iss`・`aud` だけ（個人情報を入れない） |
+| 送り方 | ログインの応答の JSON（`{"token": "…"}`）。呼ぶときは `Authorization: Bearer <JWT>` | `access`・`refresh` の HttpOnly の Cookie（requirements/auth.md の「トークンと Cookie」） |
+
+## `POST /api/auth/login`（ログイン）
+
+| 項目 | レガシー版（legacy-repo） | 改善版（refactored-repo） |
+| --- | --- | --- |
+| だれが使えるか | だれでも。何回でも試せる | だれでも。同じメールアドレスと IP で 1分に5回まで（6回目は `429`。FR-AUTH-012） |
+| 入力（JSON） | `email`・`password`。確かめない | `email`（小文字にそろえる）・`password`（どちらも必須。なければ `422`） |
+| 応答（成功） | `200` `{"token": "<30日の JWT>"}`。メールアドレスを確認していない会員もログインできる | `200` `{"user_id": 21, "email_verified": false}`。トークンは JSON に入れず、`access`（15分）と `refresh`（30日）の Cookie で渡す。確認していない会員もログインはでき、機能は `403`（FR-AUTH-021） |
+| 応答（失敗） | `401` `{"message": "メールアドレスが違います"}`（その会員がいない）・`401` `{"message": "パスワードが違います"}`（パスワードが違う）。**どちらが違うかが分かる**。`password` を送らないと `500` | `401` `{"message": "メールアドレスかパスワードが違います"}`（どちらでも同じ。FR-AUTH-011）。ないメールアドレスでも、決まったハッシュで照合して、返るまでの時間をそろえる（NFR-AUTH-002） |
+| 流れる SQL の目安 | 2本（`select * from users where email = ? limit 1`・`select * from profiles where user_id = ? limit 1`。ニックネームを JWT に入れるため） | 2本（会員を読む・`insert into refresh_tokens`） |
+| curl の例 | `curl -X POST http://127.0.0.1:8000/api/auth/login -H 'Content-Type: application/json' -d '{"email":"a@example.test","password":"password"}'` | `... -c cookies.txt`（Cookie を保存する） |
+
+レガシー版の書き方：
+
+```php
+$user = User::where('email', $request->input('email'))->first();
+if (! $user) {
+    return response()->json(['message' => 'メールアドレスが違います'], 401);   // 登録されているかが分かる
+}
+if (! Hash::check($request->input('password'), $user->password)) {          // ないときは照合を飛ばすので、速く返る
+    return response()->json(['message' => 'パスワードが違います'], 401);
+}
+$token = JWT::encode([
+    'sub' => $user->id, 'email' => $user->email, 'nickname' => $user->profile?->nickname,
+    'iat' => time(), 'exp' => time() + 60 * 60 * 24 * 30,                    // 30日
+], config('app.key'), 'HS256');
+return ['token' => $token];
+```
+
+## `GET /api/me`（自分の情報を見る）
+
+| 項目 | レガシー版（legacy-repo） | 改善版（refactored-repo） |
+| --- | --- | --- |
+| だれが使えるか | 正しい JWT を持つ人 | 正しい `access` の Cookie を持つ人。確認していなくても使える（FR-AUTH-021） |
+| 入力 | `Authorization: Bearer <JWT>` | `access` の Cookie |
+| 応答（成功） | `200`。`users` の行をそのまま返す（`password` だけ隠れる。**`verification_token` も返る**） | `200` `{"user_id": 21, "email": "a@example.test", "email_verified": true}`（FR-AUTH-017） |
+| 応答（失敗） | `401` `{"message": "ログインしてください"}`：`Authorization` がない。**署名が違う・期限が切れた・形がおかしい JWT は `500`**（`JWT::decode()` の例外をつかまえない） | `401`：トークンがない・署名が違う・期限が切れた（どれも同じ形） |
+| 流れる SQL の目安 | 1本（`select * from users where id = ? limit 1`。呼ぶたびに DB を見る） | 1本（JWT の確かめには DB を使わない。NFR-AUTH-001。応答を作るために会員を読む） |
+| curl の例 | `curl http://127.0.0.1:8000/api/me -H 'Authorization: Bearer <JWT>'` | `curl http://127.0.0.1:8000/api/me -b cookies.txt` |
+
+## `POST /api/auth/logout`（ログアウト）
+
+| 項目 | レガシー版（legacy-repo） | 改善版（refactored-repo） |
+| --- | --- | --- |
+| だれが使えるか | だれでも | ログインした会員 |
+| 応答（成功） | `200` `{"message": "ログアウトしました"}`。**サーバーは何もしない**（画面でトークンを消すだけ。消さなければ、30日のあいだ使える） | `204`。その端末の取り替え用のトークンを使えなくし、`access` と `refresh` の Cookie を消す（FR-AUTH-016） |
+| 流れる SQL の目安 | 0本 | 1本（`update refresh_tokens set revoked_at = ?`） |
+
+## `POST /api/auth/refresh`（取り替え。改善版だけ）
+
+レガシー版にはない（JWT が切れたら、もう一度ログインする）。改善版は、`refresh` の Cookie で新しい `access` と `refresh` を渡し、古い `refresh` を使えなくする。使ったあとの `refresh` がもう一度来たら、その家族をすべて止めて `401`（FR-AUTH-014・015）。表 `refresh_tokens` は、改善する段階で DB の子 Issue として作る。
+
+## レガシー版で起きること（#16 で測り、改善する段階で要件 ID のテストにする）
+
+| 送るもの・すること | レガシー版 | 要件 |
+| --- | --- | --- |
+| ログインの JWT を base64 で読む | **メールアドレスとニックネームが読める**（署名はあるが、暗号化はしていない） | FR-AUTH-013 |
+| ログアウトしたあとに、同じ JWT で `GET /api/me` | `200`（使える） | FR-AUTH-016 |
+| ないメールアドレス・違うパスワードでログイン | 言葉が違うので、登録されているかが分かる。返るまでの時間も違う（`curl -w '%{time_total}'` で測る） | FR-AUTH-011・NFR-AUTH-002 |
+| 違うパスワードで 20回続けてログイン | 20回とも `401`（止まらない） | FR-AUTH-012 |
+| `password` を送らない | `500` | FR-AUTH-010 |
+| 署名を書き換えた JWT・`exp` が過ぎた JWT・`abc` で `GET /api/me` | `500`（`401` にならない） | FR-AUTH-013 |
+| メールアドレスを確認していない会員でログイン | ログインでき、01 のプロフィールの API も使える | FR-AUTH-021 |
+| `APP_KEY` を知っている人 | 好きな `sub` の JWT を作れる（だれにでもなりすませる） | ― |
+| `SAKURA@example.test`（#15 で別の会員になったもの）でログイン | 大文字と小文字で別の会員としてログインする | FR-AUTH-003 |
+| `GET /api/me` を呼ぶたびに | DB を1本読む | NFR-AUTH-001 |
