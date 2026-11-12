@@ -92,3 +92,50 @@ return response()->json($result);
 | `user_id` をクエリ文字列（`?user_id=5`）で送る | 受け付ける（`input()` は本文とクエリ文字列の両方を読む）※コードを読んで分かったこと | FR-LIKE-001 |
 
 測るときは、開発用の DB に、会員 23（`sakura@example.test`）からのいいねを SQL でまとめて入れる（`generate_series` で 100件など）。測ったあとは消す。
+
+## 03 で変えること（状態：**確定**）
+
+03 マッチ（[03-matches.md](03-matches.md)・[requirements/matches.md](../requirements/matches.md)）で、送る・送った一覧の2つを変える。上の表は 02 で作った形のまま残し、ここに差分だけを書く。
+
+### `POST /api/me/likes`（いいねを送る）
+
+| 項目 | レガシー版（legacy-repo） | 改善版（refactored-repo） |
+| --- | --- | --- |
+| 応答（成功） | `201`。02 の応答（入れた `likes` の行）に `"matched": true` か `false` を足す（`{"from_user_id": 5, "to_user_id": 23, …, "id": 9, "matched": true}`） | `201` `{"user_id": 23, "liked_at": "2026-11-12T15:00:00+09:00", "matched": true}`（FR-MATCH-001・002） |
+| マッチの作り方 | いいねを入れたあと、相手から自分へのいいねを読み、あれば `user_matches` に (自分, 相手) を入れる。トランザクションなし | トランザクションの中で、2人の `users` の行を ID の小さい順に `for update` で押さえてから、いいね → 相手からのいいねを読む → あれば `user_matches` に (小さい ID, 大きい ID) を `on conflict do nothing` で入れる（FR-MATCH-003） |
+| 応答（失敗） | 02 と同じ。いいねで `500` になったときは、マッチの処理まで進まない | 02 と同じ。`404`・`409`・`422` のときは、マッチも作らない（ロールバック。FR-MATCH-004） |
+| 流れる SQL の目安 | マッチしないとき2本・するとき3本（`insert into likes` → `select * from likes where from_user_id = ? and to_user_id = ? limit 1` → `insert into user_matches`） | 4本＋ガード1本（`select id from users where id in (?, ?) order by id for update`・`insert into likes … on conflict do nothing`・`select exists(…)`・`insert into user_matches … on conflict do nothing`）。02 の目安「3本以内」から増える |
+
+レガシー版の書き方（02 の `Like::create` のすぐあとに足す）：
+
+```php
+$reverse = Like::where('from_user_id', $request->input('user_id'))
+    ->where('to_user_id', $payload->sub)
+    ->first();
+$matched = false;
+if ($reverse) {
+    // user1_id に送り返した人、user2_id に先に送っていた人（向きがそろわない）
+    UserMatch::create(['user1_id' => $payload->sub, 'user2_id' => $request->input('user_id')]);
+    $matched = true;
+}
+return response()->json(array_merge($like->toArray(), ['matched' => $matched]), 201);
+```
+
+### `GET /api/me/likes`（送った相手の一覧）
+
+| 項目 | レガシー版（legacy-repo） | 改善版（refactored-repo） |
+| --- | --- | --- |
+| 応答（成功） | 1件に `"matched": true` か `false` を足す。相手から自分へのいいねがあれば真（`user_matches` は見ない） | 1件に `"matched"` を足す。`user_matches` に組があれば真（FR-MATCH-006。印の正は `user_matches`） |
+| 流れる SQL の目安 | **1＋2N 本**（02 の 1＋N に、いいね1件ごとの `select exists(select * from likes where from_user_id = ? and to_user_id = ?)` が足される） | 1本＋ガード1本（`likes` に `profiles` を INNER JOIN、`user_matches` を `least`・`greatest` で LEFT JOIN）。02 の改善版の `with()`（3本）から JOIN に変える |
+
+レガシー版の書き方（02 のループの中に足す）：
+
+```php
+$matched = Like::where('from_user_id', $like->to_user_id)
+    ->where('to_user_id', $payload->sub)
+    ->exists();   // いいね1件ごとに、もう1本
+$result[] = [
+    // …02 と同じ…
+    'matched' => $matched,
+];
+```
