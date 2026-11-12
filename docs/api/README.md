@@ -33,3 +33,5 @@ API の正本。作る前に設計を書き、確かめてもらってから実�
 | [01b](01b-auth.md) | `GET /api/me` | 自分の情報を見る | 実装済み（レガシー版） |
 | [01b](01b-auth.md) | `POST /api/auth/logout` | ログアウトする | 実装済み（レガシー版） |
 | [01b](01b-auth.md) | `POST /api/auth/refresh`（改善版だけ） | トークンを取り替える | 確定 |
+| [02](02-likes.md) | `POST /api/me/likes` | いいねを送る | 確定 |
+| [02](02-likes.md) | `GET /api/me/likes` | 送った相手の一覧 | 確定 |
