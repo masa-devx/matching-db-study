@@ -4,43 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>【番号】【タイトル】</title>
-<style>
-  :root {
-    --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0;
-    --card: #f6f8fa; --accent: #0969da; --ok: #1a7f37; --warn: #9a6700;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d;
-      --card: #151b23; --accent: #4493f8; --ok: #3fb950; --warn: #d29922;
-    }
-  }
-  :root[data-theme="dark"] {
-    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d;
-    --card: #151b23; --accent: #4493f8; --ok: #3fb950; --warn: #d29922;
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--fg);
-    font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; line-height: 1.8; }
-  main { max-width: 920px; margin: 0 auto; padding: 24px 16px 80px; }
-  a { color: var(--accent); }
-  h1 { font-size: 1.6rem; margin: 8px 0 4px; }
-  h2 { font-size: 1.25rem; margin-top: 40px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
-  h3 { font-size: 1.05rem; margin-top: 24px; }
-  .meta { color: var(--muted); font-size: .9rem; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
-  .point { border-left: 4px solid var(--accent); }
-  .warn { border-left: 4px solid var(--warn); }
-  table { border-collapse: collapse; width: 100%; margin: 12px 0; display: block; overflow-x: auto; }
-  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
-  th { background: var(--card); white-space: nowrap; }
-  code { background: var(--card); padding: 1px 5px; border-radius: 4px; font-size: .9em; }
-  pre:not(.mermaid) { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; line-height: 1.5; }
-  pre.mermaid { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; text-align: center; }
-  details { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; margin: 8px 0; }
-  summary { cursor: pointer; font-weight: 600; }
-  .status { display: inline-block; padding: 0 8px; border-radius: 10px; font-size: .8rem; border: 1px solid var(--line); }
-</style>
+<link rel="stylesheet" href="assets/page.css">
 </head>
 <body>
 <main>
@@ -78,11 +42,21 @@ erDiagram
 
   <h2>5. 見本：レガシー版と改善版</h2>
   <h3>レガシー版（Fat Controller・テストなし）</h3>
-  <pre><code>【コントローラの中で Eloquent を直接使う書き方。10〜20行】</code></pre>
+  <pre><code class="language-php">【コントローラの中で Eloquent を直接使う書き方。10〜20行】</code></pre>
   <div class="card warn">【この書き方の何が問題か（N+1・二重登録・遅い検索など）】</div>
   <h3>改善版</h3>
-  <pre><code>【改善したあとの SQL・PHP（Eloquent）・TypeScript の要点。10〜20行】</code></pre>
+  <pre><code class="language-php">【改善したあとの SQL・PHP（Eloquent）・TypeScript の要点。10〜20行】</code></pre>
   <p>【見本の読み方。どの行が大事か】</p>
+
+  <h3>Eloquent が発行する SQL（レガシー版と改善版を並べる）</h3>
+  <p>左がレガシー版、右が改善版です。SQL は Laravel に作らせて確かめたもので（書き込みと、まだない表は <code>DB::pretend()</code> で、流さずに SQL だけを取り出した）、例は【例に使う会員や値】の場合です。中身は <code>explanations/sql/【番号-名前】.json</code> にあり、<code>explanations/tools/compare-block.py</code> で作り直せます。</p>
+  <p class="meta">ログ（<code>sql-*.log</code>）では、値は <code>?</code> になり、別に渡されます（プリペアドステートメント）。読みやすいよう、ここでは値を入れて、行を分けて書きました。長い値（ハッシュなど）は <code>…</code> で略しています。</p>
+  <!-- compare: sql/【番号-名前】.json -->
+<!-- /compare -->
+  <table>
+    <tr><th>操作</th><th>レガシー版</th><th>改善版</th><th>違いのもと</th></tr>
+    <tr><td>【操作】</td><td>【本数と一言】</td><td>【本数と一言】</td><td>【SQL が変わる理由】</td></tr>
+  </table>
 
   <h2>6. どう確かめるか</h2>
   <table>
@@ -117,9 +91,13 @@ erDiagram
 </main>
 <script type="module">
   import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
-  const dark = document.documentElement.dataset.theme === "dark" ||
-    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+  // page.js が選んだ表示（data-scheme）に合わせる。なければ端末の設定
+  const scheme = document.documentElement.dataset.scheme;
+  const dark = scheme ? scheme.startsWith("dark") : (document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches));
   mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/page.js"></script>
 </body>
 </html>

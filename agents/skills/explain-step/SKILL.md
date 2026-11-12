@@ -31,6 +31,12 @@ description: 実装の前に、次の一歩（機能・テーマ）の解説を�
   - 文は短く、日本語で。専門用語は「2. 先に知っておく言葉」で1〜2文で説明してから使う
   - 「4. 選択肢」は2〜3案。案ごとに良いところ・弱いところ・向いている場面を書き、選ぶ案と理由を1つに決める
   - 「5. 見本」は、レガシー版（Fat Controller）と改善版を、それぞれ10〜20行まで。レガシー版には、何が問題かを書く。全部は書かない（実装は次に頼まれたときに行う）
+  - 「5. 見本」の終わりの「Eloquent が発行する SQL」は、操作ごとに「PHP → 発行される SQL」をレガシー版と改善版で左右に並べる（00・03b・05b は分けないので書かない）
+    1. SQL は推測で書かない。Laravel に作らせる：`cat explanations/tools/collect-sql.tinker 呼び出しの.txt | docker compose exec -T app php artisan tinker | grep '^> *@@\|^@@'`（呼び出しの書き方は collect-sql.tinker の先頭）。読み取りは `$sql`（本当に流す）、書き込み・まだない表・改善版は `$dry`（`DB::pretend()`。流さない）
+    2. 集めた SQL を `explanations/sql/<番号>-<名前>.json` に書く（形は compare-block.py の先頭）。値を入れ、1行 45文字ほどで改行し、`-- ①…` で何をする SQL かを書く。`begin`・`commit` はログに出ないので手で書き足す。秘密の値は入れない
+    3. ページの印（`<!-- compare: sql/….json -->`〜`<!-- /compare -->`）の間を、`python3 -I explanations/tools/compare-block.py explanations/sql/<…>.json explanations/<…>.html` で作る。JSON を直したら同じコマンドで作り直す
+    4. 下の表に、操作ごとの本数と、SQL が変わる理由を書く。設計（`docs/api/`）の「流れる SQL の目安」と本数が合わなければ、ページに「要確認」と書いて、チャットで伝える
+  - コードのかたまりは `<pre><code class="language-php">` のように言語を付ける（色が付く。SQL は `language-sql`、シェルは `language-bash`）
   - 「6. 確かめ方」は、①レガシー版で問題を見る方法（クエリの数・EXPLAIN（`EXPLAIN (ANALYZE, BUFFERS)`）・同時に送る）②直す前に足す、振る舞いを固定するテストの名前 ③改善したあとに比べる数字
   - 00・05b は、レガシー版と改善版に分けなくてよい（5・6 章は1つの形で書く）
   - 「8. 6つの問い」は、答えも書く（開くと見える形）。答えは、この一歩で選んだ設計に合わせる。問い 6 は「Eloquent で流れる SQL → 問題 → 直し方」と、Rails（ActiveRecord）・Prisma での書き方を短い表で並べる

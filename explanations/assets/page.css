@@ -1,0 +1,303 @@
+/* 解説のページの見た目（すべてのページで共通）。
+   手元では <link> で読み、claude.ai に載せるときは tools/to-artifact.py が <style> に埋め込む。
+   色はすべてここの変数から取る（明るい・暗いの両方）。コードの色は VS Code の Light+・Dark+ に合わせた。 */
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap");
+
+:root {
+  --bg: #fbfbfc; --surface: #ffffff; --surface-2: #f3f5f8; --fg: #1d2530; --muted: #5d6877;
+  --line: #e1e5eb; --accent: #2b66d9; --accent-soft: #eaf1fd; --warn: #b45309; --warn-soft: #fdf3e6;
+  --ok: #1a7f37; --ok-soft: #e7f5ec;
+  --code-bg: #ffffff; --code-fg: #1f1f1f; --code-bar: #f3f3f3; --code-line: #e5e5e5;
+  --tk-keyword: #0000ff; --tk-control: #af00db; --tk-string: #a31515; --tk-comment: #008000;
+  --tk-number: #098658; --tk-func: #795e26; --tk-var: #001080; --tk-type: #267f99; --tk-attr: #e50000;
+  --shadow: 0 1px 2px rgba(20, 30, 50, .06), 0 4px 16px rgba(20, 30, 50, .05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1218; --surface: #151a22; --surface-2: #1b212b; --fg: #e3e8ee; --muted: #9aa4b1;
+    --line: #2a323d; --accent: #73a9ff; --accent-soft: #172438; --warn: #e5a54b; --warn-soft: #2a2115;
+    --ok: #4fc26b; --ok-soft: #14271b;
+    --code-bg: #1e1e1e; --code-fg: #d4d4d4; --code-bar: #252526; --code-line: #333333;
+    --tk-keyword: #569cd6; --tk-control: #c586c0; --tk-string: #ce9178; --tk-comment: #6a9955;
+    --tk-number: #b5cea8; --tk-func: #dcdcaa; --tk-var: #9cdcfe; --tk-type: #4ec9b0; --tk-attr: #9cdcfe;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 16px rgba(0, 0, 0, .25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1218; --surface: #151a22; --surface-2: #1b212b; --fg: #e3e8ee; --muted: #9aa4b1;
+  --line: #2a323d; --accent: #73a9ff; --accent-soft: #172438; --warn: #e5a54b; --warn-soft: #2a2115;
+  --ok: #4fc26b; --ok-soft: #14271b;
+  --code-bg: #1e1e1e; --code-fg: #d4d4d4; --code-bar: #252526; --code-line: #333333;
+  --tk-keyword: #569cd6; --tk-control: #c586c0; --tk-string: #ce9178; --tk-comment: #6a9955;
+  --tk-number: #b5cea8; --tk-func: #dcdcaa; --tk-var: #9cdcfe; --tk-type: #4ec9b0; --tk-attr: #9cdcfe;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 16px rgba(0, 0, 0, .25);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", sans-serif;
+  font-size: 16px; line-height: 1.85; letter-spacing: .01em;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 並び：広い画面は左に目次、狭い画面は1列 */
+.layout {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 40px;
+  max-width: 1200px; margin: 0 auto; padding-block: 28px 96px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+@media (min-width: 1120px) { .layout.has-toc { grid-template-columns: 230px minmax(0, 1fr); } }
+main { min-width: 0; max-width: 900px; width: 100%; margin: 0 auto; }
+
+a { color: var(--accent); text-underline-offset: 3px; }
+a:hover { text-decoration-thickness: 2px; }
+
+h1, h2, h3, h4 { text-wrap: balance; line-height: 1.4; letter-spacing: .02em; }
+h1 { font-size: 2rem; margin: 12px 0 8px; font-weight: 700; }
+h2 {
+  font-size: 1.45rem; margin: 64px 0 16px; padding-bottom: 10px;
+  border-bottom: 2px solid var(--line); scroll-margin-top: 24px;
+}
+h3 { font-size: 1.15rem; margin: 36px 0 10px; padding-left: 12px; border-left: 4px solid var(--accent); }
+h4 { font-size: 1.02rem; margin: 28px 0 8px; color: var(--fg); }
+p, ul, ol { margin: 10px 0; }
+li + li { margin-top: 4px; }
+strong { font-weight: 700; }
+
+.meta { color: var(--muted); font-size: .9rem; }
+.status {
+  display: inline-block; padding: 1px 10px; border-radius: 999px; font-size: .8rem; font-weight: 600;
+  border: 1px solid var(--line); background: var(--surface-2); color: var(--muted);
+}
+.status[data-state="legacy"] { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.status[data-state="done"] { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.status[data-state="doc"] { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+
+/* 目次（ページの中の見出し） */
+.toc { font-size: .9rem; }
+.toc-inner { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); max-height: calc(100vh - 48px); overflow-y: auto; }
+.toc-title { font-size: .75rem; font-weight: 700; letter-spacing: .12em; color: var(--muted); margin: 0 0 8px; }
+.toc ol { list-style: none; padding: 0; margin: 0; border-left: 2px solid var(--line); }
+.toc li { margin: 0; }
+.toc a {
+  display: block; padding: 5px 0 5px 14px; margin-left: -2px; border-left: 2px solid transparent;
+  color: var(--muted); text-decoration: none; line-height: 1.5;
+}
+.toc a:hover { color: var(--fg); }
+.toc a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; }
+.toc-mobile { display: block; margin: 16px 0 0; }
+.toc-side { display: none; }
+@media (min-width: 1120px) { .toc-side { display: block; } .toc-mobile { display: none; } }
+
+/* 囲み */
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 14px 20px; margin: 16px 0; box-shadow: var(--shadow);
+}
+.card > :first-child { margin-top: 0; }
+.card > :last-child { margin-bottom: 0; }
+.point { background: var(--accent-soft); border-color: transparent; border-left: 4px solid var(--accent); box-shadow: none; }
+.warn { background: var(--warn-soft); border-color: transparent; border-left: 4px solid var(--warn); box-shadow: none; }
+.warn strong:first-child { color: var(--warn); }
+
+/* 表 */
+table {
+  border-collapse: separate; border-spacing: 0; width: 100%; margin: 16px 0; display: block; overflow-x: auto;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: .94rem; line-height: 1.7;
+}
+th, td { padding: 9px 14px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+th + th, td + td { border-left: 1px solid var(--line); }
+tr:last-child > td { border-bottom: 0; }
+th { background: var(--surface-2); white-space: nowrap; font-weight: 700; font-size: .88rem; color: var(--muted); }
+tbody tr:hover > td, table > tr:hover > td { background: color-mix(in srgb, var(--accent-soft) 45%, transparent); }
+td ul { padding-left: 1.2em; margin: 0; }
+
+/* 文の中のコード */
+code {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Hiragino Sans", "Noto Sans JP", monospace;
+  font-size: .88em; background: var(--surface-2); border: 1px solid var(--line);
+  padding: 1px 6px; border-radius: 5px; overflow-wrap: anywhere;
+}
+
+/* コードのかたまり（エディタ風） */
+.code-block {
+  margin: 18px 0; border-radius: 10px; overflow: hidden; border: 1px solid var(--code-line);
+  background: var(--code-bg); box-shadow: var(--shadow);
+}
+.code-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 6px 10px 6px 14px; background: var(--code-bar); border-bottom: 1px solid var(--code-line);
+  font-size: .78rem; color: var(--muted);
+}
+.code-dots { display: flex; gap: 6px; }
+.code-dots span { width: 10px; height: 10px; border-radius: 50%; background: var(--code-line); }
+.code-lang { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; letter-spacing: .04em; margin-left: auto; }
+.code-copy {
+  font: inherit; font-size: .78rem; color: var(--muted); background: transparent; border: 1px solid var(--code-line);
+  border-radius: 6px; padding: 2px 10px; cursor: pointer;
+}
+.code-copy:hover { color: var(--fg); border-color: var(--muted); }
+pre:not(.mermaid) {
+  margin: 0; padding: 14px 18px; overflow-x: auto; background: var(--code-bg); color: var(--code-fg);
+  border: 0; border-radius: 0; line-height: 1.7; tab-size: 4;
+}
+pre:not(.mermaid) code {
+  font-size: 15px; background: none; border: 0; padding: 0; color: inherit; overflow-wrap: normal; white-space: pre;
+}
+
+/* コードの色（highlight.js のクラス） */
+.hljs-comment, .hljs-quote { color: var(--tk-comment); font-style: italic; }
+.hljs-keyword, .hljs-literal, .hljs-meta, .hljs-doctag { color: var(--tk-keyword); }
+.hljs-built_in, .hljs-type, .hljs-title.class_, .hljs-class .hljs-title { color: var(--tk-type); }
+.hljs-string, .hljs-regexp, .hljs-meta .hljs-string { color: var(--tk-string); }
+.hljs-number, .hljs-symbol, .hljs-bullet { color: var(--tk-number); }
+.hljs-title.function_, .hljs-title, .hljs-section { color: var(--tk-func); }
+.hljs-variable, .hljs-params, .hljs-property, .hljs-template-variable { color: var(--tk-var); }
+.hljs-attr, .hljs-attribute, .hljs-selector-attr { color: var(--tk-attr); }
+.hljs-name, .hljs-tag { color: var(--tk-keyword); }
+.hljs-subst { color: var(--code-fg); }
+.hljs-name-sql { color: var(--tk-var); }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 700; }
+
+/* 図 */
+pre.mermaid {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 16px; margin: 18px 0; overflow-x: auto; text-align: center; box-shadow: var(--shadow);
+}
+
+/* 6つの問い */
+details {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 0; margin: 10px 0; transition: border-color .15s;
+}
+details[open] { border-color: var(--accent); }
+summary {
+  cursor: pointer; font-weight: 700; padding: 12px 16px; list-style: none; display: flex; gap: 10px; align-items: baseline;
+}
+summary::-webkit-details-marker { display: none; }
+summary::before { content: "▸"; color: var(--accent); transition: transform .15s; display: inline-block; }
+details[open] > summary::before { transform: rotate(90deg); }
+details > :not(summary) { margin: 0 16px 14px; }
+
+/* 上へ戻る */
+.to-top {
+  position: fixed; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface);
+  color: var(--muted); font-size: 1.1rem; cursor: pointer; box-shadow: var(--shadow);
+  opacity: 0; pointer-events: none; transition: opacity .2s;
+}
+.to-top.show { opacity: 1; pointer-events: auto; }
+.to-top:hover { color: var(--accent); }
+
+@media (max-width: 600px) {
+  body { font-size: 15.5px; }
+  h1 { font-size: 1.6rem; }
+  h2 { font-size: 1.28rem; margin-top: 48px; }
+  pre:not(.mermaid) code { font-size: 13.5px; }
+  .card { padding: 12px 16px; }
+  th, td { min-width: 8.5em; }
+}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+/* 表示の切り替え（ページの上の「表示」と「暗いときの色」）。
+   page.js が、選んだものと端末の設定から data-scheme を決めて付ける。付いていないときは、上の明るい・暗いの決まりのまま */
+:root[data-scheme="light"] {
+  --bg: #fbfbfc; --surface: #ffffff; --surface-2: #f3f5f8; --fg: #1d2530; --muted: #5d6877;
+  --line: #e1e5eb; --accent: #2b66d9; --accent-soft: #eaf1fd; --warn: #b45309; --warn-soft: #fdf3e6;
+  --ok: #1a7f37; --ok-soft: #e7f5ec;
+  --code-bg: #ffffff; --code-fg: #1f1f1f; --code-bar: #f3f3f3; --code-line: #e5e5e5;
+  --tk-keyword: #0000ff; --tk-control: #af00db; --tk-string: #a31515; --tk-comment: #008000;
+  --tk-number: #098658; --tk-func: #795e26; --tk-var: #001080; --tk-type: #267f99; --tk-attr: #e50000;
+  --shadow: 0 1px 2px rgba(20, 30, 50, .06), 0 4px 16px rgba(20, 30, 50, .05);
+  color-scheme: light;
+}
+/* VS Code（Dark+） */
+:root[data-scheme="dark-vscode"] {
+  --bg: #0e1218; --surface: #151a22; --surface-2: #1b212b; --fg: #e3e8ee; --muted: #9aa4b1;
+  --line: #2a323d; --accent: #73a9ff; --accent-soft: #172438; --warn: #e5a54b; --warn-soft: #2a2115;
+  --ok: #4fc26b; --ok-soft: #14271b;
+  --code-bg: #1e1e1e; --code-fg: #d4d4d4; --code-bar: #252526; --code-line: #333333;
+  --tk-keyword: #569cd6; --tk-control: #c586c0; --tk-string: #ce9178; --tk-comment: #6a9955;
+  --tk-number: #b5cea8; --tk-func: #dcdcaa; --tk-var: #9cdcfe; --tk-type: #4ec9b0; --tk-attr: #9cdcfe;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 16px rgba(0, 0, 0, .25);
+  color-scheme: dark;
+}
+/* GitHub Dark Dimmed（白が強すぎない、やわらかい暗さ） */
+:root[data-scheme="dark-dimmed"] {
+  --bg: #1c2128; --surface: #22272e; --surface-2: #2d333b; --fg: #c5d1de; --muted: #8b98a5;
+  --line: #3d444d; --accent: #6cb6ff; --accent-soft: #24303f; --warn: #daaa3f; --warn-soft: #362e1e;
+  --ok: #6bc46d; --ok-soft: #23332a;
+  --code-bg: #22272e; --code-fg: #adbac7; --code-bar: #2d333b; --code-line: #3d444d;
+  --tk-keyword: #f47067; --tk-control: #f47067; --tk-string: #96d0ff; --tk-comment: #768390;
+  --tk-number: #6cb6ff; --tk-func: #dcbdfb; --tk-var: #f69d50; --tk-type: #f69d50; --tk-attr: #6cb6ff;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .25), 0 4px 16px rgba(0, 0, 0, .2);
+  color-scheme: dark;
+}
+/* GitHub Dark */
+:root[data-scheme="dark-github"] {
+  --bg: #0d1117; --surface: #161b22; --surface-2: #1c2128; --fg: #e6edf3; --muted: #8d96a0;
+  --line: #30363d; --accent: #4493f8; --accent-soft: #121d2f; --warn: #d29922; --warn-soft: #272115;
+  --ok: #3fb950; --ok-soft: #12261e;
+  --code-bg: #161b22; --code-fg: #e6edf3; --code-bar: #1c2128; --code-line: #30363d;
+  --tk-keyword: #ff7b72; --tk-control: #ff7b72; --tk-string: #a5d6ff; --tk-comment: #8b949e;
+  --tk-number: #79c0ff; --tk-func: #d2a8ff; --tk-var: #ffa657; --tk-type: #ffa657; --tk-attr: #79c0ff;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 16px rgba(0, 0, 0, .25);
+  color-scheme: dark;
+}
+/* One Dark */
+:root[data-scheme="dark-onedark"] {
+  --bg: #21252b; --surface: #282c34; --surface-2: #2c313a; --fg: #dcdfe4; --muted: #9da5b4;
+  --line: #3a404b; --accent: #61afef; --accent-soft: #263445; --warn: #e5c07b; --warn-soft: #3a3427;
+  --ok: #98c379; --ok-soft: #2b3627;
+  --code-bg: #282c34; --code-fg: #abb2bf; --code-bar: #21252b; --code-line: #3a404b;
+  --tk-keyword: #c678dd; --tk-control: #c678dd; --tk-string: #98c379; --tk-comment: #7f848e;
+  --tk-number: #d19a66; --tk-func: #61afef; --tk-var: #e06c75; --tk-type: #e5c07b; --tk-attr: #d19a66;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 16px rgba(0, 0, 0, .25);
+  color-scheme: dark;
+}
+/* Dracula */
+:root[data-scheme="dark-dracula"] {
+  --bg: #21222c; --surface: #282a36; --surface-2: #303241; --fg: #f8f8f2; --muted: #a9adc7;
+  --line: #3c3f52; --accent: #bd93f9; --accent-soft: #33304a; --warn: #ffb86c; --warn-soft: #3a3229;
+  --ok: #50fa7b; --ok-soft: #24372b;
+  --code-bg: #282a36; --code-fg: #f8f8f2; --code-bar: #21222c; --code-line: #3c3f52;
+  --tk-keyword: #ff79c6; --tk-control: #ff79c6; --tk-string: #f1fa8c; --tk-comment: #7b88b8;
+  --tk-number: #bd93f9; --tk-func: #50fa7b; --tk-var: #f8f8f2; --tk-type: #8be9fd; --tk-attr: #50fa7b;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 16px rgba(0, 0, 0, .25);
+  color-scheme: dark;
+}
+
+.look-bar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 10px 0 0; font-size: .85rem; color: var(--muted); }
+.look-bar label { display: inline-flex; align-items: center; gap: 6px; }
+.look-bar select {
+  font: inherit; color: var(--fg); background: var(--surface); border: 1px solid var(--line);
+  border-radius: 6px; padding: 3px 8px; cursor: pointer;
+}
+.look-bar select:disabled { opacity: .5; cursor: default; }
+
+/* レガシー版と改善版を左右に並べる（ORM のコード → 発行される SQL） */
+.compare { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin: 16px 0; }
+@media (min-width: 860px) { .compare { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.compare-col {
+  min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 12px 14px 4px; border-top: 4px solid var(--muted);
+}
+.compare-col.legacy { border-top-color: var(--warn); }
+.compare-col.improved { border-top-color: var(--ok); }
+.compare-col.alt { border-top-color: var(--accent); }
+.compare-title { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 0 0 4px; font-weight: 700; }
+.count { font-size: .8rem; font-weight: 700; padding: 1px 10px; border-radius: 999px; background: var(--surface-2); color: var(--muted); white-space: nowrap; }
+.legacy .count { background: var(--warn-soft); color: var(--warn); }
+.improved .count { background: var(--ok-soft); color: var(--ok); }
+.alt .count { background: var(--accent-soft); color: var(--accent); }
+.arrow { margin: 4px 0 -8px; font-size: .82rem; color: var(--muted); text-align: center; }
+.compare-col .code-block { margin: 10px 0; box-shadow: none; }
+.compare-col pre:not(.mermaid) code { font-size: 13.5px; }
+.compare-col > ul { font-size: .92rem; padding-left: 1.2em; }
+.compare-col.alt { grid-column: 1 / -1; }

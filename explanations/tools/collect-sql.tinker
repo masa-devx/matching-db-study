@@ -1,0 +1,40 @@
+/*
+ * Eloquent が発行する SQL を集める（解説のページの「Eloquent が発行する SQL」の節に使う）。
+ * tinker に渡す関数だけを書く（tinker は先頭の <?php を受け付けないので、.php にしない）。
+ * 呼び出しは、このファイルのあとに続けて渡す。
+ *
+ *   cat explanations/tools/collect-sql.tinker 呼び出しの.txt | docker compose exec -T app php artisan tinker | grep '^> *@@\|^@@'
+ *
+ * - $sql('名前', fn () => ...)  ：開発用の DB に本当に流す（読み取りだけに使う）。SQL と ? に入る値を出す
+ * - $dry('名前', fn () => ...)  ：DB::pretend() の中で動かし、流さずに SQL だけを出す（書き込み・まだない表に使う）
+ *   pretend の中の select は空の結果を返すので、そのあとに続く処理（with() の2本目など）は出ないことがある
+ * - トランザクションの begin・commit は、どちらでも出ない（PDO が直接送るため）。ページには手で書き足す
+ * - 出力の行は「@@ 名前 | SQL | 値」（tinker は入力も表示するので、@@ の行だけを拾う）。秘密の値（パスワードの平文・鍵）は渡さない
+ */
+
+$sql = function (string $label, callable $fn): void {
+    \DB::flushQueryLog();
+    \DB::enableQueryLog();
+    try {
+        $fn();
+    } catch (\Throwable $e) {
+        echo '@@ '.$label.' | 例外: '.get_class($e).PHP_EOL;
+    }
+    foreach (\DB::getQueryLog() as $q) {
+        echo '@@ '.$label.' | '.$q['query'].' | '.json_encode($q['bindings'], JSON_UNESCAPED_UNICODE).PHP_EOL;
+    }
+    \DB::disableQueryLog();
+};
+
+$dry = function (string $label, callable $fn): void {
+    try {
+        $queries = \DB::pretend($fn);
+    } catch (\Throwable $e) {
+        echo '@@ '.$label.' | 例外: '.get_class($e).PHP_EOL;
+
+        return;
+    }
+    foreach ($queries as $q) {
+        echo '@@ '.$label.' | '.$q['query'].PHP_EOL;
+    }
+};

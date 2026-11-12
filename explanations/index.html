@@ -4,25 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DB 設計の学習ノート</title>
-<style>
-  :root { --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --card: #f6f8fa; --accent: #0969da; }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) { --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d; --card: #151b23; --accent: #4493f8; }
-  }
-  :root[data-theme="dark"] { --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d; --card: #151b23; --accent: #4493f8; }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--fg);
-    font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; line-height: 1.8; }
-  main { max-width: 920px; margin: 0 auto; padding: 24px 16px 80px; }
-  a { color: var(--accent); }
-  h1 { font-size: 1.6rem; }
-  h2 { font-size: 1.2rem; margin-top: 36px; border-bottom: 1px solid var(--line); }
-  .meta { color: var(--muted); font-size: .9rem; }
-  table { border-collapse: collapse; width: 100%; display: block; overflow-x: auto; }
-  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
-  th { background: var(--card); white-space: nowrap; }
-  pre.mermaid { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; text-align: center; }
-</style>
+<link rel="stylesheet" href="assets/page.css">
 </head>
 <body>
 <main>
@@ -49,7 +31,7 @@ flowchart LR
     <tr><td>00</td><td><a href="00-setup.html">環境を作る</a></td><td>PostgreSQL（Docker）・Laravel のマイグレーション・流れた SQL を見る方法</td><td>実装済み</td></tr>
     <tr><td>01</td><td><a href="01-members.html">会員とプロフィール</a></td><td>主キー・データの型・NOT NULL・CHECK・1対1</td><td>レガシー版まで</td></tr>
     <tr><td>01b</td><td><a href="01b-auth.html">認証と認可</a></td><td>パスワードのハッシュ・JWT と取り替え用のトークン・メールアドレスの確認・ログインの回数制限・トランザクション・認証と認可の違い。レガシー版は 30日の JWT を JSON で返し、改善版は 15分の JWT と取り替え用のトークンを HttpOnly の Cookie に置く（D-014）</td><td>レガシー版まで</td></tr>
-    <tr><td>02</td><td><a href="02-likes.html">いいね</a></td><td>中間テーブル・自分の表どうしの多対多・UNIQUE で二重を防ぐ</td><td>解説だけ</td></tr>
+    <tr><td>02</td><td><a href="02-likes.html">いいね</a></td><td>中間テーブル・自分の表どうしの多対多・UNIQUE で二重を防ぐ</td><td>レガシー版まで</td></tr>
     <tr><td>03</td><td>マッチ</td><td>自己結合（お互いにいいね）・INNER と LEFT JOIN</td><td>未着手</td></tr>
     <tr><td>03b</td><td>React を足す</td><td>Vite・API との通信・Context で状態を持つ・コンポーネント設計・テスト・開発効率・CORS。レガシー版はひな形のままのスパゲティコード（1画面に1つの大きな部品）でトークンを sessionStorage に置き、改善版は container／presenter に分け、HttpOnly の Cookie に移して XSS への強さを比べる（docs/frontend.md）</td><td>未着手</td></tr>
     <tr><td>04</td><td>検索と一覧</td><td>複合インデックス・EXPLAIN・OFFSET とカーソル・大量のデータ。画面の表示速度（長い一覧・Web Vitals・バンドルの大きさ）も、同じ一覧で測る</td><td>未着手</td></tr>
@@ -68,9 +50,13 @@ flowchart LR
 </main>
 <script type="module">
   import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
-  const dark = document.documentElement.dataset.theme === "dark" ||
-    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+  // page.js が選んだ表示（data-scheme）に合わせる。なければ端末の設定
+  const scheme = document.documentElement.dataset.scheme;
+  const dark = scheme ? scheme.startsWith("dark") : (document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches));
   mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/page.js"></script>
 </body>
 </html>
