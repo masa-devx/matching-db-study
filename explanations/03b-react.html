@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>03b React を足す</title>
+<link rel="stylesheet" href="assets/page.css">
+</head>
+<body>
+<main>
+  <p class="meta"><a href="index.html">← 目次へ</a></p>
+  <h1>03b React を足す</h1>
+  <p class="meta">作成: 2026-11-12 ／ 状態: <span class="status">解説だけ</span> ／ Issue: <a href="https://github.com/masa-devx/matching-db-study/issues/34">#34</a> ／ 要件: <code>docs/requirements/screens.md</code>（FR-UI-001〜014・NFR-UI-001〜003）</p>
+
+  <div class="card point">
+    <strong>この一歩でできるようになること</strong>
+    <ul>
+      <li>Vite で React＋TypeScript を入れ、ブラウザの画面から API を呼ぶまでの流れ（開発サーバー・CORS・環境変数）を説明できる</li>
+      <li>React Router で画面を分け、「ログインが要る画面」をどこで守るかを説明できる</li>
+      <li>素の CSS がなぜ崩れやすいか（名前のぶつかり・読み込む順・どこで使うか分からない）と、CSS Modules と CSS の変数（デザイントークン）で何が良くなるかを説明できる</li>
+    </ul>
+  </div>
+
+  <h2>1. 何を作るか</h2>
+  <p>01〜03 で作った API を、ブラウザの画面から使えるようにします。まずレガシー版で、必要な6画面だけを作ります。会員を探す一覧はまだない（04）ので、相手は URL（<code>/users/5</code>）で開きます。</p>
+  <table>
+    <tr><th>画面</th><th>パス</th><th>呼ぶ API</th><th>要件</th><th>子 Issue</th></tr>
+    <tr><td>ログイン</td><td><code>/login</code></td><td><code>POST /api/auth/login</code></td><td>FR-UI-001・002</td><td rowspan="2"><a href="https://github.com/masa-devx/matching-db-study/issues/35">#35</a>（土台も）</td></tr>
+    <tr><td>登録</td><td><code>/register</code></td><td><code>POST /api/users</code></td><td>FR-UI-003・004</td></tr>
+    <tr><td>自分のプロフィール</td><td><code>/me</code></td><td><code>GET /api/me</code>・<code>GET</code>／<code>PUT /api/users/{id}/profile</code>・<code>POST /api/auth/logout</code></td><td>FR-UI-005・012</td><td rowspan="2"><a href="https://github.com/masa-devx/matching-db-study/issues/36">#36</a></td></tr>
+    <tr><td>相手のプロフィール</td><td><code>/users/:id</code></td><td><code>GET /api/users/{id}/profile</code>・<code>POST /api/me/likes</code></td><td>FR-UI-006〜008</td></tr>
+    <tr><td>送ったいいね</td><td><code>/likes</code></td><td><code>GET /api/me/likes</code></td><td>FR-UI-009</td><td rowspan="2"><a href="https://github.com/masa-devx/matching-db-study/issues/37">#37</a></td></tr>
+    <tr><td>マッチ</td><td><code>/matches</code></td><td><code>GET /api/me/matches</code></td><td>FR-UI-010</td></tr>
+  </table>
+  <p>どの画面にも関わるもの：ログインしていないときの移動（FR-UI-011）・読み込み中と失敗の表示（FR-UI-013）・メールアドレスを確認していないときの案内（FR-UI-014）・スマホの幅（NFR-UI-001）・キーボードでの操作（NFR-UI-002）・API の送り先（NFR-UI-003）。</p>
+
+  <h2>2. 先に知っておく言葉</h2>
+  <table>
+    <tr><th>言葉</th><th>意味（1〜2文）</th></tr>
+    <tr><td>Vite</td><td>画面の開発サーバーと、配る形にまとめる道具（ビルド）。<code>npm run dev</code> で、保存するとすぐ画面に出る。<code>npm run build</code> で <code>dist/</code> に HTML・JS・CSS を作る。</td></tr>
+    <tr><td>SPA（シングルページアプリケーション）</td><td>HTML は最初の1枚だけで、画面の切り替えはブラウザの中の JavaScript が行う作り方。データは API から JSON で取る。</td></tr>
+    <tr><td>React Router</td><td>URL（<code>/users/5</code>）と、出す部品を結びつける道具。URL の <code>:id</code> を取り出したり、別の画面に移したりできる。v7 から <code>react-router</code> の1つのパッケージになった。</td></tr>
+    <tr><td>オリジン・CORS</td><td>オリジンは「方式＋ホスト＋ポート」の組（<code>http://localhost:5173</code>）。ブラウザは、別のオリジンの API の応答を、API が許したとき（<code>Access-Control-Allow-Origin</code>）だけ画面に渡す。この決まりが CORS。</td></tr>
+    <tr><td>プリフライト</td><td><code>Authorization</code> の見出しや JSON を送るとき、ブラウザが本番の前に <code>OPTIONS</code> で「送ってよいか」を聞くこと。API が許さなければ、本番は送られない。</td></tr>
+    <tr><td>sessionStorage</td><td>ブラウザのタブごとの小さな保存場所。タブを閉じると消える。JavaScript から読めるので、XSS（悪いスクリプトが画面で動くこと）があると、中のトークンを持ち出される。</td></tr>
+    <tr><td><code>useEffect</code></td><td>画面を描いたあとに動かす処理を書く React の仕組み。レガシー版は、ここで <code>fetch</code> する。開発中は <code>StrictMode</code> が、わざと2回動かす。</td></tr>
+    <tr><td>カスケードと詳細度</td><td>CSS で、同じ要素に当たる決まりが2つあるとき、どちらが勝つかの決め方。より詳しい書き方（<code>#id</code> ＞ <code>.class</code> ＞ 要素）が勝ち、同じなら<strong>あとに読み込んだほう</strong>が勝つ。</td></tr>
+    <tr><td>CSS Modules</td><td><code>Button.module.css</code> のように書くと、クラス名が部品ごとに別の名前（<code>Button_primary_x7a2</code>）に変わる仕組み。ほかの部品の <code>.primary</code> とぶつからない。Vite はそのまま使える。</td></tr>
+    <tr><td>CSS の変数（デザイントークン）</td><td><code>--color-primary: #d6336c;</code> のように、色・余白・文字の大きさに名前を付けて1か所で決めたもの。部品は <code>var(--color-primary)</code> で使う。色を変えるときは1か所を直せばよい。</td></tr>
+    <tr><td>container と presenter</td><td>container は「データを取る・持つ」部品、presenter は「props で受け取って見せるだけ」の部品。presenter は API がなくても描けるので、テストしやすい（改善版で分ける）。</td></tr>
+  </table>
+
+  <h2>3. 図で見る</h2>
+  <p>1枚目は、開発中に画面と API がどこで動き、どう呼び合うか。2枚目は、ログインしてから一覧を出すまでのやり取り（プリフライトを含む）。3枚目は、画面のつながりと「ログインが要る画面」の守り方です。</p>
+  <pre class="mermaid">
+flowchart LR
+  subgraph PC["手元の PC"]
+    B["ブラウザ<br>http://localhost:5173"]
+    V["Vite の開発サーバー<br>npm run dev（mise の Node）"]
+  end
+  subgraph D["Docker（compose）"]
+    A["API（Laravel）<br>http://127.0.0.1:8000"]
+    DB[("PostgreSQL")]
+    M["Mailpit<br>http://127.0.0.1:58025"]
+  end
+  V -->|"HTML・JS・CSS"| B
+  B -->|"fetch（JSON）<br>別のオリジン＝CORS"| A
+  A --> DB
+  A -->|"確認のメール"| M
+  </pre>
+  <pre class="mermaid">
+sequenceDiagram
+  participant U as 利用者
+  participant B as ブラウザ（React）
+  participant A as API（Laravel）
+  U->>B: メールアドレスとパスワードを入れて送る
+  B->>A: OPTIONS /api/auth/login（プリフライト）
+  A-->>B: 204・Access-Control-Allow-Origin: *
+  B->>A: POST /api/auth/login
+  A-->>B: 200・token（30日の JWT）
+  Note over B: レガシー版：sessionStorage に token を置く
+  B->>B: /me に移る（React Router）
+  U->>B: 「マッチ」を押す
+  B->>A: OPTIONS /api/me/matches（Authorization を送るのでプリフライト）
+  A-->>B: 204
+  B->>A: GET /api/me/matches・Authorization: Bearer token
+  A-->>B: 200・マッチの一覧
+  B->>U: 一覧を描く
+  </pre>
+  <pre class="mermaid">
+flowchart TD
+  START["URL を開く"] --> PUB{"ログインが要る画面か"}
+  PUB -->|"いいえ"| LOGIN["/login・/register"]
+  PUB -->|"はい"| HAS{"トークンがあるか"}
+  HAS -->|"ない"| GO["/login に移す<br>（開こうとした画面を覚える）"]
+  HAS -->|"ある"| PAGE["/me・/users/:id・/likes・/matches"]
+  PAGE -->|"API が 401"| GO
+  PAGE -->|"API が 403"| VERIFY["メールアドレスを確認してください"]
+  LOGIN -->|"ログインできた"| BACK["覚えた画面か /me に移る"]
+  </pre>
+  <p class="meta">レガシー版は、守りを画面ごとにばらばらに書く（ある画面は確かめ、ある画面は忘れる）。改善版は、ルートの1か所（<code>RequireAuth</code>）で守り、401 は API を呼ぶところの1か所で受ける。</p>
+
+  <h2>4. 設計の選択肢を比べる</h2>
+  <h3>CSS の書き方</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. 素の CSS を1〜2枚（<code>index.css</code>・<code>App.css</code>。レガシー版）</td><td>何も入れずに書ける。ひな形のまま</td><td>クラス名がすべての画面で共有され、<code>.button</code> を2か所で書くとぶつかる。勝ち負けが読み込む順で決まる。消してよいかが分からず、増える一方になる</td><td>小さな1画面だけのとき</td></tr>
+    <tr><td>B. CSS Modules＋CSS の変数（改善版）</td><td>クラス名が部品ごとに閉じ、ぶつからない。部品を消せば CSS も消える。色や余白は変数で1か所に決める。Vite に入っていて、道具が増えない</td><td>部品ごとにファイルが1つ増える。同じ見た目を2か所で書かないよう、共通の部品（ボタンなど）を作る必要がある</td><td>素の CSS を知っていて、部品ごとに整理したいとき</td></tr>
+    <tr><td>C. Tailwind CSS</td><td>決まった段階の値（余白・色）をクラスで書くので、ばらつかない。仕事でよく使われる</td><td>道具が1つ増える。クラス名が長く、JSX が読みにくくなる。素の CSS の理解がなくても書けてしまう</td><td>チームで値をそろえたいとき・速く作りたいとき</td></tr>
+  </table>
+  <div class="card point"><strong>この一歩で選ぶもの</strong>：レガシー版は A、改善版は B。A で「名前がぶつかる・消せない」を実際に起こしてから B に直すと、なぜ分けるかを事実で話せる。C は B の考え方（決まった値を使う）を道具で強くしたもの、と説明できるようにする。</div>
+
+  <h3>見た目の決め方（デザイントークン）</h3>
+  <p>見た目は、まず「使ってよい値」を少なく決めてから作ります。値がばらばらだと、画面ごとに少しずつずれて、直すときにすべての画面を探すことになります。改善版は次の値を <code>src/styles/tokens.css</code> に変数として置き、レガシー版は同じ値を <code>index.css</code> に直接書きます（同じ見た目のまま、書き方の違いだけを比べるため）。</p>
+  <table>
+    <tr><th>種類</th><th>決める値</th><th>理由</th></tr>
+    <tr><td>色</td><td>主な色1つ（いいね・ボタン。<code>#d6336c</code>）・文字（<code>#212529</code>）・薄い文字（<code>#6c757d</code>）・線（<code>#dee2e6</code>）・背景（<code>#ffffff</code>・<code>#f8f9fa</code>）・成功（<code>#2b8a3e</code>）・失敗（<code>#c92a2a</code>）</td><td>色が増えると、何が押せるかが分かりにくくなる。主な色は「押せるもの」だけに使う。文字と背景の差は、読みやすさの目安（4.5:1）を満たす組にする</td></tr>
+    <tr><td>余白</td><td>4px 刻み（4・8・12・16・24・32）</td><td>決まった刻みにすると、画面ごとの隙間がそろう</td></tr>
+    <tr><td>文字</td><td>端末の文字（<code>system-ui</code>）。大きさは 14・16（本文）・20・24px の4つ</td><td>文字を読み込まないので速い。日本語でも端末の読みやすい文字が出る</td></tr>
+    <tr><td>角と影</td><td>角の丸みは 8px と、丸いボタンの 999px。影はカードの1種類</td><td>種類を増やさない</td></tr>
+    <tr><td>幅</td><td>中身の幅は最大 480px で真ん中に置く。スマホ（375px）を先に作る</td><td>マッチングアプリはスマホで使う前提。広い画面でも1列で読みやすい（NFR-UI-001）</td></tr>
+  </table>
+
+  <h3>置き場所（改善版）</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th></tr>
+    <tr><td>A. 種類で分ける（<code>pages/</code>・<code>components/</code>・<code>api/</code>）</td><td>ひと目で分かる。小さいうちは迷わない</td><td>1つの機能を直すのに、3つのフォルダを行き来する</td></tr>
+    <tr><td>B. 機能で分ける（<code>features/auth/</code>・<code>features/profile/</code>・<code>features/likes/</code>）＋共通（<code>shared/</code>）</td><td>1つの機能を変えるときに、触るフォルダが1か所にまとまる（architecture.md の「機能ごとに縦に切る」）</td><td>どこまでを共通にするかを決める必要がある</td></tr>
+  </table>
+  <div class="card point"><strong>この一歩で選ぶもの</strong>：レガシー版はひな形のまま、<code>src/</code> の下に画面のファイルを並べる（<code>LoginPage.tsx</code> など）。改善版は B。API を呼ぶところ（<code>shared/api/client.ts</code>）と見た目の変数（<code>shared/styles/tokens.css</code>）だけを共通にし、ほかは機能のフォルダに置く。</div>
+
+  <h3>ログインが要る画面の守り方</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th></tr>
+    <tr><td>A. 画面ごとに、トークンがあるかを確かめる（レガシー版）</td><td>その画面を見れば分かる</td><td>新しい画面で書き忘れる。401（期限切れ）の扱いも画面ごとにばらつく</td></tr>
+    <tr><td>B. ルートで包む部品（<code>&lt;RequireAuth&gt;</code>）＋API を呼ぶところで 401 を受ける（改善版）</td><td>守りが1か所。ルートの表を見れば、どの画面が守られているか分かる</td><td>画面の側の守りは見た目のためで、本当の守りは API（401・403）だと分かっている必要がある</td></tr>
+  </table>
+  <div class="card point"><strong>この一歩で選ぶもの</strong>：改善版は B。ただし画面の守りは「見せない」ためで、データを守るのは API の認証と認可（01b）。画面の守りを外しても、API が 401 を返せばデータは漏れない。</div>
+
+  <h2>5. 見本：レガシー版と改善版</h2>
+  <h3>入れ方（どちらも同じ）</h3>
+  <pre><code class="language-bash"># リポジトリのルートで（Node は mise の版。26.13.0）
+mise install
+npm create vite@latest frontend -- --template react-ts
+cd frontend
+npm install
+npm install react-router      # v7 から react-router-dom は要らない
+npm run dev                   # http://localhost:5173 で開く</code></pre>
+  <p>版は入れたときの最新にして、入れたあとにロックファイル（<code>frontend/package-lock.json</code>）の版を <code>CLAUDE.md</code> に書きます（今は vite 8.3.8・react 19.3.1・react-router 8.5.1）。</p>
+
+  <h3>レガシー版（1画面に1つの大きな部品・素の CSS）</h3>
+  <pre><code class="language-tsx">// src/UserPage.tsx（相手のプロフィール。取る・持つ・見せる・決まりを全部ここに書く）
+import { useEffect, useState } from 'react'
+import { useParams } from 'react-router'
+import './App.css'
+
+export default function UserPage() {
+  const { id } = useParams()
+  const [user, setUser] = useState&lt;any&gt;(null)
+  const [message, setMessage] = useState('')
+
+  useEffect(() =&gt; {
+    // 送り先もトークンも画面ごとに書く。読み込み中・失敗・401 は考えない
+    fetch(`http://127.0.0.1:8000/api/users/${id}/profile`, {
+      headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+    })
+      .then((r) =&gt; r.json())
+      .then(setUser)   // すぐ別の人に移ると、前の人の応答があとから上書きする
+  }, [id])
+
+  const like = () =&gt; {
+    fetch('http://127.0.0.1:8000/api/me/likes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+      body: JSON.stringify({ user_id: Number(id) }),
+    })
+      .then((r) =&gt; r.json())
+      // 2回目は API が 500 を返すが、ステータスを見ないので「いいねしました」と出る
+      .then((d) =&gt; setMessage(d.matched ? 'マッチしました' : 'いいねしました'))
+  }
+
+  // 年齢の計算もここに書く（年の引き算なので、誕生日の前だと1歳多い）
+  const age = user?.profile?.birthday
+    ? new Date().getFullYear() - Number(user.profile.birthday.slice(0, 4)) : ''
+
+  return (
+    &lt;div className="card"&gt;
+      &lt;img src={user?.profile?.image} /&gt;
+      &lt;h1&gt;{user?.profile?.nickname}（{age}）&lt;/h1&gt;
+      &lt;button className="button" onClick={like}&gt;いいね&lt;/button&gt;
+      &lt;p&gt;{message}&lt;/p&gt;
+    &lt;/div&gt;
+  )
+}</code></pre>
+  <pre><code class="language-css">/* src/App.css（すべての画面で共有される） */
+.card { padding: 16px; border: 1px solid #dee2e6; border-radius: 8px; }
+.button { background: #d6336c; color: #fff; padding: 8px 16px; border-radius: 999px; }
+
+/* …200行あと。ログインの画面のために書き足した。
+   あとに書いたほうが勝つので、いいねのボタンも灰色になる */
+.button { background: #f8f9fa; color: #212529; }</code></pre>
+  <div class="card warn"><ul>
+    <li><strong>API の送り先とトークン</strong>：<code>http://127.0.0.1:8000</code> と <code>sessionStorage.getItem('token')</code> を、画面ごとに書く。送り先を変えるときは、すべての画面を直す</li>
+    <li><strong>読み込み中・失敗・401</strong>：考えない。API が止まると、画面は空のまま何も出ない（FR-UI-013）</li>
+    <li><strong>古い応答の上書き</strong>：<code>/users/5</code> から <code>/users/6</code> にすぐ移ると、5 の応答があとから来て、6 の画面に 5 の名前が出ることがある</li>
+    <li><strong>XSS に弱い</strong>：トークンが sessionStorage にあるので、画面で動いたスクリプトは <code>sessionStorage.getItem('token')</code> で持ち出せる</li>
+    <li><strong>CSS</strong>：<code>.button</code> がすべての画面で共有される。ある画面のために <code>.button</code> を直すと、ほかの画面も変わる</li>
+    <li><strong>型</strong>：応答を <code>any</code> で受けるので、キーの名前を間違えても（<code>nick_name</code>）、ビルドは通る</li>
+  </ul></div>
+
+  <h3>改善版（container／presenter・API を1か所・CSS Modules）</h3>
+  <pre><code class="language-tsx">// shared/api/client.ts（API を呼ぶところは、ここだけ）
+export async function apiFetch&lt;T&gt;(path: string, init: RequestInit = {}): Promise&lt;T&gt; {
+  const res = await fetch(`${import.meta.env.VITE_API_URL}${path}`, {
+    ...init,
+    credentials: 'include',   // 改善版のトークンは HttpOnly の Cookie
+    headers: { 'Content-Type': 'application/json', ...init.headers },
+  })
+  if (res.status === 401) throw new UnauthorizedError()   // 呼ぶ側で /login に移す
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()) as T
+}
+
+// features/profile/UserProfilePage.tsx（container：取る・持つ）
+export function UserProfilePage() {
+  const id = Number(useParams().id)
+  const { profile, error, loading, retry } = useProfile(id)   // AbortController で古い応答を捨てる
+  const { liked, matched, sendLike } = useLike(id)
+  if (loading) return &lt;p&gt;読み込み中…&lt;/p&gt;
+  if (error) return &lt;ErrorMessage onRetry={retry} /&gt;
+  return &lt;ProfileCard profile={profile} liked={liked} matched={matched} onLike={sendLike} /&gt;
+}
+
+// features/profile/ProfileCard.tsx（presenter：props で見せるだけ）
+import styles from './ProfileCard.module.css'
+
+type Props = { profile: Profile; liked: boolean; matched: boolean; onLike: () =&gt; void }
+
+export function ProfileCard({ profile, liked, matched, onLike }: Props) {
+  return (
+    &lt;article className={styles.card}&gt;
+      &lt;img src={profile.avatar_url} alt="" className={styles.avatar} /&gt;
+      &lt;h1 className={styles.name}&gt;{profile.nickname}（{profile.age}）&lt;/h1&gt;
+      &lt;button className={styles.likeButton} onClick={onLike} disabled={liked}&gt;
+        {liked ? 'いいね済み' : 'いいね'}
+      &lt;/button&gt;
+      {matched &amp;&amp; &lt;p role="status"&gt;マッチしました&lt;/p&gt;}
+    &lt;/article&gt;
+  )
+}</code></pre>
+  <pre><code class="language-css">/* shared/styles/tokens.css（使ってよい値を1か所で決める） */
+:root {
+  --color-primary: #d6336c;   /* 押せるものだけに使う */
+  --color-text: #212529;
+  --color-muted: #6c757d;
+  --space-2: 8px;
+  --space-4: 16px;
+  --radius: 8px;
+}
+
+/* features/profile/ProfileCard.module.css（この部品だけに効く） */
+.card { padding: var(--space-4); border-radius: var(--radius); color: var(--color-text); }
+.likeButton { background: var(--color-primary); color: #fff; padding: var(--space-2) var(--space-4); border-radius: 999px; }
+.likeButton:disabled { opacity: 0.5; }</code></pre>
+  <p>大事なのは3つです。① API を呼ぶところを <code>apiFetch()</code> の1つにまとめ、送り先・<code>Authorization</code>（改善版は Cookie）・401・失敗をそこで扱う。② <code>ProfileCard</code> は props だけで描くので、API がなくてもテストできる。③ <code>styles.likeButton</code> は Vite が別の名前に変えるので、ほかの部品の <code>.likeButton</code> とぶつからない。色は <code>var(--color-primary)</code> を使い、値は <code>tokens.css</code> の1か所で決める。</p>
+
+  <h2>6. どう確かめるか</h2>
+  <table>
+    <tr><th>段階</th><th>確かめること</th></tr>
+    <tr><td>① レガシー版で問題を見る</td><td>
+      <ul>
+        <li>要件の受け入れ条件（FR-UI-001〜014）を、画面で1つずつ試し、できる・できないを記録する</li>
+        <li>開発者ツールの Network で、1画面を開くと何本の API が呼ばれるか（<code>StrictMode</code> で2回になるか）、プリフライト（<code>OPTIONS</code>）が出るか</li>
+        <li>開発者ツールの Console で <code>sessionStorage.getItem('token')</code> を打つ → トークンが読めるか（XSS で持ち出せることの確かめ）</li>
+        <li>API を止める（<code>docker compose stop app</code>）・遅くする → 画面がどうなるか</li>
+        <li><code>/users/5</code> と <code>/users/6</code> をすばやく行き来する → 違う人の名前が出るか（開発者ツールで通信を遅くして試す）</li>
+        <li>2つの画面で同じクラス名（<code>.button</code>）を使い、片方だけ直す → もう片方が崩れるか</li>
+        <li>1つの画面の部品の行の数・<code>any</code> の数・<code>npm run build</code> の <code>dist/</code> の大きさ</li>
+        <li>幅 375px で横にはみ出さないか（開発者ツールの端末の表示）</li>
+      </ul>
+    </td></tr>
+    <tr><td>② 振る舞いを固定するテスト</td><td>Vitest＋Testing Library で、要件 ID を名前に入れる。例：<code>FR-UI-002 ログインに失敗したら分かる</code>・<code>FR-UI-007 いいねを送れる。マッチしたらその場で分かる</code>（API は仮の応答に差し替える）・<code>FR-UI-011 ログインしていないと、ログイン画面に移る</code>・<code>FR-UI-013 読み込み中と失敗が分かる</code>。E2E の道具は改善する段階で決める</td></tr>
+    <tr><td>③ 改善したあとに比べる数字</td><td>1つの部品の最大の行の数・<code>any</code> の数・同じクラス名の数（→ 0）・API の送り先を書いた場所の数（→ 1）・守れている要件の数（○/17 → 17/17）・<code>dist/</code> の大きさ。表示速度（Lighthouse）は 04 の一覧で測る</td></tr>
+  </table>
+
+  <h2>7. 気をつけること（罠）</h2>
+  <div class="card warn"><ul>
+    <li><strong>CORS は API を守る仕組みではない</strong>：ブラウザが「別のオリジンに応答を渡すか」を決めるだけ。curl なら、CORS に関係なく API を呼べる。API を守るのは認証と認可</li>
+    <li><strong><code>localhost</code> と <code>127.0.0.1</code> は別のオリジン</strong>：<code>http://localhost:5173</code> の画面から見ると、<code>http://127.0.0.1:8000</code> は別のサイト。改善版で Cookie を使うと、ここで送られない問題が出る（<code>SameSite</code>）。改善版は名前をそろえる</li>
+    <li><strong>Cookie を送るなら <code>*</code> は使えない</strong>：Laravel の標準の設定は <code>allowed_origins: ['*']</code>・<code>supports_credentials: false</code>。改善版で Cookie を送るときは、画面のオリジンを名前で許し、<code>supports_credentials</code> を <code>true</code> にする</li>
+    <li><strong><code>VITE_</code> で始まる環境変数は、画面のだれにでも見える</strong>：ビルドした JS に値が入る。秘密の値（鍵・パスワード）は入れない。入れてよいのは API の送り先だけ</li>
+    <li><strong>開発中は <code>useEffect</code> が2回動く</strong>：<code>StrictMode</code> がわざと2回動かす。Network に同じ API が2本出ても、本番（ビルド）では1本。いいねを送るような書き込みを <code>useEffect</code> に書くと、開発中に2回送る</li>
+    <li><strong>画面の守りは見た目のため</strong>：<code>RequireAuth</code> を外しても、API が 401 を返せばデータは漏れない。逆に API に守りがなければ、画面でいくら隠しても漏れる（01b の「他人のプロフィールを書き換えられる」は、画面では防げない）</li>
+    <li><strong>素の CSS は、読み込む順で勝ち負けが変わる</strong>：同じ詳細度なら、あとに読み込んだ CSS が勝つ。画面を足すと、前の画面の見た目が変わることがある</li>
+    <li><strong>SPA の URL を直接開くと、サーバーにそのファイルがない</strong>：開発サーバーは <code>index.html</code> を返してくれるが、本番で静的に置くときは、どの URL でも <code>index.html</code> を返す設定が要る（今はデプロイしない）</li>
+  </ul></div>
+
+  <h2>8. 理解を確かめる6つの問い</h2>
+  <p>先に自分で答えてから、開いて見る。</p>
+  <details><summary>なぜそうするのか？</summary><p>レガシー版は、Vite のひな形のまま、1画面に1つの大きな部品で、API の呼び出し・状態・見た目・CSS を全部その中に書く。こうすると、送り先の書き散らし・401 の扱いの抜け・古い応答の上書き・CSS の名前のぶつかりが、実際に起きる。それを測ってから、API を1か所にまとめ、container と presenter に分け、CSS Modules と CSS の変数に直す。前と後の数字（部品の行の数・送り先を書いた場所の数・同じクラス名の数）で、なぜ分けるのかを話せるようにするため。見た目は、使ってよい色・余白・文字の値を先に少なく決めておくと、画面ごとのずれがなくなる。</p></details>
+  <details><summary>ほかの方法は？なぜ選ばなかったか？</summary><p>CSS は Tailwind も候補だった。決まった値をクラスで使うので値はそろうが、道具が増え、素の CSS（カスケード・詳細度）を知らなくても書けてしまう。この学習では、素の CSS の困りごとを先に体験し、CSS Modules と変数で直すほうが、理由を説明しやすい。UI の部品のライブラリ（MUI など）は、見た目はすぐ整うが、部品の設計を自分で考える場面が減るので選ばなかった。画面の切り替えを <code>useState</code> で持つ案は、URL が変わらず、相手のプロフィールを URL で開けないので選ばなかった。</p></details>
+  <details><summary>弱点は？</summary><p>CSS Modules は、部品ごとに CSS のファイルが増える。共通の見た目（ボタン・カード）を部品にしないと、同じ CSS を何か所にも書くことになる。CSS の変数は、値の名前の付け方（<code>--color-primary</code> か <code>--color-like</code> か）を決めないと、変数が増えすぎる。レガシー版の sessionStorage は XSS に弱く、改善版の Cookie は CSRF（ほかのサイトから送らせる攻撃）を考える必要がある（<code>SameSite=Lax</code> で弱める）。画面の守りは見た目のためで、データの守りにはならない。</p></details>
+  <details><summary>問題が起きたら、どう調べて直すか？</summary><p>画面が真っ白なら、開発者ツールの Console で、JavaScript のエラー（<code>undefined</code> のキーを読んだなど）を見る。データが出ないなら、Network で API の呼び出しを見る。赤い <code>OPTIONS</code> や「CORS」のエラーなら、API の CORS の設定（<code>config/cors.php</code>）と、画面のオリジンを見比べる。<code>401</code> ならトークンがあるか、<code>403</code> ならメールアドレスを確認したか。見た目が崩れたら、要素を選んで、どの CSS の決まりが勝っているか（取り消し線が付いた決まり）を見る。</p></details>
+  <details><summary>データが10倍・100倍になったら？</summary><p>画面に出す件数が増えると、一覧の描き直しと、画像の読み込みが重くなる。レガシー版は全部を一度に取って全部を描くので、100件・1000件で遅くなる。04 で、API のページ送り（カーソル）と、画面の長い一覧（見えているところだけ描く）・画像の遅延読み込み（<code>loading="lazy"</code>）を入れ、Lighthouse の LCP・INP で前と後を測る。部品が増えると、素の CSS は名前のぶつかりが増えるので、CSS Modules の効き目が大きくなる。</p></details>
+  <details><summary>Eloquent でどんな SQL が流れ、どう直したか？ Rails（ActiveRecord）・Prisma ならどう書くか？</summary>
+    <p>03b は画面の一歩なので、新しい SQL はない。画面から呼ぶ API の SQL は、01〜03 のページのとおり（送った一覧は 1＋2N 本、マッチの一覧は 1＋N 本）。画面から見ると、N+1 は「1回の API の応答が遅い」として出る。代わりに、画面の側で同じ形の問題を比べる。</p>
+    <table>
+      <tr><th></th><th>React（この学習）</th><th>Rails の画面（Hotwire など）</th><th>Next.js など</th></tr>
+      <tr><td>データの取り方</td><td>ブラウザから API を <code>fetch</code>（SPA）。CORS とトークンを考える</td><td>サーバーで HTML を作って返す。同じオリジンなので CORS がない。セッションの Cookie で認証</td><td>サーバーの部品で取ってから HTML にできる（API を通さずに DB を読むこともできる）</td></tr>
+      <tr><td>画面の「N+1」</td><td>一覧の1件ごとに API を呼ぶ部品を作ると、件数の分だけ通信が増える</td><td>部分テンプレートの中でリレーションを読むと、SQL の N+1 になる（<code>includes</code> で直す）</td><td>サーバーの部品の中で1件ずつ取ると、同じことが起きる</td></tr>
+    </table>
+  </details>
+
+  <h2>9. 実装の記録</h2>
+  <p class="meta">レガシー版のあと（9-1・9-2）と、改善したあと（9-3・9-4）に、explain-change が書く。</p>
+  <h3>9-1. レガシー版</h3>
+  <p>まだ実装していない。</p>
+  <h3>9-2. 測った問題と数字</h3>
+  <p>まだ実装していない。</p>
+  <h3>9-3. 足したテスト</h3>
+  <p>まだ実装していない。</p>
+  <h3>9-4. 改善版と、前と後の数字</h3>
+  <p>まだ実装していない。</p>
+</main>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+  // page.js が選んだ表示（data-scheme）に合わせる。なければ端末の設定
+  const scheme = document.documentElement.dataset.scheme;
+  const dark = scheme ? scheme.startsWith("dark") : (document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches));
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/page.js"></script>
+</body>
+</html>
