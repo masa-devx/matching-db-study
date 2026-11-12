@@ -4,7 +4,7 @@ API の正本。作る前に設計を書き、確かめてもらってから実�
 
 - このファイルには、全体の決まりと一覧だけを書く。API ごとの設計（入力・応答・失敗・流れる SQL の目安・curl の例）は、一歩ごとのファイル（`<番号>-<名前>.md`。名前は `explanations/` の解説のページと同じ）に書く。新しい一歩の API は、ファイルを1つ足し、下の「一覧」に行を足す
 - 状態：**案**（確かめてもらう前）→ **確定**（実装してよい）→ **実装済み**
-- 素朴な版と直した版で変わるところ（だれが使えるか・返す形など）は、表の「素朴な版」「直した版」の列に分けて書く。直したら、直した版に合わせて書き換える
+- レガシー版と直した版で変わるところ（だれが使えるか・返す形など）は、表の「レガシー版」「直した版」の列に分けて書く。直したら、直した版に合わせて書き換える
 
 ## 全体の決まり
 
@@ -24,8 +24,8 @@ API の正本。作る前に設計を書き、確かめてもらってから実�
 | 番号 | メソッドとパス | 中身 | 状態 |
 | --- | --- | --- | --- |
 | [00](00-health.md) | `GET /api/health` | 動いているかと、DB につながるか | 実装済み |
-| [01](01-members.md) | `GET /api/users/{id}/profile` | 相手のプロフィールを見る | 実装済み（素朴な版） |
-| [01](01-members.md) | `PUT /api/users/{id}/profile` | プロフィールを編集する | 実装済み（素朴な版） |
-| [01b](01b-auth.md) | `POST /api/users` | 登録する | 確定 |
-| [01b](01b-auth.md) | `GET /api/email-verifications/{token}`（直した版は `GET /api/users/{id}/email-verification/{hash}`） | メールアドレスを確認する（確認のメールのリンク） | 確定 |
-| [01b](01b-auth.md) | `POST /api/email-verifications`（直した版は `POST /api/me/email-verification`） | 確認のメールをもう一度送る | 確定 |
+| [01](01-members.md) | `GET /api/users/{id}/profile` | 相手のプロフィールを見る | 実装済み（レガシー版） |
+| [01](01-members.md) | `PUT /api/users/{id}/profile` | プロフィールを編集する | 実装済み（レガシー版） |
+| [01b](01b-auth.md) | `POST /api/users` | 登録する | 実装済み（レガシー版） |
+| [01b](01b-auth.md) | `GET /api/email-verifications/{token}`（直した版は `GET /api/users/{id}/email-verification/{hash}`） | メールアドレスを確認する（確認のメールのリンク） | 実装済み（レガシー版） |
+| [01b](01b-auth.md) | `POST /api/email-verifications`（直した版は `POST /api/me/email-verification`） | 確認のメールをもう一度送る | 実装済み（レガシー版） |

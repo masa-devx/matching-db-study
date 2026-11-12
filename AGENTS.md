@@ -82,8 +82,8 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 ### 作業の流れ
 
 1. 一歩（機能）ごとに、[issue-plan](agents/skills/issue-plan/SKILL.md) で親 Issue と子 Issue（DB・テーブル設計／バックエンド API／フロントエンド）を作り、マイルストーンと Project「matching-db-study」につなぐ。表はその機能に必要なものだけ作る。入る前に要件（[docs/requirements/](docs/requirements/)）を質問しながら決め、[explain-step](agents/skills/explain-step/SKILL.md) で解説と図を作る。「実装して」と言われるまで実装しない
-2. 最初の範囲（[background.md](agents/background.md) の「最初の範囲」）は、`legacy-repo` で**素朴に作り切る**（Fat Controller・テストなし）。子 Issue 1つにブランチ1つ（`legacy/<子 Issue の番号>-<名前>`）と PR 1つ（`legacy-repo` へ）。順番は DB → API → フロント。**API の子 Issue では、先に [docs/api/](docs/api/README.md) のその一歩のファイルに設計（入力・応答・失敗・流れる SQL の目安）を書き、確かめてもらってから実装する**。PR の行き先が既定のブランチでないので、マージのあとに子 Issue を手で閉じ、子がすべて閉じたら親を閉じる。機能ができたら [explain-change](agents/skills/explain-change/SKILL.md) で 9-1・9-2（素朴な版と、測った問題）を記録する
-3. 作り切ったら、測った問題ごとに改善の親 Issue（`.github/ISSUE_TEMPLATE/parent.md` の「改善のときだけ」を書く）と子 Issue（最初は必ず「固定するテスト」）を issue-plan で立て、`refactored-repo` で直す。ブランチは `refactor/<子 Issue の番号>-<名前>`。**今の振る舞いを固定するテストを足す（要件 ID に対応させる）→ 直す → もう一度測る** の順に進め、explain-change で 9-3・9-4 を記録し、[docs/decisions.md](docs/decisions.md) に1行足す。00（環境）・03b（画面）・05b は、素朴な版と直した版に分けなくてよい
+2. 最初の範囲（[background.md](agents/background.md) の「最初の範囲」）は、`legacy-repo` で**レガシーコードとして作り切る**（Fat Controller・テストなし）。子 Issue 1つにブランチ1つ（`legacy/<子 Issue の番号>-<名前>`）と PR 1つ（`legacy-repo` へ）。順番は DB → API → フロント。**API の子 Issue では、先に [docs/api/](docs/api/README.md) のその一歩のファイルに設計（入力・応答・失敗・流れる SQL の目安）を書き、確かめてもらってから実装する**。PR の行き先が既定のブランチでないので、マージのあとに子 Issue を手で閉じ、子がすべて閉じたら親を閉じる。機能ができたら [explain-change](agents/skills/explain-change/SKILL.md) で 9-1・9-2（レガシー版と、測った問題）を記録する
+3. 作り切ったら、測った問題ごとに改善の親 Issue（`.github/ISSUE_TEMPLATE/parent.md` の「改善のときだけ」を書く）と子 Issue（最初は必ず「固定するテスト」）を issue-plan で立て、`refactored-repo` で直す。ブランチは `refactor/<子 Issue の番号>-<名前>`。**今の振る舞いを固定するテストを足す（要件 ID に対応させる）→ 直す → もう一度測る** の順に進め、explain-change で 9-3・9-4 を記録し、[docs/decisions.md](docs/decisions.md) に1行足す。00（環境）・05b は、レガシー版と直した版に分けなくてよい（画面も 03b からレガシー版と直した版に分ける。[docs/frontend.md](docs/frontend.md)）
 4. 区切りごとに、[review](agents/skills/review/SKILL.md) の手順で見直す（実装の会話を持たないサブエージェントに、差分と確かめたいことを渡す）
 5. コミット・push・Issue・PR の作成は、頼まれたときだけ行う
 

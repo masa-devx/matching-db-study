@@ -44,7 +44,7 @@ agents/ の目次。作業内容に合うルールを読み、スキルで進め
 
 | ルール | 読むとき | 中身 |
 | --- | --- | --- |
-| [quality-types.md](rules/quality-types.md) | PHP のコードを書く・変える | `strict_types`・言語の型と PHPDoc の使い分け・PHPStan のレベル（素朴な版 6・直した版 9）・してはいけないこと |
+| [quality-types.md](rules/quality-types.md) | PHP のコードを書く・変える | `strict_types`・言語の型と PHPDoc の使い分け・PHPStan のレベル（レガシー版 6・直した版 9）・してはいけないこと |
 
 使わない領域のルールは外し、この目次からも消す（例：DB を使わないなら database.md）。
 
