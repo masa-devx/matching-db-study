@@ -11,7 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 
 /**
- * 01b メールアドレスの確認と、確認のメールの再送（素朴な版。docs/api/01b-auth.md）。
+ * 01b メールアドレスの確認と、確認のメールの再送（レガシー版。docs/api/01b-auth.md）。
  * 確認用の文字は消さず、期限もない。再送はだれでも・何回でもできる。
  */
 class EmailVerificationController extends Controller

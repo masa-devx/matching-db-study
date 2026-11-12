@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * その会員についての情報（素朴な版。D-015）。
+ * その会員についての情報（レガシー版。D-015）。
  * Laravel 5 系のころの形で、どの列でも一括代入できる（直す段階で直す。FR-010）。
  */
 class Profile extends Model

@@ -65,7 +65,7 @@
     <tr><td>メールアドレスの確認・再送</td><td>メールのリンクで確認済みにする。確認のメールをもう一度送る</td><td>FR-AUTH-005〜007</td><td>#15</td></tr>
     <tr><td>ログイン・自分の情報・ログアウト</td><td>メールアドレスとパスワードで JWT をもらう。JWT で自分の情報を見る</td><td>FR-AUTH-010〜017</td><td><a href="https://github.com/masa-devx/matching-db-study/issues/16">#16</a></td></tr>
   </table>
-  <p>API の入力と応答の細かい形は、子 Issue の最初に <code>docs/api/01b-auth.md</code> に書いて、確かめてもらってから作ります。だれが何をできるか（認可。FR-AUTH-020〜023）は、素朴な版では作らず、直す段階で足します。</p>
+  <p>API の入力と応答の細かい形は、子 Issue の最初に <code>docs/api/01b-auth.md</code> に書いて、確かめてもらってから作ります。だれが何をできるか（認可。FR-AUTH-020〜023）は、レガシー版では作らず、直す段階で足します。</p>
 
   <h2>2. 先に知っておく言葉</h2>
   <table>
@@ -80,15 +80,15 @@
     <tr><td>XSS・CSRF</td><td>XSS は画面に悪いスクリプトを埋め込まれること（トークンを盗まれる）。CSRF は、ほかのサイトから、ログイン中の人として勝手に操作されること（Cookie は自動で送られるため）</td></tr>
     <tr><td>署名つきのリンク</td><td>URL に有効期限と署名を付けたもの。期限が切れたり、書き換えたりすると使えない。Laravel の <code>URL::temporarySignedRoute()</code></td></tr>
     <tr><td>回数制限（<code>429</code>）</td><td>決まった時間に決まった回数より多く呼ばれたら断ること。パスワードの総当たりを防ぐ</td></tr>
-    <tr><td>IDOR</td><td>URL の ID を変えるだけで、他人のデータを見たり変えたりできてしまうこと。01 の素朴な版がこの形</td></tr>
+    <tr><td>IDOR</td><td>URL の ID を変えるだけで、他人のデータを見たり変えたりできてしまうこと。01 のレガシー版がこの形</td></tr>
   </table>
 
   <h2>3. 図で見る</h2>
-  <p>1枚目は素朴な版のログイン、2枚目は直した版のログインと取り替え、3枚目は登録と確認の流れ、4枚目は直した版で足す表です。</p>
+  <p>1枚目はレガシー版のログイン、2枚目は直した版のログインと取り替え、3枚目は登録と確認の流れ、4枚目は直した版で足す表です。</p>
   <pre class="mermaid">
 sequenceDiagram
   participant C as curl（03b からは画面）
-  participant A as API（素朴な版）
+  participant A as API（レガシー版）
   participant D as DB
   C->>A: POST ログイン（メールアドレスとパスワード）
   A->>D: users をメールアドレスで探す
@@ -150,7 +150,7 @@ erDiagram
   <h3>① トークンを、どこに置くか</h3>
   <table>
     <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
-    <tr><td>A. JSON で返し、画面が sessionStorage に置く（素朴な版）</td><td>作るのが簡単。CSRF が起きない</td><td>XSS で盗まれる。新しいタブでログインが消える</td><td>なし（ブラウザでは勧められない）</td></tr>
+    <tr><td>A. JSON で返し、画面が sessionStorage に置く（レガシー版）</td><td>作るのが簡単。CSRF が起きない</td><td>XSS で盗まれる。新しいタブでログインが消える</td><td>なし（ブラウザでは勧められない）</td></tr>
     <tr><td>B. HttpOnly の Cookie に置く</td><td>JavaScript から読めないので、XSS で持ち出されにくい。すべてのタブで同じ</td><td>自動で送られるので CSRF の守りが要る。画面と API を同じサイトに置く必要がある</td><td>ブラウザの SPA</td></tr>
     <tr><td>C. BFF がトークンを預かる</td><td>ブラウザにトークンがない</td><td>サーバーが1つ増える</td><td>大きめのサービス</td></tr>
   </table>
@@ -159,7 +159,7 @@ erDiagram
   <h3>② JWT を、どうやって止められるようにするか</h3>
   <table>
     <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
-    <tr><td>A. 止めない（期限を長く。素朴な版）</td><td>何も作らなくてよい</td><td>ログアウトしても、盗まれても、期限まで使える。権限が古いまま</td><td>なし</td></tr>
+    <tr><td>A. 止めない（期限を長く。レガシー版）</td><td>何も作らなくてよい</td><td>ログアウトしても、盗まれても、期限まで使える。権限が古いまま</td><td>なし</td></tr>
     <tr><td>B. 短い期限（15分）＋取り替え用のトークン（DB）</td><td>JWT は DB を見ずに確かめられる。止めたいときは、取り替え用のトークンを止めれば、最大15分で切れる</td><td>表と取り替えの仕組みを作る</td><td>JWT のよさを残したいとき</td></tr>
     <tr><td>C. 止めた JWT の番号（<code>jti</code>）を表に入れ、毎回確かめる</td><td>すぐ止められる</td><td>毎回 DB を見るので、JWT のよさ（DB を見ない）がなくなる</td><td>すぐ止める必要が強いとき（B と組み合わせる）</td></tr>
   </table>
@@ -168,7 +168,7 @@ erDiagram
   <h3>③ 確認のリンクを、どう持つか</h3>
   <table>
     <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
-    <tr><td>A. 乱数を <code>users</code> の列に平文で持つ・期限なし（素朴な版）</td><td>分かりやすい</td><td>DB が漏れると、だれのメールアドレスでも確認済みにできる。いつまでも使える</td><td>なし</td></tr>
+    <tr><td>A. 乱数を <code>users</code> の列に平文で持つ・期限なし（レガシー版）</td><td>分かりやすい</td><td>DB が漏れると、だれのメールアドレスでも確認済みにできる。いつまでも使える</td><td>なし</td></tr>
     <tr><td>B. 乱数のハッシュと期限を、別の表に持つ</td><td>漏れても使えない。期限で切れる</td><td>表が1つ増える</td><td>1回だけ使うことを、DB で厳しく守りたいとき（パスワードの再設定など）</td></tr>
     <tr><td>C. 署名つきのリンク（DB に持たない）</td><td>表が要らない。期限と書き換えの確かめは、署名で済む</td><td>期限内なら何度でも開ける（ただし確認は1回で済み、2回目は何も変えない）</td><td>メールアドレスの確認</td></tr>
   </table>
@@ -183,16 +183,17 @@ erDiagram
   </table>
   <div class="card point"><strong>この一歩で選ぶもの</strong>：直した版は、メールアドレスと IP の組み合わせで 1分に5回まで（FR-AUTH-012）。Laravel の <code>RateLimiter</code> を使う。</div>
 
-  <h2>5. 見本：素朴な版と直した版</h2>
-  <h3>素朴な版（Fat Controller・テストなし）</h3>
-  <pre><code>// 登録
-public function register(Request $request)
+  <h2>5. 見本：レガシー版と直した版</h2>
+  <h3>レガシー版（Fat Controller・テストなし）</h3>
+  <pre><code>// 登録（POST /api/users）
+public function store(Request $request): JsonResponse
 {
-    $user = User::create($request->all() + [
+    $user = User::create($request->only(['email', 'password']) + [
         'verification_token' => Str::random(40),   // 平文・期限なし
     ]);
-    Mail::to($user->email)->send(new VerifyMail($user));
-    return $user;
+    Profile::create($request->only(['nickname', 'gender', 'birthday']) + ['user_id' => $user->id]);
+    Mail::to($user->email)->send(new VerifyMail($user));   // トランザクションなし
+    return response()->json($user, 201);                   // 確認用の文字も返る
 }
 
 // ログイン
@@ -208,7 +209,7 @@ public function login(Request $request)
     ], $key, 'HS256')];
 }</code></pre>
   <div class="card warn"><ul>
-    <li><strong>登録</strong>：18歳未満も入れる。<code>A@example.test</code> と <code>a@example.test</code> が別の人になる。<code>$request->all()</code> で <code>email_verified_at</code> まで送れて、確認を飛ばせる</li>
+    <li><strong>登録</strong>：18歳未満も入れる。<code>A@example.test</code> と <code>a@example.test</code> が別の人になる。トランザクションがないので、プロフィールやメールで失敗しても会員だけが残る。応答に確認用の文字が入り、メールを受け取らずに確認できる</li>
     <li><strong>確認のリンク</strong>：平文で DB にあり、期限がない</li>
     <li><strong>ログイン</strong>：ないメールアドレスのときだけ「メールアドレスが違います」になり、登録されているかが分かる。何回でも試せる。ないメールアドレスのときはパスワードの照合を飛ばすので、返るまでの時間で見分けられる</li>
     <li><strong>JWT</strong>：30日使え、止められない。中身（メールアドレス）はだれでも読める。<code>is_paid</code> が古いまま残る</li>
@@ -234,11 +235,11 @@ DB::transaction(function () use ($plain) {
   <h2>6. どう確かめるか</h2>
   <table>
     <tr><th>段階</th><th>確かめること</th></tr>
-    <tr><td>① 素朴な版で問題を見る</td><td>
+    <tr><td>① レガシー版で問題を見る</td><td>
       <ul>
         <li>17歳の生年月日で登録して、通ることを見る</li>
         <li><code>a@example.test</code> と <code>A@example.test</code> で2人登録できることを見る</li>
-        <li>登録のときに <code>email_verified_at</code> を送り、確認を飛ばせることを見る</li>
+        <li>登録の応答と、他人のプロフィールの <code>GET</code> に確認用の文字が出て、メールを受け取らずに確認できることを見る。256文字のニックネームで、会員だけが残ることを見る</li>
         <li>DB の確認用の文字が平文で、何日たっても使えることを見る。確認のメールを何回でも送れることを見る</li>
         <li>ないメールアドレスと、違うパスワードで、返る言葉と時間が違うことを見る</li>
         <li>1分に何回ログインを試せるかを数える</li>
@@ -246,8 +247,8 @@ DB::transaction(function () use ($plain) {
         <li>「ログアウト」のあとも、同じ JWT で自分の情報が見られることを見る</li>
         <li>ログインしていなくても、01 のプロフィールを他人のものまで編集できることを見る（IDOR）</li>
       </ul></td></tr>
-    <tr><td>② 振る舞いを固定するテスト</td><td>要件 ID ごとにテストを足す（例：<code>FR-AUTH-002 18歳未満は登録できない</code>・<code>FR-AUTH-015 使ったあとの取り替え用のトークンが、もう一度使われたら止める</code>）。素朴な版でも守れているもの（パスワードのハッシュなど）は、素朴な版のまま通ることを確かめる</td></tr>
-    <tr><td>③ 直したあとに比べる数字</td><td>守れている要件の数（素朴な版 ○/22 → 直した版 22/22）・JWT が使える時間（30日 → 15分）・1分に試せるログインの回数（数えきれない → 5回）・ないメールアドレスと違うパスワードの返る時間の差・ログアウトのあと JWT が使える時間</td></tr>
+    <tr><td>② 振る舞いを固定するテスト</td><td>要件 ID ごとにテストを足す（例：<code>FR-AUTH-002 18歳未満は登録できない</code>・<code>FR-AUTH-015 使ったあとの取り替え用のトークンが、もう一度使われたら止める</code>）。レガシー版でも守れているもの（パスワードのハッシュなど）は、レガシー版のまま通ることを確かめる</td></tr>
+    <tr><td>③ 直したあとに比べる数字</td><td>守れている要件の数（レガシー版 ○/22 → 直した版 22/22）・JWT が使える時間（30日 → 15分）・1分に試せるログインの回数（数えきれない → 5回）・ないメールアドレスと違うパスワードの返る時間の差・ログアウトのあと JWT が使える時間</td></tr>
   </table>
 
   <h2>7. 気をつけること（罠）</h2>
@@ -271,7 +272,7 @@ DB::transaction(function () use ($plain) {
   <details><summary>問題が起きたら、どう調べて直すか？</summary><p>「ログインが続かない」→ ブラウザの開発ツールで Cookie が保存されているか（<code>SameSite</code>・<code>Secure</code>・ドメイン）、API が <code>Access-Control-Allow-Credentials</code> を返しているかを見る。「急に全員ログアウトした」→ JWT の鍵が変わっていないか、取り替え用のトークンの家族ごとの停止が誤って起きていないか（同時に2回の取り替え）を <code>refresh_tokens</code> の <code>used_at</code>・<code>revoked_at</code> で見る。盗まれた疑いがあれば、その会員の取り替え用のトークンを全部止め、必要なら JWT の鍵を取り替える（全員がログインし直しになる）。</p></details>
   <details><summary>データが10倍・100倍になったら？</summary><p>アクセストークンの確かめは DB を見ないので、会員が増えても重くならない。重くなるのは <code>refresh_tokens</code>：端末ごと・取り替えのたびに行が増える。<code>token_hash</code> の UNIQUE のインデックスで探すので速いが、期限切れの行を定期的に消す仕組み（バッチ）が要る。ログインの回数制限は、手元はキャッシュの表で数えるが、数が増えたら Redis に移す。</p></details>
   <details><summary>Eloquent でどんな SQL が流れ、どう直したか？ Rails（ActiveRecord）・Prisma ならどう書くか？</summary>
-    <p>素朴な版のログインは <code>select * from users where email = ? limit 1</code> の1本で、大文字のメールアドレスでは見つからない（または別の人として登録できる）。直した版は、メールアドレスを小文字にそろえ、取り替えのときに <code>select ... for update</code> で行をロックしてから <code>update</code> する。</p>
+    <p>レガシー版のログインは <code>select * from users where email = ? limit 1</code> の1本で、大文字のメールアドレスでは見つからない（または別の人として登録できる）。直した版は、メールアドレスを小文字にそろえ、取り替えのときに <code>select ... for update</code> で行をロックしてから <code>update</code> する。</p>
     <table>
       <tr><th>ORM</th><th>パスワード</th><th>署名つきのリンク・1回だけのトークン</th><th>回数制限</th></tr>
       <tr><td>Laravel（Eloquent）</td><td><code>casts()</code> の <code>'hashed'</code>・<code>Hash::check()</code></td><td><code>URL::temporarySignedRoute()</code>・<code>MustVerifyEmail</code></td><td><code>RateLimiter</code>・<code>throttle</code> のミドルウェア</td></tr>
@@ -281,8 +282,8 @@ DB::transaction(function () use ($plain) {
   </details>
 
   <h2>9. 実装の記録</h2>
-  <p class="meta">素朴な版のあと（9-1・9-2）と、直したあと（9-3・9-4）に、explain-change が書く。</p>
-  <h3>9-1. 素朴な版</h3>
+  <p class="meta">レガシー版のあと（9-1・9-2）と、直したあと（9-3・9-4）に、explain-change が書く。</p>
+  <h3>9-1. レガシー版</h3>
   <p>【まだ実装していない】</p>
   <h3>9-2. 測った問題と数字</h3>
   <p>【まだ実装していない】</p>

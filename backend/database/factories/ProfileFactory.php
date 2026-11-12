@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 class ProfileFactory extends Factory
 {
     /**
-     * 素朴な版（01）：プロフィールは文字で持つ。シードでは、それらしい値だけを入れる
+     * レガシー版（01）：プロフィールは文字で持つ。シードでは、それらしい値だけを入れる
      *
      * @return array<string, mixed>
      */

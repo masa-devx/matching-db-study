@@ -46,14 +46,14 @@
 <main>
   <p class="meta"><a href="index.html">← 目次へ</a></p>
   <h1>01 会員とプロフィール</h1>
-  <p class="meta">作成: 2026-11-11 ／ 状態: <span class="status">素朴な版まで</span> ／ Issue: <a href="https://github.com/masa-devx/matching-db-study/issues/8">#8</a> ／ 要件: <code>docs/requirements/members.md</code>（FR-001〜FR-014）</p>
+  <p class="meta">作成: 2026-11-11 ／ 状態: <span class="status">レガシー版まで</span> ／ Issue: <a href="https://github.com/masa-devx/matching-db-study/issues/8">#8</a> ／ 要件: <code>docs/requirements/members.md</code>（FR-001〜FR-014）</p>
 
   <div class="card point">
     <strong>この一歩でできるようになること</strong>
     <ul>
       <li>主キー・データの型・NOT NULL・CHECK・UNIQUE を、「何を DB に守らせるか」で選んで説明できる</li>
       <li>1対1 の表の分け方（<code>profiles.user_id</code> を主キー兼外部キーにする）と、分ける理由を説明できる</li>
-      <li>素朴な表（全部を文字で持つ）に、おかしな値が入ることを確かめ、データを壊さずに直す手順を知る</li>
+      <li>レガシー版の表（全部を文字で持つ）に、おかしな値が入ることを確かめ、データを壊さずに直す手順を知る</li>
     </ul>
   </div>
 
@@ -65,7 +65,7 @@
     <tr><td><code>PUT /api/users/{id}/profile</code></td><td>プロフィールを編集する。表示名・都道府県・身長・自己紹介・画像だけ。性別と生年月日は変わらない</td><td>FR-005〜010</td></tr>
   </table>
   <p>API の入力と応答の細かい形は、子 Issue <a href="https://github.com/masa-devx/matching-db-study/issues/10">#10</a> の最初に <code>docs/api/01-members.md</code> に書き、確かめてもらってから作ります。</p>
-  <p>だれが編集できるか（自分だけ）は 01b で直します。01 の素朴な版では、URL の会員 ID さえ分かれば、だれでも書き換えられます。</p>
+  <p>だれが編集できるか（自分だけ）は 01b で直します。01 のレガシー版では、URL の会員 ID さえ分かれば、だれでも書き換えられます。</p>
 
   <h2>2. 先に知っておく言葉</h2>
   <table>
@@ -86,7 +86,7 @@
   </table>
 
   <h2>3. 図で見る</h2>
-  <p>素朴な版も直した版も、<code>users</code>（アカウント：ログインのための情報）と <code>profiles</code>（その会員についての情報：性別・生年月日・ニックネームなど）に分けます（D-015）。1枚目は素朴な版、2枚目は直した版の表です。3枚目は、おかしな値をどこで断るかの流れです（都道府県の例。身長の範囲はアプリだけで守るので、DB の段はない）。</p>
+  <p>レガシー版も直した版も、<code>users</code>（アカウント：ログインのための情報）と <code>profiles</code>（その会員についての情報：性別・生年月日・ニックネームなど）に分けます（D-015）。1枚目はレガシー版、2枚目は直した版の表です。3枚目は、おかしな値をどこで断るかの流れです（都道府県の例。身長の範囲はアプリだけで守るので、DB の段はない）。</p>
   <pre class="mermaid">
 erDiagram
   USERS ||--o{ PROFILES : "user_id で指すだけ。守りなし"
@@ -164,13 +164,13 @@ flowchart LR
     <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
     <tr><td>A. 1つの表（<code>users</code>）に全部入れる</td><td>JOIN が要らない。作るのが速い</td><td>ログインに使う列と、相手に見せる列が混ざる。よく変わる列の更新で、行まるごとを写す（表がふくらむ）。見せてはいけない列を返しやすい</td><td>列が少なく、見せ方も1つのとき</td></tr>
     <tr><td>B. <code>profiles</code> に分け、<code>user_id</code> を主キー兼外部キーにする</td><td>1人に2つのプロフィールを、表の作りとして作れない（主キーは重ならないため）。会員が消えたら一緒に消せる。余計な列がない</td><td>読むときに JOIN か、もう1本の SQL が要る</td><td>1対1 がずっと変わらないとき</td></tr>
-    <tr><td>C. <code>profiles</code> に分け、自分の <code>id</code> と <code>user_id</code> を持つ</td><td>あとで「1人に複数」に変えやすい</td><td>列が1つ余計。<code>user_id</code> に外部キーと UNIQUE を付け忘れると、1対1 が壊れる（素朴な版はこの「付け忘れ」の形）</td><td>将来、1対多になりそうなとき</td></tr>
+    <tr><td>C. <code>profiles</code> に分け、自分の <code>id</code> と <code>user_id</code> を持つ</td><td>あとで「1人に複数」に変えやすい</td><td>列が1つ余計。<code>user_id</code> に外部キーと UNIQUE を付け忘れると、1対1 が壊れる（レガシー版はこの「付け忘れ」の形）</td><td>将来、1対多になりそうなとき</td></tr>
   </table>
-  <div class="card point"><strong>この一歩で選ぶもの</strong>：素朴な版は C の形で、外部キーも UNIQUE も付けない（以前の形に近づけ、「分けたのに守りがない」問題を測る）。直した版は B。プロフィールは会員ごとに1つで増えないので、主キーで1対1 を守る。性別と生年月日も <code>profiles</code> に置き、04 の検索の条件（性別・生年月日・都道府県・身長）を1つの表にそろえる（表をまたぐ複合インデックスは作れないため）。</div>
+  <div class="card point"><strong>この一歩で選ぶもの</strong>：レガシー版は C の形で、外部キーも UNIQUE も付けない（以前の形に近づけ、「分けたのに守りがない」問題を測る）。直した版は B。プロフィールは会員ごとに1つで増えないので、主キーで1対1 を守る。性別と生年月日も <code>profiles</code> に置き、04 の検索の条件（性別・生年月日・都道府県・身長）を1つの表にそろえる（表をまたぐ複合インデックスは作れないため）。</div>
   <h3>② 選べる値（性別・都道府県）をどう持つか</h3>
   <table>
     <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
-    <tr><td>A. 文字で持つ（<code>'male'</code>・<code>'東京都'</code>）・制約なし（素朴な版）</td><td>SQL を読むと意味がすぐ分かる</td><td>書き方のゆれ（<code>'M'</code>・<code>'東京'</code>）がそのまま入る。インデックスが大きくなる</td><td>なし（制約を付けるなら CHECK と組み合わせる）</td></tr>
+    <tr><td>A. 文字で持つ（<code>'male'</code>・<code>'東京都'</code>）・制約なし（レガシー版）</td><td>SQL を読むと意味がすぐ分かる</td><td>書き方のゆれ（<code>'M'</code>・<code>'東京'</code>）がそのまま入る。インデックスが大きくなる</td><td>なし（制約を付けるなら CHECK と組み合わせる）</td></tr>
     <tr><td>B. 小さな整数（<code>smallint</code>）＋CHECK</td><td>決めた値しか入らない。小さく、04 の検索のインデックスも小さい</td><td>番号の意味は、アプリの定数で持つ（1＝男性 など）。SQL だけ見ても意味が分からない</td><td>値が少なく、ほとんど変わらないとき</td></tr>
     <tr><td>C. PostgreSQL の ENUM 型</td><td>決めた値しか入らず、意味も読める</td><td>値を足すのは簡単だが、消す・並べ替えるのが重い。Laravel のマイグレーションで扱いにくい</td><td>値がずっと変わらず、DB だけで意味を読みたいとき</td></tr>
     <tr><td>D. マスタの表（<code>prefectures</code>）＋外部キー</td><td>名前・並び順・地方なども持てる。値を足すのは行を足すだけ</td><td>表と JOIN が増える</td><td>値が増える・名前を DB で持ちたいとき</td></tr>
@@ -180,14 +180,14 @@ flowchart LR
   <h3>③ おかしな値を、どこで断るか</h3>
   <table>
     <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
-    <tr><td>A. どこでも断らない（素朴な版）</td><td>書くことが少ない</td><td>おかしな値がたまり、あとで集計・検索・表示が壊れる</td><td>なし</td></tr>
+    <tr><td>A. どこでも断らない（レガシー版）</td><td>書くことが少ない</td><td>おかしな値がたまり、あとで集計・検索・表示が壊れる</td><td>なし</td></tr>
     <tr><td>B. アプリだけ（バリデーション）</td><td>利用者に分かる言葉で <code>422</code> を返せる</td><td>シード・手で流す SQL・別の API の書き忘れでは守れない</td><td>見た目の決まり（入力の形）だけのとき</td></tr>
     <tr><td>C. アプリと DB の両方</td><td>利用者には <code>422</code>、どの書き込みでも DB が最後に断る</td><td>決まりを2か所に書く（範囲を変えるときは両方を直す）</td><td>壊れたら困る決まり（範囲・必須・重なり）</td></tr>
   </table>
   <div class="card point"><strong>この一歩で選ぶもの</strong>：直した版は C。「アプリを通らない書き込みでも壊れてはいけないか」が Yes のもの（範囲・必須・1対1・メールアドレスの重なり）は DB にも持たせる（database.md の決まり）。身長の範囲（120〜220）は、ありえない値が入っても表示が変になるだけなので、DB では型（<code>smallint</code>）だけを守り、範囲はバックエンドで守る（D-013）。18歳以上は、CHECK に「今日の日付」が使えないので、アプリ（01b の登録）で確かめる。フロントエンドの確かめだけでは、curl で API を直接呼べば通ってしまうので守れない。</div>
 
-  <h2>5. 見本：素朴な版と直した版</h2>
-  <h3>素朴な版（Fat Controller）</h3>
+  <h2>5. 見本：レガシー版と直した版</h2>
+  <h3>レガシー版（Fat Controller）</h3>
   <pre><code>// マイグレーション：profiles を作る（外部キーも UNIQUE もない・文字の列・制約なし）
 Schema::create('profiles', function (Blueprint $table) {
     $table->id();
@@ -244,12 +244,12 @@ $data = $request->validate([
 ]);
 $user->profile()->update($data);   // 性別・生年月日は受け取らない</code></pre>
   <p>読み方：<code>foreignId('user_id')->primary()</code> が「主キー兼外部キー」で、1対1 を表の作りで守る。<code>foreign('prefecture_code')->references('code')->on('prefectures')</code> が都道府県の表への外部キー（列は表の <code>code</code> と同じ <code>smallint</code> にそろえる）。Laravel のマイグレーションには CHECK を書く道具がないので、表示名の長さは <code>DB::statement</code> で SQL を書く。<code>validate()</code> で通った項目だけを保存するので、送られてきたほかの列（性別など）は無視される。直した版では、応答は年齢を出す形（API Resource）にして、生年月日は返さない。</p>
-  <p>直すときは、素朴な版の表に入ってしまったおかしな値を、先に見つけて直してから制約を付けます（database.md の「違反する行がないか、先に読み取りの SQL で確かめる」）。データを消さずに、表を足す → 写す → 古い列を消す、の順に進めます。</p>
+  <p>直すときは、レガシー版の表に入ってしまったおかしな値を、先に見つけて直してから制約を付けます（database.md の「違反する行がないか、先に読み取りの SQL で確かめる」）。データを消さずに、表を足す → 写す → 古い列を消す、の順に進めます。</p>
 
   <h2>6. どう確かめるか</h2>
   <table>
     <tr><th>段階</th><th>確かめること</th></tr>
-    <tr><td>① 素朴な版で問題を見る</td><td>
+    <tr><td>① レガシー版で問題を見る</td><td>
       <ul>
         <li>curl で <code>height="abc"</code>・<code>gender="M"</code>・<code>birthday="2026-13-45"</code> を送り、保存されることを見る</li>
         <li>curl で <code>gender</code>・<code>birthday</code>・<code>user_id</code> を送り、書き換わる（プロフィールを他人に移せる）ことを見る</li>
@@ -258,8 +258,8 @@ $user->profile()->update($data);   // 性別・生年月日は受け取らない
         <li>SQL のログで、<code>GET</code>・<code>PUT</code> の1回に何本流れるかを数える</li>
         <li>要件 FR-001〜014 のうち、いくつ守れていないかを数える</li>
       </ul></td></tr>
-    <tr><td>② 振る舞いを固定するテスト</td><td>直す前に、要件 ID ごとにテストを足す。素朴な版でも守れているもの（FR-001・004・005・014 など）は、素朴な版のまま通ることを確かめる。守れていないもの（FR-002・006〜013）は、素朴な版では落ちることを確かめてから直す。テストの名前は <code>FR-006 表示名は 1〜20文字</code> のように要件 ID を入れる</td></tr>
-    <tr><td>③ 直したあとに比べる数字</td><td>守れている要件の数（例：素朴な版 ○/14 → 直した版 14/14）・おかしな値を DB に直接入れたときに断られた数・<code>GET</code> 1回の SQL の本数（NFR-001：2本以内）・表を直したときに見つかったおかしな行の数</td></tr>
+    <tr><td>② 振る舞いを固定するテスト</td><td>直す前に、要件 ID ごとにテストを足す。レガシー版でも守れているもの（FR-001・004・005・014 など）は、レガシー版のまま通ることを確かめる。守れていないもの（FR-002・006〜013）は、レガシー版では落ちることを確かめてから直す。テストの名前は <code>FR-006 表示名は 1〜20文字</code> のように要件 ID を入れる</td></tr>
+    <tr><td>③ 直したあとに比べる数字</td><td>守れている要件の数（例：レガシー版 ○/14 → 直した版 14/14）・おかしな値を DB に直接入れたときに断られた数・<code>GET</code> 1回の SQL の本数（NFR-001：2本以内）・表を直したときに見つかったおかしな行の数</td></tr>
   </table>
 
   <h2>7. 気をつけること（罠）</h2>
@@ -268,7 +268,7 @@ $user->profile()->update($data);   // 性別・生年月日は受け取らない
     <li><strong>年齢の境目は時間帯でずれる</strong>：今の Laravel の時間帯の設定は UTC。日本の 0時〜9時は、UTC ではまだ前の日なので、誕生日の当日の朝に、年齢が1つ少なく出る。年齢を出すときは日本の時間帯（<code>Asia/Tokyo</code>）の「今日」を使う</li>
     <li><strong>Laravel の <code>timestamps()</code> は時間帯なし</strong>（<code>timestamp without time zone</code>。00 で確かめた）。直した版は <code>timestampsTz()</code> で <code>timestamptz</code> にする</li>
     <li><strong><code>string()</code> は何も言わないと 255 文字</strong>：表示名の 20文字は <code>string('nickname', 20)</code> と書く。PostgreSQL の <code>varchar(n)</code> は、バイトではなく文字の数で数えるので、日本語でも 20文字</li>
-    <li><strong><code>$guarded = []</code> と <code>$request->all()</code></strong>：送られた値が全部の列に入る。素朴な版の大きな穴（FR-010）</li>
+    <li><strong><code>$guarded = []</code> と <code>$request->all()</code></strong>：送られた値が全部の列に入る。レガシー版の大きな穴（FR-010）</li>
     <li><strong>文字の列を数の列に変えるとき</strong>：<code>'170cm'</code> のような値が残っていると、型を変える SQL が失敗する。先に読み取りの SQL でおかしな行を探して直してから変える</li>
     <li><strong>マスタの表の行は、マイグレーションで入れる</strong>：性別と都道府県の行がないと、会員もプロフィールも作れない。シード（開発用のデータ）ではなく、どの環境にも必ず入るマイグレーションで入れる</li>
     <li><strong><code>foreignId()</code> は <code>bigint</code> になる</strong>：マスタの表の <code>code</code> を <code>smallint</code> にするなら、外部キーの列も <code>smallInteger()</code> にそろえる（PostgreSQL は整数どうしなら型がずれていても外部キーを作れてしまうので、ずれに気づきにくい）</li>
@@ -278,12 +278,12 @@ $user->profile()->update($data);   // 性別・生年月日は受け取らない
   <h2>8. 理解を確かめる6つの問い</h2>
   <p>先に自分で答えてから、開いて見る。</p>
   <details><summary>なぜそうするのか？（なぜ表を分け、型と制約を DB に持たせるのか）</summary><p>アカウント（メールアドレス・パスワード・確認）と、その会員についての情報（性別・生年月日・ニックネーム・身長など）は、使う処理・更新の多さ・守り方が違うので分ける。性別と生年月日を <code>profiles</code> に置くと、04 の検索の条件が1つの表にそろい、複合インデックスを1つ作れる。型と制約を DB に持たせるのは、アプリを通らない書き込み（シード・手で流す SQL・別の API の書き忘れ）でも、おかしな値を入れないため。利用者に分かる言葉で返すのはアプリのバリデーション、最後の守りは DB、と役目を分ける。</p></details>
-  <details><summary>ほかの方法は？なぜ選ばなかったか？</summary><p>1つの表（案 A）は JOIN が要らないが、見せてはいけない列を返しやすく、よく変わる列の更新で行まるごとを写すので表がふくらむ。<code>profiles</code> に自分の <code>id</code> を持たせる案（案 C）は、1対多 に変えやすいが、プロフィールは増えないので、外部キーと UNIQUE の付け忘れの危険のほうが大きい（素朴な版で、実際に1人に2つ・みなしごの行ができた）。性別と生年月日を <code>users</code> に置く案は、登録の確かめが <code>users</code> だけで済むが、検索の条件が2つの表に分かれる。性別・都道府県を <code>smallint</code>＋CHECK にする案は小さく速いが、性別は値が増える見込みがあり、増やすたびに CHECK を変えるマイグレーションが要る。ENUM 型は値を消す・並べ替えるのが重い。そこでマスタの表にした。身長の範囲は、壊れても困らないので DB の CHECK にしなかった。</p></details>
+  <details><summary>ほかの方法は？なぜ選ばなかったか？</summary><p>1つの表（案 A）は JOIN が要らないが、見せてはいけない列を返しやすく、よく変わる列の更新で行まるごとを写すので表がふくらむ。<code>profiles</code> に自分の <code>id</code> を持たせる案（案 C）は、1対多 に変えやすいが、プロフィールは増えないので、外部キーと UNIQUE の付け忘れの危険のほうが大きい（レガシー版で、実際に1人に2つ・みなしごの行ができた）。性別と生年月日を <code>users</code> に置く案は、登録の確かめが <code>users</code> だけで済むが、検索の条件が2つの表に分かれる。性別・都道府県を <code>smallint</code>＋CHECK にする案は小さく速いが、性別は値が増える見込みがあり、増やすたびに CHECK を変えるマイグレーションが要る。ENUM 型は値を消す・並べ替えるのが重い。そこでマスタの表にした。身長の範囲は、壊れても困らないので DB の CHECK にしなかった。</p></details>
   <details><summary>弱点は？</summary><p>読むときに JOIN か2本目の SQL が要る（一覧で会員ごとにプロフィールを読むと N+1 になる。05 で扱う）。身長の範囲はアプリにしかないので、シードや手で流す SQL では、ありえない値が入りうる。性別・都道府県の名前を出すには、マスタの表との JOIN（か、もう1本の SQL）が要る。</p></details>
   <details><summary>問題が起きたら、どう調べて直すか？</summary><p>おかしな値が見つかったら、まず読み取りの SQL で、同じような行がどれだけあるかを数える（例：<code>height</code> が数字だけでない行）。原因の書き込み（どの API・シード・手の SQL か）を SQL のログと <code>laravel.log</code> で探す。直すときは、データを直す → 制約を足す、の順に、新しいマイグレーションで進める（流したマイグレーションは書き換えない）。制約に断られたときは、エラーの制約の名前（<code>profiles_prefecture_code_foreign</code>・<code>profiles_nickname_length_check</code>）から、どの決まりかが分かる。</p></details>
   <details><summary>データが10倍・100倍になったら？</summary><p>会員が 20人 → 2000人 → 2万人 になっても、主キーで1人を引く SQL は、インデックスで一瞬で終わる。重くなるのは一覧と検索（04）で、そのときに <code>smallint</code> で持っていることが効く（インデックスが小さい）。文字で持っていたら、検索のたびにゆれ（<code>'東京'</code> と <code>'東京都'</code>）を吸収する重い SQL が要る。表を直すマイグレーションは、行が多いほど時間がかかり、その間ロックがかかる（10 で扱う）。</p></details>
   <details><summary>Eloquent でどんな SQL が流れ、どう直したか？ Rails（ActiveRecord）・Prisma ならどう書くか？</summary>
-    <p>素朴な版の <code>User::findOrFail($id)</code> は <code>select * from users where id = ? limit 1</code> の1本で、全部の列を返す。直した版でプロフィールを一緒に読むと、<code>$user->profile</code> を読んだときに <code>select * from profiles where user_id = ?</code> がもう1本流れる（合わせて2本。NFR-001）。</p>
+    <p>レガシー版の <code>User::findOrFail($id)</code> は <code>select * from users where id = ? limit 1</code> の1本で、全部の列を返す。直した版でプロフィールを一緒に読むと、<code>$user->profile</code> を読んだときに <code>select * from profiles where user_id = ?</code> がもう1本流れる（合わせて2本。NFR-001）。</p>
     <table>
       <tr><th>ORM</th><th>1対1 の書き方</th><th>CHECK 制約</th><th>決めた項目だけを保存する</th></tr>
       <tr><td>Eloquent</td><td><code>hasOne(Profile::class)</code>・<code>belongsTo(User::class)</code></td><td>マイグレーションに道具がない。<code>DB::statement</code> で SQL を書く</td><td><code>$request->validate()</code> の結果だけを入れる。<code>$fillable</code> を決める</td></tr>
@@ -293,8 +293,8 @@ $user->profile()->update($data);   // 性別・生年月日は受け取らない
   </details>
 
   <h2>9. 実装の記録</h2>
-  <p class="meta">素朴な版のあと（9-1・9-2）と、直したあと（9-3・9-4）に、explain-change が書く。</p>
-  <h3>9-1. 素朴な版</h3>
+  <p class="meta">レガシー版のあと（9-1・9-2）と、直したあと（9-3・9-4）に、explain-change が書く。</p>
+  <h3>9-1. レガシー版</h3>
   <p class="meta">記録: 2026-11-12（作り直し） ／ PR: <a href="https://github.com/masa-devx/matching-db-study/pull/11">#11</a>・<a href="https://github.com/masa-devx/matching-db-study/pull/12">#12</a>（初めの形）→ <a href="https://github.com/masa-devx/matching-db-study/pull/19">#19</a>（users と profiles に分けた）・<a href="https://github.com/masa-devx/matching-db-study/pull/21">#21</a>（型と CI）</p>
   <p>初めは <code>users</code> 1つに全部を持たせましたが、以前の形に近づけるため、<code>users</code>（アカウント）と <code>profiles</code>（その会員についての情報）に分けて作り直しました（D-015）。流したマイグレーションは書き換えず、新しいマイグレーションで「作る → 写す → 消す」の順に進めています。</p>
   <h4>書いたもの</h4>
@@ -334,10 +334,10 @@ $profile-&gt;save();</code></pre>
   <h4>解説から変えたこと</h4>
   <table>
     <tr><th>解説のとき</th><th>実装</th><th>理由</th></tr>
-    <tr><td>素朴な版は <code>users</code> 1つ</td><td><code>users</code> と <code>profiles</code> に分けた（守りはなし）</td><td>以前の形に近づけ、「分けたのに守りがない」問題を測るため（D-015）</td></tr>
+    <tr><td>レガシー版は <code>users</code> 1つ</td><td><code>users</code> と <code>profiles</code> に分けた（守りはなし）</td><td>以前の形に近づけ、「分けたのに守りがない」問題を測るため（D-015）</td></tr>
     <tr><td>直した版の性別と生年月日は <code>users</code></td><td><code>profiles</code> に置く（予定）</td><td>04 の検索の条件を1つの表にそろえ、複合インデックスを作れるようにするため（D-015）</td></tr>
     <tr><td><code>GET</code> は <code>$user-&gt;profile;</code></td><td><code>$user-&gt;load('profile')</code></td><td>Larastan に「何もしていない式」と指摘されたため。SQL は <code>in (1)</code> の形になった</td></tr>
-    <tr><td>型は書かない（素朴な版）</td><td><code>declare(strict_types=1)</code>・<code>int $id</code>・戻り値の型（PHPStan レベル 6）</td><td>素朴な版から型を書くと決めたため（D-016）</td></tr>
+    <tr><td>型は書かない（レガシー版）</td><td><code>declare(strict_types=1)</code>・<code>int $id</code>・戻り値の型（PHPStan レベル 6）</td><td>レガシー版から型を書くと決めたため（D-016）</td></tr>
   </table>
   <h3>9-2. 測った問題と数字</h3>
   <h4>API から（curl）</h4>

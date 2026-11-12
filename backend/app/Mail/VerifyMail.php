@@ -10,7 +10,7 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 
 /**
- * 確認のメール（01b の素朴な版。docs/api/01b-auth.md）。
+ * 確認のメール（01b のレガシー版。docs/api/01b-auth.md）。
  * リンクには users.verification_token をそのまま入れる。期限も署名もない。
  */
 class VerifyMail extends Mailable

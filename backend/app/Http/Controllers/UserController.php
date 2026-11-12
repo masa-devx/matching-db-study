@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
 /**
- * 01b 登録（素朴な版。docs/api/01b-auth.md）。
+ * 01b 登録（レガシー版。docs/api/01b-auth.md）。
  * 入力を確かめない・トランザクションがない・応答に確認用の文字が出る。直す段階で、要件 ID のテストにする。
  */
 class UserController extends Controller

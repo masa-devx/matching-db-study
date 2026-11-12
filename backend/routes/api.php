@@ -21,7 +21,7 @@ Route::get('/health', function () {
 Route::get('/users/{id}/profile', [ProfileController::class, 'show']);
 Route::put('/users/{id}/profile', [ProfileController::class, 'update']);
 
-// 01b 登録とメールアドレスの確認（docs/api/01b-auth.md）。素朴な版は、だれでも使える
+// 01b 登録とメールアドレスの確認（docs/api/01b-auth.md）。レガシー版は、だれでも使える
 Route::post('/users', [UserController::class, 'store']);
 Route::get('/email-verifications/{token}', [EmailVerificationController::class, 'show']);
 Route::post('/email-verifications', [EmailVerificationController::class, 'store']);

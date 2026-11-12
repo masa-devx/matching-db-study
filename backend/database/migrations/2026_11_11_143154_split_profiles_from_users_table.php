@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * 素朴な版（01 の作り直し。D-015）：users（アカウント）と profiles（その会員についての情報）に分ける。
+ * レガシー版（01 の作り直し。D-015）：users（アカウント）と profiles（その会員についての情報）に分ける。
  * 以前の形に近く、profiles は自分の id と、外部キーも UNIQUE もない user_id を持ち、列は文字のまま・制約なし。
  * 流したマイグレーションは書き換えず、新しいマイグレーションで「作る → 写す → 消す」の順に進める。
  */
@@ -21,7 +21,7 @@ return new class extends Migration
         // ① 新しい表を作る
         Schema::create('profiles', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('user_id');   // 外部キーも UNIQUE もない（素朴な版）
+            $table->unsignedBigInteger('user_id');   // 外部キーも UNIQUE もない（レガシー版）
             $table->string('nickname')->nullable();
             $table->string('gender')->nullable();
             $table->string('birthday')->nullable();
