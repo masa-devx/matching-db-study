@@ -93,7 +93,7 @@ return response()->json($result);
 
 測るときは、開発用の DB に、会員 23（`sakura@example.test`）からのいいねを SQL でまとめて入れる（`generate_series` で 100件など）。測ったあとは消す。
 
-## 03 で変えること（状態：**確定**）
+## 03 で変えること（状態：**実装済み（レガシー版）**。測った結果は [03-matches.md](03-matches.md)）
 
 03 マッチ（[03-matches.md](03-matches.md)・[requirements/matches.md](../requirements/matches.md)）で、送る・送った一覧の2つを変える。上の表は 02 で作った形のまま残し、ここに差分だけを書く。
 

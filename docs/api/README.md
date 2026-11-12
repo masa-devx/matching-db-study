@@ -33,6 +33,6 @@ API の正本。作る前に設計を書き、確かめてもらってから実�
 | [01b](01b-auth.md) | `GET /api/me` | 自分の情報を見る | 実装済み（レガシー版） |
 | [01b](01b-auth.md) | `POST /api/auth/logout` | ログアウトする | 実装済み（レガシー版） |
 | [01b](01b-auth.md) | `POST /api/auth/refresh`（改善版だけ） | トークンを取り替える | 確定 |
-| [02](02-likes.md) | `POST /api/me/likes` | いいねを送る（03 でマッチを作る・`matched` を返す） | 実装済み（レガシー版）。03 の変更は確定 |
-| [02](02-likes.md) | `GET /api/me/likes` | 送った相手の一覧（03 で `matched` を足す） | 実装済み（レガシー版）。03 の変更は確定 |
-| [03](03-matches.md) | `GET /api/me/matches` | マッチした相手の一覧 | 確定 |
+| [02](02-likes.md) | `POST /api/me/likes` | いいねを送る（03 でマッチを作る・`matched` を返す） | 実装済み（レガシー版）。03 の変更も実装済み（レガシー版） |
+| [02](02-likes.md) | `GET /api/me/likes` | 送った相手の一覧（03 で `matched` を足す） | 実装済み（レガシー版）。03 の変更も実装済み（レガシー版） |
+| [03](03-matches.md) | `GET /api/me/matches` | マッチした相手の一覧 | 実装済み（レガシー版） |
