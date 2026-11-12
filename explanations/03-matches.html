@@ -10,7 +10,7 @@
 <main>
   <p class="meta"><a href="index.html">← 目次へ</a></p>
   <h1>03 マッチ</h1>
-  <p class="meta">作成: 2026-11-12 ／ 状態: <span class="status">解説だけ</span> ／ Issue: <a href="https://github.com/masa-devx/matching-db-study/issues/29">#29</a> ／ 要件: <code>docs/requirements/matches.md</code>（FR-MATCH-001〜010・NFR-MATCH-001〜003）</p>
+  <p class="meta">作成: 2026-11-12 ／ 状態: <span class="status">レガシー版まで</span> ／ Issue: <a href="https://github.com/masa-devx/matching-db-study/issues/29">#29</a> ／ 要件: <code>docs/requirements/matches.md</code>（FR-MATCH-001〜010・NFR-MATCH-001〜003）</p>
 
   <div class="card point">
     <strong>この一歩でできるようになること</strong>
@@ -498,9 +498,115 @@ order by "l"."created_at" desc;</code></pre>
   <h2>9. 実装の記録</h2>
   <p class="meta">レガシー版のあと（9-1・9-2）と、改善したあと（9-3・9-4）に、explain-change が書く。</p>
   <h3>9-1. レガシー版</h3>
-  <p>まだ実装していない。</p>
+  <p class="meta">記録: 2026-11-12 ／ PR: <a href="https://github.com/masa-devx/matching-db-study/pull/32">#32</a>（表。#30）・<a href="https://github.com/masa-devx/matching-db-study/pull/33">#33</a>（送る・一覧。#31）／ 設計: <code>docs/api/03-matches.md</code>・<code>docs/api/02-likes.md</code> の「03 で変えること」</p>
+  <h4>書いたもの</h4>
+  <table>
+    <tr><th>ファイル</th><th>役割</th></tr>
+    <tr><td><code>backend/database/migrations/2026_11_12_063225_create_user_matches_table.php</code></td><td><code>user_matches</code>（<code>id</code>・<code>user1_id</code>・<code>user2_id</code>・日時）。主キーのほかに制約もインデックスもない</td></tr>
+    <tr><td><code>backend/app/Models/UserMatch.php</code></td><td><code>user1()</code>・<code>user2()</code>（どちらも <code>BelongsTo</code>）。表の名前は Laravel が <code>UserMatch</code> から決める <code>user_matches</code> なので、<code>$table</code> を書かない</td></tr>
+    <tr><td><code>backend/app/Http/Controllers/LikeController.php</code></td><td><code>store()</code>：いいねのあとに相手からのいいねを読み、あればマッチを入れて <code>matched</code> を返す。<code>index()</code>：1件ごとに逆向きのいいねを読んで <code>matched</code> を足す</td></tr>
+    <tr><td><code>backend/app/Http/Controllers/UserMatchController.php</code></td><td><code>index()</code>：マッチした相手の一覧（<code>GET /api/me/matches</code>）</td></tr>
+    <tr><td><code>backend/routes/api.php</code></td><td><code>GET /api/me/matches</code> の1行（だれでも呼べる。だれかはコントローラの中で JWT から決める）</td></tr>
+  </table>
+
+  <h4>大事な行の読み方</h4>
+  <p><strong>① 向きの決まりがない2つの列</strong>（マイグレーション）</p>
+  <pre><code class="language-php">$table-&gt;unsignedBigInteger('user1_id');   // いいねを送り返した会員。外部キーなし
+$table-&gt;unsignedBigInteger('user2_id');   // 先に送っていた会員。外部キーもインデックスもなし</code></pre>
+  <p>組の UNIQUE も CHECK もないので、(A, B) も (B, A) も、同じ (A, B) の2行目も入る。どちらに誰が入るかは、送った順で決まる。</p>
+  <p><strong>② 書いてから、相手の行を読む</strong>（<code>LikeController::store</code>）</p>
+  <pre><code class="language-php">$like = Like::create([...]);                        // ここで1本目が確定する
+$reverse = Like::where('from_user_id', $request-&gt;input('user_id'))
+    -&gt;where('to_user_id', $payload-&gt;sub)
+    -&gt;first();
+if ($reverse) {
+    UserMatch::create(['user1_id' =&gt; $payload-&gt;sub, 'user2_id' =&gt; $request-&gt;input('user_id')]);
+}</code></pre>
+  <p>トランザクションがないので、<code>create()</code> のいいねはすぐ確定し、ほかのリクエストから見える。2人が同時に送ると、どちらも相手のいいねを見つけて、どちらもマッチを入れる（9-2 で 100組中 60〜66組）。0行にはならない（あとから読んだほうは、必ず先に確定したいいねを見る）。自分あてのときは、今入れた自分の行が <code>$reverse</code> として見つかる。</p>
+  <p><strong>③ 組のどちら側かを PHP で選ぶ</strong>（<code>UserMatchController::index</code>）</p>
+  <pre><code class="language-php">$matches = UserMatch::where('user1_id', $me)-&gt;orWhere('user2_id', $me)
+    -&gt;orderBy('created_at', 'desc')-&gt;get();
+foreach ($matches as $match) {
+    $partnerId = $match-&gt;user1_id == $me ? $match-&gt;user2_id : $match-&gt;user1_id;
+    $profile = Profile::where('user_id', $partnerId)-&gt;first();   // 1件ごとに1本
+}</code></pre>
+  <p>1行に2人を持つので、「自分でないほう」を行ごとに選ぶ。<code>hasMany</code> 1つでは両側を取れないので、<code>User</code> にリレーションを足さず、OR で直接読む。OR の両側にインデックスがないので、表を全部読む。</p>
+  <p><strong>④ 印の正が <code>user_matches</code> でない</strong>（<code>LikeController::index</code>）</p>
+  <pre><code class="language-php">$matched = Like::where('from_user_id', $like-&gt;to_user_id)
+    -&gt;where('to_user_id', $payload-&gt;sub)
+    -&gt;exists();   // いいね1件ごとに、もう1本</code></pre>
+  <p>印は「逆向きのいいねがあるか」で決め、マッチの表は見ない。マッチが2行になっても抜けても、印は変わらない。マッチの一覧と見ている表が違うので、ずれても気づかない。</p>
+
+  <h4>実際に流れる SQL</h4>
+  <table>
+    <tr><th>API</th><th>SQL（ログから）</th><th>本数</th></tr>
+    <tr><td><code>POST /api/me/likes</code></td><td><code>insert into "likes" … returning "id"</code> → <code>select * from "likes" where "from_user_id" = ? and "to_user_id" = ? limit 1</code> → （あれば）<code>insert into "user_matches" ("user1_id", "user2_id", "updated_at", "created_at") values (?, ?, ?, ?) returning "id"</code></td><td>2〜3本（トランザクションなし）</td></tr>
+    <tr><td><code>GET /api/me/likes</code></td><td><code>select * from "likes" where "from_user_id" = ? order by "created_at" desc</code> のあと、1件ごとに <code>select * from "profiles" where "user_id" = ? limit 1</code> と <code>select exists(select * from "likes" where "from_user_id" = ? and "to_user_id" = ?) as "exists"</code></td><td>1＋2N 本</td></tr>
+    <tr><td><code>GET /api/me/matches</code></td><td><code>select * from "user_matches" where "user1_id" = ? or "user2_id" = ? order by "created_at" desc</code> のあと、1件ごとに <code>select * from "profiles" where "user_id" = ? limit 1</code></td><td>1＋N 本</td></tr>
+  </table>
+
+  <h4>テストで確かめたこと</h4>
+  <p>レガシー版なので、03 のテストはない（改善する段階で、要件 ID のテストを先に足す）。既存のテストは <code>docker compose run --rm app ./vendor/bin/pest</code> で <code>3 passed (5 assertions)</code>。Pint・PHPStan（レベル 6）・CI も通った。</p>
+
+  <h4>解説から変えたこと</h4>
+  <table>
+    <tr><th>解説のとき</th><th>実装</th><th>理由</th></tr>
+    <tr><td>同時に送るのは「<code>curl</code> を2つ並べて走らせる」</td><td>app のコンテナの中で、ワーカー8つのサーバー（<code>PHP_CLI_SERVER_WORKERS=8</code>）を 8001 番で一時的に起動し、Laravel の <code>Http::pool()</code> で組ごとに2本を同時に送った</td><td>compose の <code>app</code>（PHP の組み込みサーバー）は、ワーカーを指定していないので、リクエストを1つずつ順に処理する。そのままでは同時に送っても競合が起きない（同じ試しで 100組すべて1行だった）</td></tr>
+    <tr><td>Issue #30 に「<code>User</code> からのリレーション」</td><td>足さない</td><td>組のどちら側に自分がいるかが行ごとに違い、<code>hasMany</code> 1つでは自分のマッチを取れない。Issue の本文も直した</td></tr>
+  </table>
   <h3>9-2. 測った問題と数字</h3>
-  <p>まだ実装していない。</p>
+  <h4>送る（JWT はコンテナの中で作り、測ったデータは消した）</h4>
+  <table>
+    <tr><th>確かめたこと</th><th>結果</th><th>要件</th></tr>
+    <tr><td>23 から 5 に送ってあるところに、5 から 23</td><td><code>201</code>・<code>matched: true</code>。(5, 23) が1行</td><td>FR-MATCH-001</td></tr>
+    <tr><td>7 から 8（片方だけ）→ 8 から 7</td><td><code>matched: false</code> → <code>true</code>。(8, 7) が1行（送り返した人が <code>user1_id</code>）</td><td>FR-MATCH-002</td></tr>
+    <tr><td>マッチしたあと、5 から 23 にもう一度</td><td><code>500</code>（いいねの UNIQUE の違反）。マッチは増えなかった</td><td>FR-MATCH-004</td></tr>
+    <tr><td>9 から 9（自分あて）</td><td><code>201</code>・<code>matched: true</code>。<strong>自分とのマッチ (9, 9)</strong> ができ、9 のマッチの一覧に自分が出た</td><td>FR-MATCH-004</td></tr>
+    <tr><td>9 から <code>999999</code>（いない会員）</td><td><code>201</code>・<code>matched: false</code></td><td>FR-MATCH-004</td></tr>
+  </table>
+  <h4>同時にお互いへ送る（まだいいねしていない100組。A から B と B から A を同時に）</h4>
+  <table>
+    <tr><th>サーバー</th><th>マッチが1行の組</th><th>2行の組</th><th>0行の組</th><th>行の向き</th></tr>
+    <tr><td>ワーカー8つ（1回目）</td><td>34</td><td><strong>66</strong></td><td>0</td><td>小さい ID が先 74行・大きい ID が先 92行</td></tr>
+    <tr><td>ワーカー8つ（2回目）</td><td>40</td><td><strong>60</strong></td><td>0</td><td>65行・95行</td></tr>
+    <tr><td>compose の <code>app</code>（1つずつ処理）</td><td>100</td><td>0</td><td>0</td><td>0行・100行（いつもあとに処理された側が <code>user1_id</code>）</td></tr>
+  </table>
+  <p>2回目のあと、データを消す前に 6章の検査の SQL を流した。「お互いにいいねしているのにマッチがない組」（<code>likes</code> の自己結合に <code>user_matches</code> を LEFT JOIN して <code>m.id is null</code>）は <strong>0組</strong>、「同じ組が2行以上」（<code>least</code>・<code>greatest</code> で並べ替えて <code>having count(*) &gt; 1</code>）は <strong>60組・120行</strong>。2枚目の図のとおり、トランザクションなしでは二重になるが、抜けはしない。</p>
+  <h4>一覧（SQL のログの <code>db.summary</code> の本数）</h4>
+  <table>
+    <tr><th>件数 N</th><th>マッチの一覧</th><th>送った一覧</th></tr>
+    <tr><td>1</td><td>2本</td><td>3本</td></tr>
+    <tr><td>10</td><td>11本</td><td>21本</td></tr>
+    <tr><td>100</td><td><strong>101本</strong>（52.1ms）</td><td><strong>201本</strong>（87.4ms）</td></tr>
+  </table>
+  <p>ほかに、23 の送った一覧では 5 が <code>matched: true</code>・6 が <code>false</code>。一覧の1件は年齢ではなく生年月日。確認していない会員（33）でもマッチの一覧が <code>200</code>。トークンなしは <code>401</code>、壊れた JWT は <code>500</code>。</p>
+  <h4>実行計画（マッチ1万件。トランザクションの中で入れて、取り消した）</h4>
+  <table>
+    <tr><th>SQL</th><th>実行計画</th><th>読んだ量・時間</th></tr>
+    <tr><td>自分のマッチ <code>user1_id = ? or user2_id = ? order by created_at desc</code></td><td><strong><code>Seq Scan</code></strong> → <code>Sort</code></td><td>2行のために <strong>10378行を捨てた</strong>・87ページ・0.334ms</td></tr>
+    <tr><td>相手からのいいね <code>from_user_id = ? and to_user_id = ? limit 1</code></td><td><code>Seq Scan</code>（いいねが数行しかないため）</td><td>1万件では UNIQUE の <code>Index Scan</code> になることを 02 の 9-2 で測った</td></tr>
+  </table>
+  <h4>コードを読んで分かったこと（試していない。改善する段階のテストで確かめる）</h4>
+  <ul>
+    <li>2行になった組は、マッチの一覧に同じ相手が2回出る</li>
+    <li>相手を消しても、マッチの行が残り、一覧に <code>nickname: null</code> で出る（外部キーがない）</li>
+    <li>マッチが2行になっても抜けても、送った一覧の印は変わらない（印は逆向きのいいねから決める）</li>
+    <li>いいねを入れたあと、マッチを入れる前に落ちると、マッチだけ抜ける（今回の試しでは起きなかった）</li>
+  </ul>
+  <h4>数字</h4>
+  <table>
+    <tr><th>測ったもの</th><th>レガシー版</th></tr>
+    <tr><td>守れている要件</td><td><strong>6 / 13</strong>（FR-MATCH-001・002・006・007・008・NFR-MATCH-003）。008 はトークンがないときだけ（壊れた JWT は <code>500</code>）。006 は印は付くが、正が <code>user_matches</code> でない。004 は二重のいいねではマッチが増えないが、自分あてでマッチができる。NFR-MATCH-003 は 02 の UNIQUE のインデックスで守れている</td></tr>
+    <tr><td>100組を同時に送ったとき</td><td>2行の組が 60〜66組・0行の組は 0組</td></tr>
+    <tr><td>一覧の SQL の本数（100件）</td><td>マッチの一覧 101本・送った一覧 201本</td></tr>
+    <tr><td>自分のマッチを探すとき（1万件）</td><td><code>Seq Scan</code>・10378行を捨てた・0.334ms</td></tr>
+  </table>
+  <h4>気になる点（直していない）</h4>
+  <ul>
+    <li>compose の <code>app</code> がリクエストを1つずつ順に処理するので、02 の 9-2 の「10本同時に送った」も、実際には1本ずつ処理されていたはず（内わけは UNIQUE が決めるので、結果は同じと考えられる）。02 の記録の書き方を直すかは未定</li>
+    <li>JWT の処理を写した場所が4か所になった（<code>AuthController::me</code>・<code>LikeController</code> の2つ・<code>UserMatchController</code>）</li>
+    <li><code>UserMatchController</code> だけ <code>$payload-&gt;sub</code> を <code>$me</code> に入れていて、<code>LikeController</code> と書き方がそろっていない（動きは同じ）</li>
+  </ul>
   <h3>9-3. 足したテスト</h3>
   <p>まだ実装していない。</p>
   <h3>9-4. 改善版と、前と後の数字</h3>
