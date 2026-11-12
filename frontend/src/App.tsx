@@ -6,6 +6,7 @@ import LikesPage from './LikesPage'
 import LoginPage from './LoginPage'
 import MessagesPage from './MessagesPage'
 import RegisterPage from './RegisterPage'
+import SearchPage from './SearchPage'
 import UserPage from './UserPage'
 
 // レガシー版（03b）。画面の切り替えと、ログインしたあとの枠（四角の枠と、その下のタブ）を、ここに全部書く。
@@ -23,8 +24,8 @@ export default function App() {
       <Route path="/likes" element={<LikesPage />} />
       {/* マッチした相手は、メッセージのタブで見る（マッチだけの画面は作らない） */}
       <Route path="/messages" element={<MessagesPage />} />
-      {/* 検索（/search）は 04 で作る。それまでは「準備中」 */}
-      <Route path="/search" element={<p className="soon">検索は、04 で作ります</p>} />
+      {/* 04 検索。条件は sessionStorage に置き、戻ってきても残す */}
+      <Route path="/search" element={<SearchPage />} />
       <Route path="*" element={<p>ページが見つかりません</p>} />
     </Routes>
   )
