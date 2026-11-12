@@ -4,43 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>01b 認証と認可</title>
-<style>
-  :root {
-    --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0;
-    --card: #f6f8fa; --accent: #0969da; --ok: #1a7f37; --warn: #9a6700;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d;
-      --card: #151b23; --accent: #4493f8; --ok: #3fb950; --warn: #d29922;
-    }
-  }
-  :root[data-theme="dark"] {
-    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d;
-    --card: #151b23; --accent: #4493f8; --ok: #3fb950; --warn: #d29922;
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--fg);
-    font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; line-height: 1.8; }
-  main { max-width: 920px; margin: 0 auto; padding: 24px 16px 80px; }
-  a { color: var(--accent); }
-  h1 { font-size: 1.6rem; margin: 8px 0 4px; }
-  h2 { font-size: 1.25rem; margin-top: 40px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
-  h3 { font-size: 1.05rem; margin-top: 24px; }
-  .meta { color: var(--muted); font-size: .9rem; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
-  .point { border-left: 4px solid var(--accent); }
-  .warn { border-left: 4px solid var(--warn); }
-  table { border-collapse: collapse; width: 100%; margin: 12px 0; display: block; overflow-x: auto; }
-  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
-  th { background: var(--card); white-space: nowrap; }
-  code { background: var(--card); padding: 1px 5px; border-radius: 4px; font-size: .9em; }
-  pre:not(.mermaid) { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; line-height: 1.5; }
-  pre.mermaid { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; text-align: center; }
-  details { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; margin: 8px 0; }
-  summary { cursor: pointer; font-weight: 600; }
-  .status { display: inline-block; padding: 0 8px; border-radius: 10px; font-size: .8rem; border: 1px solid var(--line); }
-</style>
+<link rel="stylesheet" href="assets/page.css">
 </head>
 <body>
 <main>
@@ -185,7 +149,7 @@ erDiagram
 
   <h2>5. 見本：レガシー版と改善版</h2>
   <h3>レガシー版（Fat Controller・テストなし）</h3>
-  <pre><code>// 登録（POST /api/users）
+  <pre><code class="language-php">// 登録（POST /api/users）
 public function store(Request $request): JsonResponse
 {
     $user = User::create($request->only(['email', 'password']) + [
@@ -215,7 +179,7 @@ public function login(Request $request)
     <li><strong>JWT</strong>：30日使え、止められない。中身（メールアドレス）はだれでも読める。<code>is_paid</code> が古いまま残る</li>
   </ul></div>
   <h3>改善版</h3>
-  <pre><code>// ログイン：Cookie で渡す。JSON にトークンは入れない
+  <pre><code class="language-php">// ログイン：Cookie で渡す。JSON にトークンは入れない
 $jwt = $issuer->accessToken($user);                 // sub・exp(15分)・jti・iss・aud だけ
 [$plain, $row] = $refresh->issue($user);            // DB には hash('sha256', $plain)
 return response()->noContent(200)
@@ -231,6 +195,209 @@ DB::transaction(function () use ($plain) {
     // 同じ家族で、新しい取り替え用のトークンを作る
 });</code></pre>
   <p>読み方：<code>cookie()</code> の引数の <code>true</code> が HttpOnly、<code>'Lax'</code> が SameSite、<code>$secure</code> は本番だけ true にする（設定で切り替える）。取り替えでは、同じ取り替え用のトークンが同時に2回来ても1回だけ通るように、<code>lockForUpdate()</code> で行をロックする（09 で詳しく学ぶ）。</p>
+
+  <h3>Eloquent が発行する SQL（レガシー版と改善版を並べる）</h3>
+  <p>左がレガシー版、右が改善版です。SQL は Laravel に作らせて確かめたもので（書き込みと、まだない表は <code>DB::pretend()</code> で、流さずに SQL だけを取り出した）、例は会員 23 の場合です。中身は <code>explanations/sql/01b-auth.json</code> にあり、<code>explanations/tools/compare-block.py</code> で作り直せます。</p>
+  <p class="meta">ログ（<code>sql-*.log</code>）では、値は <code>?</code> になり、別に渡されます（プリペアドステートメント）。読みやすいよう、ここでは値を入れて、行を分けて書きました。長い値（ハッシュなど）は <code>…</code> で略しています。</p>
+  <!-- compare: sql/01b-auth.json -->
+  <h4>登録する（<code>POST /api/users</code>）</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">2本（トランザクションなし）</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$user = User::create(
+    $request-&gt;only(['email', 'password'])
+    + ['verification_token' =&gt; Str::random(40)]
+);
+Profile::create(
+    $request-&gt;only(['nickname', 'gender', 'birthday'])
+    + ['user_id' =&gt; $user-&gt;id]
+);</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① 会員（password は casts の
+--    hashed で bcrypt にする）
+insert into "users"
+  ("email", "password", "verification_token",
+   "updated_at", "created_at")
+values ('a@example.test',
+  '$2y$12$G5IV…', 'x8Kq…',
+  '2026-11-12 05:32:40', '2026-11-12 05:32:40')
+returning "id";
+
+-- ② プロフィール（①の id を使う）
+insert into "profiles"
+  ("nickname", "gender", "birthday", "user_id",
+   "updated_at", "created_at")
+values ('あ', 'female', '2000-01-01', 99,
+  '2026-11-12 05:32:40', '2026-11-12 05:32:40')
+returning "id";
+-- ②やメールで失敗しても、①は残る</code></pre>
+      <ul><li>2本は別々に確定する（自動コミット）。②やそのあとのメールで失敗すると、会員だけが残る</li><li>メールアドレスが空いているかを調べる SQL はない。重なれば UNIQUE の違反で 500</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版<span class="count">4本＋トランザクション</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$data = $request-&gt;validate([
+    'email' =&gt; ['required', 'email',
+                'unique:users,email'],
+    'gender_code' =&gt; ['required',
+                      'exists:genders,code'],
+    // ほかの項目は省略
+]);
+DB::transaction(function () use ($data) {
+    $user = User::create([...]);
+    $user-&gt;profile()-&gt;create([...]);
+});</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① メールアドレスが空いているか（unique）
+select count(*) as "aggregate"
+from "users" where "email" = 'a@example.test';
+
+-- ② 性別があるか（exists）
+select count(*) as "aggregate"
+from "genders" where "code" = 2;
+
+begin;  -- DB::transaction()（ログには出ない）
+
+-- ③ 会員
+insert into "users"
+  ("email", "password",
+   "updated_at", "created_at")
+values ('a@example.test', '$2y$12$Ckrg…',
+  '2026-11-12 05:32:40', '2026-11-12 05:32:40')
+returning "id";
+
+-- ④ プロフィール（主キーが user_id
+--    なので returning がない）
+insert into "profiles"
+  ("user_id", "nickname", "gender_code",
+   "birthdate", "updated_at", "created_at")
+values (99, 'あ', 2, '2000-01-01',
+  '2026-11-12 05:32:40', '2026-11-12 05:32:40');
+
+commit;  -- ④で失敗すれば rollback で③も消える</code></pre>
+      <ul><li>①②は、きれいなエラー（422）を返すための確かめ。同時に同じメールアドレスで来たときに守るのは、UNIQUE（DB）</li><li><code>DB::transaction()</code> は <code>begin</code>・<code>commit</code> を PDO で直接送るので、SQL のログには出ない</li><li>主キーを自分で決める表（<code>$incrementing = false</code>）では、Laravel は <code>returning "id"</code> を付けない</li></ul>
+    </section>
+  </div>
+  <h4>メールアドレスを確認する（確認のリンク）</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">2本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$user = User::where('verification_token', $token)-&gt;first();
+$user-&gt;email_verified_at = now();
+$user-&gt;save();</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① 確認用の文字で探す（インデックスがなく、表を全部読む）
+select * from "users"
+where "verification_token" = 'x8Kq…' limit 1;
+
+-- ② 確認済みにする（文字は消さない）
+update "users"
+set "email_verified_at" = '2026-11-12 05:32:40',
+    "updated_at" = '2026-11-12 05:32:40'
+where "id" = 23;</code></pre>
+      <ul><li>①は <code>Seq Scan</code>（9-2 で測った）。会員が増えるほど遅くなる</li><li>文字を消さず、期限もないので、同じリンクで何度でも②が流れる</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版<span class="count">1〜2本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$user = User::findOrFail($id);   // リンクの {id}
+// {hash} は sha1(メールアドレス) と比べる（DB は使わない）
+if (! $user-&gt;hasVerifiedEmail()) {
+    $user-&gt;markEmailAsVerified();
+}</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① 主キーで読む（Index Scan）
+select * from "users"
+where "users"."id" = 23 limit 1;
+
+-- ② まだなら、確認済みにする
+update "users"
+set "email_verified_at" = '2026-11-12 05:32:40',
+    "updated_at" = '2026-11-12 05:32:40'
+where "id" = 23;</code></pre>
+      <ul><li>探すのは主キーなので、インデックスで1行だけ読む</li><li>リンクの正しさは署名（URL の <code>signature</code>）と <code>{hash}</code> で確かめるので、DB に確認用の文字を持たない</li><li>確認済みなら②は流れない（1本で終わる）</li></ul>
+    </section>
+  </div>
+  <h4>ログインする（<code>POST /api/auth/login</code>）</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">2本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$user = User::where('email', $request-&gt;email)-&gt;first();
+// … パスワードを照合して、JWT にニックネームを入れる
+'nickname' =&gt; $user-&gt;profile?-&gt;nickname,</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① メールアドレスで探す
+select * from "users"
+where "email" = 'sakura@example.test' limit 1;
+
+-- ② $user-&gt;profile と書いた時点で読む
+select * from "profiles"
+where "profiles"."user_id" = 23
+  and "profiles"."user_id" is not null
+limit 1;</code></pre>
+      <ul><li><code>$user-&gt;profile</code> のようにプロパティで触ると、その場で1本流れる（Lazy Loading）。<code>load()</code> の <code>in (…)</code> と形が違う</li><li>ないメールアドレスなら①だけで返り、照合（bcrypt）も飛ばすので、返るまでの時間で見分けられる</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版<span class="count">2本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$user = User::where('email', Str::lower($request-&gt;email))
+    -&gt;first();
+// … 照合に通ったら、取り替え用のトークンを作る
+[$plain, $row] = $refresh-&gt;issue($user);</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① メールアドレスで探す
+select * from "users"
+where "email" = 'sakura@example.test' limit 1;
+
+-- ② 取り替え用のトークンを入れる
+--    （DB にはハッシュだけ）
+insert into "refresh_tokens"
+  ("user_id", "family_id",
+   "token_hash", "expires_at")
+values (23, 'f1c2…', 'e3b0…',
+  '2026-12-12 05:32:40');</code></pre>
+      <ul><li>JWT にニックネームを入れないので、プロフィールは読まない</li><li><code>refresh_tokens</code> の表と <code>issue()</code> はまだないので、②は <code>DB::table()</code> で同じ形を作って確かめた（Model で作ると <code>created_at</code> なども入る）</li></ul>
+    </section>
+  </div>
+  <h4>トークンを取り替える（<code>POST /api/auth/refresh</code>。改善版だけ）</h4>
+  <div class="compare">
+    <section class="compare-col alt">
+      <p class="compare-title">改善版（ロックとトランザクション）<span class="count">3本＋トランザクション</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">DB::transaction(function () use ($plain) {
+    $row = RefreshToken::where('token_hash', hash('sha256', $plain))
+        -&gt;lockForUpdate()
+        -&gt;first();
+    // 期限切れ・止めた印・使った印を確かめる（使った印があれば、家族ごと止める）
+    $row-&gt;update(['used_at' =&gt; now()]);
+    // 同じ家族で、新しいトークンを入れる
+});</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">begin;  -- DB::transaction()（ログには出ない）
+
+-- ① 行をロックして読む（同時に来たもう1本は、ここで待つ）
+select * from "refresh_tokens"
+where "token_hash" = 'e3b0…' limit 1
+for update;
+
+-- ② 使った印を付ける
+update "refresh_tokens"
+set "used_at" = '2026-11-12 05:32:40'
+where "id" = 7;
+
+-- ③ 新しいトークンを入れる
+insert into "refresh_tokens"
+  ("user_id", "family_id", "token_hash", "expires_at")
+values (23, 'f1c2…', '9a7b…', '2026-12-12 05:32:40');
+
+commit;  -- ここでロックが外れ、待っていた1本が①を読む</code></pre>
+      <ul><li><code>lockForUpdate()</code> は、SQL の最後に <code>for update</code> を付ける。同じ行を読もうとする別のトランザクションは、<code>commit</code> まで待つ</li><li>待っていた1本が①を読むと、もう <code>used_at</code> が入っているので「使った印あり」になる（同じトークンが2回通らない）</li><li>表とモデルはまだないので、SQL は <code>DB::table()</code> で同じ形を作って確かめた</li></ul>
+    </section>
+  </div>
+  <!-- /compare -->
+  <table>
+    <tr><th>操作</th><th>レガシー版</th><th>改善版</th><th>違いのもと</th></tr>
+    <tr><td>登録する</td><td>2本（トランザクションなし）</td><td>4本＋トランザクション</td><td>先に確かめる（unique・exists）・<code>begin</code>〜<code>commit</code></td></tr>
+    <tr><td>確認する</td><td>2本（表を全部読む）</td><td>1〜2本（主キーで読む）</td><td>確認用の文字を DB に持たず、署名で確かめる</td></tr>
+    <tr><td>ログイン</td><td>2本</td><td>2本</td><td>プロフィールを読む代わりに、取り替え用のトークンを入れる</td></tr>
+    <tr><td>取り替え</td><td>―</td><td>3本＋トランザクション</td><td><code>for update</code> で、同じトークンが2回通らないようにする</td></tr>
+  </table>
 
   <h2>6. どう確かめるか</h2>
   <table>
@@ -299,7 +466,7 @@ DB::transaction(function () use ($plain) {
 
   <h4>大事な行の読み方</h4>
   <p><strong>① トランザクションのない2本の <code>insert</code> と、その場のメール</strong>（<code>UserController::store</code>）</p>
-  <pre><code>$user = User::create($request-&gt;only(['email', 'password']) + [
+  <pre><code class="language-php">$user = User::create($request-&gt;only(['email', 'password']) + [
     'verification_token' =&gt; Str::random(40),   // 平文・期限なし
 ]);
 Profile::create($request-&gt;only(['nickname', 'gender', 'birthday']) + ['user_id' =&gt; $user-&gt;id]);
@@ -307,12 +474,12 @@ Mail::to($user-&gt;email)-&gt;send(new VerifyMail($user));
 return response()-&gt;json($user, 201);</code></pre>
   <p>1本目が成功して2本目かメールで失敗すると、会員だけが残る。<code>$user</code> をそのまま返すので、<code>#[Hidden]</code> にない <code>verification_token</code> が応答に出る。<code>password</code> は <code>casts()</code> の <code>'hashed'</code> で bcrypt になる。</p>
   <p><strong>② 確認用の文字で探す</strong>（<code>EmailVerificationController::show</code>）</p>
-  <pre><code>$user = User::where('verification_token', $token)-&gt;first();   // インデックスがない
+  <pre><code class="language-php">$user = User::where('verification_token', $token)-&gt;first();   // インデックスがない
 $user-&gt;email_verified_at = now();                              // 文字は消さない
 $user-&gt;save();</code></pre>
   <p>インデックスがないので表を全部読む。文字を消さず、期限もないので、何度でも・何日たっても使える。</p>
   <p><strong>③ 2通りの失敗と、飛ばされる照合</strong>（<code>AuthController::login</code>）</p>
-  <pre><code>if (! $user) {
+  <pre><code class="language-php">if (! $user) {
     return response()-&gt;json(['message' =&gt; 'メールアドレスが違います'], 401);
 }
 if (! Hash::check($request-&gt;input('password'), $user-&gt;password)) {
@@ -320,13 +487,13 @@ if (! Hash::check($request-&gt;input('password'), $user-&gt;password)) {
 }</code></pre>
   <p>言葉でも、返るまでの時間でも（会員がいないと bcrypt の照合を飛ばす）、そのメールアドレスが登録されているかが分かる。</p>
   <p><strong>④ 読める中身と、止められない30日</strong>（<code>AuthController::login</code>）</p>
-  <pre><code>$token = JWT::encode([
+  <pre><code class="language-php">$token = JWT::encode([
     'sub' =&gt; $user-&gt;id, 'email' =&gt; $user-&gt;email, 'nickname' =&gt; $user-&gt;profile?-&gt;nickname,
     'iat' =&gt; time(), 'exp' =&gt; time() + 60 * 60 * 24 * 30,
 ], config('app.key'), 'HS256');</code></pre>
   <p>JWT の中身は base64 なので、だれでも読める（署名は書き換えを見つけるためのもので、隠すものではない）。サーバーはどの JWT を出したかを覚えていないので、ログアウトしても30日のあいだ使える。鍵は <code>APP_KEY</code> の使い回し。</p>
   <p><strong>⑤ つかまえない例外</strong>（<code>AuthController::me</code>）</p>
-  <pre><code>$payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));
+  <pre><code class="language-php">$payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));
 return response()-&gt;json(User::find($payload-&gt;sub));</code></pre>
   <p>署名が違う・形がおかしい JWT は例外になり、<code>401</code> ではなく <code>500</code>。<code>sub</code> の会員がいなければ <code>null</code> で、<code>200 {}</code> になる。</p>
 
@@ -407,9 +574,13 @@ return response()-&gt;json(User::find($payload-&gt;sub));</code></pre>
 </main>
 <script type="module">
   import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
-  const dark = document.documentElement.dataset.theme === "dark" ||
-    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+  // page.js が選んだ表示（data-scheme）に合わせる。なければ端末の設定
+  const scheme = document.documentElement.dataset.scheme;
+  const dark = scheme ? scheme.startsWith("dark") : (document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches));
   mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/page.js"></script>
 </body>
 </html>

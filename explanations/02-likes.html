@@ -4,49 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>02 いいね</title>
-<style>
-  :root {
-    --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0;
-    --card: #f6f8fa; --accent: #0969da; --ok: #1a7f37; --warn: #9a6700;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d;
-      --card: #151b23; --accent: #4493f8; --ok: #3fb950; --warn: #d29922;
-    }
-  }
-  :root[data-theme="dark"] {
-    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d;
-    --card: #151b23; --accent: #4493f8; --ok: #3fb950; --warn: #d29922;
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--fg);
-    font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; line-height: 1.8; }
-  main { max-width: 920px; margin: 0 auto; padding: 24px 16px 80px; }
-  a { color: var(--accent); }
-  h1 { font-size: 1.6rem; margin: 8px 0 4px; }
-  h2 { font-size: 1.25rem; margin-top: 40px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
-  h3 { font-size: 1.05rem; margin-top: 24px; }
-  .meta { color: var(--muted); font-size: .9rem; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
-  .point { border-left: 4px solid var(--accent); }
-  .warn { border-left: 4px solid var(--warn); }
-  table { border-collapse: collapse; width: 100%; margin: 12px 0; display: block; overflow-x: auto; }
-  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
-  th { background: var(--card); white-space: nowrap; }
-  code { background: var(--card); padding: 1px 5px; border-radius: 4px; font-size: .9em; }
-  pre:not(.mermaid) { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; line-height: 1.5; }
-  pre.mermaid { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; text-align: center; }
-  details { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; margin: 8px 0; }
-  summary { cursor: pointer; font-weight: 600; }
-  .status { display: inline-block; padding: 0 8px; border-radius: 10px; font-size: .8rem; border: 1px solid var(--line); }
-</style>
+<link rel="stylesheet" href="assets/page.css">
 </head>
 <body>
 <main>
   <p class="meta"><a href="index.html">← 目次へ</a></p>
   <h1>02 いいね</h1>
-  <p class="meta">作成: 2026-11-12 ／ 状態: <span class="status">解説だけ</span> ／ Issue: <a href="https://github.com/masa-devx/matching-db-study/issues/24">#24</a> ／ 要件: <code>docs/requirements/likes.md</code>（FR-LIKE-001〜009・NFR-LIKE-001〜002）</p>
+  <p class="meta">作成: 2026-11-12 ／ 状態: <span class="status">レガシー版まで</span> ／ Issue: <a href="https://github.com/masa-devx/matching-db-study/issues/24">#24</a> ／ 要件: <code>docs/requirements/likes.md</code>（FR-LIKE-001〜009・NFR-LIKE-001〜002）</p>
 
   <div class="card point">
     <strong>この一歩でできるようになること</strong>
@@ -86,7 +50,7 @@
 erDiagram
   USERS ||--o{ LIKES : "送る（from_user_id）"
   USERS ||--o{ LIKES : "もらう（to_user_id）"
-  USERS ||--|| PROFILES : "1対1"
+  USERS ||--o{ PROFILES : "1対1のはず（レガシー版は何個でも入る）"
   USERS {
     bigint id PK
     varchar email UK
@@ -98,11 +62,13 @@ erDiagram
     timestamp created_at "いいねした日時"
   }
   PROFILES {
-    bigint user_id PK
+    bigint id PK
+    bigint user_id "外部キー・UNIQUE・インデックスなし"
     varchar nickname
+    varchar birthday "文字のまま"
   }
   </pre>
-  <p class="meta">改善版は <code>(from_user_id, to_user_id)</code> に UNIQUE、<code>from_user_id &lt;&gt; to_user_id</code> の CHECK を付ける。レガシー版も <code>id</code> と <code>(from_user_id, to_user_id)</code> の UNIQUE は持つ。外部キー・CHECK・<code>to_user_id</code> のインデックスはなく、トランザクションも考えない。</p>
+  <p class="meta"><code>PROFILES</code> は今のレガシー版の形（01）。改善版は <code>user_id</code> を主キーにして、1対1を DB で守る。<code>LIKES</code> の改善版は <code>(from_user_id, to_user_id)</code> に UNIQUE、<code>from_user_id &lt;&gt; to_user_id</code> の CHECK を付ける。レガシー版も <code>id</code> と <code>(from_user_id, to_user_id)</code> の UNIQUE は持つ。外部キー・CHECK・<code>to_user_id</code> のインデックスはなく、トランザクションも考えない。</p>
   <pre class="mermaid">
 sequenceDiagram
   participant R1 as リクエスト1
@@ -156,12 +122,12 @@ flowchart TD
     <tr><td>自分へのいいね</td><td>バリデーションで <code>422</code>＋DB の CHECK（<code>from_user_id &lt;&gt; to_user_id</code>）</td><td>不変条件 4。API を通らない書き込み（シード・手で入れる SQL）でも壊れてはいけない（database.md の判断）</td></tr>
     <tr><td>いない会員</td><td><code>404</code>＋外部キー</td><td>消えた会員を指す行を残さない（FR-LIKE-009 は <code>ON DELETE CASCADE</code>）</td></tr>
     <tr><td>送った一覧</td><td><code>with('toUser.profile')</code> でまとめて読む（3本）</td><td>NFR-LIKE-001。件数が増えても本数が増えない</td></tr>
-    <tr><td><code>to_user_id</code> のインデックス</td><td>足す</td><td>UNIQUE の <code>(from_user_id, to_user_id)</code> は、<code>from_user_id</code> から探すときにしか効かない。03 のマッチ（逆向きを探す）と 07 のもらった一覧で、<code>to_user_id</code> から探す</td></tr>
+    <tr><td><code>to_user_id</code> のインデックス</td><td>足す</td><td>UNIQUE の <code>(from_user_id, to_user_id)</code> は、ふつうは <code>from_user_id</code> から探すときに効く。PostgreSQL 18 の skip scan は、先頭の列の種類が少ないときだけ <code>to_user_id</code> でも使えるが、送る人が多いと使われない（9-2 で測った）。03 のマッチ（逆向きを探す）と 07 のもらった一覧で、<code>to_user_id</code> から探す</td></tr>
   </table>
 
   <h2>5. 見本：レガシー版と改善版</h2>
   <h3>レガシー版（Fat Controller・テストなし）</h3>
-  <pre><code>// いいねを送る
+  <pre><code class="language-php">// いいねを送る
 public function store(Request $request): JsonResponse
 {
     // 01b の me() から写した JWT の処理（ほかのコントローラにも同じものが増える）
@@ -195,7 +161,7 @@ public function index(Request $request): JsonResponse
     <li><strong>年齢</strong>：生年月日をそのまま返す（FR-LIKE-005 は年齢）</li>
   </ul></div>
   <h3>改善版</h3>
-  <pre><code>// マイグレーション：UNIQUE はレガシー版にある。先に自分あて・いない会員の行を直してから、残りを足す
+  <pre><code class="language-php">// マイグレーション：UNIQUE はレガシー版にある。先に自分あて・いない会員の行を直してから、残りを足す
 Schema::table('likes', function (Blueprint $table) {
     $table-&gt;foreign('from_user_id')-&gt;references('id')-&gt;on('users')-&gt;cascadeOnDelete();
     $table-&gt;foreign('to_user_id')-&gt;references('id')-&gt;on('users')-&gt;cascadeOnDelete();
@@ -217,6 +183,142 @@ $likes = $request-&gt;user()-&gt;sentLikes()-&gt;with('toUser.profile')-&gt;late
 return LikedUserResource::collection($likes);</code></pre>
   <p>大事なのは、二重を「アプリが調べる」のではなく「DB に断らせる」こと、そして DB が断ったことを <code>500</code> ではなく <code>409</code> として返すことです。<code>insertOrIgnore()</code> は UNIQUE に当たっても例外にせず 0 を返すので、トランザクションを止めずに <code>409</code> を返せます。外部キーや CHECK の違反は、無視されずにエラーになります（MySQL の <code>INSERT IGNORE</code> は、こうした違反も警告にして飲み込むので、同じではありません）。</p>
 
+  <h3>Eloquent が発行する SQL（レガシー版と改善版を並べる）</h3>
+  <p>同じ「いいね」でも、書き方で SQL の本数と中身が変わります。左がレガシー版、右が改善版です。SQL は Laravel に作らせて確かめたもので（改善版の書き込みは <code>DB::pretend()</code> で、流さずに SQL だけを取り出した）、例は会員 23 が会員 5・6 にいいねしている場合です。中身は <code>explanations/sql/02-likes.json</code> にあり、<code>explanations/tools/compare-block.py</code> で作り直せます。</p>
+  <p class="meta">ログ（<code>sql-*.log</code>）では、値は <code>?</code> になり、別に渡されます（プリペアドステートメント）。読みやすいよう、ここでは値を入れて、行を分けて書きました。</p>
+
+<!-- compare: sql/02-likes.json -->
+  <h4>いいねを送る（<code>POST /api/me/likes</code>）</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">1本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">// $payload-&gt;sub が 23、user_id が 5 のとき
+Like::create([
+    'from_user_id' =&gt; $payload-&gt;sub,
+    'to_user_id' =&gt; $request-&gt;input('user_id'),
+]);</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">insert into "likes"
+  ("from_user_id", "to_user_id",
+   "updated_at", "created_at")
+values (23, 5,
+  '2026-11-12 05:27:23',
+  '2026-11-12 05:27:23')
+returning "id";
+-- 2回目は UNIQUE の違反（23505）
+-- の例外 → 500</code></pre>
+      <ul><li>相手がいるかも、自分あてかも調べない。DB が止めるのは UNIQUE と NOT NULL だけ</li><li><code>create()</code> は Model の日時（<code>updated_at</code>・<code>created_at</code>）を自分で入れ、<code>returning "id"</code> で新しい ID を受け取る</li><li>自分（<code>sub</code>）が会員としているかも読まない。消えた会員の JWT でも送れるのは、このため</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版<span class="count">2本＋ガード1本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$me = $request-&gt;user();
+$target = User::findOrFail(
+    $request-&gt;integer('user_id')
+);
+$inserted = DB::table('likes')-&gt;insertOrIgnore([
+    'from_user_id' =&gt; $me-&gt;id,
+    'to_user_id' =&gt; $target-&gt;id,
+    'created_at' =&gt; now(),
+]);
+// $inserted が 0 なら 409</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① 相手がいるか（いなければ 404）
+select * from "users"
+where "users"."id" = 5 limit 1;
+
+-- ② 入れる。UNIQUE に当たれば何もしない
+insert into "likes"
+  ("from_user_id", "to_user_id", "created_at")
+values (23, 5, '2026-11-12 13:00:00')
+on conflict do nothing;
+-- 入った行が 1 なら 201、0 なら 409</code></pre>
+      <ul><li><code>findOrFail()</code> は <code>limit 1</code> で1行だけ読み、なければ例外（404）にする</li><li><code>insertOrIgnore()</code> は PostgreSQL では <code>on conflict do nothing</code>。例外にならないので、トランザクションも止まらない</li><li>これとは別に、ガードが「自分」を読む1本がある（形は 01b の改善版で決める）</li></ul>
+    </section>
+  </div>
+  <h4>送った相手の一覧（<code>GET /api/me/likes</code>）</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">1＋N 本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$likes = Like::where(
+        'from_user_id', $payload-&gt;sub
+    )
+    -&gt;orderBy('created_at', 'desc')
+    -&gt;get();
+foreach ($likes as $like) {
+    $profile = Profile::where(
+        'user_id', $like-&gt;to_user_id
+    )-&gt;first();
+}</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① 送ったいいね（1本）
+select * from "likes"
+where "from_user_id" = 23
+order by "created_at" desc;
+
+-- ② いいね1件ごとに1本（first()）
+select * from "profiles"
+where "user_id" = 6 limit 1;
+select * from "profiles"
+where "user_id" = 5 limit 1;
+-- いいねが100件なら、②が100本
+-- （測ったら合計101本）</code></pre>
+      <ul><li>ループの中で SQL を呼ぶと、件数の分だけ往復が増える（N+1）</li><li><code>profiles.user_id</code> にインデックスがないので、②の1本ずつが表を全部読む</li><li><code>first()</code> は <code>limit 1</code> を付けるだけで、並びを決めない（プロフィールが2つあると、どちらが出るか決まらない）</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版（with）<span class="count">3本＋ガード1本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$likes = $request-&gt;user()
+    -&gt;sentLikes()
+    -&gt;with('toUser.profile')
+    -&gt;latest()
+    -&gt;get();</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① 送ったいいね
+select * from "likes"
+where "likes"."from_user_id" = 23
+  and "likes"."from_user_id" is not null
+order by "created_at" desc;
+
+-- ② 相手の会員をまとめて（toUser）
+select * from "users"
+where "users"."id" in (5, 6);
+
+-- ③ プロフィールをまとめて（.profile）
+select * from "profiles"
+where "profiles"."user_id" in (5, 6);
+-- いいねが100件でも、3本のまま</code></pre>
+      <ul><li><code>with()</code> は、①の結果から相手の ID を集めて、<code>in (…)</code> で1本にまとめる（Eager Loading）</li><li><code>is not null</code> は、リレーション（<code>hasMany</code>）から呼ぶと Laravel が足す条件</li><li><code>latest()</code> は <code>order by "created_at" desc</code> の短い書き方</li><li><code>in (5, 6)</code> のように、整数の ID は <code>?</code> ではなく SQL に直接入る（Laravel が整数だと確かめてから入れる）</li><li>今のモデルでは名前が <code>likes()</code>。改善版で <code>sentLikes()</code> にする予定（SQL は同じ）</li></ul>
+    </section>
+    <section class="compare-col alt">
+      <p class="compare-title">ほかの書き方（JOIN）<span class="count">1本＋ガード1本</span></p>
+      <pre><code class="language-php" data-label="PHP（クエリビルダー）">DB::table('likes')
+    -&gt;join('users', 'users.id', '=', 'likes.to_user_id')
+    -&gt;leftJoin('profiles', 'profiles.user_id', '=', 'users.id')
+    -&gt;where('likes.from_user_id', $me-&gt;id)
+    -&gt;orderByDesc('likes.created_at')
+    -&gt;get(['users.id as user_id', 'profiles.nickname',
+           'profiles.birthday', 'profiles.image',
+           'likes.created_at as liked_at']);</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">select "users"."id" as "user_id", "profiles"."nickname",
+       "profiles"."birthday", "profiles"."image",
+       "likes"."created_at" as "liked_at"
+from "likes"
+inner join "users" on "users"."id" = "likes"."to_user_id"
+left join "profiles" on "profiles"."user_id" = "users"."id"
+where "likes"."from_user_id" = 23
+order by "likes"."created_at" desc;</code></pre>
+      <ul><li>1本で済む。<code>inner join users</code> なので、消えた会員のいいねは結果に出ない（FR-LIKE-009 の見え方）</li><li><code>left join profiles</code> なので、プロフィールのない相手も <code>null</code> で出る（<code>inner</code> にすると消える）</li><li>弱いところ：返るのは Model ではなくただの行。列を自分で選ぶ。プロフィールが2つある相手は、行が2つに増える</li></ul>
+    </section>
+  </div>
+  <!-- /compare -->
+
+  <table>
+    <tr><th>操作</th><th>レガシー版</th><th>改善版（with）</th><th>JOIN</th><th>違いのもと</th></tr>
+    <tr><td>送る</td><td>1本（何も確かめない）</td><td>2本＋ガード1本</td><td>―</td><td>相手がいるかを読む・<code>on conflict do nothing</code></td></tr>
+    <tr><td>一覧（いいね N 件）</td><td>1＋N 本</td><td>3本＋ガード1本</td><td>1本＋ガード1本</td><td>ループの中の <code>first()</code> → <code>with()</code> の <code>in (…)</code> → JOIN</td></tr>
+  </table>
+  <div class="card warn"><strong>要確認</strong>：NFR-LIKE-001 は「一覧の SQL は3本以内」。<code>with('toUser.profile')</code> は3本で、ガードが自分を読む1本を足すと4本になる。「3本」にガードを含めるか、<code>users</code> を飛ばして <code>profiles</code> だけを読むか（2本）、JOIN にするか（1本）は、改善する段階で決める。</div>
+
   <h2>6. どう確かめるか</h2>
   <table>
     <tr><th>段階</th><th>確かめること</th></tr>
@@ -237,7 +339,7 @@ return LikedUserResource::collection($likes);</code></pre>
     <li><strong>「あるか調べてから入れる」だけでは、同時のリクエストで破れる</strong>：アプリの確かめは、言葉を出すためのもの。守るのは UNIQUE</li>
     <li><strong>UNIQUE があっても、違反を扱わなければ <code>500</code></strong>：データは守れても、使う人には「サーバーのエラー」に見える。DB が断ったことを、API の言葉（<code>409</code>）に直すのはアプリの役目</li>
     <li><strong>PostgreSQL では、UNIQUE の違反でトランザクションが止まる</strong>：例外をつかまえても、同じトランザクションの次の SQL は <code>current transaction is aborted</code> で失敗する。<code>ON CONFLICT DO NOTHING</code> か、セーブポイントを使う</li>
-    <li><strong>複合のインデックスは、先頭の列から探すときに効く</strong>：<code>(from_user_id, to_user_id)</code> は「A が送った一覧」には効くが、「B がもらった一覧」（<code>to_user_id</code> だけ）には効かない</li>
+    <li><strong>複合のインデックスは、ふつうは先頭の列から探すときに効く</strong>：<code>(from_user_id, to_user_id)</code> は「A が送った一覧」には効くが、「B がもらった一覧」（<code>to_user_id</code> だけ）には、ふつうは効かない。PostgreSQL 18 の skip scan は、先頭の列の値ごとに索引を探し直すので、送る人が数人なら使われる。会員が増えて送る人が多くなると使われず、表を全部読む（9-2）</li>
     <li><strong>制約を足す前に、違反している行を直す</strong>：重なった行・自分あての行・いない会員を指す行が1つでもあると、<code>ALTER TABLE</code> が失敗する。先に読み取りの SQL で数える（database.md）</li>
     <li><strong>いいねには向きがある</strong>：A から B と、B から A は別の行。「お互い」（マッチ）は 03 で、向きが逆の行を探す</li>
     <li><strong><code>ON DELETE CASCADE</code> で消える範囲</strong>：会員を消すと、送ったいいねも、もらったいいねも消える。06 の退会で論理削除（行を残して印を付ける）にするなら、CASCADE は働かないので、別の扱いを考える</li>
@@ -262,9 +364,111 @@ return LikedUserResource::collection($likes);</code></pre>
   <h2>9. 実装の記録</h2>
   <p class="meta">レガシー版のあと（9-1・9-2）と、改善したあと（9-3・9-4）に、explain-change が書く。</p>
   <h3>9-1. レガシー版</h3>
-  <p>【まだ実装していない】</p>
+  <p class="meta">記録: 2026-11-12 ／ PR: <a href="https://github.com/masa-devx/matching-db-study/pull/27">#27</a>（表。#25）・<a href="https://github.com/masa-devx/matching-db-study/pull/28">#28</a>（送る・一覧。#26）／ 設計: <code>docs/api/02-likes.md</code></p>
+  <h4>書いたもの</h4>
+  <table>
+    <tr><th>ファイル</th><th>役割</th></tr>
+    <tr><td><code>backend/database/migrations/2026_11_12_033712_create_likes_table.php</code></td><td><code>likes</code>（<code>id</code>・<code>from_user_id</code>・<code>to_user_id</code>・日時）と <code>(from_user_id, to_user_id)</code> の UNIQUE。外部キー・CHECK・<code>to_user_id</code> のインデックスはなし</td></tr>
+    <tr><td><code>backend/app/Models/Like.php</code></td><td><code>fromUser()</code>・<code>toUser()</code>（どちらも <code>BelongsTo</code>）</td></tr>
+    <tr><td><code>backend/app/Models/User.php</code></td><td><code>likes()</code>：送ったいいね（<code>HasMany</code>、<code>from_user_id</code>）</td></tr>
+    <tr><td><code>backend/app/Http/Controllers/LikeController.php</code></td><td><code>store()</code>：いいねを送る（<code>POST /api/me/likes</code>）。<code>index()</code>：送った相手の一覧（<code>GET /api/me/likes</code>）</td></tr>
+    <tr><td><code>backend/routes/api.php</code></td><td>2つのルート（どちらも、だれでも呼べる。だれかはコントローラの中で JWT から決める）</td></tr>
+  </table>
+
+  <h4>大事な行の読み方</h4>
+  <p><strong>① 組の UNIQUE だけを持つ表</strong>（マイグレーション）</p>
+  <pre><code class="language-php">$table-&gt;unsignedBigInteger('from_user_id');   // 送った会員。外部キーなし
+$table-&gt;unsignedBigInteger('to_user_id');     // もらった会員。外部キーもインデックスもなし
+$table-&gt;unique(['from_user_id', 'to_user_id']);</code></pre>
+  <p>PostgreSQL には符号なしの整数がないので、<code>unsignedBigInteger</code> はただの <code>bigint</code> になり、負の数も入る。UNIQUE の裏には <code>(from_user_id, to_user_id)</code> の順の B-tree インデックスができる。この順番が、9-2 の実行計画の違いになる。</p>
+  <p><strong>② 写した JWT の処理</strong>（<code>LikeController::store</code>・<code>index</code>）</p>
+  <pre><code class="language-php">$token = $request-&gt;bearerToken();
+if (! $token) {
+    return response()-&gt;json(['message' =&gt; 'ログインしてください'], 401);
+}
+$payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));</code></pre>
+  <p>01b の <code>me()</code> と同じ6行が、<code>store()</code> と <code>index()</code> にもう一度ずつある（これで3か所）。壊れた JWT は例外のまま <code>500</code>。<code>sub</code> の会員がいるかも、確認済みかも見ない。</p>
+  <p><strong>③ 確かめずに入れる</strong>（<code>LikeController::store</code>）</p>
+  <pre><code class="language-php">$like = Like::create([
+    'from_user_id' =&gt; $payload-&gt;sub,
+    'to_user_id' =&gt; $request-&gt;input('user_id'),
+]);
+return response()-&gt;json($like, 201);</code></pre>
+  <p>自分でも、いない会員でも、そのまま入る（DB が止めるのは UNIQUE と NOT NULL だけ）。2回目は UNIQUE の違反（<code>23505</code>）の例外をつかまえないので <code>500</code>。応答は入れた Model をそのまま返すので、入力の形（<code>"5"</code> なら文字）がそのまま出る。</p>
+  <p><strong>④ ループの中の SQL</strong>（<code>LikeController::index</code>）</p>
+  <pre><code class="language-php">$likes = Like::where('from_user_id', $payload-&gt;sub)-&gt;orderBy('created_at', 'desc')-&gt;get();
+foreach ($likes as $like) {
+    $profile = Profile::where('user_id', $like-&gt;to_user_id)-&gt;first();   // 1件ごとに1本
+    ...
+}</code></pre>
+  <p>いいねが N 件なら、SQL は 1＋N 本。<code>profiles.user_id</code> にはインデックスがないので、その1本ごとに <code>profiles</code> を全部読む。<code>first()</code> に並びがないので、プロフィールが2つある相手はどちらが出るか決まらない。並びは <code>created_at</code> だけなので、同じ秒のいいねの順も決まらない。</p>
+
+  <h4>実際に流れる SQL</h4>
+  <table>
+    <tr><th>API</th><th>SQL（ログから）</th><th>本数</th></tr>
+    <tr><td><code>POST /api/me/likes</code></td><td><code>insert into "likes" ("from_user_id", "to_user_id", "updated_at", "created_at") values (?, ?, ?, ?) returning "id"</code></td><td>1本（トランザクションなし）</td></tr>
+    <tr><td><code>GET /api/me/likes</code></td><td><code>select * from "likes" where "from_user_id" = ? order by "created_at" desc</code> のあと、<code>select * from "profiles" where "user_id" = ? limit 1</code> をいいねの数だけ</td><td>1＋N 本</td></tr>
+  </table>
+
+  <h4>解説から変えたこと</h4>
+  <table>
+    <tr><th>解説のとき</th><th>実装</th><th>理由</th></tr>
+    <tr><td>トークンがないと <code>500</code>（<code>JWT::decode</code> に <code>null</code> を渡す）</td><td><code>401</code>「ログインしてください」</td><td>01b の <code>me()</code> の実装を、そのまま写したため（<code>me()</code> はトークンがないときだけ <code>401</code> を返す）</td></tr>
+    <tr><td>一覧の1件は ID・ニックネーム・生年月日・日時</td><td>画像（<code>image</code>）も返す</td><td>FR-LIKE-005 の項目に合わせた（年齢ではなく生年月日のまま）</td></tr>
+    <tr><td>複合のインデックスは、先頭の列から探すときにしか効かない</td><td>PostgreSQL 18 では、先頭の列の種類が少なければ <code>to_user_id</code> でも使われる</td><td>9-2 で実行計画を見て分かった。4章と7章の書き方を直した</td></tr>
+  </table>
   <h3>9-2. 測った問題と数字</h3>
-  <p>【まだ実装していない】</p>
+  <h4>送る（curl）</h4>
+  <table>
+    <tr><th>確かめたこと</th><th>結果</th><th>要件</th></tr>
+    <tr><td>送る・同じ相手に2回目</td><td><code>201</code>・<strong><code>500</code></strong>（UNIQUE の違反。行は1つのまま）</td><td>FR-LIKE-001・003</td></tr>
+    <tr><td>同じいいねを10本同時に</td><td><code>201</code> が1つ・<code>500</code> が9つ。行は1つ（UNIQUE が守った）</td><td>FR-LIKE-003</td></tr>
+    <tr><td>自分あて・いない会員（<code>999999</code>）</td><td>どちらも <code>201</code> で入った</td><td>FR-LIKE-002・004</td></tr>
+    <tr><td><code>user_id</code> なし・<code>"abc"</code></td><td><code>500</code>（NOT NULL・整数でない）</td><td>FR-LIKE-001</td></tr>
+    <tr><td>確認していない会員</td><td>送れた。一覧も見られた</td><td>FR-LIKE-008</td></tr>
+    <tr><td>トークンなし・壊れた JWT</td><td><code>401</code>・<code>500</code></td><td>FR-LIKE-007</td></tr>
+    <tr><td>断られた送信のあと</td><td>いいねの ID が飛んだ（<code>500</code> の分も連番が進む）</td><td>―</td></tr>
+  </table>
+  <h4>一覧（curl と SQL のログ）</h4>
+  <table>
+    <tr><th>確かめたこと</th><th>結果</th><th>要件</th></tr>
+    <tr><td>いいねを 1・10・100件にして一覧</td><td>SQL が <strong>2・11・101本</strong>。かかった時間は 4.7ms〜22ms</td><td>NFR-LIKE-001</td></tr>
+    <tr><td>一覧の1件</td><td>年齢ではなく生年月日が返った</td><td>FR-LIKE-005</td></tr>
+    <tr><td>同じ秒に送ったいいね</td><td>並びが決まらない</td><td>FR-LIKE-005</td></tr>
+    <tr><td>相手の会員とプロフィールを DB で消す</td><td>一覧に <code>nickname: null</code> の行が残った（正しくは、一覧に出ない）</td><td>FR-LIKE-009</td></tr>
+  </table>
+  <h4>実行計画（いいね1万件。トランザクションの中で入れて、取り消した）</h4>
+  <table>
+    <tr><th>SQL</th><th>入れ方</th><th>実行計画</th><th>読んだ量・時間</th></tr>
+    <tr><td>「A は B にいいねしたか」<code>from_user_id = ? and to_user_id = ?</code></td><td>送る人 1000人・1人10件</td><td><code>Index Scan</code>（UNIQUE のインデックス）</td><td>3ページ・0.008ms</td></tr>
+    <tr><td>送った一覧 <code>from_user_id = ? order by created_at desc</code></td><td>同じ</td><td><code>Bitmap Index Scan</code> → <code>Bitmap Heap Scan</code> → <code>Sort</code></td><td>10行・15ページ・0.029ms</td></tr>
+    <tr><td>「B はだれからもらったか」<code>to_user_id = ?</code></td><td>同じ（もらう人は1人1件）</td><td><strong><code>Seq Scan</code></strong></td><td>1行のために <strong>10002行を捨てた</strong>・84ページ・0.287ms</td></tr>
+    <tr><td>同じ</td><td>送る人 5人・1人2000件</td><td><code>Bitmap Index Scan</code>（skip scan。<code>Index Searches: 6</code>）</td><td>5行・20ページ・0.033ms</td></tr>
+    <tr><td>一覧の中の1本 <code>profiles where user_id = ? limit 1</code></td><td>プロフィール 28件</td><td><code>Seq Scan on profiles</code></td><td>インデックスがないので、会員が増えるほど1本ずつが重くなる</td></tr>
+  </table>
+  <p>PostgreSQL 18 の skip scan は、先頭の列（<code>from_user_id</code>）の値ごとに索引を探し直す。送る人が5人なら6回で済むので使われたが、1000人だと探し直しが多すぎて、表を全部読むほうが選ばれた。会員が増えるほど送る人も増えるので、03・07 には <code>to_user_id</code> のインデックスが要る。</p>
+  <h4>コードを読んで分かったこと（試していない。改善する段階のテストで確かめる）</h4>
+  <ul>
+    <li>相手にプロフィールが2つあると、一覧に出るプロフィールが決まらない（<code>first()</code> に並びがない。01 の「1人に2つ」が残っている）</li>
+    <li>送る側の会員を消したあとも、その JWT（30日）で送れる（<code>sub</code> の会員がいるかを確かめず、外部キーもない）</li>
+    <li>会員だけを消したときは、プロフィールが残り、一覧にニックネームも出る</li>
+    <li><code>"5"</code>（文字）で送ると、応答の <code>to_user_id</code> も <code>"5"</code> のまま</li>
+    <li><code>user_id</code> をクエリ文字列（<code>?user_id=5</code>）でも受け付ける（<code>input()</code>）</li>
+  </ul>
+  <h4>数字</h4>
+  <table>
+    <tr><th>測ったもの</th><th>レガシー版</th></tr>
+    <tr><td>守れている要件</td><td><strong>4 / 11</strong>（FR-LIKE-001・006・007・NFR-LIKE-002）。007 はトークンがないときだけ（壊れた JWT は <code>500</code>）。NFR-LIKE-002 は UNIQUE のインデックスで守れている。003 は行の数は守れているが、<code>409</code> ではなく <code>500</code>。005 は年齢でなく生年月日</td></tr>
+    <tr><td>10本同時の応答</td><td><code>201</code> が1つ・<code>500</code> が9つ</td></tr>
+    <tr><td>一覧の SQL の本数</td><td>1＋N（100件で101本）</td></tr>
+    <tr><td><code>to_user_id</code> から探すとき（1万件・送る人 1000人）</td><td><code>Seq Scan</code>・10002行を捨てた・0.287ms</td></tr>
+  </table>
+  <h4>気になる点（直していない）</h4>
+  <ul>
+    <li>JWT を読む6行が3か所になった。改善版でガードに置き換えるとき、写したすべての場所を消す</li>
+    <li><code>profiles.user_id</code> にインデックスも UNIQUE もない。02 の一覧の N+1 を <code>with()</code> で直しても、<code>where user_id in (...)</code> は表を全部読む（01 の改善と一緒に直す）</li>
+    <li>一覧には件数の上限がない（04 でページ送り）</li>
+  </ul>
   <h3>9-3. 足したテスト</h3>
   <p>【まだ実装していない】</p>
   <h3>9-4. 改善版と、前と後の数字</h3>
@@ -272,9 +476,13 @@ return LikedUserResource::collection($likes);</code></pre>
 </main>
 <script type="module">
   import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
-  const dark = document.documentElement.dataset.theme === "dark" ||
-    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+  // page.js が選んだ表示（data-scheme）に合わせる。なければ端末の設定
+  const scheme = document.documentElement.dataset.scheme;
+  const dark = scheme ? scheme.startsWith("dark") : (document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches));
   mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/page.js"></script>
 </body>
 </html>

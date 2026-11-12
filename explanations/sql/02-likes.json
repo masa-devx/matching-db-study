@@ -1,0 +1,77 @@
+{
+  "operations": [
+    {
+      "title": "いいねを送る（<code>POST /api/me/likes</code>）",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "1本",
+          "code": "// $payload->sub が 23、user_id が 5 のとき\nLike::create([\n    'from_user_id' => $payload->sub,\n    'to_user_id' => $request->input('user_id'),\n]);",
+          "sql": "insert into \"likes\"\n  (\"from_user_id\", \"to_user_id\",\n   \"updated_at\", \"created_at\")\nvalues (23, 5,\n  '2026-11-12 05:27:23',\n  '2026-11-12 05:27:23')\nreturning \"id\";\n-- 2回目は UNIQUE の違反（23505）\n-- の例外 → 500",
+          "notes": [
+            "相手がいるかも、自分あてかも調べない。DB が止めるのは UNIQUE と NOT NULL だけ",
+            "<code>create()</code> は Model の日時（<code>updated_at</code>・<code>created_at</code>）を自分で入れ、<code>returning \"id\"</code> で新しい ID を受け取る",
+            "自分（<code>sub</code>）が会員としているかも読まない。消えた会員の JWT でも送れるのは、このため"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版",
+          "count": "2本＋ガード1本",
+          "code": "$me = $request->user();\n$target = User::findOrFail(\n    $request->integer('user_id')\n);\n$inserted = DB::table('likes')->insertOrIgnore([\n    'from_user_id' => $me->id,\n    'to_user_id' => $target->id,\n    'created_at' => now(),\n]);\n// $inserted が 0 なら 409",
+          "sql": "-- ① 相手がいるか（いなければ 404）\nselect * from \"users\"\nwhere \"users\".\"id\" = 5 limit 1;\n\n-- ② 入れる。UNIQUE に当たれば何もしない\ninsert into \"likes\"\n  (\"from_user_id\", \"to_user_id\", \"created_at\")\nvalues (23, 5, '2026-11-12 13:00:00')\non conflict do nothing;\n-- 入った行が 1 なら 201、0 なら 409",
+          "notes": [
+            "<code>findOrFail()</code> は <code>limit 1</code> で1行だけ読み、なければ例外（404）にする",
+            "<code>insertOrIgnore()</code> は PostgreSQL では <code>on conflict do nothing</code>。例外にならないので、トランザクションも止まらない",
+            "これとは別に、ガードが「自分」を読む1本がある（形は 01b の改善版で決める）"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "送った相手の一覧（<code>GET /api/me/likes</code>）",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "1＋N 本",
+          "code": "$likes = Like::where(\n        'from_user_id', $payload->sub\n    )\n    ->orderBy('created_at', 'desc')\n    ->get();\nforeach ($likes as $like) {\n    $profile = Profile::where(\n        'user_id', $like->to_user_id\n    )->first();\n}",
+          "sql": "-- ① 送ったいいね（1本）\nselect * from \"likes\"\nwhere \"from_user_id\" = 23\norder by \"created_at\" desc;\n\n-- ② いいね1件ごとに1本（first()）\nselect * from \"profiles\"\nwhere \"user_id\" = 6 limit 1;\nselect * from \"profiles\"\nwhere \"user_id\" = 5 limit 1;\n-- いいねが100件なら、②が100本\n-- （測ったら合計101本）",
+          "notes": [
+            "ループの中で SQL を呼ぶと、件数の分だけ往復が増える（N+1）",
+            "<code>profiles.user_id</code> にインデックスがないので、②の1本ずつが表を全部読む",
+            "<code>first()</code> は <code>limit 1</code> を付けるだけで、並びを決めない（プロフィールが2つあると、どちらが出るか決まらない）"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版（with）",
+          "count": "3本＋ガード1本",
+          "code": "$likes = $request->user()\n    ->sentLikes()\n    ->with('toUser.profile')\n    ->latest()\n    ->get();",
+          "sql": "-- ① 送ったいいね\nselect * from \"likes\"\nwhere \"likes\".\"from_user_id\" = 23\n  and \"likes\".\"from_user_id\" is not null\norder by \"created_at\" desc;\n\n-- ② 相手の会員をまとめて（toUser）\nselect * from \"users\"\nwhere \"users\".\"id\" in (5, 6);\n\n-- ③ プロフィールをまとめて（.profile）\nselect * from \"profiles\"\nwhere \"profiles\".\"user_id\" in (5, 6);\n-- いいねが100件でも、3本のまま",
+          "notes": [
+            "<code>with()</code> は、①の結果から相手の ID を集めて、<code>in (…)</code> で1本にまとめる（Eager Loading）",
+            "<code>is not null</code> は、リレーション（<code>hasMany</code>）から呼ぶと Laravel が足す条件",
+            "<code>latest()</code> は <code>order by \"created_at\" desc</code> の短い書き方",
+            "<code>in (5, 6)</code> のように、整数の ID は <code>?</code> ではなく SQL に直接入る（Laravel が整数だと確かめてから入れる）",
+            "今のモデルでは名前が <code>likes()</code>。改善版で <code>sentLikes()</code> にする予定（SQL は同じ）"
+          ]
+        },
+        {
+          "kind": "alt",
+          "title": "ほかの書き方（JOIN）",
+          "count": "1本＋ガード1本",
+          "code_label": "PHP（クエリビルダー）",
+          "code": "DB::table('likes')\n    ->join('users', 'users.id', '=', 'likes.to_user_id')\n    ->leftJoin('profiles', 'profiles.user_id', '=', 'users.id')\n    ->where('likes.from_user_id', $me->id)\n    ->orderByDesc('likes.created_at')\n    ->get(['users.id as user_id', 'profiles.nickname',\n           'profiles.birthday', 'profiles.image',\n           'likes.created_at as liked_at']);",
+          "sql": "select \"users\".\"id\" as \"user_id\", \"profiles\".\"nickname\",\n       \"profiles\".\"birthday\", \"profiles\".\"image\",\n       \"likes\".\"created_at\" as \"liked_at\"\nfrom \"likes\"\ninner join \"users\" on \"users\".\"id\" = \"likes\".\"to_user_id\"\nleft join \"profiles\" on \"profiles\".\"user_id\" = \"users\".\"id\"\nwhere \"likes\".\"from_user_id\" = 23\norder by \"likes\".\"created_at\" desc;",
+          "notes": [
+            "1本で済む。<code>inner join users</code> なので、消えた会員のいいねは結果に出ない（FR-LIKE-009 の見え方）",
+            "<code>left join profiles</code> なので、プロフィールのない相手も <code>null</code> で出る（<code>inner</code> にすると消える）",
+            "弱いところ：返るのは Model ではなくただの行。列を自分で選ぶ。プロフィールが2つある相手は、行が2つに増える"
+          ]
+        }
+      ]
+    }
+  ]
+}

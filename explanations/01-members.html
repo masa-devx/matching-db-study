@@ -4,43 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>01 会員とプロフィール</title>
-<style>
-  :root {
-    --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0;
-    --card: #f6f8fa; --accent: #0969da; --ok: #1a7f37; --warn: #9a6700;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d;
-      --card: #151b23; --accent: #4493f8; --ok: #3fb950; --warn: #d29922;
-    }
-  }
-  :root[data-theme="dark"] {
-    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d;
-    --card: #151b23; --accent: #4493f8; --ok: #3fb950; --warn: #d29922;
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--fg);
-    font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; line-height: 1.8; }
-  main { max-width: 920px; margin: 0 auto; padding: 24px 16px 80px; }
-  a { color: var(--accent); }
-  h1 { font-size: 1.6rem; margin: 8px 0 4px; }
-  h2 { font-size: 1.25rem; margin-top: 40px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
-  h3 { font-size: 1.05rem; margin-top: 24px; }
-  .meta { color: var(--muted); font-size: .9rem; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
-  .point { border-left: 4px solid var(--accent); }
-  .warn { border-left: 4px solid var(--warn); }
-  table { border-collapse: collapse; width: 100%; margin: 12px 0; display: block; overflow-x: auto; }
-  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
-  th { background: var(--card); white-space: nowrap; }
-  code { background: var(--card); padding: 1px 5px; border-radius: 4px; font-size: .9em; }
-  pre:not(.mermaid) { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; line-height: 1.5; }
-  pre.mermaid { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; text-align: center; }
-  details { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; margin: 8px 0; }
-  summary { cursor: pointer; font-weight: 600; }
-  .status { display: inline-block; padding: 0 8px; border-radius: 10px; font-size: .8rem; border: 1px solid var(--line); }
-</style>
+<link rel="stylesheet" href="assets/page.css">
 </head>
 <body>
 <main>
@@ -188,7 +152,7 @@ flowchart LR
 
   <h2>5. 見本：レガシー版と改善版</h2>
   <h3>レガシー版（Fat Controller）</h3>
-  <pre><code>// マイグレーション：profiles を作る（外部キーも UNIQUE もない・文字の列・制約なし）
+  <pre><code class="language-php">// マイグレーション：profiles を作る（外部キーも UNIQUE もない・文字の列・制約なし）
 Schema::create('profiles', function (Blueprint $table) {
     $table->id();
     $table->unsignedBigInteger('user_id');
@@ -221,7 +185,7 @@ public function update(Request $request, int $id): Profile
     <li><strong>年齢が出せない</strong>：生年月日が文字なので、年齢で絞る・並べる SQL が書けない</li>
   </ul></div>
   <h3>改善版</h3>
-  <pre><code>// マイグレーション：profiles を分け、型と制約を DB に持たせる
+  <pre><code class="language-php">// マイグレーション：profiles を分け、型と制約を DB に持たせる
 Schema::create('profiles', function (Blueprint $table) {
     $table->foreignId('user_id')->primary()->constrained()->cascadeOnDelete();
     $table->smallInteger('gender_code');
@@ -245,6 +209,95 @@ $data = $request->validate([
 $user->profile()->update($data);   // 性別・生年月日は受け取らない</code></pre>
   <p>読み方：<code>foreignId('user_id')->primary()</code> が「主キー兼外部キー」で、1対1 を表の作りで守る。<code>foreign('prefecture_code')->references('code')->on('prefectures')</code> が都道府県の表への外部キー（列は表の <code>code</code> と同じ <code>smallint</code> にそろえる）。Laravel のマイグレーションには CHECK を書く道具がないので、表示名の長さは <code>DB::statement</code> で SQL を書く。<code>validate()</code> で通った項目だけを保存するので、送られてきたほかの列（性別など）は無視される。改善版では、応答は年齢を出す形（API Resource）にして、生年月日は返さない。</p>
   <p>直すときは、レガシー版の表に入ってしまったおかしな値を、先に見つけて直してから制約を付けます（database.md の「違反する行がないか、先に読み取りの SQL で確かめる」）。データを消さずに、表を足す → 写す → 古い列を消す、の順に進めます。</p>
+
+  <h3>Eloquent が発行する SQL（レガシー版と改善版を並べる）</h3>
+  <p>左がレガシー版、右が改善版です。SQL は Laravel に作らせて確かめたもので（書き込みと、まだない表は <code>DB::pretend()</code> で、流さずに SQL だけを取り出した）、例は会員 23 の場合です。中身は <code>explanations/sql/01-members.json</code> にあり、<code>explanations/tools/compare-block.py</code> で作り直せます。</p>
+  <p class="meta">ログ（<code>sql-*.log</code>）では、値は <code>?</code> になり、別に渡されます（プリペアドステートメント）。読みやすいよう、ここでは値を入れて、行を分けて書きました。長い値（ハッシュなど）は <code>…</code> で略しています。</p>
+  <!-- compare: sql/01-members.json -->
+  <h4>プロフィールを見る（<code>GET /api/users/{id}/profile</code>）</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">2本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$user = User::findOrFail($id);
+$user-&gt;load('profile');
+return $user;   // 会員の列も全部返る</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① 会員を読む
+select * from "users"
+where "users"."id" = 23 limit 1;
+
+-- ② プロフィールを読む（load() は in で読む）
+select * from "profiles"
+where "profiles"."user_id" in (23);</code></pre>
+      <ul><li><code>load()</code> は、1件でも <code>in (…)</code> の形で読む（Eager Loading と同じ仕組み）</li><li>応答は Model をそのまま JSON にするので、<code>select *</code> で読んだ列（メールアドレス・確認用の文字・生年月日）がそのまま出る</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版<span class="count">2本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$user = User::with('profile')-&gt;findOrFail($id);
+return new ProfileResource($user-&gt;profile);
+// Resource が、返す項目（表示名・年齢など）を決める</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① 会員を読む
+select * from "users"
+where "users"."id" = 23 limit 1;
+
+-- ② プロフィールを読む（with() も in で読む）
+select * from "profiles"
+where "profiles"."user_id" in (23);</code></pre>
+      <ul><li>SQL はレガシー版と同じ2本。違いは「何を返すか」で、Resource が見せてよい項目だけを選ぶ</li><li>プロフィールの主キーを <code>user_id</code> にすると、<code>Profile::findOrFail($id)</code> の1本（<code>select * from "profiles" where "profiles"."user_id" = 23 limit 1</code>）にもできる（会員の列が要らないとき）</li></ul>
+    </section>
+  </div>
+  <h4>プロフィールを編集する（<code>PUT /api/users/{id}/profile</code>）</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">2本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$profile = Profile::where('user_id', $id)-&gt;first();
+$profile-&gt;fill($request-&gt;all());   // 送られた値を全部
+$profile-&gt;save();</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① プロフィールを探す
+select * from "profiles"
+where "user_id" = 23 limit 1;
+
+-- ② 変わった列だけを書き換える
+update "profiles"
+set "nickname" = 'さくら2', "height" = 'abc',
+    "updated_at" = '2026-11-12 05:32:40'
+where "id" = 22;</code></pre>
+      <ul><li><code>save()</code> は、読んだときから変わった列だけを <code>set</code> に入れる。<code>user_id</code> や <code>gender</code> も、送られれば入る</li><li><code>height</code> が文字の列なので、<code>'abc'</code> もそのまま入る</li><li>②の <code>where</code> は主キーの <code>id</code>。①で見つからなければ <code>null</code> のまま②に進み、例外（500）になる</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版<span class="count">2本＋ガード1本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$data = $request-&gt;validate([
+    'nickname' =&gt; ['required', 'string',
+                   'min:1', 'max:20'],
+    'prefecture_code' =&gt; ['nullable', 'integer',
+                          'exists:prefectures,code'],
+    'height_cm' =&gt; ['nullable', 'integer',
+                    'between:120,220'],
+]);
+$request-&gt;user()-&gt;profile()-&gt;update($data);</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① 都道府県があるか（exists のルール）
+select count(*) as "aggregate"
+from "prefectures" where "code" = 13;
+
+-- ② 決めた列だけを書き換える
+update "profiles"
+set "nickname" = 'さくら', "prefecture_code" = 13,
+    "height_cm" = 160,
+    "updated_at" = '2026-11-12 05:32:40'
+where "profiles"."user_id" = 23
+  and "profiles"."user_id" is not null;</code></pre>
+      <ul><li><code>validate()</code> の <code>exists</code> は、<code>count(*)</code> の SQL を1本流す（都道府県の外部キーもあるので、DB でも守られる）</li><li><code>profile()-&gt;update()</code> は、プロフィールを読まずに <code>update</code> を1本だけ流す（Model を作らないので、Model のイベントは動かない）</li><li>これとは別に、ガードが「自分」を読む1本がある（形は 01b の改善版で決める）</li></ul>
+    </section>
+  </div>
+  <!-- /compare -->
+  <table>
+    <tr><th>操作</th><th>レガシー版</th><th>改善版</th><th>違いのもと</th></tr>
+    <tr><td>見る</td><td>2本</td><td>2本（主キーを <code>user_id</code> にすれば1本）</td><td>SQL は同じ。返す項目を Resource で選ぶ</td></tr>
+    <tr><td>編集する</td><td>2本（読む・書く）</td><td>2本＋ガード1本（都道府県を確かめる・書く）</td><td>読まずに <code>update</code>。決めた列だけを入れる</td></tr>
+  </table>
 
   <h2>6. どう確かめるか</h2>
   <table>
@@ -309,16 +362,16 @@ $user->profile()->update($data);   // 性別・生年月日は受け取らない
 
   <h4>大事な行の読み方</h4>
   <p><strong>① 作る → 写す → 消す</strong>（作り直しのマイグレーション）</p>
-  <pre><code>Schema::create('profiles', ...);                    // ① 作る
+  <pre><code class="language-php">Schema::create('profiles', ...);                    // ① 作る
 DB::statement('INSERT INTO profiles (user_id, nickname, ...)
                SELECT id, name, ... FROM users');  // ② 写す
 Schema::table('users', fn ($t) =&gt; $t-&gt;dropColumn([...]));   // ③ 消す</code></pre>
   <p>先に消すと、データがなくなる。写したあとに消すことで、20人分のプロフィールを失わずに表を分けた。<code>down()</code>（元に戻す処理）も書いた。</p>
   <p><strong>② 外部キーも UNIQUE もない <code>user_id</code></strong></p>
-  <pre><code>$table-&gt;unsignedBigInteger('user_id');   // ただの整数の列</code></pre>
+  <pre><code class="language-php">$table-&gt;unsignedBigInteger('user_id');   // ただの整数の列</code></pre>
   <p>DB は、<code>users</code> とつながっていることを知らない。だから、1人に2つ・いない会員を指す・会員を消しても残る、が起きる。</p>
   <p><strong>③ <code>user_id</code> で探して、全部入れる</strong>（<code>ProfileController::update</code>）</p>
-  <pre><code>$profile = Profile::where('user_id', $id)-&gt;first();   // なければ null
+  <pre><code class="language-php">$profile = Profile::where('user_id', $id)-&gt;first();   // なければ null
 $profile-&gt;fill($request-&gt;all());                     // user_id も入る
 $profile-&gt;save();</code></pre>
   <p>プロフィールがなければ <code>null</code> に書こうとして <code>500</code>。<code>user_id</code> も一括代入で入るので、プロフィールを別の会員に移せる。</p>
@@ -390,9 +443,13 @@ $profile-&gt;save();</code></pre>
 </main>
 <script type="module">
   import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
-  const dark = document.documentElement.dataset.theme === "dark" ||
-    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+  // page.js が選んだ表示（data-scheme）に合わせる。なければ端末の設定
+  const scheme = document.documentElement.dataset.scheme;
+  const dark = scheme ? scheme.startsWith("dark") : (document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches));
   mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/page.js"></script>
 </body>
 </html>

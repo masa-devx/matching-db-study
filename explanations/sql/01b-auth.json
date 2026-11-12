@@ -1,0 +1,105 @@
+{
+  "operations": [
+    {
+      "title": "登録する（<code>POST /api/users</code>）",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "2本（トランザクションなし）",
+          "code": "$user = User::create(\n    $request->only(['email', 'password'])\n    + ['verification_token' => Str::random(40)]\n);\nProfile::create(\n    $request->only(['nickname', 'gender', 'birthday'])\n    + ['user_id' => $user->id]\n);",
+          "sql": "-- ① 会員（password は casts の\n--    hashed で bcrypt にする）\ninsert into \"users\"\n  (\"email\", \"password\", \"verification_token\",\n   \"updated_at\", \"created_at\")\nvalues ('a@example.test',\n  '$2y$12$G5IV…', 'x8Kq…',\n  '2026-11-12 05:32:40', '2026-11-12 05:32:40')\nreturning \"id\";\n\n-- ② プロフィール（①の id を使う）\ninsert into \"profiles\"\n  (\"nickname\", \"gender\", \"birthday\", \"user_id\",\n   \"updated_at\", \"created_at\")\nvalues ('あ', 'female', '2000-01-01', 99,\n  '2026-11-12 05:32:40', '2026-11-12 05:32:40')\nreturning \"id\";\n-- ②やメールで失敗しても、①は残る",
+          "notes": [
+            "2本は別々に確定する（自動コミット）。②やそのあとのメールで失敗すると、会員だけが残る",
+            "メールアドレスが空いているかを調べる SQL はない。重なれば UNIQUE の違反で 500"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版",
+          "count": "4本＋トランザクション",
+          "code": "$data = $request->validate([\n    'email' => ['required', 'email',\n                'unique:users,email'],\n    'gender_code' => ['required',\n                      'exists:genders,code'],\n    // ほかの項目は省略\n]);\nDB::transaction(function () use ($data) {\n    $user = User::create([...]);\n    $user->profile()->create([...]);\n});",
+          "sql": "-- ① メールアドレスが空いているか（unique）\nselect count(*) as \"aggregate\"\nfrom \"users\" where \"email\" = 'a@example.test';\n\n-- ② 性別があるか（exists）\nselect count(*) as \"aggregate\"\nfrom \"genders\" where \"code\" = 2;\n\nbegin;  -- DB::transaction()（ログには出ない）\n\n-- ③ 会員\ninsert into \"users\"\n  (\"email\", \"password\",\n   \"updated_at\", \"created_at\")\nvalues ('a@example.test', '$2y$12$Ckrg…',\n  '2026-11-12 05:32:40', '2026-11-12 05:32:40')\nreturning \"id\";\n\n-- ④ プロフィール（主キーが user_id\n--    なので returning がない）\ninsert into \"profiles\"\n  (\"user_id\", \"nickname\", \"gender_code\",\n   \"birthdate\", \"updated_at\", \"created_at\")\nvalues (99, 'あ', 2, '2000-01-01',\n  '2026-11-12 05:32:40', '2026-11-12 05:32:40');\n\ncommit;  -- ④で失敗すれば rollback で③も消える",
+          "notes": [
+            "①②は、きれいなエラー（422）を返すための確かめ。同時に同じメールアドレスで来たときに守るのは、UNIQUE（DB）",
+            "<code>DB::transaction()</code> は <code>begin</code>・<code>commit</code> を PDO で直接送るので、SQL のログには出ない",
+            "主キーを自分で決める表（<code>$incrementing = false</code>）では、Laravel は <code>returning \"id\"</code> を付けない"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "メールアドレスを確認する（確認のリンク）",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "2本",
+          "code": "$user = User::where('verification_token', $token)->first();\n$user->email_verified_at = now();\n$user->save();",
+          "sql": "-- ① 確認用の文字で探す（インデックスがなく、表を全部読む）\nselect * from \"users\"\nwhere \"verification_token\" = 'x8Kq…' limit 1;\n\n-- ② 確認済みにする（文字は消さない）\nupdate \"users\"\nset \"email_verified_at\" = '2026-11-12 05:32:40',\n    \"updated_at\" = '2026-11-12 05:32:40'\nwhere \"id\" = 23;",
+          "notes": [
+            "①は <code>Seq Scan</code>（9-2 で測った）。会員が増えるほど遅くなる",
+            "文字を消さず、期限もないので、同じリンクで何度でも②が流れる"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版",
+          "count": "1〜2本",
+          "code": "$user = User::findOrFail($id);   // リンクの {id}\n// {hash} は sha1(メールアドレス) と比べる（DB は使わない）\nif (! $user->hasVerifiedEmail()) {\n    $user->markEmailAsVerified();\n}",
+          "sql": "-- ① 主キーで読む（Index Scan）\nselect * from \"users\"\nwhere \"users\".\"id\" = 23 limit 1;\n\n-- ② まだなら、確認済みにする\nupdate \"users\"\nset \"email_verified_at\" = '2026-11-12 05:32:40',\n    \"updated_at\" = '2026-11-12 05:32:40'\nwhere \"id\" = 23;",
+          "notes": [
+            "探すのは主キーなので、インデックスで1行だけ読む",
+            "リンクの正しさは署名（URL の <code>signature</code>）と <code>{hash}</code> で確かめるので、DB に確認用の文字を持たない",
+            "確認済みなら②は流れない（1本で終わる）"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "ログインする（<code>POST /api/auth/login</code>）",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "2本",
+          "code": "$user = User::where('email', $request->email)->first();\n// … パスワードを照合して、JWT にニックネームを入れる\n'nickname' => $user->profile?->nickname,",
+          "sql": "-- ① メールアドレスで探す\nselect * from \"users\"\nwhere \"email\" = 'sakura@example.test' limit 1;\n\n-- ② $user->profile と書いた時点で読む\nselect * from \"profiles\"\nwhere \"profiles\".\"user_id\" = 23\n  and \"profiles\".\"user_id\" is not null\nlimit 1;",
+          "notes": [
+            "<code>$user-&gt;profile</code> のようにプロパティで触ると、その場で1本流れる（Lazy Loading）。<code>load()</code> の <code>in (…)</code> と形が違う",
+            "ないメールアドレスなら①だけで返り、照合（bcrypt）も飛ばすので、返るまでの時間で見分けられる"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版",
+          "count": "2本",
+          "code": "$user = User::where('email', Str::lower($request->email))\n    ->first();\n// … 照合に通ったら、取り替え用のトークンを作る\n[$plain, $row] = $refresh->issue($user);",
+          "sql": "-- ① メールアドレスで探す\nselect * from \"users\"\nwhere \"email\" = 'sakura@example.test' limit 1;\n\n-- ② 取り替え用のトークンを入れる\n--    （DB にはハッシュだけ）\ninsert into \"refresh_tokens\"\n  (\"user_id\", \"family_id\",\n   \"token_hash\", \"expires_at\")\nvalues (23, 'f1c2…', 'e3b0…',\n  '2026-12-12 05:32:40');",
+          "notes": [
+            "JWT にニックネームを入れないので、プロフィールは読まない",
+            "<code>refresh_tokens</code> の表と <code>issue()</code> はまだないので、②は <code>DB::table()</code> で同じ形を作って確かめた（Model で作ると <code>created_at</code> なども入る）"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "トークンを取り替える（<code>POST /api/auth/refresh</code>。改善版だけ）",
+      "columns": [
+        {
+          "kind": "alt",
+          "title": "改善版（ロックとトランザクション）",
+          "count": "3本＋トランザクション",
+          "code_label": "PHP（Eloquent）",
+          "code": "DB::transaction(function () use ($plain) {\n    $row = RefreshToken::where('token_hash', hash('sha256', $plain))\n        ->lockForUpdate()\n        ->first();\n    // 期限切れ・止めた印・使った印を確かめる（使った印があれば、家族ごと止める）\n    $row->update(['used_at' => now()]);\n    // 同じ家族で、新しいトークンを入れる\n});",
+          "sql": "begin;  -- DB::transaction()（ログには出ない）\n\n-- ① 行をロックして読む（同時に来たもう1本は、ここで待つ）\nselect * from \"refresh_tokens\"\nwhere \"token_hash\" = 'e3b0…' limit 1\nfor update;\n\n-- ② 使った印を付ける\nupdate \"refresh_tokens\"\nset \"used_at\" = '2026-11-12 05:32:40'\nwhere \"id\" = 7;\n\n-- ③ 新しいトークンを入れる\ninsert into \"refresh_tokens\"\n  (\"user_id\", \"family_id\", \"token_hash\", \"expires_at\")\nvalues (23, 'f1c2…', '9a7b…', '2026-12-12 05:32:40');\n\ncommit;  -- ここでロックが外れ、待っていた1本が①を読む",
+          "notes": [
+            "<code>lockForUpdate()</code> は、SQL の最後に <code>for update</code> を付ける。同じ行を読もうとする別のトランザクションは、<code>commit</code> まで待つ",
+            "待っていた1本が①を読むと、もう <code>used_at</code> が入っているので「使った印あり」になる（同じトークンが2回通らない）",
+            "表とモデルはまだないので、SQL は <code>DB::table()</code> で同じ形を作って確かめた"
+          ]
+        }
+      ]
+    }
+  ]
+}

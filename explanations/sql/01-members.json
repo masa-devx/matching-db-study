@@ -1,0 +1,60 @@
+{
+  "operations": [
+    {
+      "title": "プロフィールを見る（<code>GET /api/users/{id}/profile</code>）",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "2本",
+          "code": "$user = User::findOrFail($id);\n$user->load('profile');\nreturn $user;   // 会員の列も全部返る",
+          "sql": "-- ① 会員を読む\nselect * from \"users\"\nwhere \"users\".\"id\" = 23 limit 1;\n\n-- ② プロフィールを読む（load() は in で読む）\nselect * from \"profiles\"\nwhere \"profiles\".\"user_id\" in (23);",
+          "notes": [
+            "<code>load()</code> は、1件でも <code>in (…)</code> の形で読む（Eager Loading と同じ仕組み）",
+            "応答は Model をそのまま JSON にするので、<code>select *</code> で読んだ列（メールアドレス・確認用の文字・生年月日）がそのまま出る"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版",
+          "count": "2本",
+          "code": "$user = User::with('profile')->findOrFail($id);\nreturn new ProfileResource($user->profile);\n// Resource が、返す項目（表示名・年齢など）を決める",
+          "sql": "-- ① 会員を読む\nselect * from \"users\"\nwhere \"users\".\"id\" = 23 limit 1;\n\n-- ② プロフィールを読む（with() も in で読む）\nselect * from \"profiles\"\nwhere \"profiles\".\"user_id\" in (23);",
+          "notes": [
+            "SQL はレガシー版と同じ2本。違いは「何を返すか」で、Resource が見せてよい項目だけを選ぶ",
+            "プロフィールの主キーを <code>user_id</code> にすると、<code>Profile::findOrFail($id)</code> の1本（<code>select * from \"profiles\" where \"profiles\".\"user_id\" = 23 limit 1</code>）にもできる（会員の列が要らないとき）"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "プロフィールを編集する（<code>PUT /api/users/{id}/profile</code>）",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "2本",
+          "code": "$profile = Profile::where('user_id', $id)->first();\n$profile->fill($request->all());   // 送られた値を全部\n$profile->save();",
+          "sql": "-- ① プロフィールを探す\nselect * from \"profiles\"\nwhere \"user_id\" = 23 limit 1;\n\n-- ② 変わった列だけを書き換える\nupdate \"profiles\"\nset \"nickname\" = 'さくら2', \"height\" = 'abc',\n    \"updated_at\" = '2026-11-12 05:32:40'\nwhere \"id\" = 22;",
+          "notes": [
+            "<code>save()</code> は、読んだときから変わった列だけを <code>set</code> に入れる。<code>user_id</code> や <code>gender</code> も、送られれば入る",
+            "<code>height</code> が文字の列なので、<code>'abc'</code> もそのまま入る",
+            "②の <code>where</code> は主キーの <code>id</code>。①で見つからなければ <code>null</code> のまま②に進み、例外（500）になる"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版",
+          "count": "2本＋ガード1本",
+          "code": "$data = $request->validate([\n    'nickname' => ['required', 'string',\n                   'min:1', 'max:20'],\n    'prefecture_code' => ['nullable', 'integer',\n                          'exists:prefectures,code'],\n    'height_cm' => ['nullable', 'integer',\n                    'between:120,220'],\n]);\n$request->user()->profile()->update($data);",
+          "sql": "-- ① 都道府県があるか（exists のルール）\nselect count(*) as \"aggregate\"\nfrom \"prefectures\" where \"code\" = 13;\n\n-- ② 決めた列だけを書き換える\nupdate \"profiles\"\nset \"nickname\" = 'さくら', \"prefecture_code\" = 13,\n    \"height_cm\" = 160,\n    \"updated_at\" = '2026-11-12 05:32:40'\nwhere \"profiles\".\"user_id\" = 23\n  and \"profiles\".\"user_id\" is not null;",
+          "notes": [
+            "<code>validate()</code> の <code>exists</code> は、<code>count(*)</code> の SQL を1本流す（都道府県の外部キーもあるので、DB でも守られる）",
+            "<code>profile()-&gt;update()</code> は、プロフィールを読まずに <code>update</code> を1本だけ流す（Model を作らないので、Model のイベントは動かない）",
+            "これとは別に、ガードが「自分」を読む1本がある（形は 01b の改善版で決める）"
+          ]
+        }
+      ]
+    }
+  ]
+}

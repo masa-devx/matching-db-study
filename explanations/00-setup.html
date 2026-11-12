@@ -4,43 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>00 環境を作る</title>
-<style>
-  :root {
-    --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0;
-    --card: #f6f8fa; --accent: #0969da; --ok: #1a7f37; --warn: #9a6700;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d;
-      --card: #151b23; --accent: #4493f8; --ok: #3fb950; --warn: #d29922;
-    }
-  }
-  :root[data-theme="dark"] {
-    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d;
-    --card: #151b23; --accent: #4493f8; --ok: #3fb950; --warn: #d29922;
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--fg);
-    font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; line-height: 1.8; }
-  main { max-width: 920px; margin: 0 auto; padding: 24px 16px 80px; }
-  a { color: var(--accent); }
-  h1 { font-size: 1.6rem; margin: 8px 0 4px; }
-  h2 { font-size: 1.25rem; margin-top: 40px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
-  h3 { font-size: 1.05rem; margin-top: 24px; }
-  .meta { color: var(--muted); font-size: .9rem; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
-  .point { border-left: 4px solid var(--accent); }
-  .warn { border-left: 4px solid var(--warn); }
-  table { border-collapse: collapse; width: 100%; margin: 12px 0; display: block; overflow-x: auto; }
-  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
-  th { background: var(--card); white-space: nowrap; }
-  code { background: var(--card); padding: 1px 5px; border-radius: 4px; font-size: .9em; }
-  pre:not(.mermaid) { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; line-height: 1.5; }
-  pre.mermaid { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; text-align: center; }
-  details { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; margin: 8px 0; }
-  summary { cursor: pointer; font-weight: 600; }
-  .status { display: inline-block; padding: 0 8px; border-radius: 10px; font-size: .8rem; border: 1px solid var(--line); }
-</style>
+<link rel="stylesheet" href="assets/page.css">
 </head>
 <body>
 <main>
@@ -140,7 +104,7 @@ sequenceDiagram
 
   <h2>5. 見本（小さく）</h2>
   <p>00 は環境なので、レガシー版と改善版に分けません。要点だけです。</p>
-  <pre><code># compose.yaml（要点）
+  <pre><code class="language-yaml"># compose.yaml（要点）
 services:
   db:
     image: postgres:18
@@ -156,7 +120,7 @@ services:
     ports: ["51025:1025", "58025:8025"]  # 1025・8025 は手元でもう使われている
 volumes:
   db-data:</code></pre>
-  <pre><code>// backend/app/Support/Logging/QueryLogger.php（要点）
+  <pre><code class="language-php">// backend/app/Support/Logging/QueryLogger.php（要点）
 public static function register(): void
 {
     if (! app()->environment('local')) {
@@ -256,29 +220,29 @@ flowchart LR
 
   <h3>大事な行の読み方</h3>
   <p><strong>① 接続先は環境変数で渡す</strong>（<code>compose.yaml</code>）</p>
-  <pre><code>environment:
+  <pre><code class="language-yaml">environment:
   DB_CONNECTION: pgsql
   DB_HOST: db          # コンテナの名前で届く
   DB_DATABASE: matching_dev</code></pre>
   <p>Laravel は、環境変数があると <code>.env</code> の値より優先します。秘密の値のファイルを触らずに、つなぎ先を PostgreSQL にできます。</p>
 
   <p><strong>② <code>php artisan serve</code> を使わない</strong>（<code>compose.yaml</code>）</p>
-  <pre><code>command: sh -c "cd public &amp;&amp; exec php -S 0.0.0.0:8000 ../vendor/.../server.php"</code></pre>
+  <pre><code class="language-yaml">command: sh -c "cd public &amp;&amp; exec php -S 0.0.0.0:8000 ../vendor/.../server.php"</code></pre>
   <p><code>artisan serve</code> は、決まった環境変数しか子のプロセスに渡さず、<code>.env</code> を読み直します。そのため ① が届かず、API が SQLite につながっていました。<code>artisan serve</code> が中で使う PHP の組み込みサーバーを直接起動しています。<code>server.php</code> は「今いるフォルダ」を <code>public/</code> として扱うので、先に <code>cd public</code> します。</p>
 
   <p><strong>③ テストの接続先は <code>&lt;server&gt;</code> でも上書きする</strong>（<code>phpunit.xml</code>）</p>
-  <pre><code>&lt;server name="DB_DATABASE" value="matching_test" force="true"/&gt;
+  <pre><code class="language-xml">&lt;server name="DB_DATABASE" value="matching_test" force="true"/&gt;
 &lt;env    name="DB_DATABASE" value="matching_test" force="true"/&gt;</code></pre>
   <p>Laravel は環境変数を <code>$_SERVER</code> から先に読み、Docker の環境変数（<code>matching_dev</code>）は <code>$_SERVER</code> に入っています。<code>&lt;env&gt;</code> は <code>$_SERVER</code> を変えないので、<code>&lt;env&gt;</code> だけだとテストが <code>matching_dev</code> につながりました。メールの送り先（<code>MAIL_MAILER</code>）も同じ書き方にしています。</p>
 
   <p><strong>④ 安全装置</strong>（<code>tests/TestCase.php</code>）</p>
-  <pre><code>if ($connection !== 'pgsql' || $database !== 'matching_test') {
+  <pre><code class="language-php">if ($connection !== 'pgsql' || $database !== 'matching_test') {
     throw new RuntimeException('テストはテスト用の DB だけで動かす…');
 }</code></pre>
   <p>テストのたびに、アプリを作った直後（<code>RefreshDatabase</code> が表を消すより前）に、つながる先を確かめます。③ を間違えても、開発用の DB を消しません。</p>
 
   <p><strong>⑤ SQL のログは値を書かない</strong>（<code>QueryLogger.php</code>）</p>
-  <pre><code>DB::listen(function (QueryExecuted $query): void {
+  <pre><code class="language-php">DB::listen(function (QueryExecuted $query): void {
     self::$count++;
     Log::channel('sql')->debug('db.query', [
         'n' => self::$count, 'ms' => $query->time, 'sql' => $query->sql, ...
@@ -288,7 +252,7 @@ flowchart LR
 
   <h3>実際に流れる SQL</h3>
   <p><code>GET /api/health</code> を1回叩いたときのログ（値は出ていない）：</p>
-  <pre><code>local.DEBUG: db.query   {"requestId":"9bad2ff1-…","n":1,"ms":4.26,"sql":"select count(*) as \"aggregate\" from \"migrations\"","connection":"pgsql"}
+  <pre><code class="language-plaintext">local.DEBUG: db.query   {"requestId":"9bad2ff1-…","n":1,"ms":4.26,"sql":"select count(*) as \"aggregate\" from \"migrations\"","connection":"pgsql"}
 local.INFO:  db.summary {"requestId":"9bad2ff1-…","path":"GET api/health","queries":1,"ms":4.26}</code></pre>
   <p>マイグレーションは、Laravel のひな形の3つ（<code>users</code>・<code>cache</code>・<code>jobs</code>）と、<code>install:api</code> が足した <code>personal_access_tokens</code> の4つ。<code>matching_dev</code> と <code>matching_test</code> の両方に流れています。</p>
 
@@ -327,9 +291,13 @@ local.INFO:  db.summary {"requestId":"9bad2ff1-…","path":"GET api/health","que
 </main>
 <script type="module">
   import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
-  const dark = document.documentElement.dataset.theme === "dark" ||
-    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+  // page.js が選んだ表示（data-scheme）に合わせる。なければ端末の設定
+  const scheme = document.documentElement.dataset.scheme;
+  const dark = scheme ? scheme.startsWith("dark") : (document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches));
   mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/page.js"></script>
 </body>
 </html>
