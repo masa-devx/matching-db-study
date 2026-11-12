@@ -27,7 +27,7 @@
     <tr><th>画面</th><th>パス</th><th>呼ぶ API</th><th>要件</th><th>子 Issue</th></tr>
     <tr><td>ログイン</td><td><code>/login</code></td><td><code>POST /api/auth/login</code></td><td>FR-UI-001・002</td><td rowspan="2"><a href="https://github.com/masa-devx/matching-db-study/issues/35">#35</a>（土台も）</td></tr>
     <tr><td>登録</td><td><code>/register</code></td><td><code>POST /api/users</code></td><td>FR-UI-003・004</td></tr>
-    <tr><td>自分のプロフィール</td><td><code>/me</code></td><td><code>GET /api/me</code>・<code>GET</code>／<code>PUT /api/users/{id}/profile</code>・<code>POST /api/auth/logout</code></td><td>FR-UI-005・012</td><td rowspan="2"><a href="https://github.com/masa-devx/matching-db-study/issues/36">#36</a></td></tr>
+    <tr><td>自分のプロフィール</td><td><code>/home</code></td><td><code>GET /api/me</code>・<code>GET</code>／<code>PUT /api/users/{id}/profile</code>・<code>POST /api/auth/logout</code></td><td>FR-UI-005・012</td><td rowspan="2"><a href="https://github.com/masa-devx/matching-db-study/issues/36">#36</a></td></tr>
     <tr><td>相手のプロフィール</td><td><code>/users/:id</code></td><td><code>GET /api/users/{id}/profile</code>・<code>POST /api/me/likes</code></td><td>FR-UI-006〜008</td></tr>
     <tr><td>送ったいいね</td><td><code>/likes</code></td><td><code>GET /api/me/likes</code></td><td>FR-UI-009</td><td rowspan="2"><a href="https://github.com/masa-devx/matching-db-study/issues/37">#37</a></td></tr>
     <tr><td>マッチ</td><td><code>/matches</code></td><td><code>GET /api/me/matches</code></td><td>FR-UI-010</td></tr>
@@ -79,7 +79,7 @@ sequenceDiagram
   B->>A: POST /api/auth/login
   A-->>B: 200・token（30日の JWT）
   Note over B: レガシー版：sessionStorage に token を置く
-  B->>B: /me に移る（React Router）
+  B->>B: /home に移る（React Router）
   U->>B: 「マッチ」を押す
   B->>A: OPTIONS /api/me/matches（Authorization を送るのでプリフライト）
   A-->>B: 204
@@ -93,10 +93,10 @@ flowchart TD
   PUB -->|"いいえ"| LOGIN["/login・/register"]
   PUB -->|"はい"| HAS{"トークンがあるか"}
   HAS -->|"ない"| GO["/login に移す<br>（開こうとした画面を覚える）"]
-  HAS -->|"ある"| PAGE["/me・/users/:id・/likes・/matches"]
+  HAS -->|"ある"| PAGE["/home・/users/:id・/likes・/matches"]
   PAGE -->|"API が 401"| GO
   PAGE -->|"API が 403"| VERIFY["メールアドレスを確認してください"]
-  LOGIN -->|"ログインできた"| BACK["覚えた画面か /me に移る"]
+  LOGIN -->|"ログインできた"| BACK["覚えた画面か /home に移る"]
   </pre>
   <p class="meta">レガシー版は、守りを画面ごとにばらばらに書く（ある画面は確かめ、ある画面は忘れる）。改善版は、ルートの1か所（<code>RequireAuth</code>）で守り、401 は API を呼ぶところの1か所で受ける。</p>
 

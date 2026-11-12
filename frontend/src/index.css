@@ -1,0 +1,23 @@
+/* レガシー版（03b）。全体の土台。見た目の値（色・余白・文字）は、変数にせずそのまま書く。
+   値は改善版の tokens.css と同じにする（書き方の違いだけを比べるため） */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  color: #212529;
+  background: #f8f9fa;
+}
+
+a {
+  color: #d6336c;
+}
+
+h1 {
+  margin: 0 0 16px;
+  font-size: 24px;
+}
