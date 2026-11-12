@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 
 // レガシー版（03b）。ホーム（/home）＝自分のプロフィールを見て直す。全部この部品に書く
-export default function HomePage() {
+export default function HomePage(props: any) {
   const [me, setMe] = useState<any>(null)
   const [form, setForm] = useState<any>({})
   const [editing, setEditing] = useState(false)
@@ -32,6 +32,18 @@ export default function HomePage() {
         setForm(u.profile ?? {})
       })
   }, [])
+
+  const logout = () => {
+    // 送り先とトークンの読み出しを、ここにも書く
+    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/auth/logout`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+    })
+    // 応答を待たずに消す。サーバーは何もしないので、消す前に写したトークンは30日使える
+    sessionStorage.removeItem('token')
+    props.setToken(null)
+    navigate('/login')
+  }
 
   const save = async (e: any) => {
     e.preventDefault()
@@ -160,6 +172,9 @@ export default function HomePage() {
           </form>
         )}
       </div>
+      <button className="button button-ghost logout" onClick={logout}>
+        ログアウト
+      </button>
     </div>
   )
 }
