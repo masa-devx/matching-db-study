@@ -10,7 +10,7 @@
 
 01 では初め `users` 1つに全部を持っていたが、#18（PR #19）の新しいマイグレーションで `profiles` を作り、`users` のプロフィールの列と `name` を移して消した。
 
-#46 で、`users` に URL で会員を指すための `public_id`（UUID v7）を足す（D-022。案）。表どうしのつながりと JWT の `sub` は `bigint` の `id` のまま。
+#46 で、`users` に URL で会員を指すための `public_id`（UUID v7）を足す（D-022。PR #47）。表どうしのつながりと JWT の `sub` は `bigint` の `id` のまま。
 
 ### ER 図
 
