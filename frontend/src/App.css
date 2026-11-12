@@ -376,10 +376,10 @@
   outline: 2px solid #212529;
 }
 
-/* ---- ログインしたあとの枠。幅で3つに分ける ----
-   スマホ（〜767px）：1列。上の帯と下のタブ
-   タブレット（768〜1023px）：中身は最大 720px。プロフィールは写真と本文の2列。上の帯と下のタブ
-   PC（1024px〜）：左に横のメニュー（240px）。中身は最大 960px。プロフィールは写真（400px）と本文の2列 */
+/* ---- ログインしたあとの枠。どの幅でもスマホと同じ形（1列・上の帯・下のタブ）にし、中身の幅だけを変える ----
+   スマホ（〜767px）：画面いっぱい（左右に 16px）
+   タブレット（768〜1023px）：最大 600px で真ん中
+   PC（1024px〜）：最大 640px で真ん中。写真が縦に長くなりすぎないように、4:5 にする */
 .shell {
   min-height: 100dvh;
   padding-bottom: calc(72px + env(safe-area-inset-bottom)); /* 下のタブに隠れないように */
@@ -387,10 +387,6 @@
 
 .shell-main {
   padding: 16px;
-}
-
-.side {
-  display: none;
 }
 
 .header {
@@ -416,115 +412,30 @@
 /* タブレット */
 @media (min-width: 768px) {
   .shell-main {
-    max-width: 720px;
+    max-width: 600px;
     margin: 0 auto;
-    padding: 24px;
+    padding: 24px 16px;
   }
 
-  .profile {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    align-items: start;
-    gap: 24px;
-  }
-
-  .photo {
-    position: sticky;
-    top: 80px;
-  }
-
-  .me-head {
-    padding: 24px;
-    background: #fff;
-    border: 1px solid #dee2e6;
-    border-radius: 8px;
-  }
-
-  /* 本文の下に置く。浮かせない */
-  .like-bar {
-    position: static;
-    justify-content: flex-start;
-  }
-
-  .like-button {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .avatar-picker {
-    grid-template-columns: repeat(3, 1fr);
+  /* 帯の背景は横いっぱい、ロゴとボタンは中身の幅にそろえる */
+  .header {
+    padding-right: calc((100% - 600px) / 2 + 16px);
+    padding-left: calc((100% - 600px) / 2 + 16px);
   }
 }
 
 /* PC */
 @media (min-width: 1024px) {
-  .shell {
-    display: flex;
-    padding-bottom: 0;
-  }
-
-  .header,
-  .tabs {
-    display: none;
-  }
-
-  .side {
-    position: sticky;
-    top: 0;
-    display: flex;
-    flex-direction: column;
-    flex-shrink: 0;
-    gap: 24px;
-    width: 240px;
-    height: 100dvh;
-    padding: 24px 16px;
-    background: #fff;
-    border-right: 1px solid #dee2e6;
-  }
-
-  .side-nav {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .side-link {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
-    color: #212529;
-    text-decoration: none;
-    border-radius: 999px;
-  }
-
-  .side-link:hover {
-    background: #f8f9fa;
-  }
-
-  .side-link.active {
-    color: #d6336c;
-    font-weight: bold;
-    background: #f8f9fa;
-  }
-
   .shell-main {
-    flex: 1;
-    max-width: 960px;
-    padding: 32px;
+    max-width: 640px;
   }
 
-  .profile {
-    grid-template-columns: 400px 1fr;
-    gap: 32px;
+  .header {
+    padding-right: calc((100% - 640px) / 2 + 16px);
+    padding-left: calc((100% - 640px) / 2 + 16px);
   }
 
   .photo {
-    top: 32px;
-  }
-
-  .avatar-picker {
-    grid-template-columns: repeat(6, 1fr);
+    aspect-ratio: 4 / 5;
   }
 }

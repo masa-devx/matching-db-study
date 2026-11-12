@@ -6,7 +6,7 @@ import LoginPage from './LoginPage'
 import RegisterPage from './RegisterPage'
 import UserPage from './UserPage'
 
-// レガシー版（03b）。画面の切り替え・枠（横のメニュー・上の帯・下のタブ）・ログアウトを、ここに全部書く。
+// レガシー版（03b）。画面の切り替え・枠（上の帯・下のタブ）・ログアウトを、ここに全部書く。
 // ログインしているかは、sessionStorage の token があるかだけで決める（期限切れでも「ログイン中」に見える）
 export default function App() {
   const [token, setToken] = useState<string | null>(sessionStorage.getItem('token'))
@@ -45,28 +45,9 @@ export default function App() {
     )
   }
 
-  // ログインしたあとの枠。PC は横のメニュー、タブレットとスマホは上の帯と下のタブ（CSS で出し分ける）
-  // 同じリンクを、横のメニューと下のタブの2か所に書く
+  // ログインしたあとの枠。どの幅でも、上の帯と下のタブ（中身の幅だけを CSS で変える）
   return (
     <div className="shell">
-      <aside className="side">
-        <span className="logo">matching</span>
-        <nav className="side-nav">
-          <NavLink to="/home" className="side-link">
-            <span className="tab-icon">●</span>ホーム
-          </NavLink>
-          <NavLink to="/likes" className="side-link">
-            <span className="tab-icon">♥</span>送ったいいね
-          </NavLink>
-          <NavLink to="/matches" className="side-link">
-            <span className="tab-icon">✦</span>マッチ
-          </NavLink>
-        </nav>
-        <button className="button button-small button-ghost" onClick={logout}>
-          ログアウト
-        </button>
-      </aside>
-
       <header className="header">
         <span className="logo">matching</span>
         <button className="button button-small button-ghost" onClick={logout}>
