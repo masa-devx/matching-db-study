@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>02 いいね</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0;
+    --card: #f6f8fa; --accent: #0969da; --ok: #1a7f37; --warn: #9a6700;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d;
+      --card: #151b23; --accent: #4493f8; --ok: #3fb950; --warn: #d29922;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d;
+    --card: #151b23; --accent: #4493f8; --ok: #3fb950; --warn: #d29922;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; line-height: 1.8; }
+  main { max-width: 920px; margin: 0 auto; padding: 24px 16px 80px; }
+  a { color: var(--accent); }
+  h1 { font-size: 1.6rem; margin: 8px 0 4px; }
+  h2 { font-size: 1.25rem; margin-top: 40px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 1.05rem; margin-top: 24px; }
+  .meta { color: var(--muted); font-size: .9rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
+  .point { border-left: 4px solid var(--accent); }
+  .warn { border-left: 4px solid var(--warn); }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--card); white-space: nowrap; }
+  code { background: var(--card); padding: 1px 5px; border-radius: 4px; font-size: .9em; }
+  pre:not(.mermaid) { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; line-height: 1.5; }
+  pre.mermaid { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; text-align: center; }
+  details { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; margin: 8px 0; }
+  summary { cursor: pointer; font-weight: 600; }
+  .status { display: inline-block; padding: 0 8px; border-radius: 10px; font-size: .8rem; border: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<main>
+  <p class="meta"><a href="index.html">← 目次へ</a></p>
+  <h1>02 いいね</h1>
+  <p class="meta">作成: 2026-11-12 ／ 状態: <span class="status">解説だけ</span> ／ Issue: <a href="https://github.com/masa-devx/matching-db-study/issues/24">#24</a> ／ 要件: <code>docs/requirements/likes.md</code>（FR-LIKE-001〜009・NFR-LIKE-001〜002）</p>
+
+  <div class="card point">
+    <strong>この一歩でできるようになること</strong>
+    <ul>
+      <li>中間テーブルで多対多（会員と会員）をつなぎ、「同じ組は1行だけ」を UNIQUE で守る理由を、同時に送ったときの事実で説明できる</li>
+      <li>「あるか調べてから入れる」が同時のリクエストで破れること（check-then-act）と、DB に断らせる直し方（UNIQUE＋<code>ON CONFLICT DO NOTHING</code>）を説明できる</li>
+      <li>一覧の N+1 を、流れた SQL の本数で見つけ、<code>with()</code> で直せる</li>
+    </ul>
+  </div>
+
+  <h2>1. 何を作るか</h2>
+  <p>会員が、気になる相手にいいねを送れるようにします。自分が送った相手の一覧も見られます。お互いにいいねするとマッチになりますが、マッチは 03 で作ります。もらったいいねの一覧は有料の会員だけに見せるので、07 で作ります。</p>
+  <table>
+    <tr><th>作るもの</th><th>中身</th><th>要件</th><th>子 Issue</th></tr>
+    <tr><td>いいねの表</td><td>だれから・だれへ・いつ</td><td>FR-LIKE-003・009・NFR-LIKE-002</td><td><a href="https://github.com/masa-devx/matching-db-study/issues/25">#25</a></td></tr>
+    <tr><td>いいねを送る</td><td>自分には送れない。同じ相手には1回だけ。いない会員には送れない</td><td>FR-LIKE-001〜004・007・008</td><td><a href="https://github.com/masa-devx/matching-db-study/issues/26">#26</a></td></tr>
+    <tr><td>送った相手の一覧</td><td>新しい順に、相手の ID・ニックネーム・年齢・画像・日時</td><td>FR-LIKE-005・006・NFR-LIKE-001</td><td>#26</td></tr>
+  </table>
+  <p>API のパスと応答の形は、子 Issue #26 の最初に <code>docs/api/02-likes.md</code> に書き、確かめてもらってから作ります。</p>
+
+  <h2>2. 先に知っておく言葉</h2>
+  <table>
+    <tr><th>言葉</th><th>意味（1〜2文）</th></tr>
+    <tr><td>多対多</td><td>1人が何人にもいいねでき、1人が何人からももらえる関係。2つの表の列だけでは持てないので、間に表を置く。</td></tr>
+    <tr><td>中間テーブル</td><td>多対多の「組」を1行ずつ持つ表。ここでは <code>likes</code>。「いつ」などの、組についての情報も持てる。</td></tr>
+    <tr><td>自分の表どうしの多対多</td><td>両側が同じ <code>users</code> の多対多。<code>from_user_id</code>（送った人）と <code>to_user_id</code>（もらった人）の2つの列で、向きを持つ。</td></tr>
+    <tr><td>UNIQUE 制約</td><td>指定した列の組み合わせが、表の中で1つだけになるように DB が守る決まり。裏でインデックスが作られる。</td></tr>
+    <tr><td>複合主キー</td><td>2つ以上の列の組を主キーにすること。中間テーブルでは <code>(from_user_id, to_user_id)</code> を主キーにして、<code>id</code> を持たない作り方もある。</td></tr>
+    <tr><td>check-then-act</td><td>「あるか調べてから、なければ入れる」という書き方。調べてから入れるまでの間に別のリクエストが入ると、両方が「ない」と見て、両方が入れてしまう。</td></tr>
+    <tr><td><code>ON CONFLICT DO NOTHING</code></td><td>PostgreSQL の書き方。UNIQUE に当たる行を入れようとしたら、エラーにせず、何もしない。入った行の数（0 か 1）で、二重だったかが分かる。Laravel では <code>insertOrIgnore()</code>。</td></tr>
+    <tr><td>N+1</td><td>一覧を1本の SQL で取り、そのあと1件ごとに関連するものを1本ずつ取ること。N 件なら 1＋N 本になる。Eloquent では、リレーションをループの中で読むと起きる。</td></tr>
+  </table>
+
+  <h2>3. 図で見る</h2>
+  <p>1枚目はレガシー版と改善版の表です。2枚目は、同じいいねを同時に2つ送ったときに起きること（UNIQUE がなければ、両方が入って2行になる）。3枚目は、改善版でいいねを送るときの判断の順番です。</p>
+  <pre class="mermaid">
+erDiagram
+  USERS ||--o{ LIKES : "送る（from_user_id）"
+  USERS ||--o{ LIKES : "もらう（to_user_id）"
+  USERS ||--|| PROFILES : "1対1"
+  USERS {
+    bigint id PK
+    varchar email UK
+  }
+  LIKES {
+    bigint id PK
+    bigint from_user_id FK "改善版：外部キー・ON DELETE CASCADE"
+    bigint to_user_id FK "改善版：外部キー・インデックス"
+    timestamp created_at "いいねした日時"
+  }
+  PROFILES {
+    bigint user_id PK
+    varchar nickname
+  }
+  </pre>
+  <p class="meta">改善版は <code>(from_user_id, to_user_id)</code> に UNIQUE、<code>from_user_id &lt;&gt; to_user_id</code> の CHECK を付ける。レガシー版も <code>id</code> と <code>(from_user_id, to_user_id)</code> の UNIQUE は持つ。外部キー・CHECK・<code>to_user_id</code> のインデックスはなく、トランザクションも考えない。</p>
+  <pre class="mermaid">
+sequenceDiagram
+  participant R1 as リクエスト1
+  participant R2 as リクエスト2
+  participant D as DB
+  Note over R1,D: レガシー版（UNIQUE はあるが、違反を扱わない）
+  R1->>D: insert
+  R2->>D: insert
+  D-->>R1: 1行入った（201）
+  D-->>R2: UNIQUE の違反（23505）
+  Note over R2: 例外をつかまえないので 500
+  Note over R1,D: 改善版（UNIQUE と ON CONFLICT DO NOTHING）
+  R1->>D: insert ... on conflict do nothing
+  R2->>D: insert ... on conflict do nothing
+  D-->>R1: 1行入った（201）
+  D-->>R2: 0行（UNIQUE に当たった。409）
+  </pre>
+  <pre class="mermaid">
+flowchart TD
+  S["いいねを送る"] --> AUTH{"ログインしていて<br>確認済みか"}
+  AUTH -->|"いいえ"| E401["401 か 403"]
+  AUTH -->|"はい"| SELF{"相手は自分か"}
+  SELF -->|"はい"| E422["422"]
+  SELF -->|"いいえ"| EXIST{"相手はいるか"}
+  EXIST -->|"いいえ"| E404["404"]
+  EXIST -->|"はい"| INS["insert ... on conflict do nothing"]
+  INS -->|"1行"| OK["201"]
+  INS -->|"0行"| E409["409（もう送っている）"]
+  </pre>
+
+  <h2>4. 設計の選択肢を比べる</h2>
+  <h3>中間テーブルのキー</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. <code>id</code> だけで、組に制約なし</td><td>何も考えずに作れる。Eloquent の Model がそのまま使える</td><td>同じ組が何行でも入る（アンチパターン「IDリクワイアド」）。いない会員を指せる</td><td>なし</td></tr>
+    <tr><td>B. <code>id</code>＋<code>(from_user_id, to_user_id)</code> に UNIQUE（レガシー版もこの形）</td><td>二重を DB が断る。Eloquent の Model（<code>Like</code>）を使い続けられる。A から制約を足すだけで移れる</td><td>使わない <code>id</code> と、そのインデックスが1つ増える</td><td>あとで「いいね」そのものを別の表から指したい（通知など）とき。今の表から直すとき</td></tr>
+    <tr><td>C. <code>(from_user_id, to_user_id)</code> を複合主キー</td><td>余分な列とインデックスがない。主キーがそのまま「A は B にいいねしたか」の検索に効く</td><td>Eloquent は複合主キーの Model が苦手（<code>find()</code>・<code>save()</code> が使いにくい）。A から移るには、<code>id</code> と主キーを作り直す</td><td>初めから作るとき。ORM を使わないとき</td></tr>
+  </table>
+  <div class="card point"><strong>この一歩で選ぶもの</strong>：レガシー版も改善版も B。レガシー版は UNIQUE だけで、外部キー・CHECK・<code>to_user_id</code> のインデックスがない。改善版は、自分あて・いない会員を指す行を先に直してから、それらを足す（01 と同じ「先に直してから制約」の手順）。Eloquent の <code>Like</code> の Model も使い続けられる。C との違いは、6つの問いの「ほかの方法」で話せるようにする。</div>
+  <h3>二重の防ぎ方</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. アプリで「あるか」調べてから入れる</td><td>分かりやすい。409 の言葉を出しやすい</td><td>同時に来ると両方が入る（check-then-act）。制約がなければ防げない</td><td>使わない（UNIQUE の上での、言葉を出すための前の確かめとしてならよい）</td></tr>
+    <tr><td>B. UNIQUE に当てて、例外（<code>23505</code>）をつかまえて 409（レガシー版は UNIQUE だけあって、つかまえないので <code>500</code>）</td><td>同時でも1行になる</td><td>PostgreSQL では、エラーになったトランザクションは、そのあとの SQL が全部失敗する</td><td>トランザクションの外で1本だけ入れるとき</td></tr>
+    <tr><td>C. UNIQUE＋<code>ON CONFLICT DO NOTHING</code>（<code>insertOrIgnore()</code>）で、入った行の数を見る</td><td>同時でも1行になる。エラーにならないので、トランザクションが止まらない</td><td>二重のとき、どの行とぶつかったかは返らない（ここでは要らない）</td><td>「あれば何もしない」でよいとき</td></tr>
+  </table>
+  <div class="card point"><strong>この一歩で選ぶもの</strong>：改善版は C。土台は UNIQUE（DB が守る）。03 でマッチを同じトランザクションで作るときにも、エラーでトランザクションを止めずに済む。</div>
+  <h3>自分へのいいね・一覧の取り方</h3>
+  <table>
+    <tr><th>決めること</th><th>改善版</th><th>理由</th></tr>
+    <tr><td>自分へのいいね</td><td>バリデーションで <code>422</code>＋DB の CHECK（<code>from_user_id &lt;&gt; to_user_id</code>）</td><td>不変条件 4。API を通らない書き込み（シード・手で入れる SQL）でも壊れてはいけない（database.md の判断）</td></tr>
+    <tr><td>いない会員</td><td><code>404</code>＋外部キー</td><td>消えた会員を指す行を残さない（FR-LIKE-009 は <code>ON DELETE CASCADE</code>）</td></tr>
+    <tr><td>送った一覧</td><td><code>with('toUser.profile')</code> でまとめて読む（3本）</td><td>NFR-LIKE-001。件数が増えても本数が増えない</td></tr>
+    <tr><td><code>to_user_id</code> のインデックス</td><td>足す</td><td>UNIQUE の <code>(from_user_id, to_user_id)</code> は、<code>from_user_id</code> から探すときにしか効かない。03 のマッチ（逆向きを探す）と 07 のもらった一覧で、<code>to_user_id</code> から探す</td></tr>
+  </table>
+
+  <h2>5. 見本：レガシー版と改善版</h2>
+  <h3>レガシー版（Fat Controller・テストなし）</h3>
+  <pre><code>// いいねを送る
+public function store(Request $request): JsonResponse
+{
+    // 01b の me() から写した JWT の処理（ほかのコントローラにも同じものが増える）
+    $payload = JWT::decode($request-&gt;bearerToken(), new Key(config('app.key'), 'HS256'));
+    $like = Like::create([
+        'from_user_id' =&gt; $payload-&gt;sub,
+        'to_user_id' =&gt; $request-&gt;input('user_id'),   // 自分でも・いない会員でも入る。2回目は UNIQUE の違反で 500
+    ]);
+    return response()-&gt;json($like, 201);
+}
+
+// 送った相手の一覧
+public function index(Request $request): JsonResponse
+{
+    $payload = JWT::decode($request-&gt;bearerToken(), new Key(config('app.key'), 'HS256'));
+    $likes = Like::where('from_user_id', $payload-&gt;sub)-&gt;orderBy('created_at', 'desc')-&gt;get();
+    $result = [];
+    foreach ($likes as $like) {
+        $profile = Profile::where('user_id', $like-&gt;to_user_id)-&gt;first();   // 1件ごとに1本
+        $result[] = ['user_id' =&gt; $like-&gt;to_user_id, 'nickname' =&gt; $profile?-&gt;nickname,
+                     'birthday' =&gt; $profile?-&gt;birthday, 'liked_at' =&gt; $like-&gt;created_at];
+    }
+    return response()-&gt;json($result);
+}</code></pre>
+  <div class="card warn"><ul>
+    <li><strong>二重</strong>：UNIQUE があるので行は1つのまま。ただし2回目は、違反の例外をつかまえないので <code>500</code>（<code>409</code> にならない）。同時に送ると、1つ以外は <code>500</code></li>
+    <li><strong>自分・いない会員</strong>：<code>user_id</code> が自分でも、ない会員でも入る（CHECK・外部キーがない）。会員を消すと、いいねが残る</li>
+    <li><strong>もらった側から探す</strong>：UNIQUE は <code>from_user_id</code> が先頭なので、<code>to_user_id</code> から探すと表を全部読む（03 のマッチ・07 のもらった一覧で困る）</li>
+    <li><strong>N+1</strong>：送った数が N なら、SQL は 1＋N 本。100人に送れば 101本</li>
+    <li><strong>写した JWT の処理</strong>：01b と同じく、トークンがないと <code>500</code>。直すときは、写したすべての場所を直す</li>
+    <li><strong>年齢</strong>：生年月日をそのまま返す（FR-LIKE-005 は年齢）</li>
+  </ul></div>
+  <h3>改善版</h3>
+  <pre><code>// マイグレーション：UNIQUE はレガシー版にある。先に自分あて・いない会員の行を直してから、残りを足す
+Schema::table('likes', function (Blueprint $table) {
+    $table-&gt;foreign('from_user_id')-&gt;references('id')-&gt;on('users')-&gt;cascadeOnDelete();
+    $table-&gt;foreign('to_user_id')-&gt;references('id')-&gt;on('users')-&gt;cascadeOnDelete();
+    $table-&gt;index('to_user_id');
+});
+DB::statement('ALTER TABLE likes ADD CONSTRAINT likes_not_self CHECK (from_user_id &lt;&gt; to_user_id)');
+
+// いいねを送る（だれかはガードが決める。自分あては FormRequest で 422）
+$target = User::findOrFail($request-&gt;integer('user_id'));            // いなければ 404
+$inserted = DB::table('likes')-&gt;insertOrIgnore([                       // on conflict do nothing
+    'from_user_id' =&gt; $request-&gt;user()-&gt;id, 'to_user_id' =&gt; $target-&gt;id, 'created_at' =&gt; now(),
+]);
+if ($inserted === 0) {
+    return response()-&gt;json(['message' =&gt; 'もういいねしています'], 409);
+}
+
+// 送った相手の一覧（何件でも3本：likes・users・profiles）
+$likes = $request-&gt;user()-&gt;sentLikes()-&gt;with('toUser.profile')-&gt;latest()-&gt;get();
+return LikedUserResource::collection($likes);</code></pre>
+  <p>大事なのは、二重を「アプリが調べる」のではなく「DB に断らせる」こと、そして DB が断ったことを <code>500</code> ではなく <code>409</code> として返すことです。<code>insertOrIgnore()</code> は UNIQUE に当たっても例外にせず 0 を返すので、トランザクションを止めずに <code>409</code> を返せます。外部キーや CHECK の違反は、無視されずにエラーになります（MySQL の <code>INSERT IGNORE</code> は、こうした違反も警告にして飲み込むので、同じではありません）。</p>
+
+  <h2>6. どう確かめるか</h2>
+  <table>
+    <tr><th>段階</th><th>確かめること</th></tr>
+    <tr><td>① レガシー版で問題を見る</td><td>
+      <ul>
+        <li>同じ相手に2回送る → ステータスと行の数（UNIQUE で1行のまま・2回目は <code>500</code> か）。<code>xargs -P 10</code> などで同じいいねを10本同時に送る → ステータスの内わけと行の数</li>
+        <li>自分に送る・いない会員に送る → 入るか。会員を消す → いいねが残るか（DB で、トランザクションの中で試して取り消す）</li>
+        <li>送った数を 1・10・100 にして一覧を呼ぶ → SQL のログの本数（1＋N 本になるか）</li>
+        <li><code>EXPLAIN (ANALYZE, BUFFERS)</code> で、「A は B にいいねしたか」（UNIQUE が効くか）と「B はだれからもらったか」（<code>to_user_id</code> だけ。<code>Seq Scan</code> になるか）を比べる。シードでいいねを1万件ほど入れて、読んだ行と時間を見る</li>
+      </ul>
+    </td></tr>
+    <tr><td>② 振る舞いを固定するテスト</td><td><code>FR-LIKE-001 いいねを送れる</code>・<code>FR-LIKE-002 自分にはいいねできない</code>・<code>FR-LIKE-003 同じ相手へのいいねは1回だけ</code>（続けて・同時に）・<code>FR-LIKE-004 いない会員にはいいねできない</code>・<code>FR-LIKE-005 送った相手の一覧を見られる</code>・<code>FR-LIKE-009 会員が消えたら、その会員のいいねも消える</code>・<code>NFR-LIKE-001 一覧の SQL は3本以内</code>（いいねを 1件と 20件にして、本数が同じか）</td></tr>
+    <tr><td>③ 改善したあとに比べる数字</td><td>10本同時の応答の内わけ（<code>201</code> が1つ・<code>500</code> が9つ → <code>201</code> が1つ・<code>409</code> が9つ）・一覧の SQL の本数（1＋N → 3）・<code>to_user_id</code> から探すときの EXPLAIN の段と読んだ行（<code>Seq Scan</code> → <code>Index Scan</code>）と時間・守れている要件の数（○/11 → 11/11）</td></tr>
+  </table>
+
+  <h2>7. 気をつけること（罠）</h2>
+  <div class="card warn"><ul>
+    <li><strong>「あるか調べてから入れる」だけでは、同時のリクエストで破れる</strong>：アプリの確かめは、言葉を出すためのもの。守るのは UNIQUE</li>
+    <li><strong>UNIQUE があっても、違反を扱わなければ <code>500</code></strong>：データは守れても、使う人には「サーバーのエラー」に見える。DB が断ったことを、API の言葉（<code>409</code>）に直すのはアプリの役目</li>
+    <li><strong>PostgreSQL では、UNIQUE の違反でトランザクションが止まる</strong>：例外をつかまえても、同じトランザクションの次の SQL は <code>current transaction is aborted</code> で失敗する。<code>ON CONFLICT DO NOTHING</code> か、セーブポイントを使う</li>
+    <li><strong>複合のインデックスは、先頭の列から探すときに効く</strong>：<code>(from_user_id, to_user_id)</code> は「A が送った一覧」には効くが、「B がもらった一覧」（<code>to_user_id</code> だけ）には効かない</li>
+    <li><strong>制約を足す前に、違反している行を直す</strong>：重なった行・自分あての行・いない会員を指す行が1つでもあると、<code>ALTER TABLE</code> が失敗する。先に読み取りの SQL で数える（database.md）</li>
+    <li><strong>いいねには向きがある</strong>：A から B と、B から A は別の行。「お互い」（マッチ）は 03 で、向きが逆の行を探す</li>
+    <li><strong><code>ON DELETE CASCADE</code> で消える範囲</strong>：会員を消すと、送ったいいねも、もらったいいねも消える。06 の退会で論理削除（行を残して印を付ける）にするなら、CASCADE は働かないので、別の扱いを考える</li>
+  </ul></div>
+
+  <h2>8. 理解を確かめる6つの問い</h2>
+  <p>先に自分で答えてから、開いて見る。</p>
+  <details><summary>なぜそうするのか？</summary><p>不変条件 5（同じ相手へのいいねは1回）を、アプリではなく DB の UNIQUE で守るため（レガシー版も UNIQUE は持つ）。アプリで「あるか」調べるだけだと、同時に2つ来たときに両方が「ない」と見て、2行入る。UNIQUE なら、何本同時に来ても1行になる。ただ、レガシー版は違反をそのまま <code>500</code> にしている。改善版は入れ方を <code>ON CONFLICT DO NOTHING</code> にして、エラーでトランザクションを止めずに <code>409</code> を返す。自分あてを CHECK、いない会員を外部キーで止めるのも、API を通らない書き込みでも壊れないようにするため。</p></details>
+  <details><summary>ほかの方法は？なぜ選ばなかったか？</summary><p>中間テーブルを <code>(from_user_id, to_user_id)</code> の複合主キーにする案（C）は、余分な <code>id</code> がなく、本来はきれい。選ばなかったのは、Eloquent が複合主キーの Model を苦手にすることと、レガシー版の表（<code>id</code> あり）から制約を足すだけで移れることのため。二重を例外（<code>23505</code>）で受ける案は、PostgreSQL ではトランザクションが止まり、03 でマッチを同じトランザクションで作るときに困る。</p></details>
+  <details><summary>弱点は？</summary><p>使わない <code>id</code> と、そのインデックスの分だけ、表と書き込みが少し重い。インデックスは UNIQUE の <code>(from_user_id, to_user_id)</code> と <code>to_user_id</code> の2つが増え、いいねを入れるたびに両方を書き直す。<code>ON CONFLICT DO NOTHING</code> は、二重のときにどの行とぶつかったかを返さない。CASCADE は、06 で論理削除にすると働かなくなる。</p></details>
+  <details><summary>問題が起きたら、どう調べて直すか？</summary><p>「いいねを押すとエラーになる」と言われたら、<code>laravel.log</code> で <code>23505</code>（UNIQUE の違反）を探す。あれば、2回目のいいねを <code>500</code> にしている（レガシー版）。<code>insertOrIgnore()</code> にして <code>409</code> を返す。UNIQUE のない表なら、<code>select from_user_id, to_user_id, count(*) from likes group by 1, 2 having count(*) &gt; 1</code> で重なりを数え、1つに減らしてから UNIQUE を足す。一覧が遅いと言われたら、SQL のログで本数（N+1 か）を見て、<code>EXPLAIN (ANALYZE, BUFFERS)</code> で <code>Seq Scan</code> を探す。</p></details>
+  <details><summary>データが10倍・100倍になったら？</summary><p>いいねは会員の数より速く増える（1人が何十人にも送る）。インデックスがないと、「A は B にいいねしたか」も、送った一覧も、表を全部読む。UNIQUE の <code>(from_user_id, to_user_id)</code> があれば、どちらも数行を読むだけで済む。一覧は件数が増えるので、04 でページ送り（カーソル）を入れる。N+1 のままだと、送った数に比例して SQL が増える。</p></details>
+  <details><summary>Eloquent でどんな SQL が流れ、どう直したか？ Rails（ActiveRecord）・Prisma ならどう書くか？</summary>
+    <table>
+      <tr><th></th><th>Laravel（Eloquent）</th><th>Rails（ActiveRecord）</th><th>Prisma</th></tr>
+      <tr><td>二重を防ぐ</td><td>マイグレーションの <code>unique([...])</code>＋<code>insertOrIgnore()</code>（<code>insert ... on conflict do nothing</code>）</td><td><code>add_index :likes, [:from_user_id, :to_user_id], unique: true</code>＋<code>insert_all(..., unique_by: ...)</code>。<code>validates ... uniqueness:</code> だけでは同時に破れる</td><td><code>@@unique([fromUserId, toUserId])</code>＋<code>createMany({ skipDuplicates: true })</code>、または例外 <code>P2002</code> をつかまえる</td></tr>
+      <tr><td>流れていた SQL（レガシー版の一覧）</td><td><code>select * from likes where from_user_id = ?</code> のあと、<code>select * from profiles where user_id = ? limit 1</code> を N 本</td><td>ループで <code>like.to_user.profile</code> を読むと同じ N+1</td><td>ループで <code>findUnique</code> を呼ぶと同じ N+1</td></tr>
+      <tr><td>直した一覧</td><td><code>with('toUser.profile')</code>：<code>... where id in (...)</code> を2本足して3本</td><td><code>includes(to_user: :profile)</code>（別のクエリでまとめる）</td><td><code>include: { toUser: { include: { profile: true } } }</code></td></tr>
+    </table>
+  </details>
+
+  <h2>9. 実装の記録</h2>
+  <p class="meta">レガシー版のあと（9-1・9-2）と、改善したあと（9-3・9-4）に、explain-change が書く。</p>
+  <h3>9-1. レガシー版</h3>
+  <p>【まだ実装していない】</p>
+  <h3>9-2. 測った問題と数字</h3>
+  <p>【まだ実装していない】</p>
+  <h3>9-3. 足したテスト</h3>
+  <p>【まだ実装していない】</p>
+  <h3>9-4. 改善版と、前と後の数字</h3>
+  <p>【まだ実装していない】</p>
+</main>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+  const dark = document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
+</script>
+</body>
+</html>
