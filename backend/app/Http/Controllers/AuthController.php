@@ -31,6 +31,10 @@ class AuthController extends Controller
             return response()->json(['message' => 'パスワードが違います'], 401);
         }
 
+        // 04：最終ログインを残す（検索の並び）。save() は updated_at も書き換える。時刻はアプリのサーバーの時計
+        $user->last_login_at = now();
+        $user->save();
+
         // 中身は base64 なので、だれでも読める（署名はあるが、暗号化はしていない）
         $token = JWT::encode([
             'sub' => $user->id,

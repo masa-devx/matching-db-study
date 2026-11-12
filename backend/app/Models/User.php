@@ -56,6 +56,8 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            // 04：最終ログイン（検索の並び）
+            'last_login_at' => 'datetime',
             // 保存するときに bcrypt でハッシュ化する（元に戻せない形。FR-014）
             'password' => 'hashed',
         ];

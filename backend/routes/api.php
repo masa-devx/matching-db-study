@@ -26,6 +26,8 @@ Route::put('/users/{publicId}', [ProfileController::class, 'update']);
 
 // 01b 登録とメールアドレスの確認（docs/api/01b-auth.md）。レガシー版は、だれでも使える
 Route::post('/users', [UserController::class, 'store']);
+// 04 相手を探す（docs/api/04-search.md）。レガシー版は、コントローラの中で JWT を読む
+Route::get('/users', [UserController::class, 'index']);
 Route::get('/email-verifications/{token}', [EmailVerificationController::class, 'show']);
 Route::post('/email-verifications', [EmailVerificationController::class, 'store']);
 
