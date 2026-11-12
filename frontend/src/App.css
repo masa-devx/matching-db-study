@@ -5,22 +5,6 @@
   padding: 0 16px;
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 0;
-  border-bottom: 1px solid #dee2e6;
-}
-
-.nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  font-size: 14px;
-}
-
 .main {
   padding: 24px 0;
 }
@@ -89,4 +73,366 @@
 
 .success {
   color: #2b8a3e;
+}
+
+/* ---- 03b #36 で足した（マッチングアプリによくある見せ方）。値は上と同じものを、また書く ---- */
+.logo {
+  font-size: 20px;
+  font-weight: bold;
+  color: #d6336c;
+  letter-spacing: 0.5px;
+}
+
+.logo-large {
+  font-size: 24px;
+}
+
+.button-ghost {
+  color: #6c757d;
+  background: transparent;
+  border: 1px solid #dee2e6;
+}
+
+.button-space {
+  margin-top: 8px;
+}
+
+.button-white {
+  width: auto;
+  padding: 12px 32px;
+  color: #d6336c;
+  background: #fff;
+}
+
+/* ログイン・登録 */
+.auth {
+  padding-top: 24px;
+}
+
+.brand {
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.brand-text {
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: #6c757d;
+}
+
+/* 下に固定したタブ */
+.tabs {
+  display: flex;
+  flex-shrink: 0;
+  padding-bottom: env(safe-area-inset-bottom);
+  background: #fff;
+  border-top: 1px solid #dee2e6;
+}
+
+.tab {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0;
+  font-size: 14px;
+  color: #6c757d;
+  text-decoration: none;
+}
+
+.tab.active {
+  color: #d6336c;
+  font-weight: bold;
+}
+
+.tab-icon {
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+/* プロフィール（相手・自分） */
+.profile {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.photo {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 3 / 4;
+  background: #dee2e6;
+  border-radius: 16px;
+}
+
+.photo-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.photo-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #6c757d;
+}
+
+.photo-caption {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 48px 16px 16px;
+  color: #fff;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.6));
+}
+
+.photo-name {
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.photo-age {
+  font-size: 20px;
+  font-weight: normal;
+}
+
+.photo-sub {
+  font-size: 14px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  padding: 4px 12px;
+  font-size: 14px;
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 999px;
+}
+
+.section-title {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.intro {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.toast {
+  margin: 0;
+  padding: 8px 16px;
+  text-align: center;
+  color: #fff;
+  background: #212529;
+  border-radius: 999px;
+}
+
+/* いいねのボタン（下のタブの上に浮かせる） */
+.like-bar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+}
+
+.like-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 32px;
+  font: inherit;
+  font-weight: bold;
+  color: #fff;
+  background: #d6336c;
+  border: none;
+  border-radius: 999px;
+  box-shadow: 0 4px 12px rgba(214, 51, 108, 0.4);
+  cursor: pointer;
+}
+
+.like-button:disabled {
+  color: #d6336c;
+  background: #fff;
+  border: 1px solid #d6336c;
+  box-shadow: none;
+  cursor: default;
+}
+
+.like-heart {
+  font-size: 20px;
+}
+
+/* マッチしたときに、画面いっぱいに出す */
+.match-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  color: #fff;
+  text-align: center;
+  background: linear-gradient(160deg, #d6336c, #f06595);
+}
+
+.match-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.match-avatar {
+  width: 160px;
+  height: 160px;
+  object-fit: cover;
+  border: 4px solid #fff;
+  border-radius: 50%;
+}
+
+.match-text {
+  margin: 0;
+}
+
+/* 自分のプロフィール */
+.me-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.me-avatar {
+  width: 120px;
+  height: 120px;
+  object-fit: cover;
+  border: 3px solid #d6336c;
+  border-radius: 50%;
+}
+
+.me-avatar-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: #6c757d;
+  background: #dee2e6;
+}
+
+.me-name {
+  margin-top: 8px;
+}
+
+.muted-text {
+  font-size: 14px;
+  color: #6c757d;
+}
+
+.avatar-picker {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  margin: 4px 0 16px;
+}
+
+.pick input {
+  position: absolute;
+  opacity: 0;
+}
+
+.pick img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.pick-on img {
+  border-color: #d6336c;
+}
+
+.pick input:focus-visible + img {
+  outline: 2px solid #212529;
+}
+
+/* ---- ログインしたあとの枠。四角の枠の中に、画面（上）とタブ（下）を入れる ----
+   スマホ（〜767px）：枠は画面いっぱい（線なし）
+   タブレット（768〜1023px）：幅 600px の枠を真ん中に。上下に 24px あける
+   PC（1024px〜）：幅 640px の枠を真ん中に。写真が縦に長くなりすぎないように、4:5 にする */
+.shell {
+  background: #fff;
+}
+
+.frame {
+  position: relative; /* マッチの画面を、この枠の中に出すため */
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+  background: #f8f9fa;
+}
+
+/* 画面の中身だけがスクロールする。タブは枠の下に残る */
+.frame-main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  padding-top: calc(16px + env(safe-area-inset-top));
+}
+
+.profile-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.soon {
+  margin: 48px 0;
+  text-align: center;
+  color: #6c757d;
+}
+
+.logout {
+  margin-top: 8px;
+}
+
+/* タブレット */
+@media (min-width: 768px) {
+  .frame {
+    max-width: 600px;
+    height: calc(100dvh - 48px);
+    margin: 24px auto;
+    border: 1px solid #dee2e6;
+    border-radius: 16px;
+  }
+
+  .frame-main {
+    padding: 24px;
+  }
+}
+
+/* PC */
+@media (min-width: 1024px) {
+  .frame {
+    max-width: 640px;
+  }
+
+  .photo {
+    aspect-ratio: 4 / 5;
+  }
 }

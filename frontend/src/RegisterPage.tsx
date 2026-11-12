@@ -40,40 +40,46 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="card">
-      <h1 className="title">登録</h1>
-      <form onSubmit={submit}>
-        <label className="label">
-          メールアドレス
-          <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        </label>
-        <label className="label">
-          パスワード
-          <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-        </label>
-        <label className="label">
-          ニックネーム
-          <input className="input" value={nickname} onChange={(e) => setNickname(e.target.value)} />
-        </label>
-        <label className="label">
-          性別
-          <select className="input" value={gender} onChange={(e) => setGender(e.target.value)}>
-            <option value="female">女性</option>
-            <option value="male">男性</option>
-          </select>
-        </label>
-        <label className="label">
-          生年月日
-          <input className="input" type="date" value={birthday} onChange={(e) => setBirthday(e.target.value)} />
-        </label>
-        {error && <p className="error">{error}</p>}
-        <button className="button" type="submit">
-          登録する
-        </button>
-      </form>
-      <p className="muted">
-        登録済みの方は <Link to="/login">ログイン</Link>
-      </p>
+    <div className="auth">
+      <div className="brand">
+        <div className="logo logo-large">matching</div>
+        <p className="brand-text">気になる人に、いいねを送ろう</p>
+      </div>
+      <div className="card">
+        <h1 className="title">登録</h1>
+        <form onSubmit={submit}>
+          <label className="label">
+            メールアドレス
+            <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </label>
+          <label className="label">
+            パスワード
+            <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          </label>
+          <label className="label">
+            ニックネーム
+            <input className="input" value={nickname} onChange={(e) => setNickname(e.target.value)} />
+          </label>
+          <label className="label">
+            性別
+            <select className="input" value={gender} onChange={(e) => setGender(e.target.value)}>
+              <option value="female">女性</option>
+              <option value="male">男性</option>
+            </select>
+          </label>
+          <label className="label">
+            生年月日
+            <input className="input" type="date" value={birthday} onChange={(e) => setBirthday(e.target.value)} />
+          </label>
+          {error && <p className="error">{error}</p>}
+          <button className="button" type="submit">
+            登録する
+          </button>
+        </form>
+        <p className="muted">
+          登録済みの方は <Link to="/login">ログイン</Link>
+        </p>
+      </div>
     </div>
   )
 }
