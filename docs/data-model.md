@@ -6,7 +6,7 @@
 
 ## レガシー版（legacy-repo）
 
-`users`（アカウント）と `profiles`（その会員についての情報）に分ける（D-015）。分けてはいるが、型は文字のまま・制約なし・1対1 の守りもない。`likes`（02）は会員と会員をつなぐ中間テーブルで、同じ組の UNIQUE だけを持つ。
+`users`（アカウント）と `profiles`（その会員についての情報）に分ける（D-015）。分けてはいるが、型は文字のまま・制約なし・1対1 の守りもない。`likes`（02）は会員と会員をつなぐ中間テーブルで、同じ組の UNIQUE だけを持つ。`user_matches`（03）はお互いにいいねした2人の組を1行で持つが、制約もインデックスもない。
 
 01 では初め `users` 1つに全部を持っていたが、#18（PR #19）の新しいマイグレーションで `profiles` を作り、`users` のプロフィールの列と `name` を移して消した。
 
@@ -17,6 +17,8 @@ erDiagram
   USERS ||--o{ PROFILES : "user_id で指す（守りなし）"
   USERS ||--o{ LIKES : "from_user_id で指す（守りなし）"
   USERS ||--o{ LIKES : "to_user_id で指す（守りなし）"
+  USERS ||--o{ USER_MATCHES : "user1_id で指す（守りなし）"
+  USERS ||--o{ USER_MATCHES : "user2_id で指す（守りなし）"
   USERS {
     bigint id PK
     varchar email UK
@@ -47,6 +49,13 @@ erDiagram
     timestamp created_at "いいねした日時。時間帯なし"
     timestamp updated_at "時間帯なし"
   }
+  USER_MATCHES {
+    bigint id PK
+    bigint user1_id "いいねを送り返した会員。外部キーなし"
+    bigint user2_id "先に送っていた会員。外部キーもインデックスもなし"
+    timestamp created_at "マッチした日時。時間帯なし"
+    timestamp updated_at "時間帯なし"
+  }
 ```
 
 ### 表の一覧
@@ -56,12 +65,13 @@ erDiagram
 | `users` | 00（ひな形）・01・01b | アカウント（ログインのための情報） | 主キー `id`・`email` の UNIQUE（`users_email_unique`。大文字と小文字は区別する） |
 | `profiles` | 01 | その会員についての情報 | 主キー `id` だけ。`user_id` に外部キーも UNIQUE もないので、1人に2つのプロフィール・ない会員を指すプロフィールができる |
 | `likes` | 02 | いいね（だれから・だれへ・いつ）。会員と会員をつなぐ中間テーブル | 主キー `id`・`(from_user_id, to_user_id)` の UNIQUE（`likes_from_user_id_to_user_id_unique`）だけ。外部キーがないので、ない会員を指せ、会員を消しても残る。自分から自分も入る。`to_user_id` から探すと表を全部読む |
+| `user_matches` | 03 | マッチ（お互いにいいねした2人の組と、いつ）。Model は `UserMatch`（`match` は PHP の予約語） | 主キー `id` だけ。同じ組が2行入り、(A, B) と (B, A) も両方入る。自分とのマッチ・ない会員を指すマッチも入り、会員を消しても残る。自分のマッチを探す `user1_id = ? or user2_id = ?` は表を全部読む |
 
 Laravel のひな形が作った表（この学習では扱わない）：`password_reset_tokens`・`sessions`・`cache`・`cache_locks`・`jobs`・`job_batches`・`failed_jobs`・`personal_access_tokens`（`install:api` が足した Sanctum の表。D-014 で JWT にしたので使わない）。
 
 ## 改善版（refactored-repo）
 
-まだない。01・01b・02 を直したら、次の形にする予定（[01 の解説](../explanations/01-members.html)・[01b の解説](../explanations/01b-auth.html)・[02 の解説](../explanations/02-likes.html)・D-012〜D-015）。
+まだない。01・01b・02・03 を直したら、次の形にする予定（[01 の解説](../explanations/01-members.html)・[01b の解説](../explanations/01b-auth.html)・[02 の解説](../explanations/02-likes.html)・[03 の解説](../explanations/03-matches.html)・D-012〜D-015）。
 
 | 表 | 中身 | 主な制約 |
 | --- | --- | --- |
@@ -70,4 +80,5 @@ Laravel のひな形が作った表（この学習では扱わない）：`passw
 | `users` | アカウント（メールアドレス・パスワード・確認した時刻） | メールアドレスは小文字にそろえて UNIQUE |
 | `profiles` | その会員についての情報（性別・生年月日・ニックネーム・都道府県・身長・自己紹介・画像） | `user_id` が主キー兼外部キー（1対1）・`gender_code` → `genders.code`・`prefecture_code` → `prefectures.code` の外部キー・`birthdate` は `date`・ニックネームの長さの CHECK。身長は型だけ（範囲はアプリ。D-013） |
 | `likes` | いいね（02） | `(from_user_id, to_user_id)` の UNIQUE・2つの列から `users.id` への外部キー（`ON DELETE CASCADE`）・`from_user_id <> to_user_id` の CHECK・`to_user_id` のインデックス |
+| `user_matches` | マッチ（03）。1組を1行で持ち、`user1_id` に小さい ID を入れる | `(user1_id, user2_id)` の UNIQUE・`user1_id < user2_id` の CHECK（`user_matches_user1`）・`user2_id` のインデックス・2つの列から `users.id` への外部キー（`ON DELETE CASCADE`） |
 | `refresh_tokens` | 取り替え用のトークン（01b） | `token_hash` の UNIQUE（SHA-256）・`user_id` → `users.id` の外部キー・家族の番号・期限・使った時刻・止めた時刻 |
