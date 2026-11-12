@@ -65,7 +65,7 @@
     <tr><td>Mailpit（メールの受信箱）</td><td><code>compose.yaml</code></td><td>01b のメールアドレスの確認で、外にメールを出さずに受け取る</td></tr>
     <tr><td>Laravel（API）</td><td><code>backend/</code></td><td>01 から先の機能を作る</td></tr>
     <tr><td>SQL のログ</td><td><code>backend/app/Support/Logging/</code></td><td>流れた SQL・時間・回数を見る（N+1 を見つける）</td></tr>
-    <tr><td>Pest・Larastan・Pint</td><td><code>backend/</code></td><td>直す段階のテストと、静的検査・整形</td></tr>
+    <tr><td>Pest・Larastan・Pint</td><td><code>backend/</code></td><td>改善する段階のテストと、静的検査・整形</td></tr>
   </table>
   <p>子 Issue：<a href="https://github.com/masa-devx/matching-db-study/issues/2">#2 DB（Docker）</a> → <a href="https://github.com/masa-devx/matching-db-study/issues/3">#3 バックエンド（Laravel）</a> → <a href="https://github.com/masa-devx/matching-db-study/issues/4">#4 主要コマンドと解説の記録</a></p>
 
@@ -139,7 +139,7 @@ sequenceDiagram
   <div class="card point"><strong>この一歩で選ぶもの</strong>：A を作り、C の <code>pg_stat_statements</code> も最初から有効にしておく。A は「この API で何本流れたか」、C は「全体でどれが重いか」を見るので、両方あると 04 から先で困らない。</div>
 
   <h2>5. 見本（小さく）</h2>
-  <p>00 は環境なので、レガシー版と直した版に分けません。要点だけです。</p>
+  <p>00 は環境なので、レガシー版と改善版に分けません。要点だけです。</p>
   <pre><code># compose.yaml（要点）
 services:
   db:
@@ -216,7 +216,7 @@ public static function register(): void
   </details>
 
   <h2>9. 実装の記録</h2>
-  <p class="meta">00 はレガシー版と直した版に分けず、実装したあとに explain-change がここに1つの記録として書く。</p>
+  <p class="meta">00 はレガシー版と改善版に分けず、実装したあとに explain-change がここに1つの記録として書く。</p>
   <p class="meta">記録: 2026-11-11 ／ PR: <a href="https://github.com/masa-devx/matching-db-study/pull/5">#5 DB（Docker）</a>・<a href="https://github.com/masa-devx/matching-db-study/pull/6">#6 バックエンド（Laravel）</a>・#4 主要コマンドと記録</p>
 
   <h3>書いたもの</h3>

@@ -14,7 +14,7 @@ use Illuminate\Support\Str;
 
 /**
  * 01b 登録（レガシー版。docs/api/01b-auth.md）。
- * 入力を確かめない・トランザクションがない・応答に確認用の文字が出る。直す段階で、要件 ID のテストにする。
+ * 入力を確かめない・トランザクションがない・応答に確認用の文字が出る。改善する段階で、要件 ID のテストにする。
  */
 class UserController extends Controller
 {

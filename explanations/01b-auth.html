@@ -65,7 +65,7 @@
     <tr><td>メールアドレスの確認・再送</td><td>メールのリンクで確認済みにする。確認のメールをもう一度送る</td><td>FR-AUTH-005〜007</td><td>#15</td></tr>
     <tr><td>ログイン・自分の情報・ログアウト</td><td>メールアドレスとパスワードで JWT をもらう。JWT で自分の情報を見る</td><td>FR-AUTH-010〜017</td><td><a href="https://github.com/masa-devx/matching-db-study/issues/16">#16</a></td></tr>
   </table>
-  <p>API の入力と応答の細かい形は、子 Issue の最初に <code>docs/api/01b-auth.md</code> に書いて、確かめてもらってから作ります。だれが何をできるか（認可。FR-AUTH-020〜023）は、レガシー版では作らず、直す段階で足します。</p>
+  <p>API の入力と応答の細かい形は、子 Issue の最初に <code>docs/api/01b-auth.md</code> に書いて、確かめてもらってから作ります。だれが何をできるか（認可。FR-AUTH-020〜023）は、レガシー版では作らず、改善する段階で足します。</p>
 
   <h2>2. 先に知っておく言葉</h2>
   <table>
@@ -84,7 +84,7 @@
   </table>
 
   <h2>3. 図で見る</h2>
-  <p>1枚目はレガシー版のログイン、2枚目は直した版のログインと取り替え、3枚目は登録と確認の流れ、4枚目は直した版で足す表です。</p>
+  <p>1枚目はレガシー版のログイン、2枚目は改善版のログインと取り替え、3枚目は登録と確認の流れ、4枚目は改善版で足す表です。</p>
   <pre class="mermaid">
 sequenceDiagram
   participant C as curl（03b からは画面）
@@ -102,7 +102,7 @@ sequenceDiagram
   <pre class="mermaid">
 sequenceDiagram
   participant B as ブラウザ（03b）
-  participant A as API（直した版）
+  participant A as API（改善版）
   participant D as DB
   B->>A: POST ログイン
   A->>D: 取り替え用のトークンのハッシュを保存（30日・家族の番号）
@@ -154,7 +154,7 @@ erDiagram
     <tr><td>B. HttpOnly の Cookie に置く</td><td>JavaScript から読めないので、XSS で持ち出されにくい。すべてのタブで同じ</td><td>自動で送られるので CSRF の守りが要る。画面と API を同じサイトに置く必要がある</td><td>ブラウザの SPA</td></tr>
     <tr><td>C. BFF がトークンを預かる</td><td>ブラウザにトークンがない</td><td>サーバーが1つ増える</td><td>大きめのサービス</td></tr>
   </table>
-  <div class="card point"><strong>この一歩で選ぶもの</strong>：直した版は B（D-014）。BFF は作らない。01b では画面がないので、curl の Cookie の保存（<code>-c</code>・<code>-b</code>）で確かめる。</div>
+  <div class="card point"><strong>この一歩で選ぶもの</strong>：改善版は B（D-014）。BFF は作らない。01b では画面がないので、curl の Cookie の保存（<code>-c</code>・<code>-b</code>）で確かめる。</div>
 
   <h3>② JWT を、どうやって止められるようにするか</h3>
   <table>
@@ -163,7 +163,7 @@ erDiagram
     <tr><td>B. 短い期限（15分）＋取り替え用のトークン（DB）</td><td>JWT は DB を見ずに確かめられる。止めたいときは、取り替え用のトークンを止めれば、最大15分で切れる</td><td>表と取り替えの仕組みを作る</td><td>JWT のよさを残したいとき</td></tr>
     <tr><td>C. 止めた JWT の番号（<code>jti</code>）を表に入れ、毎回確かめる</td><td>すぐ止められる</td><td>毎回 DB を見るので、JWT のよさ（DB を見ない）がなくなる</td><td>すぐ止める必要が強いとき（B と組み合わせる）</td></tr>
   </table>
-  <div class="card point"><strong>この一歩で選ぶもの</strong>：直した版は B。取り替え用のトークンは、使うたびに取り替え、使ったものがもう一度来たら「盗まれた」と考えて家族ごと止める（FR-AUTH-015）。</div>
+  <div class="card point"><strong>この一歩で選ぶもの</strong>：改善版は B。取り替え用のトークンは、使うたびに取り替え、使ったものがもう一度来たら「盗まれた」と考えて家族ごと止める（FR-AUTH-015）。</div>
 
   <h3>③ 確認のリンクを、どう持つか</h3>
   <table>
@@ -172,7 +172,7 @@ erDiagram
     <tr><td>B. 乱数のハッシュと期限を、別の表に持つ</td><td>漏れても使えない。期限で切れる</td><td>表が1つ増える</td><td>1回だけ使うことを、DB で厳しく守りたいとき（パスワードの再設定など）</td></tr>
     <tr><td>C. 署名つきのリンク（DB に持たない）</td><td>表が要らない。期限と書き換えの確かめは、署名で済む</td><td>期限内なら何度でも開ける（ただし確認は1回で済み、2回目は何も変えない）</td><td>メールアドレスの確認</td></tr>
   </table>
-  <div class="card point"><strong>この一歩で選ぶもの</strong>：直した版は C（Laravel の標準）。確認は「済んだかどうか」だけを <code>email_verified_at</code> に持てば足りる。</div>
+  <div class="card point"><strong>この一歩で選ぶもの</strong>：改善版は C（Laravel の標準）。確認は「済んだかどうか」だけを <code>email_verified_at</code> に持てば足りる。</div>
 
   <h3>④ ログインの回数を、何で数えるか</h3>
   <table>
@@ -181,9 +181,9 @@ erDiagram
     <tr><td>メールアドレスだけ</td><td>悪い人がわざと失敗して、本人を締め出せる</td></tr>
     <tr><td><strong>メールアドレスと IP の組み合わせ</strong></td><td>両方を変えないと試し続けられない。本人は別の場所からならログインできる</td></tr>
   </table>
-  <div class="card point"><strong>この一歩で選ぶもの</strong>：直した版は、メールアドレスと IP の組み合わせで 1分に5回まで（FR-AUTH-012）。Laravel の <code>RateLimiter</code> を使う。</div>
+  <div class="card point"><strong>この一歩で選ぶもの</strong>：改善版は、メールアドレスと IP の組み合わせで 1分に5回まで（FR-AUTH-012）。Laravel の <code>RateLimiter</code> を使う。</div>
 
-  <h2>5. 見本：レガシー版と直した版</h2>
+  <h2>5. 見本：レガシー版と改善版</h2>
   <h3>レガシー版（Fat Controller・テストなし）</h3>
   <pre><code>// 登録（POST /api/users）
 public function store(Request $request): JsonResponse
@@ -214,7 +214,7 @@ public function login(Request $request)
     <li><strong>ログイン</strong>：ないメールアドレスのときだけ「メールアドレスが違います」になり、登録されているかが分かる。何回でも試せる。ないメールアドレスのときはパスワードの照合を飛ばすので、返るまでの時間で見分けられる</li>
     <li><strong>JWT</strong>：30日使え、止められない。中身（メールアドレス）はだれでも読める。<code>is_paid</code> が古いまま残る</li>
   </ul></div>
-  <h3>直した版</h3>
+  <h3>改善版</h3>
   <pre><code>// ログイン：Cookie で渡す。JSON にトークンは入れない
 $jwt = $issuer->accessToken($user);                 // sub・exp(15分)・jti・iss・aud だけ
 [$plain, $row] = $refresh->issue($user);            // DB には hash('sha256', $plain)
@@ -248,7 +248,7 @@ DB::transaction(function () use ($plain) {
         <li>ログインしていなくても、01 のプロフィールを他人のものまで編集できることを見る（IDOR）</li>
       </ul></td></tr>
     <tr><td>② 振る舞いを固定するテスト</td><td>要件 ID ごとにテストを足す（例：<code>FR-AUTH-002 18歳未満は登録できない</code>・<code>FR-AUTH-015 使ったあとの取り替え用のトークンが、もう一度使われたら止める</code>）。レガシー版でも守れているもの（パスワードのハッシュなど）は、レガシー版のまま通ることを確かめる</td></tr>
-    <tr><td>③ 直したあとに比べる数字</td><td>守れている要件の数（レガシー版 ○/22 → 直した版 22/22）・JWT が使える時間（30日 → 15分）・1分に試せるログインの回数（数えきれない → 5回）・ないメールアドレスと違うパスワードの返る時間の差・ログアウトのあと JWT が使える時間</td></tr>
+    <tr><td>③ 改善したあとに比べる数字</td><td>守れている要件の数（レガシー版 ○/22 → 改善版 22/22）・JWT が使える時間（30日 → 15分）・1分に試せるログインの回数（数えきれない → 5回）・ないメールアドレスと違うパスワードの返る時間の差・ログアウトのあと JWT が使える時間</td></tr>
   </table>
 
   <h2>7. 気をつけること（罠）</h2>
@@ -272,7 +272,7 @@ DB::transaction(function () use ($plain) {
   <details><summary>問題が起きたら、どう調べて直すか？</summary><p>「ログインが続かない」→ ブラウザの開発ツールで Cookie が保存されているか（<code>SameSite</code>・<code>Secure</code>・ドメイン）、API が <code>Access-Control-Allow-Credentials</code> を返しているかを見る。「急に全員ログアウトした」→ JWT の鍵が変わっていないか、取り替え用のトークンの家族ごとの停止が誤って起きていないか（同時に2回の取り替え）を <code>refresh_tokens</code> の <code>used_at</code>・<code>revoked_at</code> で見る。盗まれた疑いがあれば、その会員の取り替え用のトークンを全部止め、必要なら JWT の鍵を取り替える（全員がログインし直しになる）。</p></details>
   <details><summary>データが10倍・100倍になったら？</summary><p>アクセストークンの確かめは DB を見ないので、会員が増えても重くならない。重くなるのは <code>refresh_tokens</code>：端末ごと・取り替えのたびに行が増える。<code>token_hash</code> の UNIQUE のインデックスで探すので速いが、期限切れの行を定期的に消す仕組み（バッチ）が要る。ログインの回数制限は、手元はキャッシュの表で数えるが、数が増えたら Redis に移す。</p></details>
   <details><summary>Eloquent でどんな SQL が流れ、どう直したか？ Rails（ActiveRecord）・Prisma ならどう書くか？</summary>
-    <p>レガシー版のログインは <code>select * from users where email = ? limit 1</code> の1本で、大文字のメールアドレスでは見つからない（または別の人として登録できる）。直した版は、メールアドレスを小文字にそろえ、取り替えのときに <code>select ... for update</code> で行をロックしてから <code>update</code> する。</p>
+    <p>レガシー版のログインは <code>select * from users where email = ? limit 1</code> の1本で、大文字のメールアドレスでは見つからない（または別の人として登録できる）。改善版は、メールアドレスを小文字にそろえ、取り替えのときに <code>select ... for update</code> で行をロックしてから <code>update</code> する。</p>
     <table>
       <tr><th>ORM</th><th>パスワード</th><th>署名つきのリンク・1回だけのトークン</th><th>回数制限</th></tr>
       <tr><td>Laravel（Eloquent）</td><td><code>casts()</code> の <code>'hashed'</code>・<code>Hash::check()</code></td><td><code>URL::temporarySignedRoute()</code>・<code>MustVerifyEmail</code></td><td><code>RateLimiter</code>・<code>throttle</code> のミドルウェア</td></tr>
@@ -282,14 +282,14 @@ DB::transaction(function () use ($plain) {
   </details>
 
   <h2>9. 実装の記録</h2>
-  <p class="meta">レガシー版のあと（9-1・9-2）と、直したあと（9-3・9-4）に、explain-change が書く。</p>
+  <p class="meta">レガシー版のあと（9-1・9-2）と、改善したあと（9-3・9-4）に、explain-change が書く。</p>
   <h3>9-1. レガシー版</h3>
   <p>【まだ実装していない】</p>
   <h3>9-2. 測った問題と数字</h3>
   <p>【まだ実装していない】</p>
   <h3>9-3. 足したテスト</h3>
   <p>【まだ実装していない】</p>
-  <h3>9-4. 直した版と、前と後の数字</h3>
+  <h3>9-4. 改善版と、前と後の数字</h3>
   <p>【まだ実装していない】</p>
 </main>
 <script type="module">

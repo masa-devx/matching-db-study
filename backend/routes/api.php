@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\AuthController;
 use App\Http\Controllers\EmailVerificationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\UserController;
@@ -25,3 +26,8 @@ Route::put('/users/{id}/profile', [ProfileController::class, 'update']);
 Route::post('/users', [UserController::class, 'store']);
 Route::get('/email-verifications/{token}', [EmailVerificationController::class, 'show']);
 Route::post('/email-verifications', [EmailVerificationController::class, 'store']);
+
+// 01b ログイン・自分の情報・ログアウト（docs/api/01b-auth.md）。レガシー版は、JWT を JSON で返す
+Route::post('/auth/login', [AuthController::class, 'login']);
+Route::get('/me', [AuthController::class, 'me']);
+Route::post('/auth/logout', [AuthController::class, 'logout']);
