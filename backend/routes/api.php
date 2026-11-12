@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\EmailVerificationController;
+use App\Http\Controllers\LikeController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\DB;
@@ -31,3 +32,7 @@ Route::post('/email-verifications', [EmailVerificationController::class, 'store'
 Route::post('/auth/login', [AuthController::class, 'login']);
 Route::get('/me', [AuthController::class, 'me']);
 Route::post('/auth/logout', [AuthController::class, 'logout']);
+
+// 02 いいね（docs/api/02-likes.md）。レガシー版は、コントローラの中で JWT を読む
+Route::post('/me/likes', [LikeController::class, 'store']);
+Route::get('/me/likes', [LikeController::class, 'index']);
