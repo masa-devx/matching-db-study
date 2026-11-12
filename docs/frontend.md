@@ -1,4 +1,4 @@
-# 画面の作り方（レガシー版と直した版）
+# 画面の作り方（レガシー版と改善版）
 
 状態：確定（細かい道具と置き場所は 03b で決める）
 決定：[decisions.md](decisions.md) の D-004（React＋TypeScript＋Vite）・D-006（OpenAPI は使わない）・D-014（認証）・D-018（画面も分ける）
@@ -28,7 +28,7 @@ export default function SearchPage() {
 
 ## 6つの項目
 
-| 項目 | レガシー版（legacy-repo） | 直した版（refactored-repo） | 測る・確かめること |
+| 項目 | レガシー版（legacy-repo） | 改善版（refactored-repo） | 測る・確かめること |
 | --- | --- | --- | --- |
 | コンポーネント設計 | 1画面に1つの大きな部品 | container（データを取る・持つ）と presenter（props で見せるだけ）に分ける | 1つの部品の行の数。presenter を、API なしでテストできるか |
 | API との通信 | 部品の中の `useEffect` で、そのつど `fetch`。URL とトークンの読み出しを、あちこちに書く | API を呼ぶところを1か所にまとめる（送り先・`401`・失敗・読み込み中）。検索の連打は `AbortController` で止める | 連打したとき、古い結果があとから上書きするか |
@@ -39,7 +39,7 @@ export default function SearchPage() {
 
 ## 認証（D-014）
 
-| | レガシー版 | 直した版 |
+| | レガシー版 | 改善版 |
 | --- | --- | --- |
 | トークンの置き場所 | ログインの応答の JWT を sessionStorage に置き、`Authorization: Bearer` で送る | HttpOnly の Cookie（画面からは読めない）。`fetch` に `credentials: 'include'` |
 | 確かめること | XSS があると、トークンを持ち出せる | 同じ XSS でも、トークンを持ち出せない |
