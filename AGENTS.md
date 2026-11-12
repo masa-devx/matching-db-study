@@ -13,11 +13,11 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 | 種類 | 使うもの | 版 | 選んだ理由（短く） |
 | --- | --- | --- | --- |
 | 言語・実行環境 | PHP（Docker の `app`）・Node（手元・mise。03b から）・Docker | PHP 8.5・Node 26.13.0 | PHP と DB を Docker にそろえ、だれの PC でも同じ版で動かす（D-011） |
-| フレームワーク | Laravel（API）・React＋TypeScript＋Vite（03b から） | 入れたときの最新・React 19 | 仕事で使ってきた形で、Eloquent の裏の SQL を確かめる |
+| フレームワーク | Laravel（API）・React＋TypeScript＋Vite＋React Router（03b から） | Laravel は入れたときの最新。React 19.3.1・TypeScript 7.0.2・Vite 8.3.8・React Router 8.5.1 | 仕事で使ってきた形で、Eloquent の裏の SQL を確かめる |
 | DB・ORM | PostgreSQL（Docker compose）・Eloquent | 18・Laravel と同じ | 流れた SQL は `DB::listen` でログに出し、`->explain()` で実行計画を見る |
 | 状態の管理（画面） | React の Context → Zustand（05b から） | React と同じ・入れたときの最新 | 標準の限界を体験してから移す。TanStack Query・OpenAPI は使わない |
 | テスト | Pest（バックエンド。テスト用の PostgreSQL に対して実行）・Vitest（画面） | 入れたときの最新 | SQLite ではロックや UNIQUE の動きが違うため、本物の PostgreSQL で確かめる |
-| 静的検査・整形 | Larastan（PHPStan）・Pint・ESLint・Prettier | 入れたときの最新 | 型の抜けと書き方のずれを機械で見つける |
+| 静的検査・整形 | Larastan（PHPStan）・Pint（API）・Biome（画面。lint と整形を1つで受け持つ） | Larastan・Pint は入れたときの最新。Biome 2.6.7 | 型の抜けと書き方のずれを機械で見つける |
 | デプロイ先 | なし（手元だけ） | ― | 学習用 |
 
 ここには結論だけを書く。
@@ -52,14 +52,15 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 | レガシー版と改善版の SQL を並べる節を作る | リポジトリのルート | `python3 -I explanations/tools/compare-block.py explanations/sql/<番号>-<名前>.json explanations/<番号>-<名前>.html`（ページの `<!-- compare: … -->` の印の間を書き換える） | python3 | 並べる HTML を手で書く（エスケープの漏れと形のずれが起きるため） |
 | セットアップ | リポジトリのルート | ① `docker compose build app` ② `docker compose up -d --wait` ③ `docker compose run --rm app composer install` ④（初めての PC だけ・人が実行）`cp backend/.env.example backend/.env` → `docker compose run --rm app php artisan key:generate` ⑤ `docker compose run --rm app php artisan migrate` | Docker。④の秘密の値のファイルは、AI は作らない・読まない | 手元の PHP・Composer（D-011。版と拡張がそろわないため）。`php.new` のスクリプト・Laravel Boost（`backend/` に AI 向けの指示が置かれるが、方針と合わないので入れない） |
 | 起動 | リポジトリのルート | `docker compose up -d --wait` → API は `http://127.0.0.1:8000/api/health`、メールの受信箱は `http://127.0.0.1:58025`。止めるのは `docker compose stop` | Docker | `php artisan serve`（compose の環境変数を子のプロセスに渡さず、`.env` の SQLite につながるため）。`docker compose down -v`（DB の中身も消える。作り直すときだけ） |
+| 画面を起動 | `frontend/` | 初めてのときは `npm install` → `npm run dev` → `http://localhost:5173/`。API の送り先は `VITE_API_URL`（既定は `http://127.0.0.1:8000`。変えるときは `.env.example` を写して `.env.local` を作る） | `mise install` 済み・API が起動している | `http://127.0.0.1:5173` で開く（`localhost` とは別のオリジンになり、改善版で Cookie が届かなくなるため） |
 | テスト | リポジトリのルート | `docker compose run --rm app ./vendor/bin/pest`（全体）・`docker compose run --rm app ./vendor/bin/pest tests/Feature/HealthTest.php`（対象別） | db が起動している。テスト用の DB `matching_test` に流れる（違えば `tests/TestCase.php` が止める） | SQLite のメモリ DB（D-010）。手元の PHP で `php artisan test`（手元に PHP がない） |
-| 静的検査・整形 | リポジトリのルート | `docker compose run --rm app ./vendor/bin/phpstan analyse --memory-limit=1G`（Larastan。レガシー版はレベル 6・改善版は 9。D-016）・`docker compose run --rm app ./vendor/bin/pint --test`（整形の確かめ）・`docker compose run --rm app ./vendor/bin/pint`（整形する） | なし | ― |
+| 静的検査・整形 | リポジトリのルート | `docker compose run --rm app ./vendor/bin/phpstan analyse --memory-limit=1G`（Larastan。レガシー版はレベル 6・改善版は 9。D-016）・`docker compose run --rm app ./vendor/bin/pint --test`（整形の確かめ）・`docker compose run --rm app ./vendor/bin/pint`（整形する）。画面は `frontend/` で `npm run lint`（Biome。レガシー版は指摘が残ったまま）・`npm run format`（整形する） | なし | ESLint・Prettier・oxlint（画面は Biome に一本化したため） |
 | 流れた SQL を見る | リポジトリのルート | `tail -n 20 backend/storage/logs/sql-$(date -u +%F).log`（日付は UTC） | app が起動していて、`APP_ENV=local` | `php artisan db:show`・`docker compose config`（接続の設定や秘密の値をまとめて出すため、AI は使わない） |
 | DB に入る | リポジトリのルート | `docker compose exec db psql -U postgres -d matching_dev`（テスト用は `-d matching_test`） | db が起動している | ― |
 | ブランチを切り替えたあと | リポジトリのルート | `docker compose restart app` | ― | 切り替え先に `backend/` がないと、動いているサーバーのフォルダが一度消えて、API がエラーを返し続けるため |
 | CI | GitHub（PR と push で自動） | `.github/workflows/backend.yml`（`legacy-repo` にある）。中身と決まりは [docs/ci.md](docs/ci.md)。結果は `gh pr checks <番号>` で見る | ― | CI の設定を緩めて通す（レベルを下げる・対象から外す） |
 | エディタの補完のファイルを作る | リポジトリのルート | `docker compose run --rm app php artisan ide-helper:models --nowrite`（`backend/_ide_helper_models.php` に書き出す。git には入らない） | db が起動している（列を DB から読む） | `--write`（Model のファイルに `@property` を書き込む。長くなり、マイグレーションとずれるため。quality-types.md） |
-| ビルド | ― | 対象外（デプロイしない。画面は 03b で決める） | ― | ― |
+| ビルド | `frontend/` | `npm run build`（型の検査と `vite build`。`dist/` に出す。デプロイはしない） | `npm install` 済み | ― |
 
 未記入のコマンドは推測して実行しない。必要な操作について確認する。
 
