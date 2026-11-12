@@ -8,7 +8,7 @@
 
 ## `POST /api/users`（登録）
 
-| 項目 | レガシー版（legacy-repo） | 直した版（refactored-repo） |
+| 項目 | レガシー版（legacy-repo） | 改善版（refactored-repo） |
 | --- | --- | --- |
 | だれが使えるか | だれでも | だれでも |
 | 入力（JSON） | `email`・`password`・`nickname`・`gender`・`birthday`。**確かめない**（`$request->only()` で、決めた名前のものだけを取り出す） | `email`（メールアドレスの形・小文字にそろえて重ならない）・`password`（8〜64文字、かつ 72バイトまで）・`gender_code`（性別の表にあるもの）・`birthdate`（日付・日本の時間帯の今日で 18歳以上）・`nickname`（1〜20文字）。ほかのキーは無視する |
@@ -43,9 +43,9 @@ return response()->json($user, 201);
 }
 ```
 
-確認のメール（レガシー版・直した版とも、件名は「メールアドレスの確認」。本文はリンクだけ）：
+確認のメール（レガシー版・改善版とも、件名は「メールアドレスの確認」。本文はリンクだけ）：
 
-| | レガシー版 | 直した版 |
+| | レガシー版 | 改善版 |
 | --- | --- | --- |
 | リンク | `http://127.0.0.1:8000/api/email-verifications/{確認用の文字}` | `URL::temporarySignedRoute()` で作る、60分の署名つきのリンク |
 | 作り方 | `App\Mail\VerifyMail`（Mailable）と、文字だけの Blade（`resources/views/mail/verify.blade.php`） | 同じ。ただし Blade は `{!! $url !!}` にする（`{{ }}` は `&` を `&amp;` に変え、`?expires=…&signature=…` のリンクが壊れるため） |
@@ -55,7 +55,7 @@ return response()->json($user, 201);
 
 確認のメールのリンクを、ブラウザで開く。03b までは画面がないので、JSON を返す。
 
-| 項目 | レガシー版（legacy-repo） | 直した版（refactored-repo） |
+| 項目 | レガシー版（legacy-repo） | 改善版（refactored-repo） |
 | --- | --- | --- |
 | パス | `GET /api/email-verifications/{token}` | `GET /api/users/{id}/email-verification/{hash}?expires=…&signature=…`（`{hash}` はメールアドレスの SHA-1。Laravel の標準の形） |
 | だれが使えるか | リンクを知っている人（**登録の応答や、01 のプロフィールの `GET` で、他人も確認用の文字を見られる**） | 署名が正しく、期限内のリンクを持つ人 |
@@ -78,7 +78,7 @@ return ['message' => 'メールアドレスを確認しました'];
 
 ## `POST /api/email-verifications`（確認のメールの再送）
 
-| 項目 | レガシー版（legacy-repo） | 直した版（refactored-repo） |
+| 項目 | レガシー版（legacy-repo） | 改善版（refactored-repo） |
 | --- | --- | --- |
 | パス | `POST /api/email-verifications` | `POST /api/me/email-verification`（「自分の情報」のパスは #16 で決めるので、そのときにそろえる） |
 | だれが使えるか | だれでも（**メールアドレスを知っていれば、他人にも送れる**） | ログインしていて、まだ確認していない本人（FR-AUTH-007・FR-AUTH-021） |
@@ -89,7 +89,7 @@ return ['message' => 'メールアドレスを確認しました'];
 | 回数 | 何回でも | 1分に1回（`throttle`） |
 | curl の例 | `curl -X POST http://127.0.0.1:8000/api/email-verifications -H 'Content-Type: application/json' -d '{"email":"a@example.test"}'` | ― （#16 のあと） |
 
-## レガシー版で起きること（#15 で測り、直す段階で要件 ID のテストにする）
+## レガシー版で起きること（#15 で測り、改善する段階で要件 ID のテストにする）
 
 | 送るもの・すること | レガシー版 | 要件 |
 | --- | --- | --- |
@@ -108,7 +108,7 @@ return ['message' => 'メールアドレスを確認しました'];
 | 登録の応答・他人のプロフィールの `GET` を見る | **`verification_token` が見えるので、メールを受け取らずに確認を済ませられる** | FR-AUTH-005・FR-002 |
 | 確認のリンクを、何日たってから・2回開く | どちらも確認できる。2回目は `email_verified_at` が書き換わる | FR-AUTH-006 |
 | 確認のリンクを開くとき | `verification_token` で表を全部読む（測った：`Seq Scan` で 28行を読み、28行を捨てた） | ― |
-| 確認のリンクを開いたあとの SQL のログ | `db.summary` の `path` に、**確認用の文字がそのまま残る**（パスに入れたため）。直す段階で、ログの `path` をルートの形（`api/email-verifications/{token}`）にする | FR-AUTH-032 |
+| 確認のリンクを開いたあとの SQL のログ | `db.summary` の `path` に、**確認用の文字がそのまま残る**（パスに入れたため）。改善する段階で、ログの `path` をルートの形（`api/email-verifications/{token}`）にする | FR-AUTH-032 |
 | 再送を続けて10回 | 10通届く | FR-AUTH-007 |
 | シードの会員（確認用の文字がない）で再送 | 開けないリンク（`/api/email-verifications`。`405`）が届く | FR-AUTH-007 |
 | ない・あるメールアドレスで再送 | `404` と `200` で、登録されているかが分かる | FR-AUTH-007 |
