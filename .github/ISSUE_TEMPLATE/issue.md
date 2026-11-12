@@ -26,5 +26,5 @@ labels: []
 ## ブランチ
 
 <!-- ハーネス・docs/：main で直し、legacy-repo → refactored-repo に取り込む
-     素朴に作る：legacy-repo から legacy/<この Issue の番号>-<名前>
+     レガシーコードで作る：legacy-repo から legacy/<この Issue の番号>-<名前>
      直す：refactored-repo から refactor/<この Issue の番号>-<名前> -->

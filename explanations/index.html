@@ -34,8 +34,8 @@
   <pre class="mermaid">
 flowchart LR
   A["explain-step<br>解説と図を作る"] --> B["読んで理解する<br>6つの問いに答える"]
-  B --> C["素朴に作る<br>Fat Controller・テストなし"]
-  C --> D["explain-change<br>素朴な版と測った問題を記録"]
+  B --> C["レガシーコードで作る<br>Fat Controller・テストなし"]
+  C --> D["explain-change<br>レガシー版と測った問題を記録"]
   D --> F["テストを足して直す<br>もう一度測る"]
   F --> G["explain-change<br>前と後の数字を記録"]
   G --> E["次の一歩へ"]
@@ -43,22 +43,22 @@ flowchart LR
   </pre>
 
   <h2>一歩ずつの目次</h2>
-  <p class="meta">状態: 未着手／解説だけ／素朴な版まで／実装済み。ページができたら、名前をリンクにする。</p>
+  <p class="meta">状態: 未着手／解説だけ／レガシー版まで／実装済み。ページができたら、名前をリンクにする。</p>
   <table>
     <tr><th>番号</th><th>一歩</th><th>学ぶこと</th><th>状態</th></tr>
     <tr><td>00</td><td>環境を作る</td><td>PostgreSQL（Docker）・Laravel のマイグレーション・流れた SQL を見る方法</td><td>未着手</td></tr>
     <tr><td>01</td><td>会員とプロフィール</td><td>主キー・データの型・NOT NULL・CHECK・1対1</td><td>未着手</td></tr>
-    <tr><td>01b</td><td>認証と認可</td><td>パスワードのハッシュ・トークンを DB にどう持つか・ログインの回数制限・認証と認可の違い。素朴な版は自分で書いたトークン、直した版は Sanctum・Policy・throttle</td><td>未着手</td></tr>
+    <tr><td>01b</td><td>認証と認可</td><td>パスワードのハッシュ・JWT と取り替え用のトークン・メールアドレスの確認・ログインの回数制限・トランザクション・認証と認可の違い。レガシー版は 30日の JWT を JSON で返し、直した版は 15分の JWT と取り替え用のトークンを HttpOnly の Cookie に置く（D-014）</td><td>未着手</td></tr>
     <tr><td>02</td><td>いいね</td><td>中間テーブル・自分の表どうしの多対多・UNIQUE で二重を防ぐ</td><td>未着手</td></tr>
     <tr><td>03</td><td>マッチ</td><td>自己結合（お互いにいいね）・INNER と LEFT JOIN</td><td>未着手</td></tr>
-    <tr><td>03b</td><td>React を足す</td><td>Vite・API を呼ぶ・Context で状態を持つ・CORS。素朴な版はトークンを sessionStorage に置き、直した版は Sanctum の SPA 認証（HttpOnly の Cookie）に移して XSS への強さを比べる</td><td>未着手</td></tr>
-    <tr><td>04</td><td>検索と一覧</td><td>複合インデックス・EXPLAIN・OFFSET とカーソル・大量のデータ</td><td>未着手</td></tr>
+    <tr><td>03b</td><td>React を足す</td><td>Vite・API との通信・Context で状態を持つ・コンポーネント設計・テスト・開発効率・CORS。レガシー版はひな形のままのスパゲティコード（1画面に1つの大きな部品）でトークンを sessionStorage に置き、直した版は container／presenter に分け、HttpOnly の Cookie に移して XSS への強さを比べる（docs/frontend.md）</td><td>未着手</td></tr>
+    <tr><td>04</td><td>検索と一覧</td><td>複合インデックス・EXPLAIN・OFFSET とカーソル・大量のデータ。画面の表示速度（長い一覧・Web Vitals・バンドルの大きさ）も、同じ一覧で測る</td><td>未着手</td></tr>
     <tr><td>05</td><td>メッセージ</td><td>相手ごとの最新の1件（ウィンドウ関数）・N+1</td><td>未着手</td></tr>
     <tr><td>05b</td><td>Context から Zustand に移す</td><td>Context の描き直しの範囲・Zustand で必要な部品だけ描き直す</td><td>未着手</td></tr>
     <tr><td>05c</td><td>Firestore と比べる</td><td>同じ「相手ごとの最新の1件」を Firebase Emulator（手元の Firestore）で作る。JOIN がないのでデータを重ねて持つ・読んだ回数で料金が決まる・リアルタイムに届く</td><td>未着手</td></tr>
     <tr><td>06</td><td>ブロックと退会</td><td>NOT EXISTS・論理削除と再登録・部分インデックス</td><td>未着手</td></tr>
     <tr><td>07</td><td>有料会員</td><td>有料かどうかで機能を分ける・購入した時の価格を残す・有効期間</td><td>未着手</td></tr>
-    <tr><td>07b</td><td>プランを増やす</td><td>素朴な版の「有料かどうか」の真偽値を、一般とプラチナに分ける。プランの表と「プランごとにできること」の表に直し、あとから増える前提の設計を前と後で比べる</td><td>未着手</td></tr>
+    <tr><td>07b</td><td>プランを増やす</td><td>レガシー版の「有料かどうか」の真偽値を、一般とプラチナに分ける。プランの表と「プランごとにできること」の表に直し、あとから増える前提の設計を前と後で比べる</td><td>未着手</td></tr>
     <tr><td>08</td><td>決済の通知</td><td>状態の遷移・トランザクション・冪等性</td><td>未着手</td></tr>
     <tr><td>09</td><td>同時更新</td><td>楽観ロック・悲観ロック・デッドロック</td><td>未着手</td></tr>
     <tr><td>10</td><td>止めずに変えるマイグレーション</td><td>列の追加・名前の変更の手順・ロック</td><td>未着手</td></tr>
