@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { Link, Navigate, Route, Routes, useNavigate } from 'react-router'
+import { NavLink, Navigate, Route, Routes, useNavigate } from 'react-router'
 import './App.css'
+import HomePage from './HomePage'
 import LoginPage from './LoginPage'
 import RegisterPage from './RegisterPage'
-import HomePage from './HomePage'
+import UserPage from './UserPage'
 
-// レガシー版（03b）。画面の切り替え・上のリンク・ログアウトを、ここに全部書く。
+// レガシー版（03b）。画面の切り替え・上の帯・下のタブ・ログアウトを、ここに全部書く。
 // ログインしているかは、sessionStorage の token があるかだけで決める（期限切れでも「ログイン中」に見える）
 export default function App() {
   const [token, setToken] = useState<string | null>(sessionStorage.getItem('token'))
@@ -24,15 +25,11 @@ export default function App() {
   }
 
   return (
-    <div className="app">
+    <div className={token ? 'app app-with-tabs' : 'app'}>
       {token && (
         <header className="header">
-          <nav className="nav">
-            <Link to="/home">ホーム</Link>
-            <Link to="/likes">送ったいいね</Link>
-            <Link to="/matches">マッチ</Link>
-          </nav>
-          <button className="button button-small" onClick={logout}>
+          <span className="logo">matching</span>
+          <button className="button button-small button-ghost" onClick={logout}>
             ログアウト
           </button>
         </header>
@@ -43,10 +40,25 @@ export default function App() {
           <Route path="/login" element={<LoginPage setToken={setToken} />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/home" element={<HomePage />} />
-          {/* /users/:id・/likes・/matches は #36・#37 で足す */}
+          <Route path="/users/:id" element={<UserPage />} />
+          {/* /likes・/matches は #37 で足す */}
           <Route path="*" element={<p>ページが見つかりません</p>} />
         </Routes>
       </main>
+      {token && (
+        // スマホのアプリによくある、下に固定したタブ
+        <nav className="tabs">
+          <NavLink to="/home" className="tab">
+            <span className="tab-icon">●</span>ホーム
+          </NavLink>
+          <NavLink to="/likes" className="tab">
+            <span className="tab-icon">♥</span>いいね
+          </NavLink>
+          <NavLink to="/matches" className="tab">
+            <span className="tab-icon">✦</span>マッチ
+          </NavLink>
+        </nav>
+      )}
     </div>
   )
 }

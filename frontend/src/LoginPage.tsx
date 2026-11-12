@@ -30,25 +30,31 @@ export default function LoginPage(props: any) {
   }
 
   return (
-    <div className="card">
-      <h1 className="title">ログイン</h1>
-      <form onSubmit={submit}>
-        <label className="label">
-          メールアドレス
-          <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        </label>
-        <label className="label">
-          パスワード
-          <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-        </label>
-        {error && <p className="error">{error}</p>}
-        <button className="button" type="submit">
-          ログイン
-        </button>
-      </form>
-      <p className="muted">
-        はじめての方は <Link to="/register">登録</Link>
-      </p>
+    <div className="auth">
+      <div className="brand">
+        <div className="logo logo-large">matching</div>
+        <p className="brand-text">気になる人に、いいねを送ろう</p>
+      </div>
+      <div className="card">
+        <h1 className="title">ログイン</h1>
+        <form onSubmit={submit}>
+          <label className="label">
+            メールアドレス
+            <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </label>
+          <label className="label">
+            パスワード
+            <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          </label>
+          {error && <p className="error">{error}</p>}
+          <button className="button" type="submit">
+            ログイン
+          </button>
+        </form>
+        <p className="muted">
+          はじめての方は <Link to="/register">登録</Link>
+        </p>
+      </div>
     </div>
   )
 }
