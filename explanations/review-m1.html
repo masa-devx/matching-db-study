@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>00〜03b の振り返り</title>
+<link rel="stylesheet" href="assets/page.css">
+</head>
+<body>
+<main>
+  <p class="meta"><a href="index.html">← 目次へ</a></p>
+  <h1>00〜03b の振り返り</h1>
+  <p class="meta">作成: 2026-11-12 ／ Issue: <a href="https://github.com/masa-devx/matching-db-study/issues/38">#38</a> ／ マイルストーン: M1 レガシーで作り切る ／ 元にしたもの: 各一歩のページの「9. 実装の記録」</p>
+
+  <div class="card point">
+    <strong>このページでできるようになること</strong>
+    <ul>
+      <li>00〜03b で作った表・API・画面と、そのつながりを、1枚の図で説明できる</li>
+      <li>一歩ごとに測った問題が、どれも同じ「根っこ」から来ていることが分かる</li>
+      <li>コードの地図の順に読み、改善する段階（M2）で何から直すかを決められる</li>
+    </ul>
+  </div>
+
+  <h2>1. 作ったもの</h2>
+  <table>
+    <tr><th>一歩</th><th>表</th><th>API</th><th>画面</th><th>ページ</th></tr>
+    <tr><td>00 環境</td><td>（ひな形の <code>users</code>・<code>cache</code>・<code>jobs</code>・<code>personal_access_tokens</code>）</td><td><code>GET /api/health</code></td><td>―</td><td><a href="00-setup.html">00</a></td></tr>
+    <tr><td>01 会員とプロフィール</td><td><code>profiles</code>（<code>users</code> から分けた）</td><td><code>GET</code>・<code>PUT /api/users/{id}/profile</code></td><td>―</td><td><a href="01-members.html">01</a></td></tr>
+    <tr><td>01b 登録とログイン</td><td><code>users.verification_token</code> を足した</td><td><code>POST /api/users</code>・<code>GET</code>・<code>POST /api/email-verifications</code>・<code>POST /api/auth/login</code>・<code>GET /api/me</code>・<code>POST /api/auth/logout</code></td><td>―</td><td><a href="01b-auth.html">01b</a></td></tr>
+    <tr><td>02 いいね</td><td><code>likes</code></td><td><code>POST</code>・<code>GET /api/me/likes</code></td><td>―</td><td><a href="02-likes.html">02</a></td></tr>
+    <tr><td>03 マッチ</td><td><code>user_matches</code></td><td><code>GET /api/me/matches</code>（送るときのマッチは <code>POST /api/me/likes</code> の中）</td><td>―</td><td><a href="03-matches.html">03</a></td></tr>
+    <tr><td>03b 画面</td><td>―</td><td>（API はそのまま。CORS も直さずに通った）</td><td><code>/login</code>・<code>/register</code>・<code>/home</code>・<code>/users/:id</code>・<code>/likes</code>・<code>/messages</code></td><td><a href="03b-react.html">03b</a></td></tr>
+  </table>
+  <p>コードの大きさ：API のコントローラ・Model・ルートで 554行、画面の部品と CSS で 1169行。ルートは12本で、どれもだれでも呼べる（ログインが要るかは、コントローラの中で決める）。</p>
+
+  <h2>2. 図で見る</h2>
+  <h3>今の表（制約は、主キー・NOT NULL・UNIQUE 2つだけ）</h3>
+  <p>線は「意味の上のつながり」で、DB の外部キーは1本もない。DB は、表どうしがつながっていることを知らない。</p>
+  <pre class="mermaid">
+erDiagram
+  users ||--o| profiles : "user_id（外部キーなし・UNIQUE なし）"
+  users ||--o{ likes : "from_user_id・to_user_id（外部キーなし）"
+  users ||--o{ user_matches : "user1_id・user2_id（外部キーなし）"
+  users {
+    bigint id PK
+    varchar email UK
+    varchar password
+    timestamp email_verified_at
+    varchar verification_token "平文・期限なし・インデックスなし"
+  }
+  profiles {
+    bigint id PK
+    bigint user_id "インデックスなし"
+    varchar nickname
+    varchar gender "文字"
+    varchar birthday "文字"
+    varchar prefecture "文字"
+    varchar height "文字"
+    text introduction
+    varchar image
+  }
+  likes {
+    bigint id PK
+    bigint from_user_id "UK（to_user_id と組で）"
+    bigint to_user_id
+    timestamp created_at
+  }
+  user_matches {
+    bigint id PK
+    bigint user1_id "送り返した側"
+    bigint user2_id "先に送った側"
+    timestamp created_at
+  }
+  </pre>
+
+  <h3>画面 → API → DB（いいねを送って、マッチする）</h3>
+  <p>1つの操作が、どの層の、どの行を通るかを並べた。番号は「4. コードの地図」の読む順と同じ。</p>
+  <pre class="mermaid">
+sequenceDiagram
+  participant S as 画面 UserPage.tsx
+  participant B as ブラウザ sessionStorage
+  participant C as LikeController::store
+  participant D as PostgreSQL
+  S->>B: token を読む（画面ごとに書き写し）
+  S->>C: POST /api/me/likes（Bearer と user_id）
+  C->>C: JWT を読む（4か所に写した6行。壊れていれば 500）
+  C->>D: insert into likes（トランザクションなし。すぐ確定）
+  C->>D: select 逆向きのいいね
+  alt 逆向きがある
+    C->>D: insert into user_matches（組の UNIQUE なし）
+  end
+  C-->>S: 201 と matched
+  S->>S: ステータスを見ずに matched だけを見る（500 でも「いいねしました」）
+  </pre>
+
+  <h2>3. 一歩ごとに測った問題と数字</h2>
+  <h3>守れている要件</h3>
+  <table>
+    <tr><th>一歩</th><th>守れている要件</th><th>いちばん大きい問題</th></tr>
+    <tr><td>00</td><td>（分けない一歩。テスト 3 passed）</td><td><code>php artisan serve</code> では compose の環境変数が届かず SQLite につながった。テストが開発用の DB を作り直した（安全装置を足した）</td></tr>
+    <tr><td>01</td><td><strong>4 / 14</strong></td><td><code>PUT</code> で <code>{"user_id": 2}</code> を送ると、プロフィールが別の会員に移る。生年月日・身長が文字の列で、<code>'abc'</code> も入る</td></tr>
+    <tr><td>01b</td><td><strong>5 / 22</strong></td><td>応答とプロフィールの API に <code>verification_token</code> が出る（他人の確認を済ませられる）。ログインの言葉と時間で、登録されているかが分かる。JWT はログアウトしても30日使える</td></tr>
+    <tr><td>02</td><td><strong>4 / 11</strong></td><td>自分あて・いない会員にも送れる。2回目は 409 でなく 500。一覧は 1＋N 本（100件で101本）</td></tr>
+    <tr><td>03</td><td><strong>6 / 13</strong></td><td>お互いに同時に送ると、100組中 60〜66組でマッチが2行になる。自分とのマッチができる。一覧は OR で表を全部読む</td></tr>
+    <tr><td>03b</td><td><strong>10 / 17</strong></td><td>送り先を14か所・トークンを13か所に書き写した。ステータスを見る <code>fetch</code> は10本のうち2本。失敗・読み込み中の表示がない</td></tr>
+  </table>
+  <p>合計すると、<strong>29 / 77</strong> の要件を守れている（00 を除く）。</p>
+
+  <h3>改善したあとに比べる数字（各ページの 9-2 から）</h3>
+  <table>
+    <tr><th>一歩</th><th>測ったもの</th><th>レガシー版</th></tr>
+    <tr><td>02</td><td>送ったいいねの一覧の SQL（1・10・100件）</td><td>2・11・101本（03 で印を足して 1＋2N 本：3・21・201本）</td></tr>
+    <tr><td>02</td><td>「B はだれからもらったか」（いいね1万件）</td><td><code>Seq Scan</code>・1行のために 10002行を捨てた</td></tr>
+    <tr><td>03</td><td>同時にお互いへ送った100組</td><td>マッチが2行の組 66・60（0行の組は0）</td></tr>
+    <tr><td>03</td><td>マッチの一覧（マッチ1万件）</td><td>OR で <code>Seq Scan</code>・10378行を捨てた</td></tr>
+    <tr><td>01b</td><td>確認用の文字で探す</td><td><code>Seq Scan</code>（会員が増えるほど読む行が増える）</td></tr>
+    <tr><td>03b</td><td>いちばん大きい部品・<code>any</code>・lint</td><td>180行・10・エラー15 警告11</td></tr>
+  </table>
+
+  <h2>4. 繰り返し出てくる問題（根っこ）</h2>
+  <p>一歩ごとに違う問題に見えるが、根っこは5つに分けられる。M2 では、一歩ずつではなく、この根っこごとに直すと、同じ直しを何度もしなくて済む。</p>
+  <table>
+    <tr><th>根っこ</th><th>出てきた所</th><th>直し方の向き</th></tr>
+    <tr><td><strong>A. DB が守らない</strong>（外部キー・UNIQUE・CHECK・型がない）</td><td>01 プロフィールが2つ・みなしご・文字の生年月日／02 自分あて・いない会員／03 マッチの重複・自分とのマッチ</td><td>守るべき決まりを、まず DB の制約にする。アプリの確かめは、その上に足す</td></tr>
+    <tr><td><strong>B. 入口で確かめない</strong>（入力・だれか・権限）</td><td>01 他人のプロフィールを直せる・一括代入／01b 17歳でも登録・確認していなくても使える／02 確認していない会員が送れる</td><td>FormRequest で入力を、ミドルウェアでログインと確認済みかを、Policy で「自分のものか」を、入口の1か所で確かめる</td></tr>
+    <tr><td><strong>C. 同じ処理の書き写し</strong></td><td>API：JWT を読む6行が4か所／画面：送り先14・トークン13・ログインの守り4・年齢の計算4</td><td>API は認証のミドルウェア1つ、画面は API を呼ぶところ1つと <code>RequireAuth</code> 1つにまとめる</td></tr>
+    <tr><td><strong>D. 失敗を扱わない</strong></td><td>API：UNIQUE の違反・壊れた JWT・いない会員が、どれも 500（本文に SQL が出る）／画面：ステータスを見ない・つながらないと真っ白</td><td>API は 401・404・409・422 を決めて返す。画面は API を呼ぶところで、ステータスごとに受ける</td></tr>
+    <tr><td><strong>E. 1本ずつ確定・ループの中の SQL</strong></td><td>01b 2本の insert とメールにトランザクションなし／02・03 一覧の 1＋N（1＋2N）／03 同時に送るとマッチが2行</td><td>まとめて確定するところはトランザクションとロック、一覧は JOIN か <code>with()</code> で本数を一定にする</td></tr>
+  </table>
+  <p>どれも「動くところまで」作るときには目に入らない。測って初めて数字になった（同時に送る試しは、サーバーが1つずつ処理していたので、02 では起きなかった。03 でワーカーを増やして、初めて起きた）。</p>
+
+  <h2>5. コードの地図（読む順）</h2>
+  <p>上から順に読む。1つのファイルで「見ること」を1〜2個に絞る。読み終えたら、右の問いに自分の言葉で答えてみる。</p>
+  <table>
+    <tr><th>順</th><th>ファイル</th><th>見ること</th><th>答えてみる問い</th></tr>
+    <tr><td>1</td><td><code>compose.yaml</code></td><td><code>app</code> の起動のコマンドと、DB の接続先を環境変数で渡すところ</td><td>なぜ <code>php artisan serve</code> を使わないのか</td></tr>
+    <tr><td>2</td><td><code>backend/routes/api.php</code></td><td>12本のルート。ミドルウェアが1つもないこと</td><td>ログインが要るかは、どこで決まっているか</td></tr>
+    <tr><td>3</td><td><code>backend/database/migrations/</code>（<code>2026_11_11_143154_split…</code>・<code>2026_11_12_033712_create_likes…</code>・<code>2026_11_12_063225_create_user_matches…</code>）</td><td>「作る → 写す → 消す」の順。どの列に制約がないか</td><td>図の4つの表のうち、DB が止めてくれるおかしな値はどれか</td></tr>
+    <tr><td>4</td><td><code>backend/app/Models/User.php</code>・<code>Profile.php</code>・<code>Like.php</code>・<code>UserMatch.php</code></td><td><code>$guarded = []</code>・リレーション・<code>casts()</code> の <code>hashed</code></td><td><code>$guarded = []</code> だと、<code>PUT</code> で何が書き換えられるか</td></tr>
+    <tr><td>5</td><td><code>backend/app/Http/Controllers/ProfileController.php</code>（35行）</td><td><code>findOrFail</code> と <code>load('profile')</code>・<code>fill($request-&gt;all())</code></td><td>1回の <code>GET</code> で SQL は何本か。なぜ <code>in (1)</code> の形か</td></tr>
+    <tr><td>6</td><td><code>UserController.php</code>・<code>EmailVerificationController.php</code></td><td>トランザクションのない2本の insert とメール。確認用の文字で探す</td><td>メールの送信で失敗したら、表には何が残るか</td></tr>
+    <tr><td>7</td><td><code>AuthController.php</code>（65行）</td><td>2通りの失敗の言葉・JWT の中身と30日・<code>me()</code> の例外</td><td>ログアウトしたあとも JWT が使えるのはなぜか</td></tr>
+    <tr><td>8</td><td><code>LikeController.php</code>（87行・いちばん大きい）</td><td><code>store()</code>：書いてから逆向きを読む。<code>index()</code>：ループの中の2本</td><td>同時に送るとマッチが2行になるのに、0行にならないのはなぜか</td></tr>
+    <tr><td>9</td><td><code>UserMatchController.php</code></td><td>OR で読み、PHP で「自分でないほう」を選ぶ</td><td>この OR を速くするには、どんなインデックスが要るか</td></tr>
+    <tr><td>10</td><td><code>backend/app/Support/Logging/QueryLogger.php</code></td><td>値を書かずに、本数と時間を数える</td><td>なぜ値（<code>bindings</code>）を書かないのか</td></tr>
+    <tr><td>11</td><td><code>frontend/src/App.tsx</code>・<code>main.tsx</code></td><td>トークンがあるかで枠を分ける。<code>setToken</code> を props で渡す</td><td>期限の切れたトークンでも「ログイン中」になるのはなぜか</td></tr>
+    <tr><td>12</td><td><code>frontend/src/LoginPage.tsx</code> → <code>UserPage.tsx</code> → <code>HomePage.tsx</code>（180行）</td><td>部品の中の <code>fetch</code>・ステータスを見ない <code>.then</code>・2本を順に呼ぶ</td><td>2回目のいいねで「いいねしました」と出るのは、どの行のせいか</td></tr>
+    <tr><td>13</td><td><code>frontend/src/LikesPage.tsx</code>・<code>MessagesPage.tsx</code></td><td>写して作った2つの部品の違い（ほぼ同じ）</td><td>2つの共通の部分を1つにするなら、何を引数にするか</td></tr>
+    <tr><td>14</td><td><code>frontend/src/App.css</code>（519行）</td><td>四角の枠（<code>.frame</code>）・色の直書き</td><td>主な色を変えるとき、何か所を直すか</td></tr>
+  </table>
+
+  <h2>6. 改善する段階（M2）で直す候補</h2>
+  <p>優先度は「危なさ（データが壊れる・他人の情報が見える）」と「ほかの直しの土台になるか」で付けた。どれも、直す前に、今の振る舞いを固定するテスト（要件 ID の名前）を先に足す。</p>
+  <table>
+    <tr><th>優先</th><th>直すこと</th><th>根っこ</th><th>関係する要件</th><th>測り直す数字</th></tr>
+    <tr><td>1</td><td>認証をミドルウェア1つにまとめ、壊れた JWT を 401 にする。確認していない会員を 403 にする</td><td>B・C・D</td><td>FR-AUTH-021・FR-LIKE-007・008・FR-MATCH-008</td><td>JWT を読む場所 4 → 1</td></tr>
+    <tr><td>2</td><td>プロフィールを「自分のものだけ」直せるようにし、入力を確かめる。応答から <code>email</code>・<code>verification_token</code> を外す</td><td>B</td><td>FR-002・006〜011</td><td>守れている要件 01：4/14・01b：5/22</td></tr>
+    <tr><td>3</td><td>表に外部キー・UNIQUE・CHECK を足す（<code>profiles.user_id</code>・<code>likes</code> の自分あて・<code>user_matches</code> の組と向き）。生年月日などを正しい型にする</td><td>A</td><td>FR-011・012・FR-LIKE-002・004・FR-MATCH-004</td><td>DB が断るおかしな値 0/4 → 4/4</td></tr>
+    <tr><td>4</td><td>いいねとマッチを1つのトランザクションにし、2人の行をロックする</td><td>E</td><td>FR-MATCH-003</td><td>同時に送った100組で、2行の組 60〜66 → 0</td></tr>
+    <tr><td>5</td><td>失敗の形を決める（409・404・422）。500 の本文に SQL を出さない</td><td>D</td><td>FR-LIKE-003 など</td><td>500 を返す入力の数</td></tr>
+    <tr><td>6</td><td>一覧の 1＋N をなくす（JOIN か <code>with()</code>）。<code>to_user_id</code>・<code>user2_id</code> にインデックス</td><td>E</td><td>NFR-LIKE-001・NFR-MATCH-001</td><td>SQL 101本 → 2本・<code>Seq Scan</code> → <code>Index Scan</code></td></tr>
+    <tr><td>7</td><td>画面：API を呼ぶところを1つにし、<code>RequireAuth</code>・失敗と読み込み中の表示を足す。トークンを HttpOnly の Cookie にする</td><td>C・D</td><td>FR-UI-002・008・011・013・014・NFR-UI-003</td><td>送り先 14 → 1・守れている要件 10/17</td></tr>
+    <tr><td>8</td><td>画面：container と presenter に分け、CSS Modules と <code>tokens.css</code> にする。Vitest と lint を CI に入れる</td><td>C</td><td>―（書き方を直す。要件の数は 7 で測る）</td><td>180行・<code>any</code> 10・色の直書き 43・lint エラー15 → 0</td></tr>
+  </table>
+  <div class="card warn"><ul>
+    <li>1〜3 は、他人の情報が見える・データが壊れる問題なので、先に直す。4〜6 は 04（検索と大量のデータ）の前に直すと、04 の数字が読みやすくなる</li>
+    <li>02 の「10本同時」の試しは、実はサーバーが1つずつ処理していた（03 で分かった）。M2 で 02 を測り直すときは、ワーカーを増やしたサーバーで送る</li>
+  </ul></div>
+
+  <h2>7. 振り返りの問い</h2>
+  <details><summary>今の表で、DB だけで「1人にプロフィールは1つ」を守るには、何を足すか？</summary><p><code>profiles.user_id</code> に UNIQUE（と、<code>users.id</code> への外部キー）。UNIQUE があれば、2つ目の行の insert を DB が断る。今は外部キーもないので、会員を消してもプロフィールが残る。<code>ON DELETE CASCADE</code> を付ければ、一緒に消える。</p></details>
+  <details><summary>JWT を読む処理が4か所にあると、何が困るか？</summary><p>直すときに4か所を同じように直す必要があり、1つ直し忘れると、その API だけ 500 のまま・確認していない会員が通る、のように振る舞いがそろわない。ミドルウェアにすると、ルートに付けるだけで、だれかの決まり方が全部の API で同じになる。</p></details>
+  <details><summary>02 で「10本同時」に送っても問題が起きなかったのは、なぜか？</summary><p>compose の <code>app</code> は PHP の組み込みサーバーで、ワーカーを指定していないので、リクエストを1つずつ順に処理していた。同時に送っても、サーバーの中では1本ずつ確定するので、競合が起きなかった。03 では、ワーカー8つのサーバーを別に立てて、初めて同時に処理させた。</p></details>
+  <details><summary>CORS を直さずに画面から呼べたのは、安全だということか？</summary><p>違う。CORS はブラウザが「応答を画面に渡すか」を決めるだけで、curl など、ブラウザでないところからは何でも呼べる。今の API は、だれでも呼べるルートに、認証と認可がコントローラの中にしかない。API を守るのは CORS ではなく、認証（だれか）と認可（してよいか）。</p></details>
+  <details><summary>M2 で、なぜ「直す前に、今の振る舞いを固定するテスト」を足すのか？</summary><p>直したあとに、直したところ以外が変わっていないことを確かめるため。レガシー版にはテストがないので、先に要件 ID の名前で今の動き（守れていないものは、守れていないことも）をテストにし、直すたびに、そのテストが「赤 → 緑」に変わるのを見る。数字（SQL の本数・守れている要件）も、同じテストの中で測れる。</p></details>
+
+  <h2>8. 次へ</h2>
+  <p>次の一歩は 04（検索と一覧）。画面の「検索」のタブと、大量のデータでの複合インデックス・ページ送り・表示速度を扱う。M2（改善）の前に 04 をレガシー版で作るか、先に M2 の 1〜3 を直すかは、このページを読んだあとに決める。</p>
+</main>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+  // page.js が選んだ表示（data-scheme）に合わせる。なければ端末の設定
+  const scheme = document.documentElement.dataset.scheme;
+  const dark = scheme ? scheme.startsWith("dark") : (document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches));
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/page.js"></script>
+</body>
+</html>
