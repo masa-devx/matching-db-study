@@ -7,6 +7,7 @@ use App\Http\Controllers\EmailVerificationController;
 use App\Http\Controllers\LikeController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\UserMatchController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
@@ -36,3 +37,6 @@ Route::post('/auth/logout', [AuthController::class, 'logout']);
 // 02 いいね（docs/api/02-likes.md）。レガシー版は、コントローラの中で JWT を読む
 Route::post('/me/likes', [LikeController::class, 'store']);
 Route::get('/me/likes', [LikeController::class, 'index']);
+
+// 03 マッチ（docs/api/03-matches.md）。送るときのマッチは LikeController::store が作る
+Route::get('/me/matches', [UserMatchController::class, 'index']);
