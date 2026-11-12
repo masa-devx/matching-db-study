@@ -46,7 +46,7 @@
 <main>
   <p class="meta"><a href="index.html">← 目次へ</a></p>
   <h1>01b 認証と認可</h1>
-  <p class="meta">作成: 2026-11-11 ／ 状態: <span class="status">解説だけ</span> ／ Issue: <a href="https://github.com/masa-devx/matching-db-study/issues/13">#13</a> ／ 要件: <code>docs/requirements/auth.md</code>（FR-AUTH-001〜032）／ 決めたこと: D-014 ／ 図解: <a href="https://claude.ai/artifact/EW5HWFdTJgLd3JYewyP4bE">認証とトークンの絵本</a></p>
+  <p class="meta">作成: 2026-11-11 ／ 状態: <span class="status">レガシー版まで</span> ／ Issue: <a href="https://github.com/masa-devx/matching-db-study/issues/13">#13</a> ／ 要件: <code>docs/requirements/auth.md</code>（FR-AUTH-001〜032）／ 決めたこと: D-014 ／ 図解: <a href="https://claude.ai/artifact/EW5HWFdTJgLd3JYewyP4bE">認証とトークンの絵本</a></p>
 
   <div class="card point">
     <strong>この一歩でできるようになること</strong>
@@ -284,9 +284,122 @@ DB::transaction(function () use ($plain) {
   <h2>9. 実装の記録</h2>
   <p class="meta">レガシー版のあと（9-1・9-2）と、改善したあと（9-3・9-4）に、explain-change が書く。</p>
   <h3>9-1. レガシー版</h3>
-  <p>【まだ実装していない】</p>
+  <p class="meta">記録: 2026-11-12 ／ PR: <a href="https://github.com/masa-devx/matching-db-study/pull/22">#22</a>（登録・確認・再送。#15）・<a href="https://github.com/masa-devx/matching-db-study/pull/23">#23</a>（ログイン・自分の情報・ログアウト。#16）／ 設計: <code>docs/api/01b-auth.md</code></p>
+  <h4>書いたもの</h4>
+  <table>
+    <tr><th>ファイル</th><th>役割</th></tr>
+    <tr><td><code>backend/app/Http/Controllers/UserController.php</code></td><td><code>store()</code>：登録（<code>POST /api/users</code>）。会員とプロフィールを作り、確認のメールを送る</td></tr>
+    <tr><td><code>backend/app/Http/Controllers/EmailVerificationController.php</code></td><td><code>show()</code>：確認のリンク（<code>GET /api/email-verifications/{token}</code>）。<code>store()</code>：再送（<code>POST /api/email-verifications</code>）</td></tr>
+    <tr><td><code>backend/app/Http/Controllers/AuthController.php</code></td><td><code>login()</code>・<code>me()</code>・<code>logout()</code>（<code>/api/auth/login</code>・<code>/api/me</code>・<code>/api/auth/logout</code>）</td></tr>
+    <tr><td><code>backend/app/Mail/VerifyMail.php</code>・<code>resources/views/mail/verify.blade.php</code></td><td>確認のメール。件名「メールアドレスの確認」と、リンクだけの本文</td></tr>
+    <tr><td><code>backend/routes/api.php</code></td><td>6つのルート（どれも、だれでも呼べる）</td></tr>
+    <tr><td><code>backend/composer.json</code>・<code>composer.lock</code></td><td><code>firebase/php-jwt</code> 7.2.1（D-021）</td></tr>
+    <tr><td><code>backend/phpstan.neon</code></td><td><code>parseModelCastsMethod: true</code>。足す前は、Larastan が <code>casts()</code> の中身を読まず、<code>email_verified_at</code> を文字の型と見ていた</td></tr>
+  </table>
+
+  <h4>大事な行の読み方</h4>
+  <p><strong>① トランザクションのない2本の <code>insert</code> と、その場のメール</strong>（<code>UserController::store</code>）</p>
+  <pre><code>$user = User::create($request-&gt;only(['email', 'password']) + [
+    'verification_token' =&gt; Str::random(40),   // 平文・期限なし
+]);
+Profile::create($request-&gt;only(['nickname', 'gender', 'birthday']) + ['user_id' =&gt; $user-&gt;id]);
+Mail::to($user-&gt;email)-&gt;send(new VerifyMail($user));
+return response()-&gt;json($user, 201);</code></pre>
+  <p>1本目が成功して2本目かメールで失敗すると、会員だけが残る。<code>$user</code> をそのまま返すので、<code>#[Hidden]</code> にない <code>verification_token</code> が応答に出る。<code>password</code> は <code>casts()</code> の <code>'hashed'</code> で bcrypt になる。</p>
+  <p><strong>② 確認用の文字で探す</strong>（<code>EmailVerificationController::show</code>）</p>
+  <pre><code>$user = User::where('verification_token', $token)-&gt;first();   // インデックスがない
+$user-&gt;email_verified_at = now();                              // 文字は消さない
+$user-&gt;save();</code></pre>
+  <p>インデックスがないので表を全部読む。文字を消さず、期限もないので、何度でも・何日たっても使える。</p>
+  <p><strong>③ 2通りの失敗と、飛ばされる照合</strong>（<code>AuthController::login</code>）</p>
+  <pre><code>if (! $user) {
+    return response()-&gt;json(['message' =&gt; 'メールアドレスが違います'], 401);
+}
+if (! Hash::check($request-&gt;input('password'), $user-&gt;password)) {
+    return response()-&gt;json(['message' =&gt; 'パスワードが違います'], 401);
+}</code></pre>
+  <p>言葉でも、返るまでの時間でも（会員がいないと bcrypt の照合を飛ばす）、そのメールアドレスが登録されているかが分かる。</p>
+  <p><strong>④ 読める中身と、止められない30日</strong>（<code>AuthController::login</code>）</p>
+  <pre><code>$token = JWT::encode([
+    'sub' =&gt; $user-&gt;id, 'email' =&gt; $user-&gt;email, 'nickname' =&gt; $user-&gt;profile?-&gt;nickname,
+    'iat' =&gt; time(), 'exp' =&gt; time() + 60 * 60 * 24 * 30,
+], config('app.key'), 'HS256');</code></pre>
+  <p>JWT の中身は base64 なので、だれでも読める（署名は書き換えを見つけるためのもので、隠すものではない）。サーバーはどの JWT を出したかを覚えていないので、ログアウトしても30日のあいだ使える。鍵は <code>APP_KEY</code> の使い回し。</p>
+  <p><strong>⑤ つかまえない例外</strong>（<code>AuthController::me</code>）</p>
+  <pre><code>$payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));
+return response()-&gt;json(User::find($payload-&gt;sub));</code></pre>
+  <p>署名が違う・形がおかしい JWT は例外になり、<code>401</code> ではなく <code>500</code>。<code>sub</code> の会員がいなければ <code>null</code> で、<code>200 {}</code> になる。</p>
+
+  <h4>実際に流れる SQL</h4>
+  <table>
+    <tr><th>API</th><th>SQL（ログから）</th><th>本数</th></tr>
+    <tr><td><code>POST /api/users</code></td><td><code>insert into "users" ("email", "password", "verification_token", ...) values (...) returning "id"</code>・<code>insert into "profiles" (...) returning "id"</code></td><td>2本（トランザクションなし）</td></tr>
+    <tr><td><code>GET /api/email-verifications/{token}</code></td><td><code>select * from "users" where "verification_token" = ? limit 1</code>・<code>update "users" set "email_verified_at" = ? ...</code></td><td>2本</td></tr>
+    <tr><td><code>POST /api/email-verifications</code></td><td><code>select * from "users" where "email" = ? limit 1</code></td><td>1本</td></tr>
+    <tr><td><code>POST /api/auth/login</code></td><td><code>select * from "users" where "email" = ? limit 1</code>・<code>select * from "profiles" where "profiles"."user_id" = ? and "profiles"."user_id" is not null limit 1</code></td><td>2本（会員がいなければ1本）</td></tr>
+    <tr><td><code>GET /api/me</code></td><td><code>select * from "users" where "users"."id" = ? limit 1</code></td><td>1本（呼ぶたびに）</td></tr>
+    <tr><td><code>POST /api/auth/logout</code></td><td>なし</td><td>0本</td></tr>
+  </table>
+  <p>確認用の文字で探す SQL の実行計画：<code>Seq Scan on users</code>・<code>Rows Removed by Filter: 28</code>・<code>Buffers: shared hit=2</code>。会員が増えるほど、読む行が増える。</p>
+
+  <h4>解説から変えたこと</h4>
+  <table>
+    <tr><th>解説のとき</th><th>実装</th><th>理由</th></tr>
+    <tr><td>登録は <code>User::create($request-&gt;all())</code></td><td><code>$request-&gt;only()</code> で、<code>users</code> と <code>profiles</code> に分けて入れる</td><td>表を分けた（D-015）ので、<code>all()</code> だと <code>users</code> にない列で <code>500</code> になる。そのため「<code>email_verified_at</code> を送って確認を飛ばす」問題は起きず、代わりに「応答に確認用の文字が出る」問題を測った</td></tr>
+    <tr><td>JWT の中身に <code>is_paid</code></td><td><code>email</code>・<code>nickname</code></td><td>有料かどうかの列は 07 で作る。個人情報が読めることを測るため</td></tr>
+    <tr><td>鍵は <code>$key</code></td><td><code>APP_KEY</code> を使い回す</td><td>秘密の値のファイルを変えずに作れる。使い回しそのものを問題として残す（D-021）</td></tr>
+    <tr><td>パスの名前は決めていない</td><td><code>/api/users</code>・<code>/api/email-verifications</code>・<code>/api/auth/login</code>・<code>/api/me</code></td><td>パスの決まり（名詞）に合わせた。<code>login</code>・<code>logout</code>・<code>refresh</code> だけは例外にした</td></tr>
+    <tr><td>パスワードは 8〜64文字</td><td>要件を「8〜64文字、かつ 72バイトまで」に変えた</td><td>日本語は1文字が3バイトで、文字の数では bcrypt の 72バイトを守れないと分かったため</td></tr>
+    <tr><td><code>password</code> を送らないと <code>500</code>（設計の見込み）</td><td><code>401</code>「パスワードが違います」</td><td><code>Hash::check()</code> が <code>null</code> を空の文字として照合したため</td></tr>
+  </table>
+
   <h3>9-2. 測った問題と数字</h3>
-  <p>【まだ実装していない】</p>
+  <h4>登録・確認・再送（curl と Mailpit）</h4>
+  <table>
+    <tr><th>確かめたこと</th><th>結果</th><th>要件</th></tr>
+    <tr><td>登録</td><td><code>201</code>。Mailpit にリンクが届いた。確認済みではない</td><td>FR-AUTH-001</td></tr>
+    <tr><td>17歳（2008-11-13）・<code>SAKURA@example.test</code>・7文字のパスワード・<code>"birthday": "abc"</code>・<code>"gender": "x"</code></td><td>どれも <code>201</code> で保存された。大文字のほうは<strong>別の会員</strong>になった</td><td>FR-AUTH-002〜004</td></tr>
+    <tr><td>80文字のパスワード</td><td>登録でき、<strong>72文字目までが合えば照合が通った</strong>（71文字では通らない）</td><td>FR-AUTH-004</td></tr>
+    <tr><td>まったく同じメールアドレス・空の JSON</td><td><code>500</code>（UNIQUE・NOT NULL で断られる。<code>422</code> にならない）</td><td>FR-AUTH-001・003</td></tr>
+    <tr><td>256文字のニックネーム・Mailpit を止めて登録</td><td><code>500</code>。<strong>会員（とプロフィール）が残った</strong>。そのメールアドレスでは、もう登録できない</td><td>FR-AUTH-001</td></tr>
+    <tr><td>登録の応答・他人のプロフィールの <code>GET</code></td><td><code>verification_token</code> が見え、<strong>メールを受け取らずに確認できる</strong></td><td>FR-AUTH-005</td></tr>
+    <tr><td>確認のリンクを2回開く</td><td>どちらも <code>200</code>。2回目で <code>email_verified_at</code> が書き換わった</td><td>FR-AUTH-006</td></tr>
+    <tr><td>再送を3回・ない人</td><td>3通届いた・<code>404</code>（登録されているかが分かる）</td><td>FR-AUTH-007</td></tr>
+    <tr><td><code>Host: evil.example</code> で再送（レビューで確かめた）</td><td>届いたリンクが <code>http://evil.example/…</code> になった</td><td>FR-AUTH-005</td></tr>
+    <tr><td><code>500</code> の応答</td><td>SQL の値（パスワードのハッシュ・確認用の文字）が出た。平文のパスワードは出ない</td><td>FR-AUTH-032</td></tr>
+    <tr><td>SQL のログ（<code>db.summary</code> の <code>path</code>）</td><td>確認用の文字がそのまま残った</td><td>FR-AUTH-032</td></tr>
+  </table>
+  <h4>ログイン・自分の情報・ログアウト（curl）</h4>
+  <table>
+    <tr><th>確かめたこと</th><th>結果</th><th>要件</th></tr>
+    <tr><td>ログイン</td><td><code>200 {"token": …}</code>。base64 で読むと <code>{"sub": 23, "email": "sakura@example.test", "nickname": "さくら", ...}</code>。期限は 30.0日</td><td>FR-AUTH-010・013</td></tr>
+    <tr><td><code>GET /api/me</code></td><td><code>200</code>。<code>verification_token</code> も返った</td><td>FR-AUTH-017</td></tr>
+    <tr><td>ログアウトしたあとの <code>/me</code></td><td><strong><code>200</code>（使えた）</strong></td><td>FR-AUTH-016</td></tr>
+    <tr><td>ないメールアドレス／違うパスワード</td><td>言葉が2通り。<strong>5回の平均で 0.024秒／0.204秒</strong></td><td>FR-AUTH-011・NFR-AUTH-002</td></tr>
+    <tr><td>違うパスワードで20回</td><td>20回とも <code>401</code>（止まらない）</td><td>FR-AUTH-012</td></tr>
+    <tr><td>署名を書き換えた JWT・<code>abc</code></td><td><code>500</code>（<code>Signature verification failed</code>・<code>Wrong number of segments</code>）</td><td>FR-AUTH-013</td></tr>
+    <tr><td>確認していない会員でログイン</td><td><code>200</code>。01 のプロフィールの API も使える</td><td>FR-AUTH-021</td></tr>
+    <tr><td>配列の <code>password</code>・<code>email</code>（レビューで確かめた）</td><td><code>500</code>（TypeError）・先頭の要素でログインできた</td><td>FR-AUTH-010</td></tr>
+    <tr><td><code>500</code> のときの <code>laravel.log</code></td><td>スタックトレースに JWT の先頭15文字（どれも同じヘッダーの部分）。PHP の設定を上げると、まるごと残る。鍵は伏せられた</td><td>FR-AUTH-032</td></tr>
+  </table>
+  <h4>数字</h4>
+  <table>
+    <tr><th>測ったもの</th><th>レガシー版</th></tr>
+    <tr><td>守れている要件</td><td><strong>5 / 22</strong>（FR-AUTH-001・005・010・017・030）。017 は、要らない列（<code>verification_token</code>）も返している</td></tr>
+    <tr><td>JWT が使える時間</td><td>30日（ログアウトしても止まらない）</td></tr>
+    <tr><td>ログインを試せる回数</td><td>無制限（20回で止まらなかった）</td></tr>
+    <tr><td>失敗の時間の差</td><td>0.024秒（会員がいない）と 0.204秒（パスワードが違う）。約8.5倍</td></tr>
+    <tr><td>確認用の文字で探すときに読む行</td><td>表の全部（28行のうち28行を捨てた）</td></tr>
+    <tr><td>API 1回の SQL</td><td>登録 2本・確認 2本・再送 1本・ログイン 2本・自分の情報 1本・ログアウト 0本</td></tr>
+  </table>
+  <h4>気になる点（直していない）</h4>
+  <ul>
+    <li>失敗した <code>insert</code> でも会員の ID の番号が進み、ID が飛ぶ（24〜32 など）</li>
+    <li>確認のリンクは状態を変える <code>GET</code>。受信箱がリンクを先に開く仕組みを持つと、本人より先に確認済みになりうる（改善版も <code>GET</code>。試していない）</li>
+    <li>DB を作り直して ID が振り直されると、古い JWT が別の会員を指す（試していない）</li>
+    <li>期限切れの JWT と、<code>APP_KEY</code> でのなりすましは、鍵を扱うので AI は測っていない</li>
+    <li><code>composer.json</code> で版を <code>7.2.1</code> に固定した（<code>composer validate</code> が警告する。<code>^7.2.1</code> にするかは、改善する段階で決める）</li>
+  </ul>
   <h3>9-3. 足したテスト</h3>
   <p>【まだ実装していない】</p>
   <h3>9-4. 改善版と、前と後の数字</h3>
