@@ -10,7 +10,7 @@
 <main>
   <p class="meta"><a href="index.html">← 目次へ</a></p>
   <h1>04 検索と一覧</h1>
-  <p class="meta">作成: 2026-11-12 ／ 状態: <span class="status">解説だけ</span> ／ Issue: <a href="https://github.com/masa-devx/matching-db-study/issues/42">#42</a> ／ 要件: <code>docs/requirements/search.md</code>（FR-SEARCH-001〜011・NFR-SEARCH-001）・<code>docs/requirements/screens.md</code>（FR-UI-015〜018）</p>
+  <p class="meta">作成: 2026-11-12 ／ 状態: <span class="status">レガシー版まで</span> ／ Issue: <a href="https://github.com/masa-devx/matching-db-study/issues/42">#42</a> ／ 要件: <code>docs/requirements/search.md</code>（FR-SEARCH-001〜011・NFR-SEARCH-001）・<code>docs/requirements/screens.md</code>（FR-UI-015〜018）</p>
 
   <div class="card point">
     <strong>この一歩でできるようになること</strong>
@@ -398,9 +398,136 @@ where "id" = 23;</code></pre>
   <h2>9. 実装の記録</h2>
   <p class="meta">レガシー版のあと（9-1・9-2）と、改善したあと（9-3・9-4）に、explain-change が書く。</p>
   <h3>9-1. レガシー版</h3>
-  <p>まだ実装していない。</p>
+  <p class="meta">記録: 2026-11-12 ／ PR: <a href="https://github.com/masa-devx/matching-db-study/pull/48">#48</a>（DB。#43）・<a href="https://github.com/masa-devx/matching-db-study/pull/49">#49</a>（API。#44）・<a href="https://github.com/masa-devx/matching-db-study/pull/50">#50</a>（画面。#45）。前に入れた <a href="https://github.com/masa-devx/matching-db-study/pull/47">#47</a>（#46。URL の会員の ID を UUID の <code>public_id</code> にした。D-022）も、この一歩の前提</p>
+  <h4>書いたもの</h4>
+  <table>
+    <tr><th>ファイル</th><th>役割</th></tr>
+    <tr><td><code>backend/database/migrations/…_add_last_login_at_to_users_table.php</code></td><td><code>users.last_login_at</code>（<code>timestamp</code>・NULL 可・インデックスなし）。今いる会員は NULL</td></tr>
+    <tr><td><code>backend/database/seeders/SearchMembersSeeder.php</code></td><td>試しの会員 2万人。1000人ずつまとめて insert（約1.2秒）。乱数の種を決めて毎回同じ会員にし、流し直すと入れ直す。<code>DatabaseSeeder</code> からは呼ばない</td></tr>
+    <tr><td><code>backend/app/Http/Controllers/UserController.php</code> の <code>index()</code></td><td><code>GET /api/users</code>。JWT を読む（5か所目の写し）・自分の性別の反対・いいねした相手を <code>whereNotIn</code>・条件を <code>whereHas</code>・最終ログインの新しい順・OFFSET で20人・1人ずつプロフィール</td></tr>
+    <tr><td><code>backend/app/Http/Controllers/AuthController.php</code> の <code>login()</code></td><td>パスワードが合ったら <code>last_login_at = now()</code> で <code>save()</code></td></tr>
+    <tr><td><code>backend/app/Models/User.php</code></td><td><code>casts()</code> に <code>last_login_at</code> を足す（PHPStan の指摘）</td></tr>
+    <tr><td><code>frontend/src/SearchPage.tsx</code>（251行・いちばん大きい部品）</td><td>検索のタブ（<code>/search</code>）。条件・取る・続き・見せるを1つの部品に書く。都道府県の名前47個と年齢の計算を書き写す</td></tr>
+    <tr><td><code>frontend/src/App.tsx</code>・<code>App.css</code>（599行）</td><td><code>/search</code> をつなぐ。2列のカード・絞り込み・都道府県のチップのクラス</td></tr>
+  </table>
+
+  <h4>大事な行の読み方</h4>
+  <p><strong>① 条件は profiles にあるので、<code>whereHas()</code> で絞る</strong>（<code>UserController::index</code>）</p>
+  <pre><code class="language-php">$users = User::whereNotNull('email_verified_at')
+    -&gt;where('id', '!=', $payload-&gt;sub)
+    -&gt;whereNotIn('id', $likedIds)          // いいねした相手の ID を全部並べる
+    -&gt;whereHas('profile', function (Builder $q) use ($request, $gender) {
+        $q-&gt;where('gender', $gender);
+        if ($request-&gt;filled('height_min')) {
+            $q-&gt;where('height', '&gt;=', $request-&gt;input('height_min'));   // 文字で比べる
+        }
+    })</code></pre>
+  <p>取ってくるのは <code>users</code>、条件は <code>profiles</code> なので、<code>exists (select * from profiles where users.id = profiles.user_id and …)</code> になる。送られた条件だけを足し、値は確かめない。身長の列は文字なので <code>'99' &gt;= '170'</code> が真になる。</p>
+
+  <p><strong>② 並びは最終ログインだけ、続きは OFFSET</strong></p>
+  <pre><code class="language-php">-&gt;orderBy('last_login_at', 'desc')
+-&gt;offset(($page - 1) * 20)
+-&gt;limit(20)</code></pre>
+  <p>同じ時刻の会員の順を決める2つ目の列がない。PostgreSQL は <code>desc</code> のとき NULL を先頭に置くので、一度もログインしていない会員が最初に並ぶ。OFFSET は、飛ばす行も読んで並べてから捨てる。</p>
+
+  <p><strong>③ 表示に使うプロフィールを、1人ずつ読み直す</strong></p>
+  <pre><code class="language-php">foreach ($users as $user) {
+    $user-&gt;load('profile');   // 1人ずつ（1＋N）
+}
+return response()-&gt;json($users);   // users の行をそのまま返す</code></pre>
+  <p><code>whereHas</code> は絞るだけで、プロフィールを持ってこない。だから1人ごとにもう1本流れ、20人で 23本になる。応答は <code>users</code> の行なので、メールアドレスと確認用の文字も出る。</p>
+
+  <p><strong>④ 画面：条件は sessionStorage、続きはスクロールを見張る</strong>（<code>SearchPage.tsx</code>）</p>
+  <pre><code class="language-tsx">const [conditions, setConditions] = useState&lt;any&gt;(JSON.parse(sessionStorage.getItem('searchConditions') ?? '{}'))
+// …
+const onScroll = () =&gt; {
+  if (!loading &amp;&amp; !done &amp;&amp; box.scrollTop + box.clientHeight &gt;= box.scrollHeight - 200) {
+    load(page + 1, conditions)
+  }
+}</code></pre>
+  <p>相手のプロフィールから戻ると部品が作り直されるので、条件は sessionStorage に置いて残す（一覧とスクロールの位置は残らず、1ページ目から読み直す）。<code>loading</code> は描き直すまで変わらないので、描き直す前に scroll が続けて来ると、同じページを何本も呼ぶ。足すときに重なりを見ないので、同じ人が何度も並ぶ。</p>
+
+  <p><strong>⑤ ログインで最終ログインを書く</strong>（<code>AuthController::login</code>）</p>
+  <pre><code class="language-php">$user-&gt;last_login_at = now();
+$user-&gt;save();   // updated_at も変わる</code></pre>
+
+  <h4>実際に流れる SQL</h4>
+  <p>5章の「Eloquent が発行する SQL」と同じ形だった（23本：自分のプロフィール・いいねした相手の ID・本体・1人ごとのプロフィール 20本）。違ったのは、生年月日の条件を、送られたものだけ足すこと（5章は全部の条件を書いた）。ログインは <code>update "users" set "last_login_at" = ?, "updated_at" = ? where "id" = ?</code> が1本増えて3本。</p>
+
+  <h4>解説から変えたこと</h4>
+  <table>
+    <tr><th>変えたこと</th><th>理由</th></tr>
+    <tr><td>URL と一覧の会員の ID を UUID（<code>public_id</code>）にした（#46）。改善版のカーソルと並びの2つ目の列も <code>public_id</code></td><td>連番だと、ID を順に変えて他人のページを開ける・会員の数が分かる（D-022）。カーソルからも連番が分からないようにする</td></tr>
+    <tr><td>条件は、送られたものだけを足す</td><td>画面の絞り込みは空のままでも探せるので</td></tr>
+    <tr><td><code>User</code> の <code>casts()</code> に <code>last_login_at</code> を足した</td><td>PHPStan（レベル 6）が、文字の列に日時を入れていると指摘したため</td></tr>
+  </table>
+
+  <h4>気になる点（直していない）</h4>
+  <ul>
+    <li>NULL の会員どうしは、ページごとに順が変わる（下の 9-2）。改善版で <code>last_login_at</code> を NOT NULL にし、2つ目の列で並びを決めるときに消える</li>
+    <li>開いた直後、読み込みが始まるまでの一瞬だけ「条件に合う相手がいません」が出る（<code>loading</code> の初めの値が <code>false</code> のため）</li>
+    <li>試しの会員の最終ログインは、シーダーの「今」（2026-11-12 09:00）より前だけなので、実際にログインした会員がいつも先頭（NULL のすぐ後ろ）に来る</li>
+    <li>CI は <code>backend/</code> だけを見るので、画面だけの PR（#50）では動かない。画面のビルドと Biome を CI に入れるのは、改善版（D-018）</li>
+  </ul>
   <h3>9-2. 測った問題と数字</h3>
-  <p>まだ実装していない。</p>
+  <p class="meta">記録: 2026-11-12 ／ 開発用の DB の試しの会員 2万人。API は、コンテナの中でコントローラを直接呼び、<code>DB::listen</code> で SQL と値を拾って <code>EXPLAIN (ANALYZE, BUFFERS)</code> を流した（女性の会員 23 として探す。確認済みの男性は 8,935人）。画面は、headless の Chrome を DevTools の仕組み（CDP）で動かし、試しの会員 <code>search00001</code> でログインして測った。鍵とトークンは出していない。時間は手元の Docker で1回ずつ、キャッシュに載った状態</p>
+  <h4>要件ごと（○ 守れている・× 守れていない）</h4>
+  <table>
+    <tr><th>要件</th><th>結果</th><th>確かめ方</th></tr>
+    <tr><td>FR-SEARCH-001 条件で絞り込める</td><td>× 合う人は返るが、身長が2桁の会員も出る（身長 300 以上で探すと、出るのは <code>38</code>・<code>82</code>・<code>96</code> などだけ）。応答に <code>email</code>・<code>verification_token</code>・<code>birthday</code>・中の <code>id</code> が出る</td><td>API</td></tr>
+    <tr><td>FR-SEARCH-002 性別を選ばなければ違う性別</td><td>○（自分が <code>male</code> でなければ、みな <code>male</code> を探す）</td><td>API・コード</td></tr>
+    <tr><td>FR-SEARCH-003 自分は出ない</td><td>○</td><td>API</td></tr>
+    <tr><td>FR-SEARCH-004 もういいねした相手は出ない</td><td>○（5・6 が出ない）</td><td>API</td></tr>
+    <tr><td>FR-SEARCH-005 確認していない会員は出ない</td><td>○</td><td>API</td></tr>
+    <tr><td>FR-SEARCH-006 最終ログインの新しい順・同じ時刻でも並びが決まる</td><td>× 先頭の 1〜22ページ目が、一度もログインしていない会員（433人）。<strong>何も変えなくても、1ページ目と2ページ目で17人が重なる</strong>（NULL どうしの順が決まらず、PostgreSQL は LIMIT だけのとき top-N heapsort、OFFSET つきのとき quicksort で並べるため）</td><td>API・実行計画</td></tr>
+    <tr><td>FR-SEARCH-007 20件ずつ・最後に「もうない」と分かる</td><td>○（API は件数で、画面は20件より少ないかで決める。ちょうど20件で終わると、空のページをもう1回読む）</td><td>API・コード</td></tr>
+    <tr><td>FR-SEARCH-008 続きを読むあいだにログインがあっても、重ならず・抜けない</td><td>× 30ページ目のあとに、まだ見ていない会員がログインすると、30ページ目の人が31ページ目にもう一度出る。ログインした人は読み終えたページに移って見えない。<strong>条件なしで最後まで読むと、447回呼んで 8,933件。違う人は 8,677人で、102人が2回以上出て、256人は一度も出ない</strong></td><td>API</td></tr>
+    <tr><td>FR-SEARCH-009 条件の誤りが分かる</td><td>× 年齢 17・身長 300・年齢 40〜30・都道府県 <code>48</code> は、どれも <code>200</code>。<code>prefecture</code> を文字で送ると <code>500</code>（<code>TypeError</code>）</td><td>API</td></tr>
+    <tr><td>FR-SEARCH-010 ログインしていないと使えない</td><td>○ <code>401</code></td><td>API</td></tr>
+    <tr><td>FR-SEARCH-011 ログインで最終ログインが新しくなる</td><td>○（<code>updated_at</code> も一緒に変わる）</td><td>API</td></tr>
+    <tr><td>NFR-SEARCH-001 SQL の本数が増えない（3本以内）</td><td>× 20人で 23本（1＋N）。18人なら 21本</td><td>SQL を数えた</td></tr>
+    <tr><td>FR-UI-015 2列のカードで見られ、押すとプロフィール</td><td>○</td><td>ブラウザ（ユーザー）・Chrome</td></tr>
+    <tr><td>FR-UI-016 条件が、プロフィールから戻っても残る</td><td>○（条件は残るが、一覧は1ページ目から読み直し、スクロールの位置も消える）</td><td>ブラウザ（ユーザー）・コード</td></tr>
+    <tr><td>FR-UI-017 下までスクロールで続き・最後は「これで全員です」</td><td>× 続きは出るが、同じ人が何度も並ぶ（下を読む）。速くスクロールすると、同じページを何本も呼ぶ</td><td>Chrome</td></tr>
+    <tr><td>FR-UI-018 0人なら分かる</td><td>○（ただし、開いた直後にも一瞬「条件に合う相手がいません」が出る）</td><td>Chrome</td></tr>
+  </table>
+  <p><strong>守れている要件：10 / 16</strong>（FR-SEARCH 7 / 11・NFR-SEARCH 0 / 1・FR-UI 3 / 4）。「コード」とだけ書いたものは、コードを読んで分かったこと。</p>
+
+  <h4>実行計画（<code>EXPLAIN (ANALYZE, BUFFERS)</code> の本体の SQL）</h4>
+  <table>
+    <tr><th>条件</th><th>深さ</th><th>返った人</th><th>時間</th><th>読んだページ（<code>shared hit</code>）</th><th>並べ方</th><th>表を全部読む</th></tr>
+    <tr><td rowspan="2">ゆるい（性別だけ）</td><td>1ページ目</td><td>20</td><td>5.9ms</td><td>1,809</td><td>top-N heapsort（32kB）</td><td><code>users</code>・<code>profiles</code></td></tr>
+    <tr><td>offset 5000</td><td>20</td><td>6.9ms</td><td>1,809</td><td>quicksort（2,645kB）</td><td><code>users</code>・<code>profiles</code></td></tr>
+    <tr><td rowspan="2">きびしい（30〜32歳・東京都・170cm〜）</td><td>1ページ目</td><td>18</td><td>1.8ms</td><td>946</td><td>quicksort（29kB）</td><td><code>profiles</code></td></tr>
+    <tr><td>offset 5000</td><td>0</td><td>1.9ms</td><td>946</td><td>quicksort（29kB）</td><td><code>profiles</code></td></tr>
+    <tr><td rowspan="2">0人（沖縄県・99歳）</td><td>1ページ目</td><td>0</td><td>1.1ms</td><td>886</td><td>quicksort（25kB）</td><td><code>profiles</code></td></tr>
+    <tr><td>offset 5000</td><td>0</td><td>1.2ms</td><td>886</td><td>quicksort（25kB）</td><td><code>profiles</code></td></tr>
+  </table>
+  <p>どの条件でも、少なくとも <code>profiles</code> を全部読む（ゆるい条件では、10,080行を読んで捨てる）。ゆるい条件の深い続きは、合う 8,933人を全部 <code>Hash Semi Join</code> してから 5,000人を並べ、4,980人を捨てる。2万人ではどれも 10ms より速いので、速さより「読む量が会員の数に比例する」ことを、改善したあとに <code>Buffers</code> で比べる。</p>
+
+  <h4>画面の数字</h4>
+  <table>
+    <tr><th>測ったもの</th><th>レガシー版</th><th>測り方</th></tr>
+    <tr><td>LCP</td><td>844ms（本番用のビルド）・1,340ms（開発用）</td><td>Chrome の PerformanceObserver。幅 375px・CPU 4倍遅く・遅い 4G に近い回線（150ms・1.6Mbps）。Lighthouse そのものではない</td></tr>
+    <tr><td>CLS</td><td>0.000</td><td>同じ</td></tr>
+    <tr><td>開いたときの <code>/api/users</code></td><td>1本（開発用は StrictMode で2本）。ほかに、どの呼び出しにも CORS の確かめ（<code>OPTIONS</code>）が1本ずつ先に飛ぶ</td><td>CDP の Network</td></tr>
+    <tr><td>下までのスクロールを8回＋速いスクロール1回</td><td><code>GET /api/users</code> が15本。速いスクロールで、10ページ目を <strong>6本</strong> 続けて呼んだ</td><td>CDP の Network</td></tr>
+    <tr><td>そのあとのカード</td><td><strong>300枚のうち、違う人は86人</strong>。59人が2回以上並ぶ</td><td>カードのリンクを数えた</td></tr>
+    <tr><td>React の key の警告</td><td>1,946回（開発用のビルドだけで出る）</td><td>CDP の Console</td></tr>
+    <tr><td><code>npm run build</code></td><td>JS 276KB（gzip 86KB）・CSS 6.4KB（gzip 1.8KB）</td><td>ビルドの出力</td></tr>
+    <tr><td>いちばん大きい部品</td><td>251行（<code>SearchPage.tsx</code>。03b の <code>HomePage.tsx</code> は180行）</td><td>行の数</td></tr>
+    <tr><td><code>any</code>・Biome</td><td>検索の画面で <code>any</code> 5か所。Biome はエラー 7・警告 5</td><td><code>npx biome lint</code></td></tr>
+    <tr><td>書き写し</td><td>送り先の読み出し 16か所（03b は14）・年齢の計算 5か所（4）・JWT を読む処理 5か所（4）・都道府県の名前47個（シーダーと画面の2か所）</td><td>数えた</td></tr>
+  </table>
+
+  <h4>問題をまとめると</h4>
+  <ul>
+    <li><strong>並びが決まらない＋OFFSET</strong>：同じ人が何度も出て、一度も出ない人がいる。画面は重なりを見ずに足すので、そのまま並ぶ（FR-SEARCH-006・008・FR-UI-017）</li>
+    <li><strong>NULL が先頭</strong>：使っていない会員が最初の20ページを埋める（FR-SEARCH-006）</li>
+    <li><strong>文字で比べる</strong>：身長の条件に、合わない会員が入る（FR-SEARCH-001・009）</li>
+    <li><strong>1＋N と表の全読み</strong>：23本。どの条件でも <code>profiles</code> を全部読む（NFR-SEARCH-001）</li>
+    <li><strong>応答に個人情報</strong>：メールアドレスと確認用の文字が、検索した人みなに返る（FR-SEARCH-001）</li>
+  </ul>
   <h3>9-3. 足したテスト</h3>
   <p>まだ実装していない。</p>
   <h3>9-4. 改善版と、前と後の数字</h3>
