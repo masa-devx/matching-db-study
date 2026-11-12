@@ -132,7 +132,7 @@ return ['message' => 'メールアドレスを確認しました'];
 | だれが使えるか | だれでも。何回でも試せる | だれでも。同じメールアドレスと IP で 1分に5回まで（6回目は `429`。FR-AUTH-012） |
 | 入力（JSON） | `email`・`password`。確かめない | `email`（小文字にそろえる）・`password`（どちらも必須。なければ `422`） |
 | 応答（成功） | `200` `{"token": "<30日の JWT>"}`。メールアドレスを確認していない会員もログインできる | `200` `{"user_id": 21, "email_verified": false}`。トークンは JSON に入れず、`access`（15分）と `refresh`（30日）の Cookie で渡す。確認していない会員もログインはでき、機能は `403`（FR-AUTH-021） |
-| 応答（失敗） | `401` `{"message": "メールアドレスが違います"}`（その会員がいない）・`401` `{"message": "パスワードが違います"}`（パスワードが違う）。**どちらが違うかが分かる**。`password` を送らないと `500` | `401` `{"message": "メールアドレスかパスワードが違います"}`（どちらでも同じ。FR-AUTH-011）。ないメールアドレスでも、決まったハッシュで照合して、返るまでの時間をそろえる（NFR-AUTH-002） |
+| 応答（失敗） | `401` `{"message": "メールアドレスが違います"}`（その会員がいない）・`401` `{"message": "パスワードが違います"}`（パスワードが違う）。**どちらが違うかが分かる**。`password` を送らないと `401`（パスワードが違います）、配列で送ると `500` | `401` `{"message": "メールアドレスかパスワードが違います"}`（どちらでも同じ。FR-AUTH-011）。ないメールアドレスでも、決まったハッシュで照合して、返るまでの時間をそろえる（NFR-AUTH-002） |
 | 流れる SQL の目安 | 2本（`select * from users where email = ? limit 1`・`select * from profiles where user_id = ? limit 1`。ニックネームを JWT に入れるため） | 2本（会員を読む・`insert into refresh_tokens`） |
 | curl の例 | `curl -X POST http://127.0.0.1:8000/api/auth/login -H 'Content-Type: application/json' -d '{"email":"a@example.test","password":"password"}'` | `... -c cookies.txt`（Cookie を保存する） |
 
@@ -182,11 +182,15 @@ return ['token' => $token];
 | --- | --- | --- |
 | ログインの JWT を base64 で読む | **メールアドレスとニックネームが読める**（署名はあるが、暗号化はしていない） | FR-AUTH-013 |
 | ログアウトしたあとに、同じ JWT で `GET /api/me` | `200`（使える） | FR-AUTH-016 |
-| ないメールアドレス・違うパスワードでログイン | 言葉が違うので、登録されているかが分かる。返るまでの時間も違う（`curl -w '%{time_total}'` で測る） | FR-AUTH-011・NFR-AUTH-002 |
+| ないメールアドレス・違うパスワードでログイン | 言葉が違うので、登録されているかが分かる。返るまでの時間も違う（測った：5回の平均で 0.024秒／0.204秒。bcrypt の照合の分だけ遅い） | FR-AUTH-011・NFR-AUTH-002 |
 | 違うパスワードで 20回続けてログイン | 20回とも `401`（止まらない） | FR-AUTH-012 |
-| `password` を送らない | `500` | FR-AUTH-010 |
-| 署名を書き換えた JWT・`exp` が過ぎた JWT・`abc` で `GET /api/me` | `500`（`401` にならない） | FR-AUTH-013 |
+| `password` を送らない | `401`「パスワードが違います」（測った。設計のときは `500` と見込んでいた） | FR-AUTH-010 |
+| `"password": ["password"]`（配列） | `500`（`password_verify()` の TypeError）。`laravel.log` のスタックトレースに、パスワードのハッシュの先頭15文字が残る | FR-AUTH-010・FR-AUTH-032 |
+| `"email": ["sakura@example.test"]`（配列） | 先頭の要素だけが使われ、ログインできる（入力の形を確かめない） | FR-AUTH-010 |
+| 署名を書き換えた JWT・`exp` が過ぎた JWT・`abc` で `GET /api/me` | `500`（`401` にならない。`exp` が過ぎたものは、鍵がないと作れないので測っていない） | FR-AUTH-013 |
+| `500` のときの `laravel.log` | スタックトレースに `JWT::decode()` の引数として JWT が残る。今は PHP の設定（`zend.exception_string_param_max_len=15`）で先頭15文字（どの JWT でも同じヘッダーの部分）だけ。この設定を上げると、JWT がまるごと残る。鍵は `#[SensitiveParameter]` で伏せられる | FR-AUTH-032 |
+| JWT の `sub` の会員がいない | `200 {}`（`User::find()` が `null`）。DB を作り直して ID が振り直されると、古い JWT が別の会員を指す（要確認。試していない） | FR-AUTH-013 |
 | メールアドレスを確認していない会員でログイン | ログインでき、01 のプロフィールの API も使える | FR-AUTH-021 |
-| `APP_KEY` を知っている人 | 好きな `sub` の JWT を作れる（だれにでもなりすませる） | ― |
+| `APP_KEY` を知っている人 | 好きな `sub` の JWT を作れる（だれにでもなりすませる。鍵を扱うので、AI は測っていない） | ― |
 | `SAKURA@example.test`（#15 で別の会員になったもの）でログイン | 大文字と小文字で別の会員としてログインする | FR-AUTH-003 |
 | `GET /api/me` を呼ぶたびに | DB を1本読む | NFR-AUTH-001 |
