@@ -1,5 +1,5 @@
 # Larastan（PHPStan を Laravel 向けにしたもの）の設定
-# レガシー版はレベル 6（D-016）。Fat Controller でも通る強さにして、直す段階で 9 に上げる
+# レガシー版はレベル 6（D-016）。Fat Controller でも通る強さにして、改善する段階で 9 に上げる
 includes:
     - vendor/larastan/larastan/extension.neon
 
