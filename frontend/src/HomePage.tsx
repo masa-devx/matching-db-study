@@ -77,87 +77,89 @@ export default function HomePage() {
         <div className="muted-text">{me.email}</div>
       </div>
 
-      {message && <p className="toast">{message}</p>}
+      <div className="profile-body">
+        {message && <p className="toast">{message}</p>}
 
-      {!editing ? (
-        <>
-          <div className="chips">
-            {me.profile?.prefecture && <span className="chip">{me.profile.prefecture}</span>}
-            {me.profile?.height && <span className="chip">{me.profile.height}cm</span>}
-          </div>
-          <div className="card">
-            <h2 className="section-title">自己紹介</h2>
-            <p className="intro">{me.profile?.introduction || 'まだ書いていません'}</p>
-          </div>
-          <button
-            className="button"
-            onClick={() => {
-              setMessage('')
-              setEditing(true)
-            }}
-          >
-            プロフィールを編集
-          </button>
-        </>
-      ) : (
-        <form className="card" onSubmit={save}>
-          <h2 className="section-title">プロフィールを編集</h2>
-          <div className="label">写真</div>
-          <div className="avatar-picker">
-            {[1, 2, 3, 4, 5, 6].map((n) => (
-              <label key={n} className={form.image === `/images/avatars/demo-${n}.svg` ? 'pick pick-on' : 'pick'}>
-                <input
-                  type="radio"
-                  name="image"
-                  value={`/images/avatars/demo-${n}.svg`}
-                  checked={form.image === `/images/avatars/demo-${n}.svg`}
-                  onChange={(e) => setForm({ ...form, image: e.target.value })}
-                />
-                <img src={`${api}/images/avatars/demo-${n}.svg`} />
-              </label>
-            ))}
-          </div>
-          <label className="label">
-            ニックネーム
-            <input
-              className="input"
-              value={form.nickname ?? ''}
-              onChange={(e) => setForm({ ...form, nickname: e.target.value })}
-            />
-          </label>
-          <label className="label">
-            都道府県
-            <input
-              className="input"
-              value={form.prefecture ?? ''}
-              onChange={(e) => setForm({ ...form, prefecture: e.target.value })}
-            />
-          </label>
-          <label className="label">
-            身長（cm）
-            <input
-              className="input"
-              value={form.height ?? ''}
-              onChange={(e) => setForm({ ...form, height: e.target.value })}
-            />
-          </label>
-          <label className="label">
-            自己紹介
-            <textarea
-              className="input"
-              rows={5}
-              value={form.introduction ?? ''}
-              onChange={(e) => setForm({ ...form, introduction: e.target.value })}
-            />
-          </label>
-          <button className="button" type="submit">
-            保存する
-          </button>
-          <button className="button button-ghost button-space" type="button" onClick={() => setEditing(false)}>
-            やめる
-          </button>
-        </form>
-      )}
+        {!editing ? (
+          <>
+            <div className="chips">
+              {me.profile?.prefecture && <span className="chip">{me.profile.prefecture}</span>}
+              {me.profile?.height && <span className="chip">{me.profile.height}cm</span>}
+            </div>
+            <div className="card">
+              <h2 className="section-title">自己紹介</h2>
+              <p className="intro">{me.profile?.introduction || 'まだ書いていません'}</p>
+            </div>
+            <button
+              className="button"
+              onClick={() => {
+                setMessage('')
+                setEditing(true)
+              }}
+            >
+              プロフィールを編集
+            </button>
+          </>
+        ) : (
+          <form className="card" onSubmit={save}>
+            <h2 className="section-title">プロフィールを編集</h2>
+            <div className="label">写真</div>
+            <div className="avatar-picker">
+              {[1, 2, 3, 4, 5, 6].map((n) => (
+                <label key={n} className={form.image === `/images/avatars/demo-${n}.svg` ? 'pick pick-on' : 'pick'}>
+                  <input
+                    type="radio"
+                    name="image"
+                    value={`/images/avatars/demo-${n}.svg`}
+                    checked={form.image === `/images/avatars/demo-${n}.svg`}
+                    onChange={(e) => setForm({ ...form, image: e.target.value })}
+                  />
+                  <img src={`${api}/images/avatars/demo-${n}.svg`} />
+                </label>
+              ))}
+            </div>
+            <label className="label">
+              ニックネーム
+              <input
+                className="input"
+                value={form.nickname ?? ''}
+                onChange={(e) => setForm({ ...form, nickname: e.target.value })}
+              />
+            </label>
+            <label className="label">
+              都道府県
+              <input
+                className="input"
+                value={form.prefecture ?? ''}
+                onChange={(e) => setForm({ ...form, prefecture: e.target.value })}
+              />
+            </label>
+            <label className="label">
+              身長（cm）
+              <input
+                className="input"
+                value={form.height ?? ''}
+                onChange={(e) => setForm({ ...form, height: e.target.value })}
+              />
+            </label>
+            <label className="label">
+              自己紹介
+              <textarea
+                className="input"
+                rows={5}
+                value={form.introduction ?? ''}
+                onChange={(e) => setForm({ ...form, introduction: e.target.value })}
+              />
+            </label>
+            <button className="button" type="submit">
+              保存する
+            </button>
+            <button className="button button-ghost button-space" type="button" onClick={() => setEditing(false)}>
+              やめる
+            </button>
+          </form>
+        )}
+      </div>
     </div>
   )
 }

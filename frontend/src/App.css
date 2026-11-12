@@ -1,35 +1,12 @@
 /* レガシー版（03b）。すべての画面のクラスを、この1枚に書く（どの画面で使っているかは、探さないと分からない） */
 .app {
-  /* ネイティブアプリのように、広い画面でもスマホの幅の1列を真ん中に置く */
   max-width: 480px;
-  min-height: 100dvh;
   margin: 0 auto;
-  background: #f8f9fa;
-}
-
-@media (min-width: 481px) {
-  .app {
-    border-right: 1px solid #dee2e6;
-    border-left: 1px solid #dee2e6;
-  }
-}
-
-.header {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  padding-top: calc(12px + env(safe-area-inset-top));
-  background: #fff;
-  border-bottom: 1px solid #dee2e6;
+  padding: 0 16px;
 }
 
 .main {
-  padding: 16px;
+  padding: 24px 0;
 }
 
 .card {
@@ -99,10 +76,6 @@
 }
 
 /* ---- 03b #36 で足した（マッチングアプリによくある見せ方）。値は上と同じものを、また書く ---- */
-.app-with-tabs {
-  padding-bottom: calc(72px + env(safe-area-inset-bottom)); /* 下のタブに隠れないように */
-}
-
 .logo {
   font-size: 20px;
   font-weight: bold;
@@ -150,11 +123,10 @@
 /* 下に固定したタブ */
 .tabs {
   position: fixed;
+  right: 0;
   bottom: 0;
-  left: 50%;
-  width: 100%;
-  max-width: 480px;
-  transform: translateX(-50%);
+  left: 0;
+  z-index: 5;
   padding-bottom: env(safe-area-inset-bottom);
   display: flex;
   justify-content: center;
@@ -309,12 +281,7 @@
 /* マッチしたときに、画面いっぱいに出す */
 .match-overlay {
   position: fixed;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 100%;
-  max-width: 480px;
-  transform: translateX(-50%);
+  inset: 0;
   z-index: 10;
   display: flex;
   flex-direction: column;
@@ -407,4 +374,157 @@
 
 .pick input:focus-visible + img {
   outline: 2px solid #212529;
+}
+
+/* ---- ログインしたあとの枠。幅で3つに分ける ----
+   スマホ（〜767px）：1列。上の帯と下のタブ
+   タブレット（768〜1023px）：中身は最大 720px。プロフィールは写真と本文の2列。上の帯と下のタブ
+   PC（1024px〜）：左に横のメニュー（240px）。中身は最大 960px。プロフィールは写真（400px）と本文の2列 */
+.shell {
+  min-height: 100dvh;
+  padding-bottom: calc(72px + env(safe-area-inset-bottom)); /* 下のタブに隠れないように */
+}
+
+.shell-main {
+  padding: 16px;
+}
+
+.side {
+  display: none;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  padding-top: calc(12px + env(safe-area-inset-top));
+  background: #fff;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.profile-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* タブレット */
+@media (min-width: 768px) {
+  .shell-main {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+
+  .profile {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+    gap: 24px;
+  }
+
+  .photo {
+    position: sticky;
+    top: 80px;
+  }
+
+  .me-head {
+    padding: 24px;
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+  }
+
+  /* 本文の下に置く。浮かせない */
+  .like-bar {
+    position: static;
+    justify-content: flex-start;
+  }
+
+  .like-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .avatar-picker {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* PC */
+@media (min-width: 1024px) {
+  .shell {
+    display: flex;
+    padding-bottom: 0;
+  }
+
+  .header,
+  .tabs {
+    display: none;
+  }
+
+  .side {
+    position: sticky;
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    gap: 24px;
+    width: 240px;
+    height: 100dvh;
+    padding: 24px 16px;
+    background: #fff;
+    border-right: 1px solid #dee2e6;
+  }
+
+  .side-nav {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .side-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    color: #212529;
+    text-decoration: none;
+    border-radius: 999px;
+  }
+
+  .side-link:hover {
+    background: #f8f9fa;
+  }
+
+  .side-link.active {
+    color: #d6336c;
+    font-weight: bold;
+    background: #f8f9fa;
+  }
+
+  .shell-main {
+    flex: 1;
+    max-width: 960px;
+    padding: 32px;
+  }
+
+  .profile {
+    grid-template-columns: 400px 1fr;
+    gap: 32px;
+  }
+
+  .photo {
+    top: 32px;
+  }
+
+  .avatar-picker {
+    grid-template-columns: repeat(6, 1fr);
+  }
 }

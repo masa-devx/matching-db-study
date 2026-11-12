@@ -6,7 +6,7 @@ import LoginPage from './LoginPage'
 import RegisterPage from './RegisterPage'
 import UserPage from './UserPage'
 
-// レガシー版（03b）。画面の切り替え・上の帯・下のタブ・ログアウトを、ここに全部書く。
+// レガシー版（03b）。画面の切り替え・枠（横のメニュー・上の帯・下のタブ）・ログアウトを、ここに全部書く。
 // ログインしているかは、sessionStorage の token があるかだけで決める（期限切れでも「ログイン中」に見える）
 export default function App() {
   const [token, setToken] = useState<string | null>(sessionStorage.getItem('token'))
@@ -24,41 +24,69 @@ export default function App() {
     navigate('/login')
   }
 
+  const routes = (
+    <Routes>
+      <Route path="/" element={<Navigate to={token ? '/home' : '/login'} />} />
+      <Route path="/login" element={<LoginPage setToken={setToken} />} />
+      <Route path="/register" element={<RegisterPage />} />
+      <Route path="/home" element={<HomePage />} />
+      <Route path="/users/:id" element={<UserPage />} />
+      {/* /likes・/matches は #37 で足す */}
+      <Route path="*" element={<p>ページが見つかりません</p>} />
+    </Routes>
+  )
+
+  // ログインしていない画面（ログイン・登録）は、真ん中に1列だけ
+  if (!token) {
+    return (
+      <div className="app">
+        <main className="main">{routes}</main>
+      </div>
+    )
+  }
+
+  // ログインしたあとの枠。PC は横のメニュー、タブレットとスマホは上の帯と下のタブ（CSS で出し分ける）
+  // 同じリンクを、横のメニューと下のタブの2か所に書く
   return (
-    <div className={token ? 'app app-with-tabs' : 'app'}>
-      {token && (
-        <header className="header">
-          <span className="logo">matching</span>
-          <button className="button button-small button-ghost" onClick={logout}>
-            ログアウト
-          </button>
-        </header>
-      )}
-      <main className="main">
-        <Routes>
-          <Route path="/" element={<Navigate to={token ? '/home' : '/login'} />} />
-          <Route path="/login" element={<LoginPage setToken={setToken} />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route path="/home" element={<HomePage />} />
-          <Route path="/users/:id" element={<UserPage />} />
-          {/* /likes・/matches は #37 で足す */}
-          <Route path="*" element={<p>ページが見つかりません</p>} />
-        </Routes>
-      </main>
-      {token && (
-        // スマホのアプリによくある、下に固定したタブ
-        <nav className="tabs">
-          <NavLink to="/home" className="tab">
+    <div className="shell">
+      <aside className="side">
+        <span className="logo">matching</span>
+        <nav className="side-nav">
+          <NavLink to="/home" className="side-link">
             <span className="tab-icon">●</span>ホーム
           </NavLink>
-          <NavLink to="/likes" className="tab">
-            <span className="tab-icon">♥</span>いいね
+          <NavLink to="/likes" className="side-link">
+            <span className="tab-icon">♥</span>送ったいいね
           </NavLink>
-          <NavLink to="/matches" className="tab">
+          <NavLink to="/matches" className="side-link">
             <span className="tab-icon">✦</span>マッチ
           </NavLink>
         </nav>
-      )}
+        <button className="button button-small button-ghost" onClick={logout}>
+          ログアウト
+        </button>
+      </aside>
+
+      <header className="header">
+        <span className="logo">matching</span>
+        <button className="button button-small button-ghost" onClick={logout}>
+          ログアウト
+        </button>
+      </header>
+
+      <main className="shell-main">{routes}</main>
+
+      <nav className="tabs">
+        <NavLink to="/home" className="tab">
+          <span className="tab-icon">●</span>ホーム
+        </NavLink>
+        <NavLink to="/likes" className="tab">
+          <span className="tab-icon">♥</span>いいね
+        </NavLink>
+        <NavLink to="/matches" className="tab">
+          <span className="tab-icon">✦</span>マッチ
+        </NavLink>
+      </nav>
     </div>
   )
 }

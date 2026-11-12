@@ -10,7 +10,7 @@ body {
   font-size: 16px;
   line-height: 1.6;
   color: #212529;
-  background: #dee2e6; /* 列の外。広い画面で、アプリの列と分けて見せる */
+  background: #f8f9fa;
   -webkit-tap-highlight-color: transparent; /* 押したときの青い影を消す（ネイティブアプリに近づける） */
 }
 

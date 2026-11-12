@@ -68,23 +68,25 @@ export default function UserPage() {
         </div>
       </div>
 
-      <div className="chips">
-        {user.profile?.prefecture && <span className="chip">{user.profile.prefecture}</span>}
-        {user.profile?.height && <span className="chip">{user.profile.height}cm</span>}
-      </div>
+      <div className="profile-body">
+        <div className="chips">
+          {user.profile?.prefecture && <span className="chip">{user.profile.prefecture}</span>}
+          {user.profile?.height && <span className="chip">{user.profile.height}cm</span>}
+        </div>
 
-      <div className="card">
-        <h2 className="section-title">自己紹介</h2>
-        <p className="intro">{user.profile?.introduction || 'まだ書いていません'}</p>
-      </div>
+        <div className="card">
+          <h2 className="section-title">自己紹介</h2>
+          <p className="intro">{user.profile?.introduction || 'まだ書いていません'}</p>
+        </div>
 
-      {message && <p className="toast">{message}</p>}
+        {message && <p className="toast">{message}</p>}
 
-      <div className="like-bar">
-        <button className="like-button" onClick={like} disabled={liked}>
-          <span className="like-heart">♥</span>
-          {liked ? 'いいね済み' : 'いいね'}
-        </button>
+        <div className="like-bar">
+          <button className="like-button" onClick={like} disabled={liked}>
+            <span className="like-heart">♥</span>
+            {liked ? 'いいね済み' : 'いいね'}
+          </button>
+        </div>
       </div>
 
       {matched && (
