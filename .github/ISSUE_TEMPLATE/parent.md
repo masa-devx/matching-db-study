@@ -5,7 +5,7 @@ title: "【番号】【機能名／直す：何を直すか】"
 labels: ["parent"]
 ---
 
-<!-- ラベルは parent と段階（素朴に作る：legacy／直す：refactor）。マイルストーンは M0〜M3 から選ぶ -->
+<!-- ラベルは parent と段階（レガシーコードで作る：legacy／直す：refactor）。マイルストーンは M0〜M3 から選ぶ -->
 
 ## 何をするか
 

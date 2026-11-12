@@ -6,7 +6,7 @@
 
 ## `GET /api/users/{id}/profile`
 
-| 項目 | 素朴な版（legacy-repo） | 直した版（refactored-repo） |
+| 項目 | レガシー版（legacy-repo） | 直した版（refactored-repo） |
 | --- | --- | --- |
 | だれが使えるか | だれでも | だれでも（01b で「ログインした会員だけ」にする） |
 | 入力 | パスの `id`（整数） | 同じ |
@@ -15,7 +15,7 @@
 | 流れる SQL の目安 | 2本（`select * from users where id = ? limit 1` と、`select * from profiles where user_id in (?)`） | 2本以内（NFR-001） |
 | curl の例 | `curl http://127.0.0.1:8000/api/users/1/profile` | 同じ |
 
-素朴な版の書き方（Laravel 5 系のころによくある形）：
+レガシー版の書き方（Laravel 5 系のころによくある形）：
 
 ```php
 $user = User::findOrFail($id);
@@ -24,7 +24,7 @@ return $user;
 // 初めは $user->profile; と書く案だったが、Larastan に「何もしていない式」と指摘されたので load() にした
 ```
 
-素朴な版の応答の例（**メールアドレス・確認用の文字・生年月日も返してしまう**。FR-002 を守れていない）：
+レガシー版の応答の例（**メールアドレス・確認用の文字・生年月日も返してしまう**。FR-002 を守れていない）：
 
 ```json
 {
@@ -70,7 +70,7 @@ return $user;
 
 ## `PUT /api/users/{id}/profile`
 
-| 項目 | 素朴な版（legacy-repo） | 直した版（refactored-repo） |
+| 項目 | レガシー版（legacy-repo） | 直した版（refactored-repo） |
 | --- | --- | --- |
 | だれが使えるか | だれでも（**他人のプロフィールも書き換えられる**） | だれでも（01b で「自分だけ」にする。他人なら `403`） |
 | 入力（JSON） | 何でも受け取り、`profiles` の列に全部入れる（`$request->all()`） | `nickname`（必須・1〜20文字）・`prefecture_code`（なし か 都道府県の表にあるもの）・`height_cm`（なし か 120〜220 の整数）・`bio`（0〜500文字）・`avatar_path`（なし か 文字）。ほかのキーは無視する |
@@ -79,7 +79,7 @@ return $user;
 | 流れる SQL の目安 | 2本（`select * from profiles where user_id = ? limit 1` と `update`） | 3本以内（会員を読む・プロフィールを書き換える・都道府県があるかを確かめる） |
 | curl の例 | `curl -X PUT http://127.0.0.1:8000/api/users/1/profile -H 'Content-Type: application/json' -d '{"nickname":"さくら","height":"160"}'` | `... -d '{"nickname":"さくら","height_cm":160}'` |
 
-素朴な版の書き方：
+レガシー版の書き方：
 
 ```php
 $profile = Profile::where('user_id', $id)->first();   // 見つからなければ null
@@ -88,9 +88,9 @@ $profile->save();
 return $profile;
 ```
 
-素朴な版で起きること（直す段階で、要件 ID のテストにする）：
+レガシー版で起きること（直す段階で、要件 ID のテストにする）：
 
-| 送るもの・すること | 素朴な版 | 要件 |
+| 送るもの・すること | レガシー版 | 要件 |
 | --- | --- | --- |
 | `{"height": "abc"}` | 保存される | FR-008 |
 | 21文字のニックネーム | 保存される | FR-006 |

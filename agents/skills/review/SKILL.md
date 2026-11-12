@@ -14,7 +14,7 @@ PR作成前に必ず1回、実装とは別セッションで実行する。別�
 - 差分：`git diff main...HEAD` と、まだ追跡していないファイル（`git status --short`）。比較元は、ブランチを切った元に合わせる
 - Issue：ブランチ名の番号（`legacy/<番号>-<名前>`・`refactor/<番号>-<名前>`）の Issue の本文（`gh issue view <番号>`）。このリポジトリはプランを使わない
 - 要件：Issue の本文の「要件」にある docs/requirements/ のファイル
-- 段階：`legacy/` なら素朴に作る段階（Fat Controller・テストなしは指摘しない。architecture.md の「一歩の段階」）、`refactor/` なら直す段階
+- 段階：`legacy/` ならレガシーコードで作る段階（Fat Controller・テストなしは指摘しない。architecture.md の「一歩の段階」）、`refactor/` なら直す段階
 
 観点は、Issue と要件との整合、異常系と境界値（対応するテストと骨抜きテストを含む）、セキュリティ、SSoT・過剰設計、これ以上単純にできないか、名前が意図を表し、コメントが「なぜ」を書いているか、該当ルールへの準拠。観点別に分ける場合は、design-reviewer、edge-case-reviewer、security-reviewerへ同じ資料を渡して並列で走らせる。
 

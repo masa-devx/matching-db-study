@@ -76,8 +76,8 @@ erDiagram
   </table>
   <div class="card point"><strong>この一歩で選ぶもの</strong>：【案と、選ぶ理由】</div>
 
-  <h2>5. 見本：素朴な版と直した版</h2>
-  <h3>素朴な版（Fat Controller・テストなし）</h3>
+  <h2>5. 見本：レガシー版と直した版</h2>
+  <h3>レガシー版（Fat Controller・テストなし）</h3>
   <pre><code>【コントローラの中で Eloquent を直接使う書き方。10〜20行】</code></pre>
   <div class="card warn">【この書き方の何が問題か（N+1・二重登録・遅い検索など）】</div>
   <h3>直した版</h3>
@@ -87,7 +87,7 @@ erDiagram
   <h2>6. どう確かめるか</h2>
   <table>
     <tr><th>段階</th><th>確かめること</th></tr>
-    <tr><td>① 素朴な版で問題を見る</td><td>【クエリの数・EXPLAIN（ANALYZE, BUFFERS）・同時に送ったときの結果】</td></tr>
+    <tr><td>① レガシー版で問題を見る</td><td>【クエリの数・EXPLAIN（ANALYZE, BUFFERS）・同時に送ったときの結果】</td></tr>
     <tr><td>② 振る舞いを固定するテスト</td><td>【直す前に足すテストの名前と、何を確かめるか】</td></tr>
     <tr><td>③ 直したあとに比べる数字</td><td>【前と後で比べる数字（クエリの数・時間・読んだ行の数）】</td></tr>
   </table>
@@ -105,8 +105,8 @@ erDiagram
   <details><summary>Eloquent でどんな SQL が流れ、どう直したか？ Rails（ActiveRecord）・Prisma ならどう書くか？</summary><p>【】</p></details>
 
   <h2>9. 実装の記録</h2>
-  <p class="meta">素朴な版のあと（9-1・9-2）と、直したあと（9-3・9-4）に、explain-change が書く。</p>
-  <h3>9-1. 素朴な版</h3>
+  <p class="meta">レガシー版のあと（9-1・9-2）と、直したあと（9-3・9-4）に、explain-change が書く。</p>
+  <h3>9-1. レガシー版</h3>
   <p>【まだ実装していない】</p>
   <h3>9-2. 測った問題と数字</h3>
   <p>【まだ実装していない】</p>
