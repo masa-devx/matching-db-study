@@ -1,0 +1,92 @@
+/* レガシー版（03b）。すべての画面のクラスを、この1枚に書く（どの画面で使っているかは、探さないと分からない） */
+.app {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 14px;
+}
+
+.main {
+  padding: 24px 0;
+}
+
+.card {
+  padding: 24px;
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+}
+
+.title {
+  font-size: 20px;
+}
+
+.label {
+  display: block;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.input {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 12px;
+  font: inherit;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.button {
+  width: 100%;
+  padding: 12px 16px;
+  font: inherit;
+  font-weight: bold;
+  color: #fff;
+  background: #d6336c;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.button:disabled {
+  background: #6c757d;
+  cursor: default;
+}
+
+.button-small {
+  width: auto;
+  padding: 4px 12px;
+  font-size: 14px;
+}
+
+.muted {
+  margin: 16px 0 0;
+  font-size: 14px;
+  color: #6c757d;
+}
+
+.error {
+  font-size: 14px;
+  color: #c92a2a;
+}
+
+.success {
+  color: #2b8a3e;
+}
