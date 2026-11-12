@@ -25,8 +25,8 @@ API の正本。作る前に設計を書き、確かめてもらってから実�
 | 番号 | メソッドとパス | 中身 | 状態 |
 | --- | --- | --- | --- |
 | [00](00-health.md) | `GET /api/health` | 動いているかと、DB につながるか | 実装済み |
-| [01](01-members.md) | `GET /api/users/{public_id}`（#46 までは `/api/users/{id}/profile`） | 相手のプロフィール（ユーザー詳細）を見る | 実装済み（レガシー版）。#46 の変更は案 |
-| [01](01-members.md) | `PUT /api/users/{public_id}`（#46 までは `/api/users/{id}/profile`。改善版は `PATCH /api/me`） | 自分のプロフィールを編集する | 実装済み（レガシー版）。#46 の変更は案 |
+| [01](01-members.md) | `GET /api/users/{public_id}`（#46 までは `/api/users/{id}/profile`） | 相手のプロフィール（ユーザー詳細）を見る | 実装済み（レガシー版）。#46 の変更も実装済み（レガシー版） |
+| [01](01-members.md) | `PUT /api/users/{public_id}`（#46 までは `/api/users/{id}/profile`。改善版は `PATCH /api/me`） | 自分のプロフィールを編集する | 実装済み（レガシー版）。#46 の変更も実装済み（レガシー版） |
 | [01b](01b-auth.md) | `POST /api/users` | 登録する | 実装済み（レガシー版） |
 | [01b](01b-auth.md) | `GET /api/email-verifications/{token}`（改善版は `GET /api/users/{public_id}/email-verification/{hash}`） | メールアドレスを確認する（確認のメールのリンク） | 実装済み（レガシー版） |
 | [01b](01b-auth.md) | `POST /api/email-verifications`（改善版は `POST /api/me/email-verification`） | 確認のメールをもう一度送る | 実装済み（レガシー版） |

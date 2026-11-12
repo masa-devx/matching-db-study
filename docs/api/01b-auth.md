@@ -195,13 +195,13 @@ return ['token' => $token];
 | `SAKURA@example.test`（#15 で別の会員になったもの）でログイン | 大文字と小文字で別の会員としてログインする | FR-AUTH-003 |
 | `GET /api/me` を呼ぶたびに | DB を1本読む | NFR-AUTH-001 |
 
-## #46 で変えること（ID。状態：**案**）
+## #46 で変えること（ID。状態：**実装済み（レガシー版）**。PR #47 で測った）
 
 D-022。上の表は 01b で作った形のまま残し、ここに差分だけを書く。
 
 | 項目 | レガシー版（legacy-repo） | 改善版（refactored-repo） |
 | --- | --- | --- |
 | JWT の `sub` | 変えない（中の `id`）。分かるのは自分の番号だけで、それで他人のページは開けない | 同じ |
-| `GET /api/me` の応答 | `users` の行に `public_id` が足される。/home は、これを使って `PUT /api/users/{public_id}` を呼ぶ | `"user_id": "019a…"`（値が UUID） |
-| `POST /api/users` の応答 | `public_id` は出ない見込み（DB の既定の値で入るが、作ったあとに読み直さないため） | `"user_id": "019a…"`（作ったあとに読み直す） |
+| `GET /api/me` の応答 | `users` の行に `public_id` が足される（測った。SQL は1本のまま）。/home は、これを使って `PUT /api/users/{public_id}` を呼ぶ | `"user_id": "019a…"`（値が UUID） |
+| `POST /api/users` の応答 | `public_id` は出ない見込み（DB の既定の値で入るが、作ったあとに読み直さないため。登録は試していない） | `"user_id": "019a…"`（作ったあとに読み直す） |
 | `public_id` を入れるところ | 書かない。DB の既定の値（`uuidv7()`）が入れる | 同じ |

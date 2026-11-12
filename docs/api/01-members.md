@@ -103,7 +103,7 @@ return $profile;
 | DB に、`user_id = 999`（いない会員）のプロフィールを入れる | 入る（外部キーがない） | FR-011 |
 | 会員を消す | **プロフィールが残る**（みなしごの行。確かめ済み） | FR-011 |
 
-## #46 で変えること（パスと ID。状態：**案**）
+## #46 で変えること（パスと ID。状態：**実装済み（レガシー版）**。PR #47 で測った）
 
 D-022。上の表は 01 で作った形のまま残し、ここに差分だけを書く。
 
@@ -114,8 +114,8 @@ D-022。上の表は 01 で作った形のまま残し、ここに差分だけ�
 | 入力 | パスの `public_id`（UUID）。形は確かめない | パスの `public_id`。UUID の形でなければ `404`（ルートの `whereUuid`） |
 | 会員の探し方 | `User::where('public_id', $publicId)->firstOrFail()` | 同じ（`public_id` の UNIQUE のインデックスで1行） |
 | 応答（成功） | `users` の行に `public_id` が足される。`id` などはこれまでどおり出る（メールアドレス・確認用の文字・生年月日も返したまま） | `"user_id": "019a…"`（値が UUID になる。ほかは同じ） |
-| 応答（失敗） | いない UUID は `404`。**UUID の形でない文字（`/api/users/5` など）は `500` の見込み**（PostgreSQL が `uuid` に変えられない。`22P02`） | いない・形が違う、どちらも `404` |
-| 流れる SQL の目安 | 変わらない（`select * from users where public_id = ? limit 1` と、`profiles` の1本） | 変わらない |
+| 応答（失敗） | いない UUID は `404`。**UUID の形でない文字（`/api/users/5` など）は `500`**（PostgreSQL が `uuid` に変えられない。`22P02`。SQL の文と接続先も本文に出る） | いない・形が違う、どちらも `404` |
+| 流れる SQL の目安 | `GET` は変わらない（`select * from users where public_id = ? limit 1` と、`profiles` の1本。測って2本。いない UUID は1本で `404`）。`PUT` は、UUID から中の `id` を読む1本が増える（同じ値で書き戻すと `update` が流れず2本。値が変われば3本の見込み） | 変わらない |
 | curl の例 | `curl http://127.0.0.1:8000/api/users/<public_id>` | 同じ |
 
 `users` と `profiles` に分けたのは DB の都合なので、パスに `/profile` を付けない。検索の `GET /api/users`（04）と、一覧と1件の対になる。
