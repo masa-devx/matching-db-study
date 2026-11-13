@@ -10,7 +10,7 @@
 <main>
   <p class="meta"><a href="index.html">← 目次へ</a></p>
   <h1>06 ブロックと退会</h1>
-  <p class="meta">作成: 2026-11-13 ／ 状態: <span class="status">解説だけ</span> ／ 要件: <code>docs/requirements/blocks.md</code>（FR-BLOCK-001〜015・NFR-BLOCK-001〜002）・<code>docs/requirements/withdrawal.md</code>（FR-WD-001〜011・NFR-WD-001〜002）・<code>screens.md</code> の FR-UI-034〜037</p>
+  <p class="meta">作成: 2026-11-13 ／ 状態: <span class="status">レガシー版まで</span> ／ 要件: <code>docs/requirements/blocks.md</code>（FR-BLOCK-001〜015・NFR-BLOCK-001〜002）・<code>docs/requirements/withdrawal.md</code>（FR-WD-001〜011・NFR-WD-001〜002）・<code>screens.md</code> の FR-UI-034〜037</p>
 
   <div class="card point">
     <strong>この一歩でできるようになること</strong>
@@ -216,8 +216,8 @@ $blockedMe = Block::where('blocked_id', $me)-&gt;pluck('blocker_id');
 
 $users = User::whereNotNull('email_verified_at')
     -&gt;where('id', '!=', $me)
-    -&gt;whereNull('deleted_at')   // 検索にだけ書いた
     -&gt;whereNotIn('id', $blocked-&gt;merge($blockedMe))
+    -&gt;whereNull('deleted_at')   // 検索にだけ書いた
     -&gt;orderBy('last_login_at', 'desc')-&gt;limit(20)-&gt;get();</code></pre>
       <p class="arrow">↓ 発行される SQL</p>
       <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① 自分がブロックした相手（UNIQUE の先頭の列なので索引が効く）
@@ -232,11 +232,11 @@ where "blocked_id" = 1;
 select * from "users"
 where "email_verified_at" is not null
   and "id" != 1
-  and "deleted_at" is null
   and "id" not in (3, 7, 12)
+  and "deleted_at" is null
 order by "last_login_at" desc
 limit 20;</code></pre>
-      <ul><li>③の <code>deleted_at is null</code> は、手で書いた形（<code>whereNull</code>）。<code>DB::pretend()</code> では①②が空になるので、③は値を入れて作らせた</li><li>ブロックが増えるほど ③ の SQL が長くなる。同じ3行を、いいね・マッチ・トークの一覧にも写す（写し忘れると出る）</li><li><code>NOT IN</code> は、並べたものに <code>NULL</code> が1つでもあると、何も返さなくなる（ここでは FK と NOT NULL で入らない）</li></ul>
+      <ul><li>③の <code>deleted_at is null</code> は、手で書いた形（<code>whereNull</code>）。<code>DB::pretend()</code> では①②が空になるので、③は値を入れて作らせた。実装では、この前に 04 の「いいねした相手」の <code>not in</code> もある（9-1）</li><li>ブロックが増えるほど ③ の SQL が長くなる。同じ3行を、いいね・マッチ・トークの一覧にも写す（写し忘れると出る）</li><li><code>NOT IN</code> は、並べたものに <code>NULL</code> が1つでもあると、何も返さなくなる（ここでは FK と NOT NULL で入らない）</li></ul>
     </section>
     <section class="compare-col improved">
       <p class="compare-title">改善版<span class="count">1本</span></p>
@@ -416,9 +416,150 @@ limit 1;</code></pre>
   <h2>9. 実装の記録</h2>
   <p class="meta">レガシー版のあと（9-1・9-2）と、改善したあと（9-3・9-4）に、explain-change が書く。</p>
   <h3>9-1. レガシー版</h3>
-  <p>【まだ実装していない】</p>
+  <p class="meta">記録: 2026-11-13（PR #76・#77・#78。Issue #73・#74・#75）</p>
+  <h4>書いたもの</h4>
+  <table>
+    <tr><th>ファイル</th><th>役割</th></tr>
+    <tr><td><code>backend/database/migrations/2026_11_13_120000_create_blocks_table.php</code></td><td><code>blocks</code>：<code>(blocker_id, blocked_id)</code> の UNIQUE と外部キー（<code>ON DELETE CASCADE</code>）。インデックスは足さない</td></tr>
+    <tr><td><code>backend/database/migrations/2026_11_13_120001_add_deleted_at_to_users_table.php</code></td><td><code>users.deleted_at</code>（NULL 可）。メールアドレスの UNIQUE はそのまま</td></tr>
+    <tr><td><code>backend/app/Models/Block.php</code>・<code>User.php</code></td><td><code>blocker()</code>・<code>blocked()</code>・<code>User::blocks()</code>。<code>SoftDeletes</code> は付けない</td></tr>
+    <tr><td><code>backend/database/seeders/BlocksSeeder.php</code></td><td>ブロック 30,054件・退会した会員 1,025人（<code>search00001</code> がした・された・お互い・退会したマッチの相手を混ぜる）</td></tr>
+    <tr><td><code>backend/app/Http/Controllers/BlockController.php</code></td><td><code>POST</code>・<code>GET /api/me/blocks</code>・<code>DELETE /api/me/blocks/{public_id}</code></td></tr>
+    <tr><td><code>backend/app/Http/Controllers/UserController.php</code></td><td><code>destroy()</code>（<code>DELETE /api/me</code>。退会）と、検索に除く条件</td></tr>
+    <tr><td><code>LikeController.php</code>・<code>UserMatchController.php</code>・<code>TalkRoomController.php</code></td><td>送ったいいね・マッチ・トークの一覧に、ブロックを除く3行を写した</td></tr>
+    <tr><td><code>frontend/src/UserPage.tsx</code>・<code>TalkPage.tsx</code>・<code>BlocksPage.tsx</code>・<code>HomePage.tsx</code></td><td>ブロックのボタンと確認のモーダル・<code>/blocks</code> で解除・ホームから退会（パスワードのモーダル）</td></tr>
+  </table>
+
+  <h4>大事な行の読み方</h4>
+  <p><strong>① 除く3行を、一覧ごとに写す</strong></p>
+  <pre><code class="language-php">$blocked = Block::where('blocker_id', $me)-&gt;pluck('blocked_id');     // UNIQUE の先頭なので索引が効く
+$blockedMe = Block::where('blocked_id', $me)-&gt;pluck('blocker_id');   // 索引がなく、表を全部読む
+$blockIds = $blocked-&gt;merge($blockedMe);</code></pre>
+  <p>同じ3行が、検索・送ったいいね・マッチ・トークの一覧の4か所にあります。除き方は場所で違います。検索といいねは <code>whereNotIn()</code> で SQL に渡し、マッチとトークはループの中で <code>if ($blockIds-&gt;contains(…)) continue;</code> と PHP で飛ばします。「同じ事実」が4か所に散っているので、写し忘れた場所（プロフィール・いいねを送る・トークの履歴と送る）では、ブロックした相手がそのまま使えます。</p>
+
+  <p><strong>② 退会した人を除くのは、検索だけ</strong></p>
+  <pre><code class="language-php">-&gt;whereNotIn('id', $likedIds)
+-&gt;whereNotIn('id', $blockIds)
+// 06：退会した会員を除くのは、ここ（検索）だけ
+-&gt;whereNull('deleted_at')</code></pre>
+  <p><code>SoftDeletes</code> を付けていないので、<code>deleted_at</code> を見るのは条件を書いた1か所だけです。マッチやトークの一覧は、相手を <code>Profile::where('user_id', …)</code> で読むので、退会した人が名前つきで残ります。改善版で <code>SoftDeletes</code> を付けても、<code>Profile::</code> から読む書き方では除かれない点に気をつけます（7章の罠）。</p>
+
+  <p><strong>③ 退会：メールアドレスを書き換えて空ける</strong></p>
+  <pre><code class="language-php">$user = User::find($payload-&gt;sub);
+if (! Hash::check((string) $request-&gt;input('password'), $user-&gt;password)) {
+    return response()-&gt;json(['message' =&gt; 'パスワードが違います'], 422);
+}
+$user-&gt;update([
+    'email' =&gt; $user-&gt;email.'#deleted#'.time(),
+    'deleted_at' =&gt; now(),
+]);</code></pre>
+  <p>UNIQUE を変えずに登録し直せるようにする、よくある手です。代わりに元のメールアドレスが残らず、長いメールアドレスでは 255文字を超えて <code>500</code> になります。JWT は止めないので、退会した人の JWT は、期限まで使えます（<code>User::find()</code> も <code>deleted_at</code> を見ないので、もう一度退会もできる）。</p>
+
+  <p><strong>④ ブロックの一覧は 1＋2N 本</strong></p>
+  <pre><code class="language-php">$blocks = Block::where('blocker_id', $payload-&gt;sub)-&gt;orderBy('created_at', 'desc')-&gt;get();
+foreach ($blocks as $block) {
+    $profile = Profile::where('user_id', $block-&gt;blocked_id)-&gt;first();
+    $publicId = User::where('id', $block-&gt;blocked_id)-&gt;value('public_id');</code></pre>
+  <p>03 のマッチの一覧と同じ形です。27件で 55本になります。</p>
+
+  <h4>実際に流れる SQL（クエリログ）</h4>
+  <pre><code class="language-sql">-- ブロックする（2本）
+select "id" from "users" where "public_id" = ? limit 1;
+insert into "blocks" ("blocker_id", "blocked_id", "updated_at", "created_at") values (?, ?, ?, ?) returning "id";
+
+-- 解除する（2本）
+select "id" from "users" where "public_id" = ? limit 1;
+delete from "blocks" where "blocker_id" = ? and "blocked_id" = ?;
+
+-- 検索の1ページ目（25本のうち、06 で変わったところ）
+select "blocked_id" from "blocks" where "blocker_id" = ?;
+select "blocker_id" from "blocks" where "blocked_id" = ?;        -- Seq Scan
+select * from "users"
+where "email_verified_at" is not null and "id" != ?
+  and "id" not in (?×100)     -- 04：いいねした相手
+  and "id" not in (?×54)      -- 06：ブロックした・された相手（27＋27）
+  and "deleted_at" is null    -- 06：退会した会員（ここだけ）
+  and exists (select * from "profiles" where "users"."id" = "profiles"."user_id" and "gender" = ?)
+order by "last_login_at" desc limit 20 offset 0;
+
+-- 退会する（2本）
+select * from "users" where "users"."id" = ? limit 1;
+update "users" set "email" = ?, "deleted_at" = ?, "updated_at" = ? where "id" = ?;
+
+-- 退会したあとの古い JWT でマッチの一覧（200。会員を読まずに進む）
+select "blocked_id" from "blocks" where "blocker_id" = ?;
+select "blocker_id" from "blocks" where "blocked_id" = ?;
+select * from "user_matches" where "user1_id" = ? or "user2_id" = ? order by "created_at" desc;</code></pre>
+  <p>5章の見本と同じ形です（検索の見本は、条件の並びを実装に合わせて直しました）。<code>not in (?×54)</code> は、ブロックが増えるほど長くなります。</p>
+
+  <h4>解説から変えたこと</h4>
+  <ul>
+    <li><strong>シーダーの退会</strong>：<code>deleted_at</code> だけを入れ、メールアドレスは書き換えない（書き換えると、04・05 のシーダーが <code>search%@example.test</code> で会員を数えられなくなる）。そのため、シーダーで退会にした会員はログインできる（9-2）</li>
+    <li><strong>マッチとトークの除き方</strong>：<code>whereNotIn()</code> ではなく、ループの中で飛ばす（相手が分かるのがループの中のため）。除いた相手の分の SQL は減る</li>
+    <li><strong>プロフィール</strong>：<code>GET /api/users/{public_id}</code> はログインが要らない API なので、見ている人が分からず、ブロックを除けない（写し忘れの1つとして残した）</li>
+    <li><strong>確認のモーダル</strong>：03c の共通のモーダルはまだないので、3つの画面に同じものを書いた</li>
+  </ul>
+
+  <h4>気になる点（直していない）</h4>
+  <ul>
+    <li>JWT の処理を写すのが 13か所になった（#51 のリファクタの候補）</li>
+    <li>ログインが <code>deleted_at</code> を見ない。退会の API を通らずに <code>deleted_at</code> だけが入った行（手で直した・バッチで入れた）は、ログインできる</li>
+    <li>未読の数（トークの一覧）に、ブロックした相手のルームは入らないが、退会した相手のルームは入ったまま</li>
+    <li>画面の Biome の指摘が エラー 35・警告 32 → 62・33 に増えた（ボタンの <code>type</code>・モーダルをキーボードで閉じられないなど）</li>
+  </ul>
   <h3>9-2. 測った問題と数字</h3>
-  <p>【まだ実装していない】</p>
+  <p>開発用の DB（会員 2万人・マッチ 1000組・メッセージ 10万件・ブロック 30,054件・退会した会員 1,025人）に、手元から本物の HTTP を送った。SQL はクエリログの増えた行で数えた。会員は <code>search00001</code>（マッチ 100。そのうちブロックした・された・お互いが 11人、退会したのが 5人）。画面は headless の Chrome（幅 375px）。試しに書いたものは消した。時間は手元の Docker で1回ずつ。</p>
+  <h4>写し忘れの表（ブロックした・された相手・退会した相手が出るか）</h4>
+  <table>
+    <tr><th>場所</th><th>ブロックした・された相手</th><th>退会した相手</th></tr>
+    <tr><td>検索（<code>GET /api/users</code>）</td><td>出ない</td><td>出ない</td></tr>
+    <tr><td>送ったいいね（<code>GET /api/me/likes</code>）</td><td>出ない</td><td><strong>出る</strong></td></tr>
+    <tr><td>マッチ（<code>GET /api/me/matches</code>）</td><td>出ない</td><td><strong>出る</strong></td></tr>
+    <tr><td>トークの一覧（<code>GET /api/me/talk-rooms</code>）</td><td>出ない</td><td><strong>出る</strong></td></tr>
+    <tr><td>プロフィール（<code>GET /api/users/{public_id}</code>）</td><td><strong><code>200</code></strong></td><td><strong><code>200</code></strong></td></tr>
+    <tr><td>トークの履歴・送る</td><td><strong><code>200</code>（50件）・<code>201</code></strong></td><td>（ルームの UUID が分かれば同じ）</td></tr>
+    <tr><td>いいねを送る（ブロックした側から）</td><td><strong><code>201</code></strong></td><td>―</td></tr>
+    <tr><td>ブロックの一覧（<code>GET /api/me/blocks</code>）</td><td>―</td><td><strong>出る</strong></td></tr>
+    <tr><td>退会した人の古い JWT（<code>/me</code>・マッチ・検索）</td><td>―</td><td><strong><code>200</code>・<code>200</code>・<code>200</code></strong></td></tr>
+  </table>
+
+  <h4>数字</h4>
+  <table>
+    <tr><th>操作</th><th>結果</th><th>要件</th></tr>
+    <tr><td>検索（絞らない1ページ目）</td><td><code>200</code>・SQL 25本（04 より2本多い）・53ms。<code>not in</code> の値が 100（いいね）＋54（ブロック）</td><td>NFR-BLOCK-001</td></tr>
+    <tr><td>送ったいいね・マッチ・トークの一覧</td><td>100件 → 89件。SQL 270・181・559本。129・96・704ms</td><td>FR-BLOCK-007〜009</td></tr>
+    <tr><td>ブロックの一覧（27件）</td><td>SQL 55本（1＋2N）・57ms</td><td>FR-BLOCK-010</td></tr>
+    <tr><td>同じ相手をもう一度ブロック</td><td><strong><code>500</code></strong>（UNIQUE の違反）</td><td>FR-BLOCK-002</td></tr>
+    <tr><td>自分・退会した相手をブロック</td><td><strong><code>201</code>・<code>201</code></strong></td><td>FR-BLOCK-003・004</td></tr>
+    <tr><td>いない相手・UUID の形でない文字</td><td><code>500</code>・<code>500</code></td><td>FR-BLOCK-004</td></tr>
+    <tr><td>相手がした「自分へのブロック」を解除</td><td><strong><code>204</code>（行は残る）</strong></td><td>FR-BLOCK-012</td></tr>
+    <tr><td>退会（違うパスワード・正しいパスワード）</td><td><code>422</code>・<code>204</code>（SQL 2本）</td><td>FR-WD-001・002</td></tr>
+    <tr><td>退会したあとのログイン</td><td><code>401</code>（「メールアドレスが違います」）</td><td>FR-WD-003</td></tr>
+    <tr><td>古い JWT でもう一度退会</td><td><strong><code>204</code></strong>（<code>#deleted#</code> が2回付く）</td><td>FR-WD-004</td></tr>
+    <tr><td>同じメールアドレスで登録し直す（1回目・2回退会したあと）</td><td><code>201</code>・<code>201</code></td><td>FR-WD-008・010</td></tr>
+    <tr><td>253文字のメールアドレスで退会</td><td><strong><code>500</code></strong>（255文字を超える）</td><td>FR-WD-001</td></tr>
+    <tr><td>シーダーで退会にした会員（メールアドレスは元のまま）でログイン</td><td><strong><code>200</code></strong></td><td>FR-WD-003</td></tr>
+  </table>
+
+  <h4>EXPLAIN（ANALYZE, BUFFERS）</h4>
+  <pre><code class="language-sql">-- 私をブロックした人（blocked_id だけ。索引がない）
+explain (analyze, buffers) select blocker_id from blocks where blocked_id = :search00001の id;
+--  Seq Scan on blocks  (actual rows=27)  Rows Removed by Filter: 30027
+--  Buffers: shared hit=752   Execution Time: 1.996 ms
+
+-- 私がブロックした人（blocker_id が UNIQUE の先頭）
+explain (analyze, buffers) select blocked_id from blocks where blocker_id = :search00001の id;
+--  Index Only Scan using blocks_blocker_id_blocked_id_unique  (actual rows=27)
+--  Buffers: shared hit=9   Execution Time: 0.053 ms</code></pre>
+  <p>同じ 27行を読むのに、向きによって読むページの数が 752 と 9（約 80倍）。前者は、検索・いいね・マッチ・トークの一覧を開くたびに流れます。</p>
+
+  <h4>画面（FR-UI-034〜037）</h4>
+  <ul>
+    <li>プロフィールでブロック：モーダル → 「ブロックしました」 → 1秒後に前の画面（<code>/search</code>）へ。キャンセルでは何も起きない</li>
+    <li><code>/blocks</code>：28行が新しい順。解除で 27行・「解除しました」</li>
+    <li>トーク画面でブロック：<code>/messages</code> に戻り、一覧が 89 → 88行</li>
+    <li>退会：違うパスワードはモーダルの中に「パスワードがちがいます」。正しいパスワードで <code>/login</code>・トークンが消える</li>
+  </ul>
   <h3>9-3. 足したテスト</h3>
   <p>【まだ実装していない】</p>
   <h3>9-4. 改善版と、前と後の数字</h3>
