@@ -14,6 +14,8 @@
 
 05 で、メッセージの表を3つ足す（D-023。#57）。`talk_rooms`（やり取りの場所。マッチしたときに1つ作る）・`talk_room_members`（ルームの中の一人ひとりの状態）・`messages`（中身）。それまでの表と違い、主キー・UNIQUE・外部キーを持つが、インデックスは足さない（PostgreSQL は外部キーの列にインデックスを作らないので、UNIQUE の分しかない）。受け取った人は持たない（参加者のうち、送った人でない人）。
 
+06 で、ブロックの表 `blocks` と、`users` の退会した日時 `deleted_at`（論理削除）を足す（#73）。05 と同じく、主キー・UNIQUE・外部キーを持ち、インデックスは足さない。ブロックしてもマッチやメッセージは消さず、読むときに除く。`User` に `SoftDeletes` は付けないので、退会した人を除くのは、条件を書いたクエリだけ。メールアドレスの UNIQUE はそのままで、退会の API がメールアドレスを書き換えて空ける。
+
 ### ER 図
 
 ```mermaid
@@ -28,10 +30,13 @@ erDiagram
   USERS ||--o{ TALK_ROOM_MEMBERS : "user_id（外部キー）"
   TALK_ROOMS ||--o{ MESSAGES : "talk_room_id（外部キー・インデックスなし）"
   USERS ||--o{ MESSAGES : "sender_id（外部キー・インデックスなし）"
+  USERS ||--o{ BLOCKS : "blocker_id（外部キー）"
+  USERS ||--o{ BLOCKS : "blocked_id（外部キー・blocked_id だけで探すインデックスはない）"
   USERS {
     bigint id PK "中で使う。つながりと JWT の sub"
     uuid public_id UK "URL で会員を指す ID。既定は uuidv7()（#46）"
     timestamp last_login_at "最終ログイン。NULL 可・時間帯なし・インデックスなし（04）"
+    timestamp deleted_at "退会した日時（06）。NULL なら会員。インデックスなし"
     varchar email UK
     timestamp email_verified_at "NULL 可。時間帯なし"
     varchar password "bcrypt のハッシュ"
@@ -90,19 +95,27 @@ erDiagram
     timestamp created_at "送った日時。時間帯なし"
     timestamp updated_at "時間帯なし"
   }
+  BLOCKS {
+    bigint id PK
+    bigint blocker_id FK "ブロックした会員。UK（blocked_id と組で）。ON DELETE CASCADE"
+    bigint blocked_id FK "ブロックされた会員。ON DELETE CASCADE"
+    timestamp created_at "ブロックした日時。時間帯なし"
+    timestamp updated_at "時間帯なし"
+  }
 ```
 
 ### 表の一覧
 
 | 表 | 一歩 | 中身 | 制約 |
 | --- | --- | --- | --- |
-| `users` | 00（ひな形）・01・01b・#46・04 | アカウント（ログインのための情報）と最終ログイン | 主キー `id`・`email` の UNIQUE（`users_email_unique`。大文字と小文字は区別する）・`public_id` の UNIQUE（`NOT NULL`・既定は `uuidv7()`。D-022）。`last_login_at` は NULL 可でインデックスなし（desc で並べると、ログインしていない会員が先頭に出る。検索は表を全部読む） |
+| `users` | 00（ひな形）・01・01b・#46・04・06 | アカウント（ログインのための情報）・最終ログイン・退会した日時（06。論理削除） | 主キー `id`・`email` の UNIQUE（`users_email_unique`。大文字と小文字は区別する）・`public_id` の UNIQUE（`NOT NULL`・既定は `uuidv7()`。D-022）。`last_login_at` は NULL 可でインデックスなし（desc で並べると、ログインしていない会員が先頭に出る。検索は表を全部読む）。`deleted_at` は NULL 可でインデックスなし。退会してもメールアドレスの UNIQUE はそのまま（退会の API が書き換えて空ける） |
 | `profiles` | 01 | その会員についての情報 | 主キー `id` だけ。`user_id` に外部キーも UNIQUE もないので、1人に2つのプロフィール・ない会員を指すプロフィールができる |
 | `likes` | 02 | いいね（だれから・だれへ・いつ）。会員と会員をつなぐ中間テーブル | 主キー `id`・`(from_user_id, to_user_id)` の UNIQUE（`likes_from_user_id_to_user_id_unique`）だけ。外部キーがないので、ない会員を指せ、会員を消しても残る。自分から自分も入る。`to_user_id` から探すと表を全部読む |
 | `user_matches` | 03 | マッチ（お互いにいいねした2人の組と、いつ）。Model は `UserMatch`（`match` は PHP の予約語） | 主キー `id` だけ。同じ組が2行入り、(A, B) と (B, A) も両方入る。自分とのマッチ・ない会員を指すマッチも入り、会員を消しても残る。自分のマッチを探す `user1_id = ? or user2_id = ?` は表を全部読む |
 | `talk_rooms` | 05 | トークルーム（やり取りの場所）。マッチしたときに、いいねの API の中で作る（トランザクションなし） | 主キー `id`・`public_id` の UNIQUE（既定は `uuidv7()`）・`match_id` の UNIQUE と外部キー（`ON DELETE CASCADE`）。03 で2行になった組には、ルームも2つできる |
 | `talk_room_members` | 05 | トークルームの参加者（マッチした2人）と、最後に読んだ時刻 | 主キー `id`・`(talk_room_id, user_id)` の UNIQUE・2つの列の外部キー（`ON DELETE CASCADE`）。UNIQUE は `talk_room_id` が先なので、自分のルーム（`user_id = ?`）を探すと表を全部読む |
 | `messages` | 05 | メッセージ（ルーム・送った人・本文・いつ）。受け取った人は持たない | 主キー `id`・`talk_room_id` と `sender_id` の外部キー（`ON DELETE CASCADE`）だけ。外部キーの列にインデックスがないので、ルームのメッセージを探すたびに表を全部読み、会員を消すと CASCADE のために表を全部読む。本文の長さの決まりなし |
+| `blocks` | 06 | ブロック（だれが・だれを・いつ）。マッチ・メッセージは消さずに、読むときに除く | 主キー `id`・`(blocker_id, blocked_id)` の UNIQUE・2つの列の外部キー（`ON DELETE CASCADE`）。自分で自分をブロックする行も入る。UNIQUE は `blocker_id` が先なので、私をブロックした人（`blocked_id = ?`）を探すと表を全部読む |
 
 Laravel のひな形が作った表（この学習では扱わない）：`password_reset_tokens`・`sessions`・`cache`・`cache_locks`・`jobs`・`job_batches`・`failed_jobs`・`personal_access_tokens`（`install:api` が足した Sanctum の表。D-014 で JWT にしたので使わない）。
 
