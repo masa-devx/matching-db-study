@@ -83,6 +83,8 @@ class User extends Authenticatable
             // 07：有料会員か（真偽値）と、いつまで有料か（機能を使えるかは is_paid だけで決める）
             'is_paid' => 'boolean',
             'paid_until' => 'datetime',
+            // 12：管理画面で利用を止めた日時
+            'suspended_at' => 'datetime',
             // 保存するときに bcrypt でハッシュ化する（元に戻せない形。FR-014）
             'password' => 'hashed',
         ];
