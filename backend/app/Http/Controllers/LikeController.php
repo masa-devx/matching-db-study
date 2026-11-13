@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Models\Block;
 use App\Models\Like;
 use App\Models\Profile;
 use App\Models\TalkRoom;
@@ -24,6 +25,7 @@ use Illuminate\Support\Facades\Http;
  * #46 で、相手を public_id（UUID）で受け取り・返すようにした（送るときは1本、一覧は1件ごとに1本増える）。
  * 05 で、マッチしたときにトークルームと参加者2人を作るようにした（送ってマッチしたときに3本増える）。
  * 05c で、マッチしたときに Firestore（手元の Emulator）にもルームと2人の受信箱を作るようにした（SQL 2本・HTTP 3本が増える）。
+ * 06 で、ブロックした・された相手を除いた（向きごとに2本足す。退会した相手は除かない。docs/api/06-blocks-withdrawal.md）。
  */
 class LikeController extends Controller
 {
@@ -97,7 +99,13 @@ class LikeController extends Controller
         }
         $payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));
 
-        $likes = Like::where('from_user_id', $payload->sub)->orderBy('created_at', 'desc')->get();
+        // 06：ブロックした・された相手を、向きごとに PHP に持ってくる（検索から写した）
+        $blocked = Block::where('blocker_id', $payload->sub)->pluck('blocked_id');     // UNIQUE の先頭なので索引が効く
+        $blockedMe = Block::where('blocked_id', $payload->sub)->pluck('blocker_id');   // 索引がなく、表を全部読む
+        $blockIds = $blocked->merge($blockedMe);
+
+        // 退会した相手は除かない
+        $likes = Like::where('from_user_id', $payload->sub)->whereNotIn('to_user_id', $blockIds)->orderBy('created_at', 'desc')->get();
 
         $result = [];
         foreach ($likes as $like) {

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Models\Block;
 use App\Models\Message;
 use App\Models\Profile;
 use App\Models\TalkRoom;
@@ -19,6 +20,7 @@ use Illuminate\Http\Request;
  * だれが見るかは、AuthController::me() の JWT の処理を写して決める（これで6か所目）。
  * 自分の参加者の行を全部読み、ルームごとに6本ずつ読む（1＋6N 本）。messages にインデックスがないので、
  * 最新の1件と未読の数は、ルームごとに表を全部読む。並べるのは PHP。改善する段階で、要件 ID のテストにする。
+ * 06 で、ブロックした・された相手を除いた（向きごとに2本足す。退会した相手は除かない。docs/api/06-blocks-withdrawal.md）。
  */
 class TalkRoomController extends Controller
 {
@@ -32,6 +34,11 @@ class TalkRoomController extends Controller
         $payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));
         $me = $payload->sub;
 
+        // 06：ブロックした・された相手を、向きごとに PHP に持ってくる（検索から写した）
+        $blocked = Block::where('blocker_id', $me)->pluck('blocked_id');     // UNIQUE の先頭なので索引が効く
+        $blockedMe = Block::where('blocked_id', $me)->pluck('blocker_id');   // 索引がなく、表を全部読む
+        $blockIds = $blocked->merge($blockedMe);
+
         // 自分が入っているルーム。UNIQUE は (talk_room_id, user_id) の順なので、user_id だけでは使えず表を全部読む
         $members = TalkRoomMember::where('user_id', $me)->get();
 
@@ -41,6 +48,10 @@ class TalkRoomController extends Controller
             $room = TalkRoom::where('id', $member->talk_room_id)->first();
             // 相手（同じルームの、自分でない参加者）。いなければ null で、次の行が 500
             $partner = TalkRoomMember::where('talk_room_id', $room->id)->where('user_id', '!=', $me)->first();
+            // 06：ブロックした・された相手のルームは飛ばす（退会した相手は飛ばさない）
+            if ($blockIds->contains($partner->user_id)) {
+                continue;
+            }
             $profile = Profile::where('user_id', $partner->user_id)->first();
             $publicId = User::where('id', $partner->user_id)->value('public_id');
             // 最新の1件と未読の数：talk_room_id にインデックスがないので、どちらも表を全部読む
