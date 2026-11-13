@@ -45,11 +45,14 @@ class TalkRoomController extends Controller
             $publicId = User::where('id', $partner->user_id)->value('public_id');
             // 最新の1件と未読の数：talk_room_id にインデックスがないので、どちらも表を全部読む
             $last = Message::where('talk_room_id', $room->id)->orderBy('created_at', 'desc')->first();
-            // まだ開いていないと last_read_at が null。Laravel は「> null」を SQL にせず例外を投げるので、一覧の全体が 500 になる
-            $unread = Message::where('talk_room_id', $room->id)
-                ->where('sender_id', '!=', $me)
-                ->where('created_at', '>', $member->last_read_at)
-                ->count();
+            // 未読の数は、最後に読んだ時刻より新しい相手のもの（時刻で比べるので、同じ秒に届いたものの境目がずれる）
+            $query = Message::where('talk_room_id', $room->id)->where('sender_id', '!=', $me);
+            // まだ開いていない（last_read_at が null）なら、相手のものを全部数える。
+            // #58 で測ったとき、null のまま「> null」と書いて Laravel が例外を投げ、一覧の全体が 500 になったので、ここだけ直した
+            if ($member->last_read_at) {
+                $query->where('created_at', '>', $member->last_read_at);
+            }
+            $unread = $query->count();
             $result[] = [
                 'room_id' => $room->public_id,
                 'user_id' => $publicId,
