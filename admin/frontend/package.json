@@ -1,0 +1,31 @@
+{
+  "name": "admin-frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "biome lint",
+    "preview": "vite preview",
+    "format": "biome format --write"
+  },
+  "dependencies": {
+    "@mantine/charts": "9.7.4",
+    "@mantine/core": "9.7.4",
+    "@mantine/hooks": "9.7.4",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router": "^8.5.1",
+    "recharts": "3.10.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.7",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "typescript": "~7.0.2",
+    "vite": "^8.3.6"
+  }
+}
