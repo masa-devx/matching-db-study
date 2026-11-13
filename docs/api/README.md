@@ -55,3 +55,10 @@ API の正本。作る前に設計を書き、確かめてもらってから実�
 | [07](07-paid-members.md) | `POST /api/me/purchases` | 購入する（男性だけ。決済なし） | 実装済み（レガシー版） |
 | [07](07-paid-members.md) | `GET /api/me/purchases` | 購入の記録（男性だけ） | 実装済み（レガシー版） |
 | [07](07-paid-members.md) | `POST /api/me/talk-rooms/{public_id}/messages`・`POST /api/me/likes`・`GET /api/users`（07 の変更） | 男性の無料の会員を断る（送る・1日11回目のいいね・身長の条件） | 実装済み（レガシー版） |
+| [12](12-admin.md) | `POST /api/auth/login`・`GET /api/me`（管理画面の API・:8100） | 管理者のログイン・自分 | 実装済み（レガシー版） |
+| [12](12-admin.md) | `GET /api/dashboard` | 数・日ごと・月ごとの売上 | 実装済み（レガシー版） |
+| [12](12-admin.md) | `GET /api/members`・`GET /api/members/{public_id}` | 会員の一覧と詳細 | 実装済み（レガシー版） |
+| [12](12-admin.md) | `POST`・`DELETE /api/members/{public_id}/suspension` | 利用を止める・解く | 実装済み（レガシー版） |
+| [12](12-admin.md) | `GET /api/messages`・`GET /api/purchases`・`GET /api/sales/monthly` | メッセージ・購入の一覧と月ごとの売上 | 実装済み（レガシー版） |
+| [12](12-admin.md) | `GET /api/plans`・`PUT /api/plans/{id}`・`GET /api/audit-logs` | 値段の変更・監査ログ | 実装済み（レガシー版） |
+| [12](12-admin.md) | `POST /api/auth/login`（会員の側。12 の変更） | 止めた会員をログインで断る | 実装済み（レガシー版） |
