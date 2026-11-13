@@ -37,7 +37,7 @@ flowchart LR
     <tr><td>03c</td><td><a href="03c-ui.html">画面の見た目と動き</a></td><td>モーダル（&lt;dialog&gt;）・トースト・スケルトン・楽観的な表示（useOptimistic）・View Transitions・動きを減らす設定。動かすのは transform と opacity だけにして、CLS とバンドルの大きさを前と後で測る（docs/design.md）</td><td>解説だけ</td></tr>
     <tr><td>振り返り</td><td><a href="review-m1.html">00〜03b の振り返り</a></td><td>作った表・API・画面の地図・一歩ごとに測った問題と数字・繰り返し出てくる問題（根っこ）・コードを読む順・改善する段階（M2）で直す候補</td><td>まとめ</td></tr>
     <tr><td>04</td><td><a href="04-search.html">検索と一覧</a></td><td>複合インデックス・EXPLAIN・OFFSET とカーソル・大量のデータ。画面の表示速度（長い一覧・Web Vitals・バンドルの大きさ）も、同じ一覧で測る</td><td>レガシー版まで</td></tr>
-    <tr><td>05</td><td><a href="05-messages.html">メッセージ</a></td><td>相手ごとの最新の1件（ウィンドウ関数・DISTINCT ON・LATERAL）・未読の数・ポーリング・N+1</td><td>解説だけ</td></tr>
+    <tr><td>05</td><td><a href="05-messages.html">メッセージ</a></td><td>相手ごとの最新の1件（ウィンドウ関数・DISTINCT ON・LATERAL）・未読の数・ポーリング・N+1</td><td>レガシー版まで</td></tr>
     <tr><td>05b</td><td>Context から Zustand に移す</td><td>Context の描き直しの範囲・Zustand で必要な部品だけ描き直す</td><td>未着手</td></tr>
     <tr><td>05c</td><td>Firestore と比べる</td><td>同じ「相手ごとの最新の1件」を Firebase Emulator（手元の Firestore）で作る。JOIN がないのでデータを重ねて持つ・読んだ回数で料金が決まる・リアルタイムに届く</td><td>未着手</td></tr>
     <tr><td>06</td><td>ブロックと退会</td><td>NOT EXISTS・論理削除と再登録・部分インデックス</td><td>未着手</td></tr>

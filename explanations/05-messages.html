@@ -10,7 +10,7 @@
 <main>
   <p class="meta"><a href="index.html">← 目次へ</a></p>
   <h1>05 メッセージ</h1>
-  <p class="meta">作成: 2026-11-13 ／ 状態: <span class="status">解説だけ</span> ／ Issue: <a href="https://github.com/masa-devx/matching-db-study/issues/56">#56</a> ／ 要件: <code>docs/requirements/messages.md</code>（FR-MSG-001〜014・NFR-MSG-001〜003）・<code>docs/requirements/screens.md</code>（FR-UI-019〜022） ／ 決めたこと: D-023</p>
+  <p class="meta">作成: 2026-11-13 ／ 状態: <span class="status">レガシー版まで</span> ／ Issue: <a href="https://github.com/masa-devx/matching-db-study/issues/56">#56</a> ／ 要件: <code>docs/requirements/messages.md</code>（FR-MSG-001〜014・NFR-MSG-001〜003）・<code>docs/requirements/screens.md</code>（FR-UI-019〜022） ／ 決めたこと: D-023</p>
 
   <div class="card point">
     <strong>この一歩でできるようになること</strong>
@@ -632,9 +632,125 @@ where "talk_room_id" = 7 and "user_id" = 23;</code></pre>
   <h2>9. 実装の記録</h2>
   <p class="meta">レガシー版のあと（9-1・9-2）と、改善したあと（9-3・9-4）に、explain-change が書く。</p>
   <h3>9-1. レガシー版</h3>
-  <p>【まだ実装していない】</p>
+  <p class="meta">記録: 2026-11-13 ／ PR <a href="https://github.com/masa-devx/matching-db-study/pull/60">#60</a>（DB）・<a href="https://github.com/masa-devx/matching-db-study/pull/61">#61</a>（API）・<a href="https://github.com/masa-devx/matching-db-study/pull/64">#64</a>（画面）。設計は <code>docs/api/05-messages.md</code>。</p>
+  <h4>書いたもの</h4>
+  <table>
+    <tr><th>ファイル</th><th>役わり</th></tr>
+    <tr><td><code>database/migrations/2026_11_13_0204xx_create_{talk_rooms,talk_room_members,messages}_table.php</code></td><td>3つの表。主キー・UNIQUE・外部キー（<code>ON DELETE CASCADE</code>）だけを持ち、インデックスは足さない</td></tr>
+    <tr><td><code>app/Models/TalkRoom.php</code>・<code>TalkRoomMember.php</code>・<code>Message.php</code>（と <code>UserMatch::talkRoom()</code>）</td><td>Model とリレーション（<code>$guarded = []</code>）</td></tr>
+    <tr><td><code>app/Http/Controllers/LikeController.php</code>（<code>store</code>）</td><td>マッチしたら、ルームと参加者2人を作る（トランザクションなし）</td></tr>
+    <tr><td><code>app/Http/Controllers/TalkRoomController.php</code></td><td><code>GET /api/me/talk-rooms</code>（トークの一覧。1＋6N 本・並びは PHP の <code>usort</code>）</td></tr>
+    <tr><td><code>app/Http/Controllers/MessageController.php</code></td><td><code>GET</code>・<code>POST /api/me/talk-rooms/{public_id}/messages</code>（履歴は OFFSET で50件、GET の中で既読を書く。送るは確かめずに入れる）</td></tr>
+    <tr><td><code>database/seeders/MessagesSeeder.php</code></td><td>マッチ 1000組・メッセージ 10万件（<code>search00001</code> はルーム 100、1つ目は 2万件）。時刻は流したときの今が基準</td></tr>
+    <tr><td><code>frontend/src/MessagesPage.tsx</code>（65行）・<code>TalkPage.tsx</code>（125行）</td><td>トークの一覧とトーク画面。取る・続き・5秒ごとの読み直し・送る・見せるを、1つの部品に書く</td></tr>
+  </table>
+  <h4>大事な行の読み方</h4>
+  <pre><code class="language-php">// マイグレーション：foreignId()->constrained() は外部キーだけを作る（PostgreSQL ではインデックスは作られない）
+$table->foreignId('talk_room_id')->constrained()->cascadeOnDelete();</code></pre>
+  <p><code>\d messages</code> のインデックスは <code>messages_pkey</code> だけでした。外部キーは「指す先があるか」と「親を消したら消す」を守るだけで、<code>where talk_room_id = ?</code> を速くしません。</p>
+  <pre><code class="language-php">// TalkRoomController：自分のルームを探してから、ルームごとに6本
+$members = TalkRoomMember::where('user_id', $me)->get();   // UNIQUE (talk_room_id, user_id) は使えない
+foreach ($members as $member) {
+    $room = TalkRoom::where('id', $member->talk_room_id)->first();
+    $partner = TalkRoomMember::where('talk_room_id', $room->id)->where('user_id', '!=', $me)->first();
+    // …プロフィール・public_id・最新の1件・未読の数
+}</code></pre>
+  <pre><code class="language-php">// 未読の数：last_read_at が null のまま where('created_at', '>', null) と書くと、Laravel は SQL を作らずに例外を投げる
+if ($member->last_read_at) {
+    $query->where('created_at', '>', $member->last_read_at);
+}</code></pre>
+  <p>最初は <code>if</code> なしで書き、まだ開いていないルームが1つでもあると一覧の全体が 500 になりました（9-2）。新しくマッチしたルームはいつも <code>null</code> なので、レガシー版の中でここだけ直しました。時刻で比べる問題は残しています。</p>
+  <pre><code class="language-tsx">// TalkPage.tsx：5秒ごとに1ページ目を読み直し、今の一覧と入れ替える
+const timer = setInterval(() =&gt; load(1), 5000)
+setMessages(p === 1 ? old : [...old, ...messages])   // 1ページ目は入れ替え（さかのぼった分が消える）</code></pre>
+  <p>相手の名前と写真は、履歴の API が返さないので、トーク画面を開くたびにトークの一覧の API（601本の SQL）を呼んで、そのルームを探しています。</p>
+  <h4>実際に流れる SQL</h4>
+  <p>5章の「Eloquent が発行する SQL」のレガシー版と同じ形でした（<code>DB::listen</code> で拾った。<code>search00001</code> の一覧）。</p>
+  <pre><code class="language-sql">-- 1本
+select * from "talk_room_members" where "user_id" = ?;
+-- ルームごとに6本 × 100
+select * from "talk_rooms" where "id" = ? limit 1;
+select * from "talk_room_members" where "talk_room_id" = ? and "user_id" != ? limit 1;
+select * from "profiles" where "user_id" = ? limit 1;
+select "public_id" from "users" where "id" = ? limit 1;
+select * from "messages" where "talk_room_id" = ? order by "created_at" desc limit 1;
+select count(*) as "aggregate" from "messages"
+where "talk_room_id" = ? and "sender_id" != ? and "created_at" &gt; ?;   -- 開いていなければこの行はない</code></pre>
+  <p>履歴は3本（<code>select</code> ルーム・<code>select</code> メッセージ・<code>update</code> 既読）、送るは2本、マッチしたときのいいねは 4本 → 7本（ルーム1本・参加者2本が増える）でした。</p>
+  <h4>テストで確かめたこと</h4>
+  <p>レガシー版なのでテストは足していません（Pest は前からの3件が通るだけ）。代わりに、9-2 の数字を測りました。</p>
+  <h4>解説から変えたこと</h4>
+  <ul>
+    <li>未読の数：「<code>created_at &gt; null</code> で 0 になる」と見込んでいたが、実際は Laravel の例外で一覧の全体が 500。<code>null</code> なら全部数える、とだけ直した</li>
+    <li><code>page=0</code>：「<code>offset -50</code> で 500」と見込んでいたが、Laravel の <code>offset()</code> が負の数を 0 にするので、1ページ目と同じものが返る</li>
+    <li>トーク画面の相手の名前：履歴の API が返さないので、一覧の API をもう一度呼ぶ形になった</li>
+    <li>試しのデータの時刻：決まった日時にしていたら DB の今より未来になり、送ったものが新しい50件に入らなかったので、流したときの今を基準にした</li>
+  </ul>
+  <h4>気になる点（直していない）</h4>
+  <ul>
+    <li>エラーの応答に、SQL と例外の中身がそのまま出る（<code>APP_DEBUG</code>。04 までと同じ）</li>
+    <li>画面だけの変更では CI が動かない（今回はシーダーを変えたので backend の CI が動いた）。Biome は全体でエラー 29・警告 22</li>
+    <li>03 で2行になったマッチは開発用の DB に 0組で、ルームが2つになって同じ相手が2回出るかは、まだ試していない</li>
+  </ul>
   <h3>9-2. 測った問題と数字</h3>
-  <p>【まだ実装していない】</p>
+  <p class="meta">記録: 2026-11-13 ／ 開発用の DB（試しの会員 2万人・マッチ 1000組・メッセージ 10万件）。API は、コンテナの中でコントローラを直接呼び、<code>DB::listen</code> で SQL を数え、<code>EXPLAIN (ANALYZE, BUFFERS)</code> を流した。本文の扱いは、ミドルウェアを通すために本物の HTTP で確かめた。画面は headless の Chrome を CDP で動かした（本番用のビルド・幅 375px）。会員は <code>search00001</code>。JWT はコンテナの中で作り、外に出していない。書いたものは消すかトランザクションで取り消し、最後にシーダーを流し直した。時間は手元の Docker で1回ずつ</p>
+  <h4>要件ごと（○ 守れている・× 守れていない）</h4>
+  <table>
+    <tr><th>要件</th><th>結果</th><th>確かめ方</th></tr>
+    <tr><td>FR-MSG-001 マッチした相手に送れる</td><td>○（201。応答は messages の行そのもの）</td><td>API・画面</td></tr>
+    <tr><td>FR-MSG-002 マッチしていない相手には送れない</td><td>×：参加していない会員が、他人のルームに送れた（201）</td><td>API</td></tr>
+    <tr><td>FR-MSG-003 他人のルームは見られない</td><td>×：参加していない会員が読めた（200・50件）。ないルームは 404 でなく 500、UUID の形でない文字も 500</td><td>API</td></tr>
+    <tr><td>FR-MSG-004 本文は1〜1000文字</td><td>×：1001文字も1万文字も 201。なし・空・空白だけは 422 でなく 500（NOT NULL の違反）</td><td>HTTP</td></tr>
+    <tr><td>FR-MSG-005 新しい50件ずつ</td><td>○（50件。「もうない」は画面が件数で決める）</td><td>API・画面</td></tr>
+    <tr><td>FR-MSG-006 さかのぼっても重ならず・抜けない</td><td>×：OFFSET なので、さかのぼるあいだに届くと1件ずつずれる。2万件のルームで、同じ秒に2件以上あるところが 754か所（<code>created_at</code> だけの並びで順が決まらない）</td><td>コード・API</td></tr>
+    <tr><td>FR-MSG-007 数秒ごとに届く</td><td>○（5秒ごとに届く）。ただし、前に受け取ったものも毎回返し直す</td><td>画面</td></tr>
+    <tr><td>FR-MSG-008 トークの一覧</td><td>×：並び・最新の1件・やり取りのない相手は出るが、年齢でなく生年月日を返す。直す前は、まだ開いていないルームが1つでもあると一覧の全体が 500 だった</td><td>API・画面</td></tr>
+    <tr><td>FR-MSG-009 未読の数</td><td>○（直したあと。まだ開いていない 29 ルームも正しい数）。時刻で比べるので、同じ秒に届いたものの境目はずれうる</td><td>API</td></tr>
+    <tr><td>FR-MSG-010 開くと読んだことになる</td><td>○（一覧に戻ると未読の印が消える）。GET の中で書き込む</td><td>API・画面</td></tr>
+    <tr><td>FR-MSG-011 相手に既読を見せない</td><td>○</td><td>コード</td></tr>
+    <tr><td>FR-MSG-012 ログインしていないと使えない</td><td>○（一覧・履歴・送るとも 401）</td><td>API</td></tr>
+    <tr><td>FR-MSG-013 確認していないと使えない</td><td>×：確認していない会員でも一覧が 200</td><td>API</td></tr>
+    <tr><td>FR-MSG-014 会員が消えたら、そのルームも消える</td><td>×：相手を消すと、自分の一覧の全体が 500（相手の参加者の行が CASCADE で消え、<code>$partner</code> が <code>null</code>）。ルームは残る</td><td>API</td></tr>
+    <tr><td>NFR-MSG-001 一覧の SQL は3本以内</td><td>×：ルーム 1・10・100 で 7・61・601本（1＋6N）。100 で約 700ms</td><td>SQL を数えた</td></tr>
+    <tr><td>NFR-MSG-002 ルームのメッセージを全部読まない</td><td>×：最新の1件・未読・履歴は、どのルームでも <code>Seq Scan on messages</code>（shared hit 2529。表の全部）</td><td>実行計画</td></tr>
+    <tr><td>NFR-MSG-003 新しいものがなければ、ほとんど読まない</td><td>×：1分開いたままで、履歴の GET が 12本・125KB。1本ごとに表の全部を読み、既読も書き込む</td><td>Chrome・実行計画</td></tr>
+    <tr><td>FR-UI-019 トークの一覧</td><td>○（100行・未読の印 49個・やり取りのない 50行）</td><td>Chrome</td></tr>
+    <tr><td>FR-UI-020 トーク画面・いちばん下が見える</td><td>×：吹き出しは出るが、いちばん下まで動くかは届く速さしだい（500ms 待って1回だけ。2回のうち1回は動かなかった）</td><td>Chrome</td></tr>
+    <tr><td>FR-UI-021 上までスクロールで古い続き・位置が動かない</td><td>×：50 → 100件に増えるが、見ていた位置が押し出される（<code>scrollTop</code> 0 のまま）。6秒後の読み直しで 50件に戻り、さかのぼった分が消える</td><td>Chrome</td></tr>
+    <tr><td>FR-UI-022 送ったもの・届いたものが出る・1〜1000文字でなければ送れない</td><td>×：送ったものは下に出るが、空のまま送れて 500 が返り、画面には何も出ない</td><td>Chrome</td></tr>
+  </table>
+  <p>守れている要件：<strong>8 / 21</strong>（FR-MSG 7 / 14・NFR-MSG 0 / 3・FR-UI 1 / 4）。「コード」とだけ書いたものは、コードを読んで分かったこと。</p>
+  <h4>実行計画（<code>EXPLAIN (ANALYZE, BUFFERS)</code>）</h4>
+  <table>
+    <tr><th>SQL</th><th>読み方</th><th>時間</th><th>読んだページ（shared hit）</th><th>捨てた行</th></tr>
+    <tr><td>自分のルーム（<code>talk_room_members where user_id = ?</code>）</td><td>Seq Scan</td><td>0.13ms</td><td>70</td><td>1,902（100行のため）</td></tr>
+    <tr><td>最新の1件（2万件のルーム）</td><td>Seq Scan → top-N heapsort</td><td>3.4ms</td><td>2,529</td><td>8万</td></tr>
+    <tr><td>未読の数（2万件のルーム）</td><td>Seq Scan → Aggregate</td><td>2.8ms</td><td>2,529</td><td>95,436（4,564行のため）</td></tr>
+    <tr><td>履歴 1ページ目（2万件のルーム）</td><td>Seq Scan → top-N heapsort（38kB）</td><td>4.0ms</td><td>2,529</td><td>8万</td></tr>
+    <tr><td>履歴 20ページ目（2万件のルーム）</td><td>Seq Scan → top-N heapsort（314kB。1000行を並べて 950行を捨てる）</td><td>4.8ms</td><td>2,529</td><td>8万</td></tr>
+    <tr><td>履歴 1ページ目（少ないルーム）</td><td>Seq Scan → quicksort</td><td>1.9ms</td><td>2,529</td><td>ほぼ全部</td></tr>
+    <tr><td>メッセージ 9,871件の会員を消す（取り消した）</td><td><code>messages_sender_id_foreign</code> の CASCADE が表を全部読む</td><td>4.4ms（うち CASCADE 4.2ms）</td><td>―</td><td>―</td></tr>
+  </table>
+  <p>どのルームでも、メッセージの表の全部（2,529ページ）を読みます。1回は数 ms ですが、一覧ではルームの数（100）× 2本、トーク画面では5秒ごとに1回、これを繰り返します。改善したあとに、<code>(talk_room_id, id)</code> のインデックスで Buffers がどれだけ減るかを比べます。</p>
+  <h4>画面の数字</h4>
+  <table>
+    <tr><th>測ったもの</th><th>レガシー版</th></tr>
+    <tr><td>一覧を開いたときの API</td><td><code>/api/me/talk-rooms</code> 1本・32KB</td></tr>
+    <tr><td>トーク画面を開いたときの API</td><td>GET 3本：<code>/api/me</code>・<code>/api/me/talk-rooms</code>（相手の名前のためだけに一覧の全部。601本の SQL）・履歴</td></tr>
+    <tr><td>1分開いたまま（新しいものなし）</td><td>履歴の GET 12本・125KB（既読の書き込みも 12回）</td></tr>
+    <tr><td>部品の大きさ</td><td><code>TalkPage.tsx</code> 125行・<code>MessagesPage.tsx</code> 65行。<code>any</code> を使う。Biome は、新しい2ファイルでエラー 10・警告 6（画面の全体ではエラー 29・警告 22）</td></tr>
+    <tr><td>書き写し</td><td>JWT を読む処理が 8か所（04 は5）。年齢の計算は一覧にもう1か所</td></tr>
+    <tr><td><code>npm run build</code></td><td>JS 279KB（gzip 86KB）・CSS 7.4KB（gzip 2.0KB）</td></tr>
+  </table>
+  <h4>問題をまとめると</h4>
+  <ul>
+    <li><strong>外部キーの列にインデックスがない</strong>：どのルームでもメッセージの表を全部読み、会員を消すと CASCADE も全部読む（NFR-MSG-002・003）</li>
+    <li><strong>N+1</strong>：トークの一覧が 1＋6N 本。トーク画面は相手の名前のために、それをもう一度呼ぶ（NFR-MSG-001）</li>
+    <li><strong>参加者を確かめない</strong>：UUID を知っていれば、だれでも読めて送れる（FR-MSG-002・003）</li>
+    <li><strong>入力を確かめない</strong>：1万文字が入り、空は 500（FR-MSG-004）</li>
+    <li><strong>ポーリングと入れ替え</strong>：5秒ごとに50件と書き込み。さかのぼった分が消える（FR-MSG-007・FR-UI-021）</li>
+    <li><strong>相手がいないルーム・NULL</strong>：まだ開いていないルーム（直した）や消えた相手で、一覧の全体が 500 になる（FR-MSG-008・014）</li>
+  </ul>
   <h3>9-3. 足したテスト</h3>
   <p>【まだ実装していない】</p>
   <h3>9-4. 改善版と、前と後の数字</h3>
