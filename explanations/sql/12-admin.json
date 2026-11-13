@@ -1,0 +1,114 @@
+{
+  "operations": [
+    {
+      "title": "ダッシュボード：直近30日の日ごとの登録（<code>GET /admin/api/dashboard</code> の一部）",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "30本（1日1本）",
+          "code": "$days = [];\nforeach (range(29, 0) as $i) {\n    $d = now()->subDays($i)->toDateString();   // アプリの時計（UTC）の日付\n    $days[$d] = User::whereDate('created_at', $d)->count();\n}\n// マッチ・メッセージも同じ形で30本ずつ（合わせて90本）",
+          "sql": "-- 日の数だけくり返す（ここでは2日分だけ見せる）\nselect count(*) as \"aggregate\" from \"users\"\nwhere \"created_at\"::date = '2026-11-12';\nselect count(*) as \"aggregate\" from \"users\"\nwhere \"created_at\"::date = '2026-11-13';\n-- …を30回。日付は UTC で区切る",
+          "notes": [
+            "表がまだない列・表もあるので、どれも <code>DB::pretend()</code> で作らせた（以下も同じ）",
+            "<code>created_at::date</code> は列に関数をかけるので、索引があっても使えず、1本ごとに <code>users</code> を全部読む（30本 × 2万行）",
+            "退会した会員も数える。日本時間の0時〜9時の登録は、前の日に入る"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版",
+          "count": "1本",
+          "code": "DB::select(\"\n  select d::date as day, count(u.id) as registrations\n  from generate_series(今日 - 29, 今日, interval '1 day') as d\n  left join users u on 日本時間の日付(u.created_at) = d::date\n                   and u.deleted_at is null\n  group by d order by d\");",
+          "sql": "select d::date as day, count(u.id) as registrations\nfrom generate_series(\n       (now() at time zone 'Asia/Tokyo')::date - 29,\n       (now() at time zone 'Asia/Tokyo')::date,\n       interval '1 day') as d\n-- 登録がない日も 0 で出す（left join）\nleft join users u\n  on (u.created_at at time zone 'UTC' at time zone 'Asia/Tokyo')::date = d::date\n and u.deleted_at is null\ngroup by d\norder by d;",
+          "notes": [
+            "<code>generate_series</code> で30日を作り、<code>left join</code> で登録のない日も 0 にする（グラフの線が途切れない）",
+            "日本時間に直してから日付にする。さらに速くするなら、日ごとの数を別の表（集計の表・マテリアライズドビュー）に夜のうちに作っておく（解説の選択肢）"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "会員の一覧（50人ずつ。メールアドレスの部分一致）",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "2＋2N 本（50人で 102本）",
+          "code": "$users = User::where('email', 'like', \"%{$q}%\")\n    ->orderBy('created_at', 'desc')\n    ->offset(($page - 1) * 50)->limit(50)->get();\n$total = User::where('email', 'like', \"%{$q}%\")->count();\nforeach ($users as $u) {\n    $u->nickname = Profile::where('user_id', $u->id)->first()?->nickname;   // 1人ごとに1本\n    $u->purchases = DB::table('purchases')->where('user_id', $u->id)->count(); // もう1本\n}",
+          "sql": "select * from \"users\"\nwhere \"email\"::text like '%search001%'\norder by \"created_at\" desc\nlimit 50 offset 0;\n\nselect count(*) as \"aggregate\" from \"users\"\nwhere \"email\"::text like '%search001%';\n\n-- 1人ごとに\nselect * from \"profiles\" where \"user_id\" = 1 limit 1;\nselect count(*) as \"aggregate\" from \"purchases\" where \"user_id\" = 1;",
+          "notes": [
+            "<code>select *</code> なので、パスワードのハッシュや確認用の文字まで管理画面の API に出る",
+            "前に % が付く <code>like</code> は、普通の索引を使えない（全部読む）",
+            "ページが進むと <code>offset</code> の分を読んで捨てる"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版",
+          "count": "1本（＋件数の1本）",
+          "code": "DB::table('users as u')\n    ->leftJoin('profiles as p', 'p.user_id', '=', 'u.id')\n    ->select('u.public_id', 'u.email', 'u.created_at', 'u.last_login_at',\n             'u.is_paid', 'u.deleted_at', 'p.nickname')   // 要る列だけ\n    ->where('u.email', 'like', \"%{$q}%\")\n    ->orderBy('u.created_at', 'desc')->orderBy('u.id', 'desc')\n    ->limit(51)->get();   // 51件目があれば「続きあり」",
+          "sql": "select \"u\".\"public_id\", \"u\".\"email\", \"u\".\"created_at\",\n       \"u\".\"last_login_at\", \"u\".\"is_paid\", \"u\".\"deleted_at\",\n       \"p\".\"nickname\"\nfrom \"users\" as \"u\"\nleft join \"profiles\" as \"p\" on \"p\".\"user_id\" = \"u\".\"id\"\nwhere \"u\".\"email\"::text like '%search001%'\norder by \"u\".\"created_at\" desc, \"u\".\"id\" desc\nlimit 51;",
+          "notes": [
+            "JOIN で1本にし、要る列だけを返す",
+            "部分一致を速くするなら、<code>pg_trgm</code> の GIN 索引（3文字ずつに分けた索引）を使う（解説の選択肢）"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "メッセージの一覧（10万件から、新しい50件）",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "2＋3N 本（50件で 152本）",
+          "code": "$messages = Message::orderBy('created_at', 'desc')\n    ->offset(($page - 1) * 50)->limit(50)->get();\n$total = Message::count();\nforeach ($messages as $m) {\n    $m->sender = Profile::where('user_id', $m->sender_id)->first()?->nickname;\n    $m->room = TalkRoom::where('id', $m->talk_room_id)->first();\n    $m->partner = TalkRoomMember::where('talk_room_id', $m->talk_room_id)\n        ->where('user_id', '!=', $m->sender_id)->first();\n}",
+          "sql": "-- 10万件を並べ替えて 50件（created_at に索引がない）\nselect * from \"messages\"\norder by \"created_at\" desc\nlimit 50 offset 0;\n\n-- 全部の件数（10万行を数える）\nselect count(*) as \"aggregate\" from \"messages\";\n\n-- 1件ごとに3本\nselect * from \"profiles\" where \"user_id\" = 23 limit 1;\nselect * from \"talk_rooms\" where \"id\" = 7 limit 1;\nselect * from \"talk_room_members\"\nwhere \"talk_room_id\" = 7 and \"user_id\" != 23 limit 1;",
+          "notes": [
+            "目次の「大量のメッセージの一覧と N+1」そのもの",
+            "後ろのページほど <code>offset</code> で読んで捨てる行が増える"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版",
+          "count": "1本",
+          "code": "DB::table('messages as m')\n    ->join('profiles as sp', 'sp.user_id', '=', 'm.sender_id')\n    ->join('talk_rooms as r', 'r.id', '=', 'm.talk_room_id')\n    ->select('m.id', 'm.body', 'm.created_at', 'sp.nickname as sender', 'r.public_id as room_id')\n    ->where('m.id', '<', $cursor)          // 前のページの最後の id（カーソル）\n    ->orderBy('m.id', 'desc')->limit(51)->get();",
+          "sql": "select \"m\".\"id\", \"m\".\"body\", \"m\".\"created_at\",\n       \"sp\".\"nickname\" as \"sender\",\n       \"r\".\"public_id\" as \"room_id\"\nfrom \"messages\" as \"m\"\ninner join \"profiles\" as \"sp\" on \"sp\".\"user_id\" = \"m\".\"sender_id\"\ninner join \"talk_rooms\" as \"r\" on \"r\".\"id\" = \"m\".\"talk_room_id\"\n-- 主キーの索引で、前のページの続きから 51件だけ読む\nwhere \"m\".\"id\" < 99950\norder by \"m\".\"id\" desc\nlimit 51;",
+          "notes": [
+            "カーソル（<code>id &lt; 前の最後</code>）で、何ページ目でも読む量が同じ",
+            "全部の件数は毎回数えず、ダッシュボードの数（または「約10万件」）で代わりにする"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "月ごとの売上",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "1本",
+          "code": "DB::table('purchases as pu')\n    ->join('plans as pl', 'pl.id', '=', 'pu.plan_id')\n    ->selectRaw(\"to_char(pu.created_at, 'YYYY-MM') as month, sum(pl.price) as sales\")\n    ->groupBy('month')->orderBy('month')->get();",
+          "sql": "select to_char(pu.created_at, 'YYYY-MM') as month,\n       sum(pl.price) as sales      -- 「今の」プランの値段で足す\nfrom \"purchases\" as \"pu\"\ninner join \"plans\" as \"pl\" on \"pl\".\"id\" = \"pu\".\"plan_id\"\ngroup by \"month\"\norder by \"month\" asc;",
+          "notes": [
+            "07 のレガシー版の記録は値段を持たないので、プランの値段を変えると、過去の月の売上まで変わる（FR-ADMIN-008・009）",
+            "月の区切りも UTC"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版（07 の改善のあと）",
+          "count": "1本",
+          "code": "DB::table('purchases')\n    ->selectRaw(\"date_trunc('month', created_at at time zone 'Asia/Tokyo') as month, sum(price_yen) as sales\")\n    ->where('created_at', '>=', $since)\n    ->groupBy('month')->orderBy('month')->get();",
+          "sql": "select date_trunc('month', created_at at time zone 'Asia/Tokyo') as month,\n       sum(price_yen) as sales     -- 買ったときの値段で足す\nfrom \"purchases\"\nwhere \"created_at\" >= '2025-12-01'\ngroup by \"month\"\norder by \"month\" asc;",
+          "notes": [
+            "07 の改善（<code>purchases.price_yen</code> に買ったときの値段を写す）が先に要る。管理画面だけでは直せない",
+            "監査ログ（改善版）は、操作のたびに1行入れる：<code>insert into \"admin_audit_logs\" (\"admin_id\", \"action\", \"target_type\", \"target_id\", \"created_at\") values (1, 'member.view', 'user', '01a1…', '2026-11-13 12:00:00')</code>"
+          ]
+        }
+      ]
+    }
+  ]
+}

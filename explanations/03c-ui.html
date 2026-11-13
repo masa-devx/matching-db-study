@@ -100,7 +100,7 @@
 
   <p class="meta"><a href="index.html">← 目次へ</a></p>
   <h1>03c 画面の見た目と動き</h1>
-  <p class="meta">作成: 2026-11-13 ／ 状態: <span class="status">解説だけ</span></p>
+  <p class="meta">作成: 2026-11-13 ／ 状態: <span class="status">レガシー版まで</span></p>
 
   <div class="card point">
     <strong>この一歩でできるようになること</strong>
@@ -359,9 +359,102 @@ const like = () =&gt; startTransition(async () =&gt; {
   <h2>9. 実装の記録</h2>
   <p class="meta">レガシー版のあと（9-1・9-2）と、改善したあと（9-3・9-4）に、explain-change が書く。</p>
   <h3>9-1. レガシー版</h3>
-  <p>まだ実装していない</p>
+  <p class="meta">記録: 2026-11-13（PR #86。Issue #62・#63）</p>
+  <h4>書いたもの</h4>
+  <table>
+    <tr><th>ファイル</th><th>役割</th></tr>
+    <tr><td><code>frontend/src/components/ConfirmDialog.tsx</code></td><td>確認のモーダル（<code>&lt;dialog&gt;</code>・<code>showModal()</code>・Esc と後ろで閉じる・開いたボタンにフォーカスを戻す）</td></tr>
+    <tr><td><code>frontend/src/components/UpsellDialog.tsx</code></td><td>07 の有料会員への誘導（上の部品を使う）</td></tr>
+    <tr><td><code>frontend/src/components/Toast.tsx</code></td><td>トースト（<code>ToastProvider</code> と <code>useToast()</code>。1つだけ・3秒・タイマーごと入れ替える・<code>role="status"</code>）</td></tr>
+    <tr><td><code>frontend/src/components/Button.tsx</code></td><td>主な・控えめな・危ないボタン。送信中は文字を隠して幅を保ち、スピナーを重ねる</td></tr>
+    <tr><td><code>frontend/src/components/Skeleton.tsx</code></td><td>行・カード・プロフィール・トークの形</td></tr>
+    <tr><td><code>frontend/src/components/Avatar.tsx</code>・<code>EmptyState.tsx</code>・<code>MatchCelebration.tsx</code>・<code>Icon.tsx</code></td><td>イニシャルのアバター・空の状態・マッチの演出・SVG のアイコン</td></tr>
+    <tr><td><code>frontend/src/components/TabBar.tsx</code></td><td>下のタブ（すりガラス・選んだタブの点・未読の合計）</td></tr>
+    <tr><td><code>frontend/src/App.css</code>・<code>index.css</code></td><td>design.md の値に書き直した。部品の形と動き（<code>@keyframes</code>・View Transitions・<code>prefers-reduced-motion</code>）</td></tr>
+    <tr><td><code>App.tsx</code> と 11 の画面</td><td>部品に置き換えた（06・07 で画面ごとに書いた <code>div</code> のモーダルも、<code>&lt;dialog&gt;</code> の部品にした）</td></tr>
+  </table>
+
+  <h4>大事な行の読み方</h4>
+  <p><strong>① <code>showModal()</code> で開き、閉じたらフォーカスを戻す</strong></p>
+  <pre><code class="language-tsx">useEffect(() =&gt; {
+  if (open &amp;&amp; !dialog.open) {
+    opener.current = document.activeElement as HTMLElement | null   // 開いたボタンを覚える
+    dialog.showModal()
+  }
+  if (!open &amp;&amp; dialog.open) dialog.close()
+}, [open])
+// &lt;dialog onClose={() =&gt; { opener.current?.focus(); if (open) onClose() }}&gt;</code></pre>
+  <p><code>open</code> 属性だけで開くとモーダルになりません（後ろが触れて、Esc で閉じない）。<code>showModal()</code> で開くと、ブラウザが「後ろを触れなくする・Esc で閉じる・フォーカスを中に閉じ込める」を受け持ちます。戻す先は自分で覚えておきます。</p>
+
+  <p><strong>② トーストは、タイマーごと入れ替える</strong></p>
+  <pre><code class="language-tsx">const show = useCallback((text: string, kind: Kind = 'success') =&gt; {
+  window.clearTimeout(timer.current)          // 前のタイマーを止める
+  setToast({ text, kind, key: Date.now() })   // key を変えて、出る動きをもう一度
+  timer.current = window.setTimeout(() =&gt; setToast(null), 3000)
+}, [])</code></pre>
+  <p>前のタイマーを止めないと、続けて出したときに、新しいトーストが早く消えます（解説の罠）。</p>
+
+  <p><strong>③ いいねは押した瞬間に済みに見せる</strong></p>
+  <pre><code class="language-tsx">const [shownLiked, setShownLiked] = useOptimistic(liked)
+const like = () =&gt; startTransition(async () =&gt; {
+  setShownLiked(true)                       // 応答を待たずに「いいね済み」
+  const r = await fetch(`${api}/api/me/likes`, …)
+  if (!r.ok) { toast('いいねできませんでした', 'error'); return }   // 終わると元の値（false）に戻る
+  setLiked(true)                            // 成功したら、元の値も true にする
+})</code></pre>
+
+  <p><strong>④ 送信中の吹き出しと、幅を保つボタン</strong></p>
+  <pre><code class="language-css">.bubble.is-pending { opacity: 0.5; }
+.button-label.is-hidden { visibility: hidden; }   /* 文字は消さずに隠す（幅が変わらない） */
+.skeleton::after { transform: translateX(-100%); animation: shimmer 1.4s ease-in-out infinite; }</code></pre>
+  <p>動かすのは <code>transform</code> と <code>opacity</code> だけです。スケルトンの光も、<code>background-position</code> ではなく、帯を <code>transform</code> で動かしています（最初は <code>background-position</code> で書き、決まりに合わないので直した）。</p>
+
+  <h4>解説から変えたこと</h4>
+  <ul>
+    <li><strong>部品の置き場所</strong>：解説と D-024 では「レガシー版は部品も画面ごとに書く（コピーになる）」としていたが、ユーザーの指示で <code>frontend/src/components/</code> に1つずつ置き、画面から使う形にした（design.md と D-024 も直した）。そのため、レガシー版で「同じモーダルが何画面にコピーされているか」は測れない（0）</li>
+    <li><strong>範囲</strong>：#63 は 06・07 より前に立てたが、06・07 で足した画面（ブロック・退会・有料会員の誘導・ブロックした相手・プラン・購入）も入れた（ユーザーの指示）</li>
+    <li><strong>いいねの失敗</strong>：解説では「レガシー版はわざと戻さない」としていたが、<code>useOptimistic</code> を使うと、失敗したときは自然に元に戻る。失敗のトーストも出すようにした</li>
+    <li><strong>05c の画面</strong>：Firestore 版（比べるための画面）は触っていない</li>
+  </ul>
+
+  <h4>気になる点（直していない）</h4>
+  <ul>
+    <li>タブバーの未読の合計のために、どの画面でもトークの一覧（05 のレガシー版。SQL 約560本）を読む。検索の LCP が約 450ms 遅くなった（9-2）。改善版で、未読の合計だけを返す API にする候補</li>
+    <li>閉じるときの動き（design.md の 200ms）はない。<code>&lt;dialog&gt;</code> の <code>close()</code> はすぐ消えるため</li>
+    <li>失敗・<code>401</code>・連打の扱いは、これまでどおり直していない（保存は失敗しても「保存しました」と出る）</li>
+    <li>Biome の指摘：部品の中に エラー 4・警告 1（配列の番号の key・<code>any</code> など）</li>
+  </ul>
   <h3>9-2. 測った問題と数字</h3>
-  <p>まだ実装していない</p>
+  <p>本番用のビルド（<code>vite preview</code>）を headless の Chrome で開き、ブラウザの PerformanceObserver で測った（Lighthouse ではなく、同じ条件を作った）。条件は幅 375px・CPU 4倍遅く・回線 RTT 150ms／1.6Mbps。会員は <code>search00001</code>。3回の真ん中の値。INP は、1回のタップで測った近い値。</p>
+  <table>
+    <tr><th>数字</th><th>前（03b〜07 のまま）</th><th>後（03c）</th></tr>
+    <tr><td><code>/search</code> の LCP</td><td>2,032ms</td><td><strong>2,464ms・2,496ms</strong>（2回測った）</td></tr>
+    <tr><td><code>/messages</code> の LCP</td><td>2,612ms</td><td>2,540ms・3,276ms（ぶれが大きい）</td></tr>
+    <tr><td>CLS（どちらも）</td><td>0.000</td><td>0.000（スケルトンが中身と同じ大きさなので、出てもずれない）</td></tr>
+    <tr><td>INP（近い値）</td><td>16ms・24ms</td><td>16〜24ms・32ms</td></tr>
+    <tr><td>JS（gzip）</td><td>858.94KB（260.21KB）</td><td>863.12KB（262.39KB）。+2.2KB（部品の分。依存は増えていない）</td></tr>
+    <tr><td>CSS（gzip）</td><td>8.41KB（2.24KB）</td><td>15.37KB（3.60KB）</td></tr>
+    <tr><td>Biome（画面の全体）</td><td>エラー 88・警告 39</td><td>エラー 34・警告 45（<code>&lt;button&gt;</code> の <code>type</code> や、<code>div</code> のモーダルのキーボード操作がなくなった）</td></tr>
+  </table>
+  <p><code>/search</code> の LCP が約 450ms 遅くなったのは、タブバーがどの画面でもトークの一覧（SQL 約560本・約0.7秒）を読むようになり、1本ずつ処理する API のサーバー（PHP の組み込みのサーバー）で、検索の API がその後ろで待たされるためと見込んでいる（確かめていない）。</p>
+
+  <h4>画面で確かめたこと（FR-UI-023〜033・NFR-UI-004）</h4>
+  <table>
+    <tr><th>要件</th><th>結果</th></tr>
+    <tr><td>FR-UI-023 ログアウトの確認</td><td>キーボードの Enter で開き、本当のモーダル（<code>:modal</code>）になる。中のフォーカスは「ログアウトする」。Esc で閉じ、フォーカスは「ログアウト」に戻る</td></tr>
+    <tr><td>FR-UI-024 トースト</td><td>「保存しました」・<code>role="status"</code>・3秒で消える</td></tr>
+    <tr><td>FR-UI-025 スケルトン</td><td>API を 2.5秒遅らせると、検索はカード6枚・いいねとメッセージは行6つ・ホームとプロフィールは形・トークは吹き出しの形</td></tr>
+    <tr><td>FR-UI-026 送信中</td><td><code>aria-busy="true"</code>・スピナー・幅はそのまま</td></tr>
+    <tr><td>FR-UI-027 いいね</td><td>押した直後（応答の前）に「いいね済み」・<code>aria-pressed="true"</code></td></tr>
+    <tr><td>FR-UI-028 マッチの演出</td><td>2人の写真が寄り、ハート・「メッセージを送る」「あとで」</td></tr>
+    <tr><td>FR-UI-029 画面の切り替え</td><td>カードとプロフィールの写真に同じ <code>view-transition-name</code>。タブ・リンクに <code>viewTransition</code></td></tr>
+    <tr><td>FR-UI-030 送信中の吹き出し</td><td>送った直後に濃さ 0.5 の吹き出し、届くと濃い吹き出しに替わる</td></tr>
+    <tr><td>FR-UI-031・033</td><td>写真のない人はイニシャル。0件の一覧に「検索で相手を探す」</td></tr>
+    <tr><td>FR-UI-032 未読のバッジ</td><td>「99+」</td></tr>
+    <tr><td>NFR-UI-004 動きを減らす</td><td>モーダルの動きが 0.001秒</td></tr>
+    <tr><td>06・07 の画面</td><td>ブロック（トーストのあと前の画面へ）・解除・退会（違うパスワード）・有料会員の誘導・購入の画面が、部品で動く。画面の例外 0回</td></tr>
+  </table>
+  <p>画面写真を見て、トークの「送る」が縦に折り返す・マッチのハートが右にずれる（弾む動きの <code>transform</code> が位置の <code>translateX</code> を上書きしていた）の2つを直した。</p>
   <h3>9-3. 足したテスト</h3>
   <p>まだ実装していない</p>
   <h3>9-4. 改善版と、前と後の数字</h3>

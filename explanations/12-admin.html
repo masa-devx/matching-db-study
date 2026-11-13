@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>12 管理画面</title>
+<link rel="stylesheet" href="assets/page.css">
+</head>
+<body>
+<main>
+  <p class="meta"><a href="index.html">← 目次へ</a></p>
+  <h1>12 管理画面</h1>
+  <p class="meta">作成: 2026-11-13 ／ 状態: <span class="status">解説だけ</span> ／ 要件: <code>docs/requirements/admin.md</code>（FR-ADMIN-001〜012・NFR-ADMIN-001〜004）</p>
+
+  <div class="card point">
+    <strong>この一歩でできるようになること</strong>
+    <ul>
+      <li>会員の側と管理画面を、別のアプリ（別の Laravel と別の React）に分け、共有するのを DB だけにする理由と、表の持ち主の決め方を説明できる</li>
+      <li>管理者と会員の権限の分け方（別の表・役割）と、「だれが何を見たか」を残す監査ログの持ち方が分かる</li>
+      <li>大量のデータの一覧（N+1・<code>offset</code>・<code>count(*)</code>）と、日ごとの集計を、1本の SQL と索引で速くできる</li>
+      <li>サイドバーの項目を「1か所の一覧」から作り、ドメインを足すときに直す場所を1つにできる</li>
+    </ul>
+  </div>
+
+  <h2>1. 何を作るか</h2>
+  <p>運営の人（管理者）が使う画面です。よくある管理画面の形にします。左にサイドバー（ダッシュボード・会員・メッセージ・有料会員と売上・監査ログ）、上に帯（管理者の名前と役割・ログアウト）、真ん中に中身です。</p>
+  <ul>
+    <li><strong>ダッシュボード</strong>：会員・今日の登録・マッチ・メッセージ・有料会員・今月の売上の数（カード）と、直近30日の日ごとの折れ線（登録・マッチ・メッセージ）、直近12か月の売上の棒グラフ</li>
+    <li><strong>会員</strong>：探す（メールアドレス・ニックネーム・状態）→ 詳細（プロフィール・いいね・マッチ・購入・ブロック）→ 利用を止める／解く</li>
+    <li><strong>メッセージ</strong>：10万件の一覧を、送った会員・期間・本文の語で絞る</li>
+    <li><strong>有料会員・売上</strong>：購入の一覧・月ごとの売上（表とグラフ）・プランの値段の変更</li>
+    <li><strong>監査ログ</strong>：だれが・いつ・どの会員の何を見た／変えたか</li>
+  </ul>
+  <p>管理者は会員とは別にログインし、役割は「すべてできる（<code>owner</code>）」と「見るだけ（<code>viewer</code>）」の2つです。</p>
+
+  <h2>2. 先に知っておく言葉</h2>
+  <table>
+    <tr><th>言葉</th><th>意味（1〜2文）</th></tr>
+    <tr><td>境界（バウンダリ）</td><td>どこまでが1つのアプリ（チーム）の持ち物かの線。ここでは「会員の側」と「管理画面」の線で、越えるのは DB だけにする。</td></tr>
+    <tr><td>表の持ち主</td><td>その表の作り（列・制約・マイグレーション）を決めて変えてよいアプリ。会員の表の持ち主は <code>backend/</code>、管理者と監査ログの表の持ち主は <code>admin/backend</code>。</td></tr>
+    <tr><td>役割による権限（RBAC）</td><td>人に役割（<code>owner</code>・<code>viewer</code>）を付け、役割ごとにできる操作を決めること。人ごとに決めるより、増えても管理しやすい。</td></tr>
+    <tr><td>監査ログ</td><td>だれが・いつ・何に・何をしたかを、あとから確かめるための記録。書き足すだけで、消さない・書き換えない（追記だけ）。</td></tr>
+    <tr><td>集計の表（ロールアップ）</td><td>日ごと・月ごとの数を、あらかじめ数えて別の表に入れておくこと。ダッシュボードは、その小さな表を読むだけになる。PostgreSQL のマテリアライズドビューも同じ考え。</td></tr>
+    <tr><td><code>generate_series</code></td><td>PostgreSQL で、日付や数の並びを作る関数。登録が0件の日も、グラフに0として出せる。</td></tr>
+    <tr><td><code>pg_trgm</code></td><td>文字を3文字ずつに分けて索引にする PostgreSQL の拡張。<code>like '%語%'</code>（前にも % がつく部分一致）を索引で速くできる。</td></tr>
+    <tr><td>レジストリ（1か所の一覧）</td><td>「どの項目があり、どの画面を出し、どの役割が見られるか」を1つの配列に書き、サイドバーもルートもそこから作る形。</td></tr>
+  </table>
+
+  <h2>3. 図で見る</h2>
+  <p>1枚目は構成（何がどこを読むか）、2枚目は足す表、3枚目は会員の利用を止めるときの流れです。</p>
+  <pre class="mermaid">
+flowchart LR
+  subgraph member["会員の側（今あるもの）"]
+    F["frontend（React）localhost:5173"] --> B["backend（Laravel API）:8000"]
+  end
+  subgraph admin["admin/（新しく作る）"]
+    AF["admin/frontend（React）localhost:5174"] --> AB["admin/backend（Laravel API）:8100"]
+  end
+  B --> DB[("PostgreSQL matching_dev")]
+  AB --> DB
+  B -. "会員の表の持ち主（users・likes・messages…）" .- DB
+  AB -. "管理の表の持ち主（admins・admin_audit_logs）" .- DB
+  </pre>
+  <pre class="mermaid">
+erDiagram
+  ADMINS ||--o{ ADMIN_AUDIT_LOGS : "操作する"
+  USERS ||--o{ ADMIN_AUDIT_LOGS : "対象になる（public_id で指す）"
+  ADMINS {
+    bigint id PK
+    varchar email UK
+    varchar password "bcrypt のハッシュ"
+    varchar name
+    varchar role "owner または viewer"
+    timestamp last_login_at
+  }
+  ADMIN_AUDIT_LOGS {
+    bigint id PK
+    bigint admin_id FK
+    varchar action "member.view・member.suspend・message.list・plan.price など"
+    varchar target_type "user・plan など"
+    varchar target_id "会員の public_id など"
+    jsonb detail "変えた前と後・理由"
+    timestamptz created_at "書き足すだけ"
+  }
+  USERS {
+    bigint id PK
+    timestamp suspended_at "12 で足す（会員の側のマイグレーション）。止めた日時"
+    varchar suspended_reason "止めた理由"
+  }
+  </pre>
+  <pre class="mermaid">
+sequenceDiagram
+  participant A as 管理者（owner）
+  participant AB as admin/backend
+  participant DB as PostgreSQL
+  participant B as backend（会員の側）
+  participant M as 会員
+  A->>AB: POST /admin/api/members/{id}/suspension（理由）
+  AB->>AB: 役割が owner か（viewer なら 403）
+  AB->>DB: update users set suspended_at = now()
+  AB->>DB: insert into admin_audit_logs（member.suspend）
+  AB-->>A: 204
+  M->>B: GET /api/me/matches（持っているトークン）
+  alt レガシー版（会員の側が見ない場所が残る）
+    B-->>M: 200
+  else 改善版（会員の側の入口で見る）
+    B->>DB: select … where id = ? and suspended_at is null
+    B-->>M: 403
+  end
+  </pre>
+
+  <h2>4. 設計の選択肢を比べる</h2>
+  <h3>構成（他の機能と干渉しない形）</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. <code>admin/backend</code>（別の Laravel）と <code>admin/frontend</code>（別の React）。共有は DB だけ</td><td>会員の側を変えても管理画面のコードは壊れない（API の形に頼らない）。デプロイ・権限・依存を別にできる。どこまでが管理画面かがフォルダで分かる</td><td>同じ表を読む Model を2か所に書く（会員の側が列の名前を変えると、管理画面の SQL も直す）。コンテナが2つ増える</td><td>今回（ユーザーが選んだ）。管理画面と会員の画面を別の人が作るとき</td></tr>
+    <tr><td>B. 今の Laravel に <code>app/Admin</code> と <code>routes/admin.php</code>、画面だけ別</td><td>Model を共有でき、書く量が少ない</td><td>会員の側の変更（Model・ミドルウェア）の影響を受けやすい。管理者の権限の穴が会員の API に広がりやすい</td><td>小さく始めたいとき</td></tr>
+    <tr><td>C. 管理画面は会員の側の API を呼ぶ</td><td>DB に直接さわらない</td><td>会員の API に管理用の入口を足すことになり、境界がかえってにじむ。集計の API も会員の側に要る</td><td>DB を共有できないとき（別の会社・別のサービス）</td></tr>
+  </table>
+  <h3>管理者のアカウントと権限</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. <code>admins</code> の表・<code>role</code> の列（<code>owner</code>・<code>viewer</code>）。トークンの鍵も会員と別</td><td>会員のトークンでは管理画面に入れない（FR-ADMIN-001）。役割で操作を分けられる</td><td>ログインの仕組みが2つになる</td><td>今回</td></tr>
+    <tr><td>B. <code>users.is_admin</code></td><td>ログインが1つ</td><td>会員のトークンが盗まれると管理画面にも入れる。会員の検索などに管理者が混ざる</td><td>選ばない（分け方の弱い形として知る）</td></tr>
+    <tr><td>C. 役割と権限の表（<code>roles</code>・<code>permissions</code>）</td><td>細かく分けられる</td><td>2つの役割には重い</td><td>役割が増えたとき（次の段階）</td></tr>
+  </table>
+  <h3>サイドバーの増やし方</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. 画面の「1か所の一覧」（レジストリ）：<code>{ path, label, icon, roles, element }</code> の配列から、サイドバーとルートを作る</td><td>ドメインを足すのは、フォルダ1つと一覧に1行（FR-ADMIN-002・NFR-ADMIN-004）。役割で見せる項目も同じ一覧で決まる</td><td>一覧の書き方を決めておく必要がある</td><td>今回</td></tr>
+    <tr><td>B. サイドバーとルートを別々に手で書く</td><td>すぐ書ける</td><td>足すたびに2か所を直し、片方を忘れる</td><td>選ばない</td></tr>
+    <tr><td>C. サーバーが「見せる項目」を返す</td><td>役割を変えても画面を作り直さなくてよい</td><td>画面の部品はどのみち画面にある。仕組みが重い</td><td>項目や役割が運用で変わるとき</td></tr>
+  </table>
+  <h3>画面の部品とグラフ</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. 部品のライブラリ Mantine（<code>AppShell</code>・<code>Table</code>・<code>Modal</code>）と、そのグラフ（<code>@mantine/charts</code>。中は Recharts）</td><td>よくある管理画面の形（サイドバー・帯・表・カード）がそろう。グラフも同じ見た目</td><td>依存が増え、バンドルが大きくなる（会員の画面とは別なので、会員の数字には響かない）</td><td>今回。部品が多く、見た目の作り込みより機能を先にしたいとき</td></tr>
+    <tr><td>B. Tailwind と shadcn/ui（部品を写して使う）</td><td>よく使われている。部品を自分のコードとして直せる</td><td>Tailwind の設定から入る。写した部品の量が多い</td><td>見た目を細かく決めたいとき</td></tr>
+    <tr><td>C. 03c と同じく自分で書く（グラフは SVG）</td><td>依存なし</td><td>表・グラフ・サイドバーを全部書く量が多い。グラフの軸や吹き出しを作るのが大変</td><td>部品が少ないとき</td></tr>
+  </table>
+  <h3>ダッシュボードの数え方</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. 開くたびに、日ごとに1本ずつ数える</td><td>すぐ書ける</td><td>30日 × 3種類で 90本。1本ごとに表を全部読む</td><td>レガシー版</td></tr>
+    <tr><td>B. 開くたびに、<code>generate_series</code> と <code>group by</code> で1本</td><td>1本で済み、0件の日も出る。いつも最新</td><td>データが増えると、開くたびの集計が重くなる</td><td>改善版の最初</td></tr>
+    <tr><td>C. 日ごとの数を集計の表（またはマテリアライズドビュー）に作っておく</td><td>ダッシュボードは小さな表を読むだけ</td><td>作り直すまで少し古い。作り直す仕組みが要る</td><td>データが大きくなったとき（測ってから選ぶ）</td></tr>
+  </table>
+  <h3>監査ログの守り方</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. コントローラで、思い出した操作のあとに insert</td><td>すぐ書ける</td><td>書き忘れる。書き換え・削除を止められない</td><td>レガシー版</td></tr>
+    <tr><td>B. ミドルウェアで、決めた操作は必ず残す。DB では、管理画面の DB ユーザーに監査ログの <code>update</code>・<code>delete</code> の権限を与えない（または止めるトリガー）</td><td>書き忘れない。アプリのバグでも書き換えられない（DB が守る）</td><td>DB ユーザーを分ける設定が要る</td><td>改善版</td></tr>
+  </table>
+  <div class="card point"><strong>この一歩で選ぶもの</strong>：構成は A（別の Laravel と別の React・共有は DB だけ）、管理者は A（<code>admins</code> と役割）、サイドバーは A（1か所の一覧）、部品とグラフは A（Mantine と <code>@mantine/charts</code>。版は入れるときに、出てから2週間以上のものを決め打ちにする）。レガシー版は構成と一覧を最初から整え、中の API は Fat Controller で作ります（集計は A・監査ログは A）。測ってから、集計は B（必要なら C）、監査ログは B に直します。</div>
+
+  <h2>5. 見本：レガシー版と改善版</h2>
+  <h3>レガシー版（構成は整え、中は Fat Controller）</h3>
+  <pre><code class="language-tsx">// admin/frontend/src/domains.tsx：サイドバーとルートの「1か所の一覧」（ここは最初から整える）
+export const DOMAINS = [
+  { path: '/', label: 'ダッシュボード', icon: 'chart', roles: ['owner', 'viewer'], element: &lt;DashboardPage /&gt; },
+  { path: '/members', label: '会員', icon: 'users', roles: ['owner', 'viewer'], element: &lt;MembersPage /&gt; },
+  { path: '/messages', label: 'メッセージ', icon: 'chat', roles: ['owner', 'viewer'], element: &lt;MessagesPage /&gt; },
+  { path: '/sales', label: '有料会員・売上', icon: 'yen', roles: ['owner', 'viewer'], element: &lt;SalesPage /&gt; },
+  { path: '/audit-logs', label: '監査ログ', icon: 'log', roles: ['owner'], element: &lt;AuditLogsPage /&gt; },
+]
+// 足すときは、domains/&lt;名前&gt;/ を作って、ここに1行足すだけ</code></pre>
+  <pre><code class="language-php">// admin/backend：DashboardController（中は Fat Controller）
+public function index(Request $request): JsonResponse
+{
+    $admin = $this-&gt;adminFromToken($request);        // 管理者の JWT（会員と別の鍵）
+    $days = [];
+    foreach (range(29, 0) as $i) {
+        $d = now()-&gt;subDays($i)-&gt;toDateString();
+        $days[] = ['day' =&gt; $d,
+            'registrations' =&gt; DB::table('users')-&gt;whereDate('created_at', $d)-&gt;count(),
+            'matches' =&gt; DB::table('user_matches')-&gt;whereDate('created_at', $d)-&gt;count(),
+            'messages' =&gt; DB::table('messages')-&gt;whereDate('created_at', $d)-&gt;count()];
+    }
+    // 監査ログは書かない（ダッシュボードは個人の情報を出さないので、と思って書き忘れる）
+    return response()-&gt;json(['days' =&gt; $days, /* カードの数・月ごとの売上 */]);
+}</code></pre>
+  <div class="card warn"><ul>
+    <li><strong>集計の本数</strong>：30日 × 3種類で 90本。どれも <code>created_at::date</code> で表を全部読む（メッセージは10万行を30回）</li>
+    <li><strong>一覧の N+1</strong>：会員は 2＋2N 本、メッセージは 2＋3N 本。<code>offset</code> と毎回の <code>count(*)</code></li>
+    <li><strong>出しすぎ</strong>：<code>select *</code> で、パスワードのハッシュや確認用の文字まで管理画面に返る</li>
+    <li><strong>監査ログの抜け</strong>：コントローラで思い出したところにだけ書く。メッセージの一覧を見ても残らない</li>
+    <li><strong>役割の抜け</strong>：<code>viewer</code> の確かめもコントローラごとに写すので、写し忘れたところで <code>viewer</code> が止める・値段を変えるができる</li>
+    <li><strong>売上がずれる</strong>：07 のレガシー版の記録は値段を持たないので、プランの値段を変えると過去の売上も変わる</li>
+    <li><strong>止めても使える</strong>：会員の側が <code>suspended_at</code> を見ない場所（JWT を読むだけの API）では、止めた会員がそのまま使える</li>
+  </ul></div>
+
+  <h3>改善版</h3>
+  <pre><code class="language-php">// 役割と監査ログは、ルートで決める（コントローラに書かない）
+Route::middleware(['admin.auth', 'audit:member.view'])-&gt;get('/members/{publicId}', [MemberController::class, 'show']);
+Route::middleware(['admin.auth', 'role:owner', 'audit:member.suspend'])-&gt;post('/members/{publicId}/suspension', …);
+
+// 監査ログの表は、管理画面の DB ユーザーに insert と select だけを許す（書き換え・削除は DB が断る）
+// grant select, insert on admin_audit_logs to admin_app;   -- update・delete は与えない</code></pre>
+  <p>大事なのは3つです。① 役割の確かめと監査ログは、ルートのミドルウェアで決め、コントローラに写さない（足し忘れたら、ルートの一覧で見つけられる）。② 一覧は JOIN とカーソルで1本、集計は <code>generate_series</code> と <code>group by</code> で1本にし、必要なら集計の表に移す。③ 会員の利用の停止は、会員の側の入口（会員を読むところ）で見る。管理画面だけでは守れない。</p>
+
+  <h3>Eloquent が発行する SQL（レガシー版と改善版を並べる）</h3>
+  <p>左がレガシー版、右が改善版です。SQL は Laravel に作らせて確かめたもので（管理画面の表と、07 の改善版の列はまだないので、すべて <code>DB::pretend()</code> で、流さずに SQL だけを取り出した。管理画面の Laravel はまだないので、会員の側の Laravel で同じ書き方をして作らせた）、例は会員の検索の語が <code>search001</code> の場合です。中身は <code>explanations/sql/12-admin.json</code> にあり、<code>explanations/tools/compare-block.py</code> で作り直せます。</p>
+  <p class="meta">ログ（<code>sql-*.log</code>）では、値は <code>?</code> になり、別に渡されます。読みやすいよう、ここでは値を入れて、行を分けて書きました。</p>
+  <!-- compare: sql/12-admin.json -->
+  <h4>ダッシュボード：直近30日の日ごとの登録（<code>GET /admin/api/dashboard</code> の一部）</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">30本（1日1本）</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$days = [];
+foreach (range(29, 0) as $i) {
+    $d = now()-&gt;subDays($i)-&gt;toDateString();   // アプリの時計（UTC）の日付
+    $days[$d] = User::whereDate('created_at', $d)-&gt;count();
+}
+// マッチ・メッセージも同じ形で30本ずつ（合わせて90本）</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- 日の数だけくり返す（ここでは2日分だけ見せる）
+select count(*) as "aggregate" from "users"
+where "created_at"::date = '2026-11-12';
+select count(*) as "aggregate" from "users"
+where "created_at"::date = '2026-11-13';
+-- …を30回。日付は UTC で区切る</code></pre>
+      <ul><li>表がまだない列・表もあるので、どれも <code>DB::pretend()</code> で作らせた（以下も同じ）</li><li><code>created_at::date</code> は列に関数をかけるので、索引があっても使えず、1本ごとに <code>users</code> を全部読む（30本 × 2万行）</li><li>退会した会員も数える。日本時間の0時〜9時の登録は、前の日に入る</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版<span class="count">1本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">DB::select("
+  select d::date as day, count(u.id) as registrations
+  from generate_series(今日 - 29, 今日, interval '1 day') as d
+  left join users u on 日本時間の日付(u.created_at) = d::date
+                   and u.deleted_at is null
+  group by d order by d");</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">select d::date as day, count(u.id) as registrations
+from generate_series(
+       (now() at time zone 'Asia/Tokyo')::date - 29,
+       (now() at time zone 'Asia/Tokyo')::date,
+       interval '1 day') as d
+-- 登録がない日も 0 で出す（left join）
+left join users u
+  on (u.created_at at time zone 'UTC' at time zone 'Asia/Tokyo')::date = d::date
+ and u.deleted_at is null
+group by d
+order by d;</code></pre>
+      <ul><li><code>generate_series</code> で30日を作り、<code>left join</code> で登録のない日も 0 にする（グラフの線が途切れない）</li><li>日本時間に直してから日付にする。さらに速くするなら、日ごとの数を別の表（集計の表・マテリアライズドビュー）に夜のうちに作っておく（解説の選択肢）</li></ul>
+    </section>
+  </div>
+  <h4>会員の一覧（50人ずつ。メールアドレスの部分一致）</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">2＋2N 本（50人で 102本）</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$users = User::where('email', 'like', "%{$q}%")
+    -&gt;orderBy('created_at', 'desc')
+    -&gt;offset(($page - 1) * 50)-&gt;limit(50)-&gt;get();
+$total = User::where('email', 'like', "%{$q}%")-&gt;count();
+foreach ($users as $u) {
+    $u-&gt;nickname = Profile::where('user_id', $u-&gt;id)-&gt;first()?-&gt;nickname;   // 1人ごとに1本
+    $u-&gt;purchases = DB::table('purchases')-&gt;where('user_id', $u-&gt;id)-&gt;count(); // もう1本
+}</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">select * from "users"
+where "email"::text like '%search001%'
+order by "created_at" desc
+limit 50 offset 0;
+
+select count(*) as "aggregate" from "users"
+where "email"::text like '%search001%';
+
+-- 1人ごとに
+select * from "profiles" where "user_id" = 1 limit 1;
+select count(*) as "aggregate" from "purchases" where "user_id" = 1;</code></pre>
+      <ul><li><code>select *</code> なので、パスワードのハッシュや確認用の文字まで管理画面の API に出る</li><li>前に % が付く <code>like</code> は、普通の索引を使えない（全部読む）</li><li>ページが進むと <code>offset</code> の分を読んで捨てる</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版<span class="count">1本（＋件数の1本）</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">DB::table('users as u')
+    -&gt;leftJoin('profiles as p', 'p.user_id', '=', 'u.id')
+    -&gt;select('u.public_id', 'u.email', 'u.created_at', 'u.last_login_at',
+             'u.is_paid', 'u.deleted_at', 'p.nickname')   // 要る列だけ
+    -&gt;where('u.email', 'like', "%{$q}%")
+    -&gt;orderBy('u.created_at', 'desc')-&gt;orderBy('u.id', 'desc')
+    -&gt;limit(51)-&gt;get();   // 51件目があれば「続きあり」</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">select "u"."public_id", "u"."email", "u"."created_at",
+       "u"."last_login_at", "u"."is_paid", "u"."deleted_at",
+       "p"."nickname"
+from "users" as "u"
+left join "profiles" as "p" on "p"."user_id" = "u"."id"
+where "u"."email"::text like '%search001%'
+order by "u"."created_at" desc, "u"."id" desc
+limit 51;</code></pre>
+      <ul><li>JOIN で1本にし、要る列だけを返す</li><li>部分一致を速くするなら、<code>pg_trgm</code> の GIN 索引（3文字ずつに分けた索引）を使う（解説の選択肢）</li></ul>
+    </section>
+  </div>
+  <h4>メッセージの一覧（10万件から、新しい50件）</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">2＋3N 本（50件で 152本）</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$messages = Message::orderBy('created_at', 'desc')
+    -&gt;offset(($page - 1) * 50)-&gt;limit(50)-&gt;get();
+$total = Message::count();
+foreach ($messages as $m) {
+    $m-&gt;sender = Profile::where('user_id', $m-&gt;sender_id)-&gt;first()?-&gt;nickname;
+    $m-&gt;room = TalkRoom::where('id', $m-&gt;talk_room_id)-&gt;first();
+    $m-&gt;partner = TalkRoomMember::where('talk_room_id', $m-&gt;talk_room_id)
+        -&gt;where('user_id', '!=', $m-&gt;sender_id)-&gt;first();
+}</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- 10万件を並べ替えて 50件（created_at に索引がない）
+select * from "messages"
+order by "created_at" desc
+limit 50 offset 0;
+
+-- 全部の件数（10万行を数える）
+select count(*) as "aggregate" from "messages";
+
+-- 1件ごとに3本
+select * from "profiles" where "user_id" = 23 limit 1;
+select * from "talk_rooms" where "id" = 7 limit 1;
+select * from "talk_room_members"
+where "talk_room_id" = 7 and "user_id" != 23 limit 1;</code></pre>
+      <ul><li>目次の「大量のメッセージの一覧と N+1」そのもの</li><li>後ろのページほど <code>offset</code> で読んで捨てる行が増える</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版<span class="count">1本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">DB::table('messages as m')
+    -&gt;join('profiles as sp', 'sp.user_id', '=', 'm.sender_id')
+    -&gt;join('talk_rooms as r', 'r.id', '=', 'm.talk_room_id')
+    -&gt;select('m.id', 'm.body', 'm.created_at', 'sp.nickname as sender', 'r.public_id as room_id')
+    -&gt;where('m.id', '&lt;', $cursor)          // 前のページの最後の id（カーソル）
+    -&gt;orderBy('m.id', 'desc')-&gt;limit(51)-&gt;get();</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">select "m"."id", "m"."body", "m"."created_at",
+       "sp"."nickname" as "sender",
+       "r"."public_id" as "room_id"
+from "messages" as "m"
+inner join "profiles" as "sp" on "sp"."user_id" = "m"."sender_id"
+inner join "talk_rooms" as "r" on "r"."id" = "m"."talk_room_id"
+-- 主キーの索引で、前のページの続きから 51件だけ読む
+where "m"."id" &lt; 99950
+order by "m"."id" desc
+limit 51;</code></pre>
+      <ul><li>カーソル（<code>id &lt; 前の最後</code>）で、何ページ目でも読む量が同じ</li><li>全部の件数は毎回数えず、ダッシュボードの数（または「約10万件」）で代わりにする</li></ul>
+    </section>
+  </div>
+  <h4>月ごとの売上</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">1本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">DB::table('purchases as pu')
+    -&gt;join('plans as pl', 'pl.id', '=', 'pu.plan_id')
+    -&gt;selectRaw("to_char(pu.created_at, 'YYYY-MM') as month, sum(pl.price) as sales")
+    -&gt;groupBy('month')-&gt;orderBy('month')-&gt;get();</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">select to_char(pu.created_at, 'YYYY-MM') as month,
+       sum(pl.price) as sales      -- 「今の」プランの値段で足す
+from "purchases" as "pu"
+inner join "plans" as "pl" on "pl"."id" = "pu"."plan_id"
+group by "month"
+order by "month" asc;</code></pre>
+      <ul><li>07 のレガシー版の記録は値段を持たないので、プランの値段を変えると、過去の月の売上まで変わる（FR-ADMIN-008・009）</li><li>月の区切りも UTC</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版（07 の改善のあと）<span class="count">1本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">DB::table('purchases')
+    -&gt;selectRaw("date_trunc('month', created_at at time zone 'Asia/Tokyo') as month, sum(price_yen) as sales")
+    -&gt;where('created_at', '&gt;=', $since)
+    -&gt;groupBy('month')-&gt;orderBy('month')-&gt;get();</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">select date_trunc('month', created_at at time zone 'Asia/Tokyo') as month,
+       sum(price_yen) as sales     -- 買ったときの値段で足す
+from "purchases"
+where "created_at" &gt;= '2025-12-01'
+group by "month"
+order by "month" asc;</code></pre>
+      <ul><li>07 の改善（<code>purchases.price_yen</code> に買ったときの値段を写す）が先に要る。管理画面だけでは直せない</li><li>監査ログ（改善版）は、操作のたびに1行入れる：<code>insert into "admin_audit_logs" ("admin_id", "action", "target_type", "target_id", "created_at") values (1, 'member.view', 'user', '01a1…', '2026-11-13 12:00:00')</code></li></ul>
+    </section>
+  </div>
+  <!-- /compare -->
+  <table>
+    <tr><th>操作</th><th>レガシー版</th><th>改善版</th><th>違いのもと</th></tr>
+    <tr><td>ダッシュボードの日ごとの数</td><td>90本（30日 × 3種類）</td><td>3本（種類ごとに1本）</td><td><code>generate_series</code> と <code>group by</code>。日本時間で区切る</td></tr>
+    <tr><td>会員の一覧</td><td>2＋2N 本</td><td>1本（＋件数）</td><td>JOIN・要る列だけ・カーソル</td></tr>
+    <tr><td>メッセージの一覧</td><td>2＋3N 本</td><td>1本</td><td>JOIN・主キーのカーソル・毎回の <code>count(*)</code> をやめる</td></tr>
+    <tr><td>月ごとの売上</td><td>1本（今の値段で足す）</td><td>1本（買ったときの値段で足す）</td><td>07 の改善（値段を写す）が先に要る</td></tr>
+  </table>
+  <p class="meta">API の設計（<code>docs/api/12-admin.md</code>）はまだないので、「流れる SQL の目安」との突き合わせは、API の子 Issue で設計を書くときに行います。</p>
+
+  <h2>6. どう確かめるか</h2>
+  <table>
+    <tr><th>段階</th><th>確かめること</th></tr>
+    <tr><td>① レガシー版で問題を見る</td><td>
+      <ul>
+        <li>試しのデータ：これまでのシーダー（会員 2万人・マッチ・メッセージ 10万件・ブロック・退会・有料会員と購入）と、試しの管理者2人（<code>owner</code>・<code>viewer</code>）</li>
+        <li>ダッシュボード・会員の一覧（1ページ目と 200ページ目）・メッセージの一覧（1ページ目と 2,000ページ目）の SQL の本数と時間</li>
+        <li><code>EXPLAIN (ANALYZE, BUFFERS)</code>：日ごとの数・<code>like '%語%'</code>・<code>messages order by created_at desc offset …</code></li>
+        <li>役割：<code>viewer</code> で止める・値段を変える（API を直接呼ぶ）</li>
+        <li>監査ログ：どの操作で残り、どれで残らないか（表にする）。DB で直接 <code>update</code>・<code>delete</code> できるか</li>
+        <li>会員のトークンで管理画面の API を呼ぶ・管理者のトークンで会員の API を呼ぶ</li>
+        <li>止めた会員が、会員の側のどの API を使えるか（06 の写し忘れの表と同じ形）</li>
+        <li>値段を変えたあとの、過去の月の売上</li>
+        <li>サイドバーに項目を1つ足すとき、直したファイルの数</li>
+      </ul></td></tr>
+    <tr><td>② 振る舞いを固定するテスト</td><td>要件 ID を名前に入れる。例：<code>FR-ADMIN-001 会員のトークンでは管理画面を使えない</code>・<code>FR-ADMIN-006 止めた会員は会員の API を使えない</code>・<code>FR-ADMIN-010 見るだけの役割は会員を止められない</code>・<code>FR-ADMIN-011 会員の詳細を見ると監査ログが残る</code>・<code>FR-ADMIN-009 値段を変えても過去の売上は変わらない</code></td></tr>
+    <tr><td>③ 改善したあとに比べる数字</td><td>ダッシュボードと一覧の SQL の本数・時間・読んだ行とバッファ。後ろのページの時間（<code>offset</code> とカーソル）。監査ログの抜けの数（レガシー版 → 0）。<code>viewer</code> が変えられる操作の数（→ 0）</td></tr>
+  </table>
+
+  <h2>7. 気をつけること（罠）</h2>
+  <div class="card warn"><ul>
+    <li><strong>2つのアプリで同じ表を読む</strong>：会員の側が列の名前を変えると、管理画面の SQL が動かなくなる。会員の側の表を変えるときは、管理画面が読む列の一覧（data-model.md）を見る</li>
+    <li><strong>マイグレーションの表が1つ</strong>：2つの Laravel が同じ DB の <code>migrations</code> の表を使うと、お互いのマイグレーションが混ざる。管理画面は <code>admin_migrations</code> のように別の名前にする</li>
+    <li><strong>画面で隠すだけ</strong>：<code>viewer</code> にボタンを出さなくても、API を直接呼べば変えられる。役割は API で必ず確かめる</li>
+    <li><strong><code>count(*)</code> は速くない</strong>：PostgreSQL は件数を持っていないので、毎回数える。10万件の一覧の「全部で何件」を毎回出すのは重い</li>
+    <li><strong>個人の情報の出しすぎ</strong>：管理者でも、要る列だけを返す。メッセージの本文を見たことは監査ログに残す</li>
+    <li><strong>グラフの日付</strong>：UTC で区切ると、日本時間の 0時〜9時の分が前の日になる（07 と同じ罠）。0件の日を抜かすと、線が途切れて見える</li>
+    <li><strong>監査ログを消せる</strong>：アプリで消さないと決めても、DB の権限で止めなければ、手で消せる</li>
+  </ul></div>
+
+  <h2>8. 理解を確かめる6つの問い</h2>
+  <p>先に自分で答えてから、開いて見る。</p>
+  <details><summary>なぜそうするのか？（別のアプリに分ける・役割と監査ログ）</summary><p>管理画面は、会員の画面と使う人も、見せてよい情報も、変える速さも違う。同じアプリに入れると、会員の側の変更で管理画面が壊れ、管理者の権限の穴が会員の API に広がる。だから別のアプリにし、共有を DB だけにして、どこまでが管理画面かを線で分ける。管理者は会員の個人の情報を見られるので、役割で操作を絞り、だれが何を見たかを監査ログに残して、あとから確かめられるようにする。</p></details>
+  <details><summary>ほかの方法は？なぜ選ばなかったか？</summary><p>今の Laravel に同居させる形は書く量が少ないが、会員の側の影響を受けやすい。管理画面が会員の API を呼ぶ形は、会員の API に管理用の入口が増えて、かえって境界がにじむ。<code>users.is_admin</code> は会員のトークンで管理画面に入れてしまう。部品を自分で書く形は、表・グラフ・サイドバーの量が多い。</p></details>
+  <details><summary>弱点は？</summary><p>同じ表を2つのアプリが読むので、会員の側の表の変更が管理画面に響く（API の形ではなく、表の形に頼っている）。Model や接続の設定が2か所になる。会員の利用の停止のように、管理画面の操作でも、守るのは会員の側の仕事になるものがある。Mantine を入れるので、管理画面のバンドルは大きくなる。</p></details>
+  <details><summary>問題が起きたら、どう調べて直すか？</summary><p>「ダッシュボードが遅い」なら、管理画面の API のクエリログで本数と時間を見て、<code>EXPLAIN (ANALYZE, BUFFERS)</code> で全部読んでいる SQL を探す。「viewer が変えられた」なら、ルートの一覧で、その操作に役割のミドルウェアが付いているかを見る。「だれが見たか分からない」なら、監査ログに残す操作の一覧と、ルートの一覧を突き合わせる。</p></details>
+  <details><summary>データが10倍・100倍になったら？</summary><p>メッセージが 1,000万件になると、毎回の <code>count(*)</code> と <code>offset</code> は使えない。カーソルにして件数は出さない（または概数）。ダッシュボードは、開くたびの集計から、夜のうちに作る集計の表やマテリアライズドビューに移す。監査ログは増え続けるので、月ごとのパーティションや、古い分を別の置き場に移すことを考える。</p></details>
+  <details><summary>Eloquent でどんな SQL が流れ、どう直したか？ Rails（ActiveRecord）・Prisma ならどう書くか？</summary>
+    <p>レガシー版は、日ごとに <code>whereDate()</code> で1本ずつ（90本）、一覧は1件ごとに Model を読む N+1。改善版は、<code>generate_series</code> と <code>group by</code> の1本、一覧は JOIN とカーソルの1本。</p>
+    <table>
+      <tr><th>やること</th><th>Laravel</th><th>Rails（ActiveRecord）</th><th>Prisma</th></tr>
+      <tr><td>日ごとの数</td><td><code>DB::select()</code> で <code>generate_series</code>・<code>selectRaw('date_trunc(…)')-&gt;groupBy()</code></td><td><code>group(&quot;date_trunc('day', created_at)&quot;).count</code>（gem の groupdate でも）</td><td><code>groupBy</code> は日付で丸められないので <code>$queryRaw</code></td></tr>
+      <tr><td>一覧を1本で</td><td><code>join()</code>・<code>with()</code>（別の1本）</td><td><code>includes</code>・<code>eager_load</code></td><td><code>include</code>（別のクエリ）・<code>select</code> で要る列だけ</td></tr>
+      <tr><td>カーソル</td><td><code>cursorPaginate()</code>・<code>where('id', '&lt;', $c)</code></td><td><code>where('id &lt; ?', c).order(id: :desc).limit</code></td><td><code>cursor: { id }</code>・<code>take</code></td></tr>
+      <tr><td>役割の確かめ</td><td>ミドルウェア・<code>Gate</code></td><td><code>before_action</code>・Pundit</td><td>なし（自分の関数）</td></tr>
+    </table>
+  </details>
+
+  <h2>9. 実装の記録</h2>
+  <p class="meta">レガシー版のあと（9-1・9-2）と、改善したあと（9-3・9-4）に、explain-change が書く。</p>
+  <h3>9-1. レガシー版</h3>
+  <p>【まだ実装していない】</p>
+  <h3>9-2. 測った問題と数字</h3>
+  <p>【まだ実装していない】</p>
+  <h3>9-3. 足したテスト</h3>
+  <p>【まだ実装していない】</p>
+  <h3>9-4. 改善版と、前と後の数字</h3>
+  <p>【まだ実装していない】</p>
+</main>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+  // page.js が選んだ表示（data-scheme）に合わせる。なければ端末の設定
+  const scheme = document.documentElement.dataset.scheme;
+  const dark = scheme ? scheme.startsWith("dark") : (document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches));
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/page.js"></script>
+</body>
+</html>
