@@ -11,7 +11,7 @@
           "sql": "select * from \"plans\" where \"plans\".\"id\" = 2 limit 1;\n\n-- 「どのプランを買ったか」だけ\ninsert into \"purchases\" (\"user_id\", \"plan_id\", \"updated_at\", \"created_at\")\nvalues (1, 2, '2026-11-13 11:59:34', '2026-11-13 11:59:34')\nreturning \"id\";\n\n-- 有料の印と期限を users に書く（トランザクションなし）\nupdate \"users\"\nset \"is_paid\" = true,\n    \"paid_until\" = '2027-02-13 10:00:00',\n    \"updated_at\" = '2026-11-13 11:59:34'\nwhere \"id\" = 1;",
           "notes": [
             "表がまだないので <code>DB::pretend()</code> で作らせた（以下も同じ）",
-            "性別を見ないので、女性も買える（FR-PAID-012）",
+            "性別はプロフィールの今の値で確かめる（男性でなければ 403）。プロフィールの編集で性別を書き換えられるので、女性が男性に変えると買える（FR-PAID-012・013）",
             "同時に2回押すと、2つとも同じ古い期限から足し、片方の期間が消える"
           ]
         },
