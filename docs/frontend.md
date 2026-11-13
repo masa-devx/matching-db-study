@@ -46,6 +46,6 @@ export default function SearchPage() {
 
 ## 03b で決めること
 
-- `frontend/` の中の置き場所（ページ・部品・API を呼ぶところ）
+- `frontend/client/` の中の置き場所（ページ・部品・API を呼ぶところ）
 - E2E の道具（[testing.md](../agents/rules/testing.md)）
 - 画面の CI（[ci.md](ci.md)）

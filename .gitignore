@@ -25,10 +25,10 @@ coverage/
 # 手元だけのメモ（個人のパスなど）
 *.local.md
 
-# Laravel が自動で作るもの（main には backend/ の .gitignore がないため、ここでも外す）
-backend/storage/logs/*.log
-backend/bootstrap/cache/*.php
-backend/storage/framework/views/*.php
+# Laravel が自動で作るもの（main には backend/ の下の .gitignore がないため、ここでも外す）
+backend/*/storage/logs/*.log
+backend/*/bootstrap/cache/*.php
+backend/*/storage/framework/views/*.php
 # エディタの補完のファイル（ide-helper:models --nowrite で作る。quality-types.md）
-backend/_ide_helper.php
-backend/_ide_helper_models.php
+backend/*/_ide_helper.php
+backend/*/_ide_helper_models.php

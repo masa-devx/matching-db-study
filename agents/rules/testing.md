@@ -1,9 +1,9 @@
 ---
 paths:
-  - "backend/tests/**"
-  - "backend/phpunit.xml"
-  - "frontend/src/**/*.test.*"
-  - "frontend/vitest.config.*"
+  - "backend/*/tests/**"
+  - "backend/*/phpunit.xml"
+  - "frontend/*/src/**/*.test.*"
+  - "frontend/*/vitest.config.*"
 ---
 
 # 単体/E2Eの切り分けと骨抜き禁止
@@ -14,8 +14,8 @@ paths:
 
 | 種別 | ツール | 置き場所 | 実行 | 何を守るか |
 | --- | --- | --- | --- | --- |
-| 単体 | Pest・Vitest（画面） | `backend/tests/Unit/`（`app/` の構造を再現）・`frontend/src/**/*.test.tsx` | `docker compose run --rm app ./vendor/bin/pest tests/Unit`（画面は 03b で決める） | ロジックの境界値・異常系 |
-| 結合 | Pest（テスト用の PostgreSQL に対して実行） | `backend/tests/Feature/` | `docker compose run --rm app ./vendor/bin/pest tests/Feature` | DB や API をまたぐ制御 |
+| 単体 | Pest・Vitest（画面） | `backend/client/tests/Unit/`（`app/` の構造を再現）・`frontend/client/src/**/*.test.tsx` | `docker compose run --rm app ./vendor/bin/pest tests/Unit`（画面は 03b で決める） | ロジックの境界値・異常系 |
+| 結合 | Pest（テスト用の PostgreSQL に対して実行） | `backend/client/tests/Feature/` | `docker compose run --rm app ./vendor/bin/pest tests/Feature` | DB や API をまたぐ制御 |
 | E2E | 03b（React を足す）で決める | 03b で決める | 03b で決める | 主要フロー・認可・状態遷移 |
 
 - 単体の置き場所は、実装のパスと対応づける（例: `app/Actions/Likes/CreateLike.php` → `tests/Unit/Actions/Likes/CreateLikeTest.php`）
@@ -43,7 +43,7 @@ E2Eは、固定のシードデータを入れたデータベースに対して�
 テストユーザーと権限の違いを確かめるためのデータを、あらかじめ用意しておく。
 
 - シードは1つの定義に集約し、テスト内で独自のマジック値を作らない
-  （`backend/database/seeders/` と `backend/database/factories/`）
+  （`backend/client/database/seeders/` と `backend/client/database/factories/`）
 - 最低限用意する: 権限ごとのログインユーザー（管理者・一般など固定メール＋固定ID）、
   他人のデータが見えないことを確かめるための「別の持ち主のデータ」
 - 実行の流れ: シード投入 → アプリ起動 → E2E 実行
