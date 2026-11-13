@@ -51,3 +51,7 @@ API の正本。作る前に設計を書き、確かめてもらってから実�
 | [06](06-blocks-withdrawal.md) | `DELETE /api/me/blocks/{public_id}` | 解除する | 実装済み（レガシー版） |
 | [06](06-blocks-withdrawal.md) | `DELETE /api/me` | 退会する | 実装済み（レガシー版） |
 | [06](06-blocks-withdrawal.md) | `GET /api/users`・`GET /api/me/likes`・`GET /api/me/matches`・`GET /api/me/talk-rooms`（06 の変更） | ブロックした・された相手を除く（退会した相手は検索だけ除く） | 実装済み（レガシー版） |
+| [07](07-paid-members.md) | `GET /api/plans` | 期間と値段の一覧（男性だけ） | 実装済み（レガシー版） |
+| [07](07-paid-members.md) | `POST /api/me/purchases` | 購入する（男性だけ。決済なし） | 実装済み（レガシー版） |
+| [07](07-paid-members.md) | `GET /api/me/purchases` | 購入の記録（男性だけ） | 実装済み（レガシー版） |
+| [07](07-paid-members.md) | `POST /api/me/talk-rooms/{public_id}/messages`・`POST /api/me/likes`・`GET /api/users`（07 の変更） | 男性の無料の会員を断る（送る・1日11回目のいいね・身長の条件） | 実装済み（レガシー版） |
