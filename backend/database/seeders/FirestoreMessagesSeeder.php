@@ -40,7 +40,8 @@ class FirestoreMessagesSeeder extends Seeder
             ? ['nullValue' => null]
             : ['timestampValue' => Carbon::parse($at, 'UTC')->toIso8601ZuluString()];
 
-        Http::withToken('owner')->delete("http://{$host}/emulator/v1/projects/{$project}/databases/(default)/documents")->throw();
+        // 10万件を消すのは、Emulator でも30秒（Http の既定の待ち時間）より長くかかることがあるので、待ち時間を延ばす
+        Http::withToken('owner')->timeout(300)->delete("http://{$host}/emulator/v1/projects/{$project}/databases/(default)/documents")->throw();
 
         $writes = [];
         $flush = function (bool $force = false) use (&$writes, $base): void {

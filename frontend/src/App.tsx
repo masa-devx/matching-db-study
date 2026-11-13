@@ -4,9 +4,11 @@ import './App.css'
 import HomePage from './HomePage'
 import LikesPage from './LikesPage'
 import LoginPage from './LoginPage'
+import MessagesFsPage from './MessagesFsPage'
 import MessagesPage from './MessagesPage'
 import RegisterPage from './RegisterPage'
 import SearchPage from './SearchPage'
+import TalkFsPage from './TalkFsPage'
 import TalkPage from './TalkPage'
 import UserPage from './UserPage'
 
@@ -27,6 +29,9 @@ export default function App() {
       <Route path="/messages" element={<MessagesPage />} />
       {/* 05 トーク画面。ルームは public_id（UUID）で指す */}
       <Route path="/messages/:roomId" element={<TalkPage />} />
+      {/* 05c Firestore 版（手元の Emulator）。05 の画面と並べて比べる */}
+      <Route path="/messages-fs" element={<MessagesFsPage />} />
+      <Route path="/messages-fs/:roomId" element={<TalkFsPage />} />
       {/* 04 検索。条件は sessionStorage に置き、戻ってきても残す */}
       <Route path="/search" element={<SearchPage />} />
       <Route path="*" element={<p>ページが見つかりません</p>} />

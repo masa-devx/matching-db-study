@@ -686,3 +686,10 @@
   background: #f8f9fa;
   border-top: 1px solid #dee2e6;
 }
+
+/* ---- 05c で足した。本番なら読み取り何件分かを出す ---- */
+.read-counter {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: #6c757d;
+}
