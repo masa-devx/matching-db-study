@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
+import Button from './components/Button'
+import Icon from './components/Icon'
+import { SkeletonProfile } from './components/Skeleton'
+import { useToast } from './components/Toast'
 
 // レガシー版（07）。購入の画面（/plans/:planId）。内容を確かめて「購入する」を押す。決済はしない（押したらすぐ有料）
 export default function PurchasePage() {
@@ -7,6 +11,7 @@ export default function PurchasePage() {
   const [plan, setPlan] = useState<any>(null)
   const [me, setMe] = useState<any>(null)
   const [sending, setSending] = useState(false)
+  const toast = useToast()
   const navigate = useNavigate()
   const api = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
   const headers = { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` }
@@ -39,11 +44,12 @@ export default function PurchasePage() {
       body: JSON.stringify({ plan_id: plan.id }),
     }).then(() => {
       // ステータスを見ない
-      navigate('/plans', { state: { message: '有料会員になりました' } })
+      toast('有料会員になりました')
+      navigate('/plans', { viewTransition: true })
     })
   }
 
-  if (!plan || !me) return null
+  if (!plan || !me) return <SkeletonProfile />
 
   // 購入したあとの期限：API と同じ計算を画面にも写す（今の期限、なければ今に月を足す。期限が過ぎていても古い期限から）
   const base = me.paid_until ? new Date(me.paid_until) : new Date()
@@ -53,8 +59,13 @@ export default function PurchasePage() {
   return (
     <div>
       <div className="talk-head">
-        <button className="button button-small button-ghost" onClick={() => navigate('/plans')}>
-          ←
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="プランの一覧へ戻る"
+          onClick={() => navigate('/plans', { viewTransition: true })}
+        >
+          <Icon name="back" />
         </button>
         <span className="row-name">購入の確かめ</span>
       </div>
@@ -64,9 +75,9 @@ export default function PurchasePage() {
         <p>購入すると、{until.toLocaleDateString('ja-JP')} まで有料会員になります。</p>
         <p className="muted-text">これは学習用です。お金は払いません。</p>
       </div>
-      <button className="button" onClick={buy} disabled={sending}>
+      <Button onClick={buy} loading={sending}>
         購入する
-      </button>
+      </Button>
     </div>
   )
 }

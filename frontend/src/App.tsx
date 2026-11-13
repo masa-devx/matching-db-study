@@ -1,7 +1,9 @@
 import { useState } from 'react'
-import { NavLink, Navigate, Route, Routes } from 'react-router'
+import { Navigate, Route, Routes } from 'react-router'
 import './App.css'
 import BlocksPage from './BlocksPage'
+import TabBar from './components/TabBar'
+import { ToastProvider } from './components/Toast'
 import HomePage from './HomePage'
 import LikesPage from './LikesPage'
 import LoginPage from './LoginPage'
@@ -47,32 +49,24 @@ export default function App() {
   // ログインしていない画面（ログイン・登録）は、真ん中に1列だけ
   if (!token) {
     return (
-      <div className="app">
-        <main className="main">{routes}</main>
-      </div>
+      <ToastProvider>
+        <div className="app">
+          <main className="main">{routes}</main>
+        </div>
+      </ToastProvider>
     )
   }
 
   // ログインしたあとは、四角の枠の中に画面とタブを入れる。タブは左から 検索・いいね・メッセージ・ホーム
+  // 03c：トーストはどの画面からも出せるように、枠の外側で1つだけ持つ。タブは部品（components/TabBar）にした
   return (
-    <div className="shell">
-      <div className="frame">
-        <main className="frame-main">{routes}</main>
-        <nav className="tabs">
-          <NavLink to="/search" className="tab">
-            <span className="tab-icon">⌕</span>検索
-          </NavLink>
-          <NavLink to="/likes" className="tab">
-            <span className="tab-icon">♥</span>いいね
-          </NavLink>
-          <NavLink to="/messages" className="tab">
-            <span className="tab-icon">✉</span>メッセージ
-          </NavLink>
-          <NavLink to="/home" className="tab">
-            <span className="tab-icon">●</span>ホーム
-          </NavLink>
-        </nav>
+    <ToastProvider>
+      <div className="shell">
+        <div className="frame">
+          <main className="frame-main">{routes}</main>
+          <TabBar />
+        </div>
       </div>
-    </div>
+    </ToastProvider>
   )
 }

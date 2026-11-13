@@ -1,16 +1,20 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
+import Button from './components/Button'
 
 // レガシー版（03b）。送る・トークンを置く・失敗を見せる・移るを、この部品にまとめて書く
 export default function LoginPage(props: any) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  // 03c：送っている間はボタンにスピナーを出し、押せなくする（FR-UI-026）
+  const [sending, setSending] = useState(false)
   const navigate = useNavigate()
 
   const submit = async (e: any) => {
     e.preventDefault()
     setError('')
+    setSending(true)
     // 送り先は画面ごとに書く。つながらないとき（API が止まっている）は、例外のまま何も出ない
     const res = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/auth/login`, {
       method: 'POST',
@@ -18,6 +22,7 @@ export default function LoginPage(props: any) {
       body: JSON.stringify({ email, password }),
     })
     const data = await res.json()
+    setSending(false)
     if (res.ok) {
       // XSS があると、画面で動いたスクリプトがここから持ち出せる
       sessionStorage.setItem('token', data.token)
@@ -47,9 +52,9 @@ export default function LoginPage(props: any) {
             <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
           </label>
           {error && <p className="error">{error}</p>}
-          <button className="button" type="submit">
+          <Button type="submit" loading={sending}>
             ログイン
-          </button>
+          </Button>
         </form>
         <p className="muted">
           はじめての方は <Link to="/register">登録</Link>

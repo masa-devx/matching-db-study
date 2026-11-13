@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
+import Avatar from './components/Avatar'
+import Button from './components/Button'
+import ConfirmDialog from './components/ConfirmDialog'
+import Icon from './components/Icon'
+import { SkeletonTalk } from './components/Skeleton'
+import { useToast } from './components/Toast'
+import UpsellDialog from './components/UpsellDialog'
 
 // レガシー版（05）。トーク画面（/messages/:roomId）。取る・続き・5秒ごとの読み直し・送る・見せるを、全部この部品に書く。
 export default function TalkPage() {
@@ -15,6 +22,10 @@ export default function TalkPage() {
   // 07：自分の性別（/api/me には出ないので、プロフィールをもう1回読む）と、誘導のモーダル
   const [myGender, setMyGender] = useState('')
   const [upsell, setUpsell] = useState(false)
+  // 03c：最初の1ページが届くまではスケルトン（FR-UI-025）。送っている間の吹き出し（FR-UI-030）
+  const [loaded, setLoaded] = useState(false)
+  const [pending, setPending] = useState<any[]>([])
+  const toast = useToast()
   const navigate = useNavigate()
 
   const api = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
@@ -33,6 +44,7 @@ export default function TalkPage() {
         setPage(p)
         // 50件より少なければ、もう古いものはない
         setDone(rows.length < 50)
+        setLoaded(true)
       })
   }
 
@@ -90,18 +102,26 @@ export default function TalkPage() {
       setUpsell(true)
       return
     }
-    // 入力を確かめない。空のまま送ると API が 500 を返すが、何も出さない
+    // 03c：応答を待たずに、半分の濃さの吹き出しを下に出す（届いたら、読み直した一覧の濃い吹き出しに替わる）
+    const temp = { id: `pending-${Date.now()}`, body, sender_id: me?.id, created_at: new Date().toISOString() }
+    setPending((now) => [...now, temp])
+    setBody('')
+    setTimeout(() => {
+      const box = document.querySelector('.frame-main')
+      if (box) box.scrollTop = box.scrollHeight
+    }, 50)
+    // 入力を確かめない。空のまま送ると API が 500 を返す（03c から、失敗はトーストで出す）
     fetch(`${api}/api/me/talk-rooms/${roomId}/messages`, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body }),
-    }).then(() => {
-      setBody('')
+      body: JSON.stringify({ body: temp.body }),
+    }).then((r) => {
+      setPending((now) => now.filter((m) => m.id !== temp.id))
+      if (!r.ok) {
+        toast('送れませんでした', 'error')
+        return
+      }
       load(1)
-      setTimeout(() => {
-        const box = document.querySelector('.frame-main')
-        if (box) box.scrollTop = box.scrollHeight
-      }, 300)
     })
   }
 
@@ -111,51 +131,56 @@ export default function TalkPage() {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: partner?.user_id }),
-    }).then(() => navigate('/messages'))
+    }).then(() => {
+      toast('ブロックしました')
+      navigate('/messages', { viewTransition: true })
+    })
   }
 
   return (
     <div className="talk">
       <div className="talk-head">
-        <button className="button button-small button-ghost" onClick={() => navigate('/messages')}>
-          ←
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="トークの一覧へ戻る"
+          onClick={() => navigate('/messages', { viewTransition: true })}
+        >
+          <Icon name="back" />
         </button>
-        {partner?.image && <img className="row-avatar" src={`${api}${partner.image}`} />}
+        {partner && <Avatar image={partner.image} name={partner.nickname} size={36} />}
         <span className="row-name">{partner?.nickname ?? ''}</span>
-        <button className="danger-link talk-block" onClick={() => setConfirming(true)}>
+        <button type="button" className="danger-link talk-block" onClick={() => setConfirming(true)}>
           ブロック
         </button>
       </div>
 
-      {confirming && (
-        // 06：確かめのモーダル（相手のプロフィールから写した）
-        <div className="modal-back" onClick={() => setConfirming(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <p className="modal-title">{partner?.nickname}さんをブロックしますか？</p>
-            <p>お互いに、検索・いいね・メッセージに出なくなります。あとで解除できます。</p>
-            <button className="button button-danger" onClick={block}>
-              ブロックする
-            </button>
-            <button className="button button-ghost" onClick={() => setConfirming(false)}>
-              キャンセル
-            </button>
-          </div>
-        </div>
-      )}
-
       {done && messages.length > 0 && <p className="soon">これより前のメッセージはありません</p>}
 
-      <ul className="talk-list">
-        {messages.map((m) => (
-          // 自分のものかは、中の連番の sender_id と、/api/me の id を比べて決める
-          <li key={m.id} className={m.sender_id === me?.id ? 'bubble bubble-mine' : 'bubble'}>
-            <span className="bubble-body">{m.body}</span>
-            <span className="bubble-time">
-              {new Date(m.created_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
-            </span>
-          </li>
-        ))}
-      </ul>
+      {!loaded ? (
+        <SkeletonTalk />
+      ) : (
+        <ul className="talk-list">
+          {[...messages, ...pending].map((m) => (
+            // 自分のものかは、中の連番の sender_id と、/api/me の id を比べて決める
+            <li
+              key={m.id}
+              className={[
+                'bubble',
+                m.sender_id === me?.id && 'bubble-mine',
+                String(m.id).startsWith('pending-') && 'is-pending',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+            >
+              <span className="bubble-body">{m.body}</span>
+              <span className="bubble-time">
+                {new Date(m.created_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
 
       <form className="talk-form" onSubmit={send}>
         <input
@@ -163,24 +188,24 @@ export default function TalkPage() {
           value={body}
           onChange={(e) => setBody(e.target.value)}
           placeholder="メッセージを入力"
+          aria-label="メッセージ"
         />
-        <button className="button button-small">送る{locked && <span className="paid-mark">有料</span>}</button>
+        <Button type="submit" small>
+          送る{locked && <span className="paid-mark">有料</span>}
+        </Button>
       </form>
-      {upsell && (
-        // 07：誘導のモーダル（送る・検索・いいねの画面に、同じものを書く）
-        <div className="modal-back" onClick={() => setUpsell(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <p className="modal-title">有料会員になると使えます</p>
-            <p>メッセージを送る・いいねを何回でも・身長で探す、が使えるようになります。</p>
-            <button className="button" onClick={() => navigate('/plans')}>
-              有料会員になる
-            </button>
-            <button className="button button-ghost" onClick={() => setUpsell(false)}>
-              閉じる
-            </button>
-          </div>
-        </div>
-      )}
+
+      <ConfirmDialog
+        open={confirming}
+        title={`${partner?.nickname ?? ''}さんをブロックしますか？`}
+        confirmLabel="ブロックする"
+        danger
+        onConfirm={block}
+        onClose={() => setConfirming(false)}
+      >
+        <p>お互いに、検索・いいね・メッセージに出なくなります。あとで解除できます。</p>
+      </ConfirmDialog>
+      <UpsellDialog open={upsell} onClose={() => setUpsell(false)} />
     </div>
   )
 }

@@ -1,4 +1,7 @@
-/* レガシー版（03b）。すべての画面のクラスを、この1枚に書く（どの画面で使っているかは、探さないと分からない） */
+/* レガシー版（03b）。すべての画面のクラスを、この1枚に書く（どの画面で使っているかは、探さないと分からない）。
+   03c で、値を docs/design.md にそろえ、部品（components/）の見た目と動きを足した。値は変数にせず、そのまま書く */
+
+/* ---- 土台 ---- */
 .app {
   max-width: 480px;
   margin: 0 auto;
@@ -11,102 +14,184 @@
 
 .card {
   padding: 24px;
-  background: #fff;
-  border: 1px solid #dee2e6;
-  border-radius: 8px;
+  background: #ffffff;
+  border-radius: 20px;
+  box-shadow:
+    0 1px 2px rgba(35, 28, 32, 0.04),
+    0 8px 24px rgba(35, 28, 32, 0.06);
 }
 
 .title {
+  margin: 0 0 16px;
   font-size: 20px;
+  font-weight: 800;
+  line-height: 1.3;
 }
 
 .label {
   display: block;
   margin-bottom: 16px;
   font-size: 14px;
+  color: #6f6368;
 }
 
 .input {
   display: block;
   width: 100%;
+  min-height: 44px;
   margin-top: 4px;
-  padding: 8px 12px;
+  padding: 10px 12px;
   font: inherit;
-  border: 1px solid #dee2e6;
-  border-radius: 8px;
-  background: #fff;
+  color: #231c20;
+  background: #ffffff;
+  border: 1px solid #ece3e1;
+  border-radius: 12px;
+  transition:
+    border-color 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+.input:focus {
+  border-color: #d12f5f;
+  outline: none;
+  box-shadow: 0 0 0 4px #fdecf1;
+}
+
+/* ---- ボタン（主な・控えめな・危ない。docs/design.md の「部品」） ---- */
 .button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
+  min-height: 44px;
   padding: 12px 16px;
   font: inherit;
-  font-weight: bold;
-  color: #fff;
-  background: #d6336c;
+  font-weight: 600;
+  color: #ffffff;
+  text-decoration: none;
+  background: linear-gradient(135deg, #d63a5f 0%, #dc4e3c 100%);
   border: none;
   border-radius: 999px;
+  box-shadow: 0 6px 20px rgba(214, 58, 95, 0.32);
   cursor: pointer;
+  transition: transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.button:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .button:disabled {
-  background: #6c757d;
   cursor: default;
+  opacity: 0.6;
+}
+
+.button[aria-busy="true"] {
+  opacity: 1;
 }
 
 .button-small {
   width: auto;
-  padding: 4px 12px;
+  min-height: 36px;
+  padding: 6px 16px;
   font-size: 14px;
-}
-
-.muted {
-  margin: 16px 0 0;
-  font-size: 14px;
-  color: #6c757d;
-}
-
-.error {
-  font-size: 14px;
-  color: #c92a2a;
-}
-
-.success {
-  color: #2b8a3e;
-}
-
-/* ---- 03b #36 で足した（マッチングアプリによくある見せ方）。値は上と同じものを、また書く ---- */
-.logo {
-  font-size: 20px;
-  font-weight: bold;
-  color: #d6336c;
-  letter-spacing: 0.5px;
-}
-
-.logo-large {
-  font-size: 24px;
 }
 
 .button-ghost {
-  color: #6c757d;
-  background: transparent;
-  border: 1px solid #dee2e6;
+  color: #d12f5f;
+  background: #ffffff;
+  border: 1px solid #ece3e1;
+  box-shadow: none;
+}
+
+.button-danger {
+  color: #ffffff;
+  background: #c23a3a;
+  box-shadow: none;
+}
+
+.button-white {
+  width: auto;
+  padding: 12px 32px;
+  color: #d12f5f;
+  background: #ffffff;
+  box-shadow: 0 12px 40px rgba(35, 28, 32, 0.18);
 }
 
 .button-space {
   margin-top: 8px;
 }
 
-.button-white {
-  width: auto;
-  padding: 12px 32px;
-  color: #d6336c;
-  background: #fff;
+/* 送信中は、文字を見えなくして幅を保ち、スピナーを重ねる（FR-UI-026） */
+.button-label.is-hidden {
+  visibility: hidden;
+}
+
+.spinner {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 999px;
+  animation: spin 700ms linear infinite;
+}
+
+/* 丸いアイコンだけのボタン（戻る） */
+.icon-button {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  color: #231c20;
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.icon-button:active {
+  transform: scale(0.94);
+}
+
+.muted {
+  margin: 16px 0 0;
+  font-size: 14px;
+  color: #6f6368;
+}
+
+.error,
+.modal-error {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: #c23a3a;
+}
+
+.success {
+  color: #2f9e6a;
+}
+
+.logo {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  background: linear-gradient(135deg, #d63a5f 0%, #dc4e3c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.logo-large {
+  font-size: 32px;
 }
 
 /* ログイン・登録 */
 .auth {
-  padding-top: 24px;
+  padding-top: 32px;
 }
 
 .brand {
@@ -117,40 +202,107 @@
 .brand-text {
   margin: 4px 0 0;
   font-size: 14px;
-  color: #6c757d;
+  color: #6f6368;
 }
 
-/* 下に固定したタブ */
+/* ---- アバター（FR-UI-031） ---- */
+.avatar {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  object-fit: cover;
+  border-radius: 999px;
+}
+
+.avatar-initial {
+  font-weight: 600;
+  color: #ffffff;
+  background: linear-gradient(135deg, #d63a5f 0%, #dc4e3c 100%);
+}
+
+/* 05c の画面（手を入れていない）が使う古い形 */
+.row-avatar {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 999px;
+}
+
+.me-avatar-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  background: linear-gradient(135deg, #d63a5f 0%, #dc4e3c 100%);
+}
+
+/* ---- 下に固定したタブ（すりガラス・SVG のアイコン・選んだタブの点） ---- */
 .tabs {
   display: flex;
   flex-shrink: 0;
   padding-bottom: env(safe-area-inset-bottom);
-  background: #fff;
-  border-top: 1px solid #dee2e6;
+  background: rgba(255, 255, 255, 0.8);
+  border-top: 1px solid #ece3e1;
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
 }
 
 .tab {
+  position: relative;
   display: flex;
   flex: 1;
   flex-direction: column;
   align-items: center;
-  padding: 8px 0;
-  font-size: 14px;
-  color: #6c757d;
+  min-height: 56px;
+  padding: 8px 0 12px;
+  font-size: 12px;
+  color: #6f6368;
   text-decoration: none;
+  transition: color 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .tab.active {
-  color: #d6336c;
-  font-weight: bold;
+  color: #d12f5f;
+  font-weight: 600;
+}
+
+/* 選んだタブの下の点 */
+.tab.active::after {
+  position: absolute;
+  bottom: 4px;
+  width: 4px;
+  height: 4px;
+  content: "";
+  background: #d12f5f;
+  border-radius: 999px;
 }
 
 .tab-icon {
-  font-size: 20px;
-  line-height: 1.2;
+  position: relative;
+  display: flex;
+  height: 24px;
 }
 
-/* プロフィール（相手・自分） */
+/* 未読の合計（FR-UI-032） */
+.tab-badge {
+  position: absolute;
+  top: -6px;
+  left: 16px;
+  min-width: 18px;
+  padding: 0 5px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  color: #ffffff;
+  text-align: center;
+  background: linear-gradient(135deg, #d63a5f 0%, #dc4e3c 100%);
+  border-radius: 999px;
+  animation: pop 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ---- プロフィール（相手・自分） ---- */
 .profile {
   display: flex;
   flex-direction: column;
@@ -161,8 +313,8 @@
   position: relative;
   overflow: hidden;
   aspect-ratio: 3 / 4;
-  background: #dee2e6;
-  border-radius: 16px;
+  background: #f4eeec;
+  border-radius: 20px;
 }
 
 .photo-img {
@@ -176,8 +328,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
   height: 100%;
-  color: #6c757d;
+  font-size: 48px;
+  font-weight: 600;
+  color: #ffffff;
+  background: linear-gradient(135deg, #d63a5f 0%, #dc4e3c 100%);
 }
 
 .photo-caption {
@@ -186,18 +342,19 @@
   bottom: 0;
   left: 0;
   padding: 48px 16px 16px;
-  color: #fff;
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.6));
+  color: #ffffff;
+  background: linear-gradient(transparent, rgba(35, 28, 32, 0.6));
 }
 
 .photo-name {
   font-size: 24px;
-  font-weight: bold;
+  font-weight: 800;
+  line-height: 1.3;
 }
 
 .photo-age {
   font-size: 20px;
-  font-weight: normal;
+  font-weight: 400;
 }
 
 .photo-sub {
@@ -211,16 +368,18 @@
 }
 
 .chip {
-  padding: 4px 12px;
+  min-height: 36px;
+  padding: 6px 12px;
   font-size: 14px;
-  background: #fff;
-  border: 1px solid #dee2e6;
+  background: #ffffff;
+  border: 1px solid #ece3e1;
   border-radius: 999px;
 }
 
 .section-title {
   margin: 0 0 8px;
   font-size: 16px;
+  font-weight: 600;
 }
 
 .intro {
@@ -228,51 +387,49 @@
   white-space: pre-wrap;
 }
 
-.toast {
-  margin: 0;
-  padding: 8px 16px;
-  text-align: center;
-  color: #fff;
-  background: #212529;
-  border-radius: 999px;
-}
-
-/* いいねのボタン（下のタブの上に浮かせる） */
+/* ---- いいねのボタン（下に浮かせる。押すとハートが弾む。FR-UI-027） ---- */
 .like-bar {
   position: sticky;
   bottom: 0;
   display: flex;
   justify-content: center;
+  padding: 8px 0;
 }
 
 .like-button {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-height: 52px;
   padding: 12px 32px;
   font: inherit;
-  font-weight: bold;
-  color: #fff;
-  background: #d6336c;
-  border: none;
+  font-weight: 600;
+  color: #d12f5f;
+  background: #ffffff;
+  border: 1px solid #ece3e1;
   border-radius: 999px;
-  box-shadow: 0 4px 12px rgba(214, 51, 108, 0.4);
+  box-shadow: 0 12px 40px rgba(35, 28, 32, 0.18);
   cursor: pointer;
+  transition: transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.like-button:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .like-button:disabled {
-  color: #d6336c;
-  background: #fff;
-  border: 1px solid #d6336c;
-  box-shadow: none;
   cursor: default;
 }
 
 .like-heart {
-  font-size: 20px;
+  display: flex;
 }
 
-/* マッチしたときに、画面いっぱいに出す */
+.like-button.is-liked .like-heart {
+  animation: pop 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ---- マッチの演出（FR-UI-028） ---- */
 .match-overlay {
   position: absolute;
   inset: 0;
@@ -283,30 +440,63 @@
   justify-content: center;
   gap: 16px;
   padding: 24px;
-  color: #fff;
+  color: #ffffff;
   text-align: center;
-  background: linear-gradient(160deg, #d6336c, #f06595);
+  background: linear-gradient(135deg, #d63a5f 0%, #dc4e3c 100%);
+  animation: fade-in 250ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.match-photos {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.match-photos .avatar {
+  border: 4px solid #ffffff;
+}
+
+.match-left {
+  animation: from-left 400ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.match-right {
+  margin-left: -16px;
+  animation: from-right 400ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.match-heart {
+  position: absolute;
+  z-index: 1;
+  /* 真ん中に置く（transform は弾む動きに使うので、位置は left で決める。ハートは 32px） */
+  left: calc(50% - 16px);
+  display: flex;
+  color: #ffffff;
+  animation: pop 400ms cubic-bezier(0.34, 1.56, 0.64, 1) 200ms both;
 }
 
 .match-title {
   margin: 0;
-  font-size: 24px;
-  font-weight: bold;
-}
-
-.match-avatar {
-  width: 160px;
-  height: 160px;
-  object-fit: cover;
-  border: 4px solid #fff;
-  border-radius: 50%;
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1.3;
 }
 
 .match-text {
   margin: 0;
 }
 
-/* 自分のプロフィール */
+.match-later {
+  min-height: 44px;
+  padding: 8px 24px;
+  font: inherit;
+  color: #ffffff;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+/* ---- 自分のプロフィール ---- */
 .me-head {
   display: flex;
   flex-direction: column;
@@ -315,29 +505,24 @@
 }
 
 .me-avatar {
-  width: 120px;
-  height: 120px;
-  object-fit: cover;
-  border: 3px solid #d6336c;
-  border-radius: 50%;
+  display: inline-flex;
+  padding: 3px;
+  background: linear-gradient(135deg, #d63a5f 0%, #dc4e3c 100%);
+  border-radius: 999px;
 }
 
-.me-avatar-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  color: #6c757d;
-  background: #dee2e6;
+.me-avatar .avatar {
+  border: 3px solid #faf6f4;
 }
 
 .me-name {
   margin-top: 8px;
+  color: #231c20;
 }
 
 .muted-text {
   font-size: 14px;
-  color: #6c757d;
+  color: #6f6368;
 }
 
 .avatar-picker {
@@ -358,16 +543,17 @@
   aspect-ratio: 1;
   object-fit: cover;
   border: 2px solid transparent;
-  border-radius: 50%;
+  border-radius: 999px;
   cursor: pointer;
 }
 
 .pick-on img {
-  border-color: #d6336c;
+  border-color: #d12f5f;
 }
 
 .pick input:focus-visible + img {
-  outline: 2px solid #212529;
+  outline: 2px solid #d12f5f;
+  outline-offset: 2px;
 }
 
 /* ---- ログインしたあとの枠。四角の枠の中に、画面（上）とタブ（下）を入れる ----
@@ -375,7 +561,7 @@
    タブレット（768〜1023px）：幅 600px の枠を真ん中に。上下に 24px あける
    PC（1024px〜）：幅 640px の枠を真ん中に。写真が縦に長くなりすぎないように、4:5 にする */
 .shell {
-  background: #fff;
+  background: #faf6f4;
 }
 
 .frame {
@@ -384,7 +570,7 @@
   flex-direction: column;
   height: 100dvh;
   overflow: hidden;
-  background: #f8f9fa;
+  background: #faf6f4;
 }
 
 /* 画面の中身だけがスクロールする。タブは枠の下に残る */
@@ -404,7 +590,7 @@
 .soon {
   margin: 48px 0;
   text-align: center;
-  color: #6c757d;
+  color: #6f6368;
 }
 
 .logout {
@@ -417,8 +603,11 @@
     max-width: 600px;
     height: calc(100dvh - 48px);
     margin: 24px auto;
-    border: 1px solid #dee2e6;
-    border-radius: 16px;
+    border: 1px solid #ece3e1;
+    border-radius: 28px;
+    box-shadow:
+      0 1px 2px rgba(35, 28, 32, 0.04),
+      0 8px 24px rgba(35, 28, 32, 0.06);
   }
 
   .frame-main {
@@ -437,19 +626,25 @@
   }
 }
 
-/* ---- 03b #37 で足した。一覧（送ったいいね・メッセージ）。値は上と同じものを、また書く ---- */
+/* ---- 一覧（送ったいいね・メッセージ・ブロック・プラン） ---- */
 .page-title {
   margin: 0 0 16px;
-  font-size: 20px;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: 0.02em;
 }
 
 .list {
   margin: 0;
   padding: 0;
+  overflow: hidden;
   list-style: none;
-  background: #fff;
-  border: 1px solid #dee2e6;
-  border-radius: 8px;
+  background: #ffffff;
+  border-radius: 20px;
+  box-shadow:
+    0 1px 2px rgba(35, 28, 32, 0.04),
+    0 8px 24px rgba(35, 28, 32, 0.06);
 }
 
 .list:empty {
@@ -457,68 +652,84 @@
 }
 
 .list li + li {
-  border-top: 1px solid #dee2e6;
+  border-top: 1px solid #ece3e1;
 }
 
 .row {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-height: 72px;
   padding: 12px 16px;
-  color: #212529;
+  color: #231c20;
   text-decoration: none;
 }
 
-.row-avatar {
-  flex-shrink: 0;
-  width: 56px;
-  height: 56px;
-  object-fit: cover;
-  border-radius: 50%;
-}
-
 .row-body {
+  display: flex;
   flex: 1;
+  flex-direction: column;
   min-width: 0; /* 長い名前で横にはみ出さないように */
 }
 
 .row-name {
   overflow: hidden;
-  font-weight: bold;
+  font-weight: 600;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
 .row-age {
-  font-weight: normal;
-  color: #6c757d;
+  margin-left: 4px;
+  font-weight: 400;
+  color: #6f6368;
 }
 
 .row-sub {
   overflow: hidden;
   font-size: 14px;
-  color: #6c757d;
+  color: #6f6368;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
 .row-date {
   flex-shrink: 0;
-  font-size: 14px;
-  color: #6c757d;
+  font-size: 12px;
+  color: #6f6368;
 }
 
+.row-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.row-action {
+  flex-shrink: 0;
+  width: auto;
+}
+
+/* 未読の数・マッチ済み・選ぶ */
 .badge {
   flex-shrink: 0;
-  padding: 4px 12px;
-  font-size: 14px;
-  font-weight: bold;
-  color: #fff;
-  background: #d6336c;
+  min-width: 20px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 20px;
+  color: #ffffff;
+  text-align: center;
+  background: linear-gradient(135deg, #d63a5f 0%, #dc4e3c 100%);
   border-radius: 999px;
 }
 
-/* 04 検索（/search）。値は 03b と同じものをそのまま書く */
+.fs-link {
+  margin-bottom: 16px;
+}
+
+/* ---- 04 検索 ---- */
 .search-head {
   display: flex;
   align-items: center;
@@ -551,14 +762,21 @@
 .pref-list .chip {
   font: inherit;
   font-size: 14px;
-  color: #212529;
+  color: #231c20;
   cursor: pointer;
+  transition:
+    background 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.pref-list .chip:active {
+  transform: scale(0.97);
 }
 
 .chip-on {
-  color: #fff !important;
-  background: #d6336c;
-  border-color: #d6336c;
+  color: #d12f5f !important;
+  background: #fdecf1;
+  border-color: #d12f5f;
 }
 
 .user-grid {
@@ -575,10 +793,21 @@
   display: block;
   overflow: hidden;
   aspect-ratio: 3 / 4;
-  color: #fff;
+  color: #ffffff;
   text-decoration: none;
-  background: #dee2e6;
-  border-radius: 16px;
+  background: #f4eeec;
+  border-radius: 20px;
+  transition: transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.user-card:active {
+  transform: scale(0.98);
+}
+
+.user-card-photo {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .user-card-caption {
@@ -587,51 +816,31 @@
   bottom: 0;
   left: 0;
   padding: 32px 12px 12px;
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.6));
+  background: linear-gradient(transparent, rgba(35, 28, 32, 0.6));
 }
 
 .user-card-name {
-  font-weight: bold;
+  font-weight: 600;
 }
 
 .user-card-sub {
   font-size: 14px;
 }
 
-/* ---- 05 で足した。トークの一覧の未読と、トーク画面。値は上と同じものを、また書く ---- */
-.row-side {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-}
-
-.badge {
-  min-width: 20px;
-  padding: 0 6px;
-  font-size: 12px;
-  line-height: 20px;
-  color: #fff;
-  text-align: center;
-  background: #d6336c;
-  border-radius: 10px;
-}
-
+/* ---- 05 トーク画面 ---- */
 .talk-head {
   position: sticky;
   top: -16px;
+  z-index: 1;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   margin: -16px -16px 12px;
-  padding: 8px 16px;
-  background: #f8f9fa;
-  border-bottom: 1px solid #dee2e6;
-}
-
-.talk-head .row-avatar {
-  width: 36px;
-  height: 36px;
+  padding: 6px 12px;
+  background: rgba(250, 246, 244, 0.85);
+  border-bottom: 1px solid #ece3e1;
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
 }
 
 .talk-list {
@@ -648,21 +857,21 @@
   align-items: flex-end;
   gap: 6px;
   max-width: 80%;
+  animation: rise 250ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .bubble-body {
-  padding: 8px 12px;
+  padding: 10px 14px;
   white-space: pre-wrap;
   word-break: break-word;
-  background: #fff;
-  border: 1px solid #dee2e6;
-  border-radius: 16px;
+  background: #f4eeec;
+  border-radius: 20px 20px 20px 6px;
 }
 
 .bubble-time {
   flex-shrink: 0;
-  font-size: 11px;
-  color: #6c757d;
+  font-size: 12px;
+  color: #6f6368;
 }
 
 .bubble-mine {
@@ -671,118 +880,347 @@
 }
 
 .bubble-mine .bubble-body {
-  color: #fff;
-  background: #d6336c;
-  border-color: #d6336c;
+  color: #ffffff;
+  background: linear-gradient(135deg, #d63a5f 0%, #dc4e3c 100%);
+  border-radius: 20px 20px 6px 20px;
+}
+
+/* 送っている間は半分の濃さ（FR-UI-030） */
+.bubble.is-pending {
+  opacity: 0.5;
 }
 
 .talk-form {
   position: sticky;
   bottom: -16px;
   display: flex;
+  align-items: center;
   gap: 8px;
   margin: 0 -16px -16px;
   padding: 8px 16px;
-  background: #f8f9fa;
-  border-top: 1px solid #dee2e6;
+  background: rgba(250, 246, 244, 0.85);
+  border-top: 1px solid #ece3e1;
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
 }
 
-/* ---- 05c で足した。本番なら読み取り何件分かを出す ---- */
-.read-counter {
-  margin: 0 0 12px;
-  font-size: 12px;
-  color: #6c757d;
+.talk-form .input {
+  margin-top: 0;
+  border-radius: 999px;
 }
 
-/* 06：ブロック・退会の確かめ（画面ごとに同じものを書く） */
-.modal-back {
-  position: absolute;
-  inset: 0;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: rgba(0, 0, 0, 0.45);
+/* 送るボタンは縮めない・折り返さない */
+.talk-form .button {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
-.modal {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 100%;
-  max-width: 360px;
-  padding: 20px;
-  background: #fff;
-  border-radius: 16px;
-}
-
-.modal-title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: bold;
-}
-
-.modal-error {
-  margin: 0;
-  color: #c23a3a;
-}
-
-.button-danger {
-  color: #fff;
-  background: #c23a3a;
-}
-
-.danger-link {
-  margin-top: 8px;
-  color: #c23a3a;
-  background: none;
-  border: none;
-  font: inherit;
-  cursor: pointer;
-}
-
-/* トーク画面の上の帯で、ブロックを右に寄せる */
 .talk-block {
   margin: 0 0 0 auto;
 }
 
-/* ホームの「ブロックした相手」（リンクをボタンの形で出す） */
-a.button {
+/* ---- 05c：本番なら読み取り何件分かを出す ---- */
+.read-counter {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: #6f6368;
+}
+
+/* ---- 確認のモーダル（<dialog>。FR-UI-023）。スマホは下からのシート、768px 以上は真ん中 ---- */
+.sheet {
+  width: 100%;
+  max-width: 100%;
+  margin: auto 0 0;
+  padding: 0;
+  color: #231c20;
+  background: #ffffff;
+  border: none;
+  border-radius: 28px 28px 0 0;
+  box-shadow: 0 12px 40px rgba(35, 28, 32, 0.18);
+}
+
+.sheet[open] {
+  animation: rise 250ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.sheet::backdrop {
+  background: rgba(35, 28, 32, 0.45);
+  animation: fade-in 250ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.sheet-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px 24px calc(24px + env(safe-area-inset-bottom));
+}
+
+.sheet-body p {
+  margin: 0;
+}
+
+.sheet-body .label {
+  margin: 0;
+}
+
+@media (min-width: 768px) {
+  .sheet {
+    max-width: 400px;
+    margin: auto;
+    border-radius: 28px;
+  }
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+/* ブロック・退会（06）の文字のボタン */
+.danger-link {
+  min-height: 44px;
+  margin-top: 8px;
+  padding: 8px;
+  font: inherit;
+  font-size: 14px;
+  color: #c23a3a;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+/* ---- トースト（FR-UI-024）。画面の上の真ん中に1つだけ ---- */
+.toast-area {
+  position: fixed;
+  top: calc(12px + env(safe-area-inset-top));
+  left: 50%;
+  z-index: 100;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #231c20;
+  white-space: nowrap;
+  background: #ffffff;
+  border-radius: 999px;
+  box-shadow: 0 12px 40px rgba(35, 28, 32, 0.18);
+  animation:
+    drop-in 250ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    fade-out 200ms cubic-bezier(0.2, 0.8, 0.2, 1) 2800ms forwards;
+}
+
+.toast-dot {
+  width: 8px;
+  height: 8px;
+  background: #2f9e6a;
+  border-radius: 999px;
+}
+
+.toast-error .toast-dot {
+  background: #c23a3a;
+}
+
+/* ---- スケルトン（FR-UI-025）。左から右へ光が流れる ---- */
+.skeleton {
+  position: relative;
   display: block;
-  box-sizing: border-box;
+  overflow: hidden;
+  background: #f4eeec;
+  border-radius: 8px;
+}
+
+/* 光の帯を transform で動かす（background-position を動かすと、描き直しが毎回起きる） */
+.skeleton::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+  transform: translateX(-100%);
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton-circle {
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+}
+
+.skeleton-line {
+  width: 60%;
+  height: 14px;
+  margin: 4px 0;
+}
+
+.skeleton-short {
+  width: 40%;
+}
+
+.skeleton-block {
+  height: 120px;
+  border-radius: 20px;
+}
+
+.skeleton-bubble {
+  height: 40px;
+  max-width: 100%;
+  border-radius: 20px;
+}
+
+/* ---- 空の状態（FR-UI-033） ---- */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin: 48px 0;
   text-align: center;
-  text-decoration: none;
+  animation: fade-in 250ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* ブロックした相手の行の「解除」 */
-.row-action {
+.empty-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  color: #d12f5f;
+  background: #fdecf1;
+  border-radius: 999px;
+}
+
+.empty-text {
+  margin: 0;
+  color: #6f6368;
+}
+
+.empty-action {
   width: auto;
-  flex-shrink: 0;
+  padding: 12px 24px;
 }
 
-/* 07：有料の印（無料の男性に、使えない機能の横に出す） */
+/* ---- 07：有料の印と、検索の身長の条件 ---- */
 .paid-mark {
   margin-left: 6px;
   padding: 2px 8px;
   font-size: 12px;
-  color: #fff;
-  background: #e8a317;
-  border-radius: 999px;
+  font-weight: 600;
+  color: #d12f5f;
+  background: #fdecf1;
+  border-radius: 8px;
 }
 
-/* 07：検索の身長の条件（無料の男性には、入力の代わりにこのボタンを出す） */
+.button .paid-mark {
+  color: #d12f5f;
+  background: #ffffff;
+}
+
 .paid-lock {
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 16px;
   padding: 12px;
   font: inherit;
   text-align: left;
-  color: inherit;
-  background: #f8f9fa;
-  border: 1px dashed #ced4da;
+  color: #231c20;
+  background: #f4eeec;
+  border: 1px dashed #ece3e1;
   border-radius: 12px;
   cursor: pointer;
 }
 
 .hidden-range {
   display: none;
+}
+
+/* ---- 動き（transform と opacity だけを動かす。NFR-UI-006） ---- */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pop {
+  0% {
+    transform: scale(0.6);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+
+@keyframes drop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes from-left {
+  from {
+    opacity: 0;
+    transform: translateX(-48px);
+  }
+}
+
+@keyframes from-right {
+  from {
+    opacity: 0;
+    transform: translateX(48px);
+  }
+}
+
+@keyframes shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* 画面の切り替え（View Transitions。FR-UI-029）。使えないブラウザでは何も起きない */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 250ms;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* OS で「視差効果を減らす」を選んだ人には、動きを止めて、出る・消えるだけにする（NFR-UI-004） */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after,
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
 }
