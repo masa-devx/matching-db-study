@@ -60,6 +60,6 @@ EARS形式で書く場合は「【条件・事象】のとき、システムは�
 
 ## 関連する設計・テスト
 
-【記入】その一歩の解説のページ（記入例：[../../explanations/02-likes.html](../../explanations/02-likes.html)）と、要件 ID に対応するテスト（記入例：`backend/tests/Feature/LikeTest.php` の `FR-001`）。直す前に足す「振る舞いを固定するテスト」は、ここの要件 ID を名前に入れる。あとの一歩で書き足したら、リンクを1行ずつ足す。
+【記入】その一歩の解説のページ（記入例：[../../explanations/02-likes.html](../../explanations/02-likes.html)）と、要件 ID に対応するテスト（記入例：`backend/client/tests/Feature/LikeTest.php` の `FR-001`）。直す前に足す「振る舞いを固定するテスト」は、ここの要件 ID を名前に入れる。あとの一歩で書き足したら、リンクを1行ずつ足す。
 
 要件を変更したら、影響するプランとテストも確認する。未実装の要件を実装済みとして記録しない。

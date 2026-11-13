@@ -4,7 +4,7 @@ PR を出したとき・ブランチに push したときに、GitHub の上で�
 
 ## 動かすもの
 
-| ジョブ | コマンド（`backend/` で） | 落ちる条件 |
+| ジョブ | コマンド（`backend/client/` で） | 落ちる条件 |
 | --- | --- | --- |
 | 整形の確かめ | `./vendor/bin/pint --test` | 整形されていないファイルがある |
 | 静的解析 | `./vendor/bin/phpstan analyse --memory-limit=1G` | PHPStan（Larastan）の指摘がある。レベルはブランチの `phpstan.neon` に従う（[quality-types.md](../agents/rules/quality-types.md)） |
@@ -25,7 +25,7 @@ PR を出したとき・ブランチに push したときに、GitHub の上で�
 
 | もの | 決まり |
 | --- | --- |
-| 置き場所 | `.github/workflows/backend.yml`。**`legacy-repo` に置く**（`main` には `backend/` がないので、`main` に置くと動かせない）。`refactored-repo` には取り込みで入る |
+| 置き場所 | `.github/workflows/backend.yml`。**`legacy-repo` に置く**（`main` には `backend/client/` がないので、`main` に置くと動かせない）。`refactored-repo` には取り込みで入る |
 | 実行する機械 | GitHub の Ubuntu |
 | PHP | `shivammathur/setup-php` で PHP 8.5（手元の Docker と同じ版）と、`pdo_pgsql`・`intl`・`zip` を入れる。Docker のイメージは作り直さない（遅いため） |
 | Composer | `composer install` を、`composer.lock` のとおりに。`vendor/` は、`composer.lock` が変わらなければ、前の結果を使い回す（キャッシュ） |

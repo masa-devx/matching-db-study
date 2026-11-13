@@ -1,7 +1,7 @@
 ---
 paths:
-  - "backend/database/**"
-  - "backend/app/Models/**"
+  - "backend/*/database/**"
+  - "backend/*/app/Models/**"
   - "compose.yaml"
 ---
 

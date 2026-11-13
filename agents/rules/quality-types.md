@@ -1,10 +1,10 @@
 ---
 paths:
-  - "backend/app/**"
-  - "backend/database/**"
-  - "backend/routes/**"
-  - "backend/tests/**"
-  - "backend/phpstan.neon"
+  - "backend/*/app/**"
+  - "backend/*/database/**"
+  - "backend/*/routes/**"
+  - "backend/*/tests/**"
+  - "backend/*/phpstan.neon"
 ---
 
 # PHP の型と PHPDoc
@@ -42,7 +42,7 @@ paths:
   /** @return Collection<int, User> */
   ```
 
-- Model の列の型（`@property`）と、Eloquent の魔法のメソッド（`where〇〇()` など）の `@method` は、**Model には書かない**。型の確かめは、Larastan がマイグレーションと Eloquent の仕組みから推し量る。エディタの補完が要るときは、Laravel IDE Helper で別のファイル（`backend/_ide_helper_models.php`。git に入れない）に書き出す。Model に書くと長くなり、マイグレーションと同じ事実が2か所になって、作り直し忘れでずれるため（architecture.md の SSoT）
+- Model の列の型（`@property`）と、Eloquent の魔法のメソッド（`where〇〇()` など）の `@method` は、**Model には書かない**。型の確かめは、Larastan がマイグレーションと Eloquent の仕組みから推し量る。エディタの補完が要るときは、Laravel IDE Helper で別のファイル（`backend/client/_ide_helper_models.php`。git に入れない）に書き出す。Model に書くと長くなり、マイグレーションと同じ事実が2か所になって、作り直し忘れでずれるため（architecture.md の SSoT）
 - Model に手で書くのは、リレーションの戻り値（`@return HasOne<Profile, $this>`）など、Larastan が推し量れない型だけ
 - `mixed` は、本当に何でも来るところ（`$request->all()` の中身など）だけにする
 - 型を書いても PHP は実行するときに確かめるので、型が合わないと `TypeError` になる。レガシー版でも、型を書いたら、curl で動きを確かめ直す
