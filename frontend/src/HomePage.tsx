@@ -197,6 +197,12 @@ export default function HomePage(props: any) {
           </form>
         )}
       </div>
+      {/* 07：有料会員の入口は、男性にだけ出す。状態は is_paid だけを見る（期限が過ぎていても「有料会員」） */}
+      {me.profile?.gender === 'male' && (
+        <Link to="/plans" className="button button-ghost logout">
+          {me.is_paid ? `有料会員（${new Date(me.paid_until).toLocaleDateString('ja-JP')} まで）` : '有料会員になる'}
+        </Link>
+      )}
       <Link to="/blocks" className="button button-ghost logout">
         ブロックした相手
       </Link>

@@ -64,6 +64,9 @@ export default function SearchPage() {
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState(false)
+  // 07：自分が男性の無料の会員か（身長の条件を使えない）と、誘導のモーダル
+  const [locked, setLocked] = useState(false)
+  const [upsell, setUpsell] = useState(false)
   const navigate = useNavigate()
 
   // 1ページ分を取って、今の一覧の後ろに足す。重なっていても、そのまま足す
@@ -81,7 +84,14 @@ export default function SearchPage() {
     fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/users?${params}`, {
       headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
     })
-      .then((r) => r.json())
+      .then((r) => {
+        // 07：身長の条件を残したまま無料になったときなど、API が 403 を返したら、モーダルを出して空にする
+        if (r.status === 403) {
+          setUpsell(true)
+          return []
+        }
+        return r.json()
+      })
       .then((rows) => {
         setUsers((before) => (p === 1 ? rows : [...before, ...rows]))
         setPage(p)
@@ -100,6 +110,18 @@ export default function SearchPage() {
     // 戻ってくるたびに、1ページ目から読み直す（どこまで見ていたかは覚えない）
     load(1, conditions)
   }, [conditions])
+
+  useEffect(() => {
+    // 07：男性の無料の会員かを知るために、自分と自分のプロフィールを読む（ホームと同じ2本を、ここにも写す）
+    const headers = { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me`, { headers })
+      .then((r) => r.json())
+      .then((u) =>
+        fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/users/${u.public_id}`, { headers }),
+      )
+      .then((r) => r.json())
+      .then((u) => setLocked(u.profile?.gender === 'male' && !u.is_paid))
+  }, [])
 
   useEffect(() => {
     // スクロールするのは枠の中（.frame-main）なので、その要素を探して見張る
@@ -174,7 +196,13 @@ export default function SearchPage() {
               />
             </label>
           </div>
-          <div className="search-range">
+          {/* 07：男性の無料の会員には、身長の条件に「有料」の印を出し、押すとモーダル */}
+          {locked && (
+            <button type="button" className="paid-lock" onClick={() => setUpsell(true)}>
+              身長で探す <span className="paid-mark">有料</span>
+            </button>
+          )}
+          <div className={locked ? 'search-range hidden-range' : 'search-range'}>
             <label className="label">
               身長（下）
               <input
@@ -246,6 +274,21 @@ export default function SearchPage() {
 
       {loading && <p className="soon">読み込み中…</p>}
       {done && users.length > 0 && <p className="soon">これで全員です</p>}
+      {upsell && (
+        // 07：誘導のモーダル（送る・検索・いいねの画面に、同じものを書く）
+        <div className="modal-back" onClick={() => setUpsell(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <p className="modal-title">有料会員になると使えます</p>
+            <p>メッセージを送る・いいねを何回でも・身長で探す、が使えるようになります。</p>
+            <button className="button" onClick={() => navigate('/plans')}>
+              有料会員になる
+            </button>
+            <button className="button button-ghost" onClick={() => setUpsell(false)}>
+              閉じる
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

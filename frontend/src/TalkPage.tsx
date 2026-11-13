@@ -12,6 +12,9 @@ export default function TalkPage() {
   const [body, setBody] = useState('')
   // 06：ブロックの確かめのモーダルを開いているか
   const [confirming, setConfirming] = useState(false)
+  // 07：自分の性別（/api/me には出ないので、プロフィールをもう1回読む）と、誘導のモーダル
+  const [myGender, setMyGender] = useState('')
+  const [upsell, setUpsell] = useState(false)
   const navigate = useNavigate()
 
   const api = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
@@ -42,7 +45,13 @@ export default function TalkPage() {
     // 自分のメッセージかを見分けるために、自分の id を読む（ホームでも読んでいるが、もう一度読む）
     fetch(`${api}/api/me`, { headers })
       .then((r) => r.json())
-      .then(setMe)
+      .then((u) => {
+        setMe(u)
+        // 07：性別を知るために、自分のプロフィールを読む（ホームと同じ2本を、ここにも写す）
+        return fetch(`${api}/api/users/${u.public_id}`, { headers })
+      })
+      .then((r) => r.json())
+      .then((u) => setMyGender(u.profile?.gender ?? ''))
     // 相手の名前と写真を出すために、トークの一覧を全部読んで、このルームを探す
     fetch(`${api}/api/me/talk-rooms`, { headers })
       .then((r) => r.json())
@@ -72,8 +81,15 @@ export default function TalkPage() {
     return () => box.removeEventListener('scroll', onScroll)
   }, [page, done, messages])
 
+  // 07：男性の無料の会員は送れない（is_paid だけを見る。API の判断を、画面にも写す）
+  const locked = myGender === 'male' && !me?.is_paid
+
   const send = (e: any) => {
     e.preventDefault()
+    if (locked) {
+      setUpsell(true)
+      return
+    }
     // 入力を確かめない。空のまま送ると API が 500 を返すが、何も出さない
     fetch(`${api}/api/me/talk-rooms/${roomId}/messages`, {
       method: 'POST',
@@ -148,8 +164,23 @@ export default function TalkPage() {
           onChange={(e) => setBody(e.target.value)}
           placeholder="メッセージを入力"
         />
-        <button className="button button-small">送る</button>
+        <button className="button button-small">送る{locked && <span className="paid-mark">有料</span>}</button>
       </form>
+      {upsell && (
+        // 07：誘導のモーダル（送る・検索・いいねの画面に、同じものを書く）
+        <div className="modal-back" onClick={() => setUpsell(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <p className="modal-title">有料会員になると使えます</p>
+            <p>メッセージを送る・いいねを何回でも・身長で探す、が使えるようになります。</p>
+            <button className="button" onClick={() => navigate('/plans')}>
+              有料会員になる
+            </button>
+            <button className="button button-ghost" onClick={() => setUpsell(false)}>
+              閉じる
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
