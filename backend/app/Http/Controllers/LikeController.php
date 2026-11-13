@@ -26,6 +26,7 @@ use Illuminate\Support\Facades\Http;
  * 05 で、マッチしたときにトークルームと参加者2人を作るようにした（送ってマッチしたときに3本増える）。
  * 05c で、マッチしたときに Firestore（手元の Emulator）にもルームと2人の受信箱を作るようにした（SQL 2本・HTTP 3本が増える）。
  * 06 で、ブロックした・された相手を除いた（向きごとに2本足す。退会した相手は除かない。docs/api/06-blocks-withdrawal.md）。
+ * 07 で、男性の無料の会員のいいねを1日10回までにした（UTC の日付で数えてから入れる。3本増える。docs/api/07-paid-members.md）。
  */
 class LikeController extends Controller
 {
@@ -37,6 +38,17 @@ class LikeController extends Controller
             return response()->json(['message' => 'ログインしてください'], 401);
         }
         $payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));
+
+        // 07：男性の無料の会員は使えない（is_paid だけを見る。paid_until は見ない。送る・いいね・検索に写した）
+        $myProfile = Profile::where('user_id', $payload->sub)->first();
+        $myUser = User::find($payload->sub);
+        if ($myProfile?->gender === 'male' && ! $myUser->is_paid) {
+            // 無料の男性は1日10回まで。今日はアプリの時計（UTC）の日付。数えてから入れる（ロックなし）
+            $today = Like::where('from_user_id', $payload->sub)->whereDate('created_at', now()->toDateString())->count();
+            if ($today >= 10) {
+                return response()->json(['message' => '有料会員になると使えます'], 403);
+            }
+        }
 
         // #46：相手は public_id（UUID）で来るので、中の id を読む。いない UUID なら null（下の insert が NOT NULL で 500）
         $toUserId = User::where('public_id', $request->input('user_id'))->value('id');

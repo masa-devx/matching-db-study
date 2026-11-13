@@ -8,7 +8,9 @@ use App\Http\Controllers\EmailVerificationController;
 use App\Http\Controllers\FirebaseTokenController;
 use App\Http\Controllers\LikeController;
 use App\Http\Controllers\MessageController;
+use App\Http\Controllers\PlanController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\TalkRoomController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserMatchController;
@@ -61,3 +63,7 @@ Route::post('/me/blocks', [BlockController::class, 'store']);
 Route::get('/me/blocks', [BlockController::class, 'index']);
 Route::delete('/me/blocks/{publicId}', [BlockController::class, 'destroy']);
 Route::delete('/me', [UserController::class, 'destroy']);
+
+Route::get('/plans', [PlanController::class, 'index']);
+Route::post('/me/purchases', [PurchaseController::class, 'store']);
+Route::get('/me/purchases', [PurchaseController::class, 'index']);
