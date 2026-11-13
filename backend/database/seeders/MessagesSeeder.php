@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\DB;
  * - ③ メッセージを 10万件。search00001 の1つ目のルームに 2万件、2〜10個目に 2000件ずつ、51〜100個目は 0件（やり取りのない相手）、
  *   残り 6万2000件を、ほかのルームにばらまく。全部を時刻の順に並べてから入れる（id の順と時刻の順をそろえる）
  * - 参加者の 3割は、まだ一度も開いていない（last_read_at が NULL）。残りは、最後に読んだ時刻をばらつかせる
+ * - 時刻は流したときの今を基準にする（中身は乱数の種で毎回同じ。時刻だけが動く）
  * - 流し直すと、前に入れた試しの会員どうしのいいねとマッチを消してから入れ直す（ルーム・参加者・メッセージは外部キーの CASCADE で消える）
  */
 class MessagesSeeder extends Seeder
@@ -41,7 +42,9 @@ class MessagesSeeder extends Seeder
     {
         $faker = fake('ja_JP');
         $faker->seed(42);
-        $now = Carbon::parse('2026-11-13 09:00:00');
+        // 時刻は流したときの「今」を基準にする（決まった日時にすると、DB の今より未来のメッセージになり、
+        // 送ったものが新しい50件に入らず、読んだことにしても未来の分が未読に残る。#59 で画面を測って分かった）
+        $now = Carbon::now()->startOfMinute();
 
         $members = DB::table('users')->where('email', 'like', 'search%@example.test')->orderBy('email')->pluck('id')->all();
         if (count($members) < 20000) {

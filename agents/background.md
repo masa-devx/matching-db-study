@@ -53,6 +53,7 @@
 | 02 | いいね | 中間テーブル・自分の表どうしの多対多・UNIQUE で二重を防ぐ |
 | 03 | マッチ | 自己結合（お互いにいいね）・INNER と LEFT JOIN |
 | 03b | React を足す | Vite・API との通信・Context で状態を持つ・コンポーネント設計・テスト・開発効率・CORS。レガシー版はひな形のままのスパゲティコード（1画面に1つの大きな部品）でトークンを sessionStorage に置き、改善版は container／presenter に分け、HttpOnly の Cookie に移して XSS への強さを比べる（[docs/frontend.md](../docs/frontend.md)） |
+| 03c | 画面の見た目と動き | モーダル（`<dialog>`）・トースト・スケルトン・楽観的な表示（`useOptimistic`）・View Transitions・動きを減らす設定。動かすのは `transform` と `opacity` だけにして、CLS とバンドルの大きさを前と後で測る（[docs/design.md](../docs/design.md)） |
 | 04 | 検索と一覧 | 複合インデックス・EXPLAIN・OFFSET とカーソル・大量のデータ。画面の表示速度（長い一覧・Web Vitals・バンドルの大きさ）も、同じ一覧で測る |
 | 05 | メッセージ | 相手ごとの最新の1件（ウィンドウ関数）・N+1 |
 | 05b | Context から Zustand に移す | Context の描き直しの範囲・Zustand で必要な部品だけ描き直す |

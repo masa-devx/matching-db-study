@@ -7,6 +7,7 @@ import LoginPage from './LoginPage'
 import MessagesPage from './MessagesPage'
 import RegisterPage from './RegisterPage'
 import SearchPage from './SearchPage'
+import TalkPage from './TalkPage'
 import UserPage from './UserPage'
 
 // レガシー版（03b）。画面の切り替えと、ログインしたあとの枠（四角の枠と、その下のタブ）を、ここに全部書く。
@@ -22,8 +23,10 @@ export default function App() {
       <Route path="/home" element={<HomePage setToken={setToken} />} />
       <Route path="/users/:publicId" element={<UserPage />} />
       <Route path="/likes" element={<LikesPage />} />
-      {/* マッチした相手は、メッセージのタブで見る（マッチだけの画面は作らない） */}
+      {/* マッチした相手は、メッセージのタブで見る（マッチだけの画面は作らない）。05 から、トークの一覧 */}
       <Route path="/messages" element={<MessagesPage />} />
+      {/* 05 トーク画面。ルームは public_id（UUID）で指す */}
+      <Route path="/messages/:roomId" element={<TalkPage />} />
       {/* 04 検索。条件は sessionStorage に置き、戻ってきても残す */}
       <Route path="/search" element={<SearchPage />} />
       <Route path="*" element={<p>ページが見つかりません</p>} />
