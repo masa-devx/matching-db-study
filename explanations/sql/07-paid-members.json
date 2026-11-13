@@ -1,0 +1,112 @@
+{
+  "operations": [
+    {
+      "title": "購入する（<code>POST /api/me/purchases</code>）。会員 1 が「3か月」（プラン 2）を買う",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "3本",
+          "code": "$plan = Plan::find($request->input('plan_id'));\nPurchase::create(['user_id' => $me, 'plan_id' => $plan->id]);   // 値段も期間も写さない\n$user->update([\n    'is_paid' => true,\n    // 期限が過ぎていても、古い期限から足す\n    'paid_until' => ($user->paid_until ?? now())->addMonths($plan->months),\n]);",
+          "sql": "select * from \"plans\" where \"plans\".\"id\" = 2 limit 1;\n\n-- 「どのプランを買ったか」だけ\ninsert into \"purchases\" (\"user_id\", \"plan_id\", \"updated_at\", \"created_at\")\nvalues (1, 2, '2026-11-13 11:59:34', '2026-11-13 11:59:34')\nreturning \"id\";\n\n-- 有料の印と期限を users に書く（トランザクションなし）\nupdate \"users\"\nset \"is_paid\" = true,\n    \"paid_until\" = '2027-02-13 10:00:00',\n    \"updated_at\" = '2026-11-13 11:59:34'\nwhere \"id\" = 1;",
+          "notes": [
+            "表がまだないので <code>DB::pretend()</code> で作らせた（以下も同じ）",
+            "性別を見ないので、女性も買える（FR-PAID-012）",
+            "同時に2回押すと、2つとも同じ古い期限から足し、片方の期間が消える"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版",
+          "count": "4本＋begin・commit",
+          "code": "DB::transaction(function () use ($me, $plan) {\n    DB::table('users')->where('id', $me->id)->lockForUpdate()->value('id');\n    $plan = Plan::findOrFail($planId);\n    $last = Purchase::where('user_id', $me->id)->max('ends_at');\n    $start = max(now(), $last ?? now());   // 有料のあいだなら、今の期限から\n    Purchase::create([\n        'user_id' => $me->id, 'plan_id' => $plan->id,\n        'months' => $plan->months, 'price_yen' => $plan->price,   // 買ったときの値を写す\n        'starts_at' => $start, 'ends_at' => $start->copy()->addMonthsNoOverflow($plan->months),\n    ]);\n});",
+          "sql": "begin;\n-- 同じ会員の購入を1つずつにする（行ロック）\nselect \"id\" from \"users\" where \"id\" = 1 limit 1 for update;\nselect * from \"plans\" where \"plans\".\"id\" = 2 limit 1;\n-- 今の期限（索引 (user_id, ends_at) で1回で分かる）\nselect max(\"ends_at\") as \"aggregate\" from \"purchases\"\nwhere \"user_id\" = 1;\n-- 値段・期間・始まり・終わりを、買ったときの値で残す\ninsert into \"purchases\"\n  (\"user_id\", \"plan_id\", \"months\", \"price_yen\",\n   \"starts_at\", \"ends_at\", \"updated_at\", \"created_at\")\nvalues (1, 2, 3, 9800,\n  '2026-11-13 10:00:00+00', '2027-02-13 10:00:00+00', '2026-11-13 11:59:34', '2026-11-13 11:59:34')\nreturning \"id\";\ncommit;",
+          "notes": [
+            "<code>users</code> に有料の印を持たない。有料かは「<code>purchases</code> の最後の <code>ends_at</code> が今より後か」で決める（1つの事実を1か所に）",
+            "<code>begin</code>・<code>commit</code> はログに出ないので手で書き足した"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "購入の記録を見る（<code>GET /api/me/purchases</code>）",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "1＋N 本",
+          "code": "$purchases = Purchase::where('user_id', $me)->orderBy('created_at', 'desc')->get();\nforeach ($purchases as $p) {\n    $plan = Plan::find($p->plan_id);      // 1件ごとに1本\n    $rows[] = ['name' => $plan->name, 'price' => $plan->price, 'bought_at' => $p->created_at];\n}",
+          "sql": "select * from \"purchases\" where \"user_id\" = 1\norder by \"created_at\" desc;\n\n-- 1件ごとに（値段は「今の」プランの値段）\nselect * from \"plans\" where \"id\" = 2 limit 1;",
+          "notes": [
+            "プランの値段を変えると、前に買った記録の値段も変わって見える（FR-PAID-004）",
+            "期間の始まりと終わりは残っていないので、「いつまでの分か」が分からない"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版",
+          "count": "1本",
+          "code": "Purchase::where('user_id', $me->id)\n    ->orderBy('starts_at', 'desc')\n    ->get(['months', 'price_yen', 'starts_at', 'ends_at']);",
+          "sql": "select \"months\", \"price_yen\", \"starts_at\", \"ends_at\"\nfrom \"purchases\"\nwhere \"user_id\" = 1\norder by \"starts_at\" desc;",
+          "notes": [
+            "買ったときの値段と期間が行の中にあるので、プランを読まなくてよい"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "有料の機能を使ってよいか（メッセージを送る前）",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "2本（機能ごとに写す）",
+          "code": "// 送る・いいね・検索のコントローラに、同じ if を写す\n$profile = Profile::where('user_id', $me)->first();\n$user = User::where('id', $me)->first();\nif ($profile->gender === 'male' && ! $user->is_paid) {\n    return response()->json(['message' => '有料会員になると使えます'], 403);\n}",
+          "sql": "select * from \"profiles\" where \"user_id\" = 1 limit 1;\nselect * from \"users\" where \"id\" = 1 limit 1;",
+          "notes": [
+            "<code>is_paid</code> しか見ないので、期限が過ぎても有料のまま（FR-PAID-005）",
+            "どの機能が有料かは、<code>if</code> がある場所を探さないと分からない（FR-PAID-017）"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版",
+          "count": "1本（会員を読むときに一緒に）",
+          "code": "// ミドルウェアで会員を読むときに、期限も一緒に読む\n$me = User::query()->select('users.*')\n    ->selectSub(DB::table('purchases')->selectRaw('max(ends_at)')\n        ->whereColumn('purchases.user_id', 'users.id'), 'paid_until')\n    ->where('users.id', $id)->first();\n\n// 判断は1か所（config/features.php の「有料の機能」の一覧と、性別と期限で決める）\nif (! Features::allows($me, 'send_message')) abort(403, 'paid_required');",
+          "sql": "select \"users\".*,\n  (select max(ends_at) from \"purchases\"\n   where \"purchases\".\"user_id\" = \"users\".\"id\") as \"paid_until\"\nfrom \"users\"\nwhere \"users\".\"id\" = 1\nlimit 1;",
+          "notes": [
+            "相関サブクエリの <code>max(ends_at)</code> は、索引 <code>(user_id, ends_at)</code> の最後の1件を読むだけ",
+            "<code>Features::allows()</code> は SQL を流さない（純粋な関数）。<code>GET /api/me</code> も同じ関数で「使える機能」を返し、画面はそれで出し分ける"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "男性の無料の会員のいいね（1日10回まで）",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "2本",
+          "code": "$today = Like::where('from_user_id', $me)->whereDate('created_at', now()->toDateString())->count();\nif ($today >= 10) { /* 403 */ }\nLike::create(['from_user_id' => $me, 'to_user_id' => $toUserId]);",
+          "sql": "-- 数える（日付はアプリの時計 = UTC。日本時間の 9時に数え直す）\nselect count(*) as \"aggregate\" from \"likes\"\nwhere \"from_user_id\" = 1\n  and \"created_at\"::date = '2026-11-13';\n\n-- 数えてから入れるまでのあいだに、ほかのいいねが入れる\ninsert into \"likes\" (\"from_user_id\", \"to_user_id\", \"updated_at\", \"created_at\")\nvalues (1, 3, '2026-11-13 11:59:34', '2026-11-13 11:59:34')\nreturning \"id\";",
+          "notes": [
+            "<code>created_at::date</code> は列に関数をかけるので、<code>created_at</code> の索引があっても使えない",
+            "同時に何本も送ると、全部が「まだ 9回」と数えて、上限を超えて入る（NFR-PAID-002）"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版",
+          "count": "3本＋begin・commit",
+          "code": "DB::transaction(function () use ($me, $to) {\n    DB::table('users')->where('id', $me->id)->lockForUpdate()->value('id');\n    [$from, $until] = Today::rangeInTokyo();   // 日本時間の0時〜次の0時（UTC に直す）\n    $count = Like::where('from_user_id', $me->id)\n        ->where('created_at', '>=', $from)->where('created_at', '<', $until)->count();\n    if (! Features::allows($me, 'unlimited_likes') && $count >= 10) abort(403, 'paid_required');\n    Like::create(['from_user_id' => $me->id, 'to_user_id' => $to->id]);\n});",
+          "sql": "begin;\n-- 同じ会員のいいねを1つずつにする\nselect \"id\" from \"users\" where \"id\" = 1 limit 1 for update;\n-- 日本時間の 11/13 の0時〜11/14 の0時（UTC で 11/12 15:00〜11/13 15:00）\nselect count(*) as \"aggregate\" from \"likes\"\nwhere \"from_user_id\" = 1\n  and \"created_at\" >= '2026-11-12 15:00:00'\n  and \"created_at\" < '2026-11-13 15:00:00';\ninsert into \"likes\" (\"from_user_id\", \"to_user_id\", \"updated_at\", \"created_at\")\nvalues (1, 3, '2026-11-13 11:59:34', '2026-11-13 11:59:34')\nreturning \"id\";\ncommit;",
+          "notes": [
+            "範囲で比べるので、索引 <code>(from_user_id, created_at)</code> が使える",
+            "行ロックで、同じ会員のいいねは1つずつ数えて入れる（ほかの会員は待たない）"
+          ]
+        }
+      ]
+    }
+  ]
+}

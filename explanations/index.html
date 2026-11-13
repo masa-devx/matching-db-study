@@ -41,7 +41,7 @@ flowchart LR
     <tr><td>05b</td><td>Context から Zustand に移す</td><td>Context の描き直しの範囲・Zustand で必要な部品だけ描き直す</td><td>未着手</td></tr>
     <tr><td>05c</td><td><a href="05c-firestore.html">Firestore と比べる</a></td><td>同じ「相手ごとの最新の1件」を Firebase Emulator（手元の Firestore）で作る。JOIN がないのでデータを重ねて持つ・読んだ回数で料金が決まる・リアルタイムに届く</td><td>レガシー版まで</td></tr>
     <tr><td>06</td><td><a href="06-blocks-withdrawal.html">ブロックと退会</a></td><td>NOT EXISTS・論理削除と再登録・部分インデックス</td><td>レガシー版まで</td></tr>
-    <tr><td>07</td><td>有料会員</td><td>有料かどうかで機能を分ける・購入した時の価格を残す・有効期間</td><td>未着手</td></tr>
+    <tr><td>07</td><td><a href="07-paid-members.html">有料会員</a></td><td>有料かどうかで機能を分ける・購入した時の価格を残す・有効期間</td><td>解説だけ</td></tr>
     <tr><td>07b</td><td>プランを増やす</td><td>レガシー版の「有料かどうか」の真偽値を、一般とプラチナに分ける。プランの表と「プランごとにできること」の表に直し、あとから増える前提の設計を前と後で比べる</td><td>未着手</td></tr>
     <tr><td>08</td><td>決済の通知</td><td>状態の遷移・トランザクション・冪等性</td><td>未着手</td></tr>
     <tr><td>09</td><td>同時更新</td><td>楽観ロック・悲観ロック・デッドロック</td><td>未着手</td></tr>
