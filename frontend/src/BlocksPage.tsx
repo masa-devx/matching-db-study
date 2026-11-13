@@ -1,10 +1,18 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
+import Avatar from './components/Avatar'
+import Button from './components/Button'
+import EmptyState from './components/EmptyState'
+import Icon from './components/Icon'
+import { SkeletonRows } from './components/Skeleton'
+import { useToast } from './components/Toast'
 
 // レガシー版（06）。ブロックした相手（/blocks）。ホームから開く。いいねの一覧の画面を写して、全部この部品に書く
 export default function BlocksPage() {
   const [blocks, setBlocks] = useState<any[] | null>(null)
-  const [message, setMessage] = useState('')
+  // 03c：解除の結果はトーストで出す（FR-UI-024）。解除している行のボタンにスピナー
+  const toast = useToast()
+  const [busy, setBusy] = useState('')
   const navigate = useNavigate()
   const api = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
 
@@ -27,37 +35,39 @@ export default function BlocksPage() {
   }, [])
 
   const unblock = (userId: string) => {
+    setBusy(userId)
     // 確かめずに、すぐ解除する。ステータスを見ない。終わったら一覧を全部読み直す
     fetch(`${api}/api/me/blocks/${userId}`, {
       method: 'DELETE',
       headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
     }).then(() => {
-      setMessage('解除しました')
+      setBusy('')
+      toast('解除しました')
       load()
     })
   }
 
-  if (!blocks) return null
+  if (!blocks) return <SkeletonRows />
 
   return (
     <div>
       <div className="talk-head">
-        <button className="button button-small button-ghost" onClick={() => navigate('/home')}>
-          ←
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="ホームへ戻る"
+          onClick={() => navigate('/home', { viewTransition: true })}
+        >
+          <Icon name="back" />
         </button>
         <span className="row-name">ブロックした相手</span>
       </div>
-      {message && <p className="toast">{message}</p>}
-      {blocks.length === 0 && <p className="soon">ブロックした相手はいません</p>}
+      {blocks.length === 0 && <EmptyState icon="lock" text="ブロックした相手はいません" />}
       <ul className="list">
         {blocks.map((b) => (
           // 同じ相手は1回しかブロックできないので、相手の id を key にする
           <li key={b.user_id} className="row">
-            {b.image ? (
-              <img className="row-avatar" src={`${api}${b.image}`} />
-            ) : (
-              <div className="row-avatar me-avatar-empty">?</div>
-            )}
+            <Avatar image={b.image} name={b.nickname} />
             <div className="row-body">
               {/* 退会した相手も、名前つきでそのまま出る */}
               <div className="row-name">{b.nickname ?? '退会した会員'}</div>
@@ -65,9 +75,15 @@ export default function BlocksPage() {
                 {new Date(b.blocked_at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })} にブロック
               </div>
             </div>
-            <button className="button button-small button-ghost row-action" onClick={() => unblock(b.user_id)}>
+            <Button
+              variant="ghost"
+              small
+              className="row-action"
+              loading={busy === b.user_id}
+              onClick={() => unblock(b.user_id)}
+            >
               解除
-            </button>
+            </Button>
           </li>
         ))}
       </ul>

@@ -1,24 +1,41 @@
-/* レガシー版（03b）。全体の土台。見た目の値（色・余白・文字）は、変数にせずそのまま書く。
-   値は改善版の tokens.css と同じにする（書き方の違いだけを比べるため） */
+/* レガシー版（03b → 03c で値を docs/design.md にそろえた）。全体の土台。
+   見た目の値（色・余白・文字）は、変数にせずそのまま書く（改善版で tokens.css の変数にまとめる。D-024） */
 * {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif;
   font-size: 16px;
   line-height: 1.6;
-  color: #212529;
-  background: #f8f9fa;
+  color: #231c20;
+  background: #faf6f4;
   -webkit-tap-highlight-color: transparent; /* 押したときの青い影を消す（ネイティブアプリに近づける） */
 }
 
 a {
-  color: #d6336c;
+  color: #d12f5f;
 }
 
 h1 {
   margin: 0 0 16px;
   font-size: 24px;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+}
+
+/* キーボードで動かしたときだけ、今いる場所に枠を出す（NFR-UI-005） */
+:focus-visible {
+  outline: 2px solid #d12f5f;
+  outline-offset: 2px;
+}
+
+/* 時刻・数字の桁をそろえる */
+time,
+.row-date,
+.bubble-time,
+.badge {
+  font-variant-numeric: tabular-nums;
 }

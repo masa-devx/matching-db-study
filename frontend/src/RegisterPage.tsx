@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import Button from './components/Button'
 import { Link } from 'react-router'
 
 // レガシー版（03b）。入力の項目ごとに useState を並べ、確かめはしない（API も確かめないので、何でも通る）
@@ -10,15 +11,19 @@ export default function RegisterPage() {
   const [birthday, setBirthday] = useState('')
   const [done, setDone] = useState(false)
   const [error, setError] = useState('')
+  // 03c：送っている間はボタンにスピナーを出し、押せなくする（FR-UI-026）
+  const [sending, setSending] = useState(false)
 
   const submit = async (e: any) => {
     e.preventDefault()
     setError('')
+    setSending(true)
     const res = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/users`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ email, password, nickname, gender, birthday }),
     })
+    setSending(false)
     if (res.status === 201) {
       setDone(true)
     } else {
@@ -72,9 +77,9 @@ export default function RegisterPage() {
             <input className="input" type="date" value={birthday} onChange={(e) => setBirthday(e.target.value)} />
           </label>
           {error && <p className="error">{error}</p>}
-          <button className="button" type="submit">
+          <Button type="submit" loading={sending}>
             登録する
-          </button>
+          </Button>
         </form>
         <p className="muted">
           登録済みの方は <Link to="/login">ログイン</Link>

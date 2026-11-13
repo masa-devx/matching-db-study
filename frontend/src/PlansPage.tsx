@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router'
+import { Link, useNavigate } from 'react-router'
+import Icon from './components/Icon'
+import { SkeletonRows } from './components/Skeleton'
 
 // レガシー版（07）。プランの一覧（/plans）。男性の会員だけ。今の状態・プラン・購入の記録を、全部この部品に書く
 export default function PlansPage() {
@@ -7,7 +9,6 @@ export default function PlansPage() {
   const [me, setMe] = useState<any>(null)
   const [history, setHistory] = useState<any[]>([])
   const navigate = useNavigate()
-  const location = useLocation()
   const api = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
   const headers = { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` }
 
@@ -34,17 +35,21 @@ export default function PlansPage() {
       .then((rows) => setHistory(Array.isArray(rows) ? rows : []))
   }, [])
 
-  if (!plans) return null
+  if (!plans) return <SkeletonRows count={3} />
 
   return (
     <div>
       <div className="talk-head">
-        <button className="button button-small button-ghost" onClick={() => navigate('/home')}>
-          ←
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="ホームへ戻る"
+          onClick={() => navigate('/home', { viewTransition: true })}
+        >
+          <Icon name="back" />
         </button>
         <span className="row-name">有料会員</span>
       </div>
-      {location.state?.message && <p className="toast">{location.state.message}</p>}
 
       <div className="card">
         {/* is_paid だけを見る（期限が過ぎていても「有料会員」と出る） */}
@@ -58,7 +63,7 @@ export default function PlansPage() {
       <ul className="list">
         {plans.map((p) => (
           <li key={p.id}>
-            <Link to={`/plans/${p.id}`} className="row">
+            <Link to={`/plans/${p.id}`} viewTransition className="row">
               <div className="row-body">
                 <div className="row-name">{p.name}</div>
                 <div className="row-sub">{p.price.toLocaleString()}円</div>

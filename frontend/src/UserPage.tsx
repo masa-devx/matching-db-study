@@ -1,19 +1,36 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useOptimistic, useState, useTransition } from 'react'
 import { useNavigate, useParams } from 'react-router'
+import ConfirmDialog from './components/ConfirmDialog'
+import Icon from './components/Icon'
+import MatchCelebration from './components/MatchCelebration'
+import { SkeletonProfile } from './components/Skeleton'
+import { useToast } from './components/Toast'
+import UpsellDialog from './components/UpsellDialog'
 
 // レガシー版（03b）。相手のプロフィール。取る・持つ・見せる・決まりを、全部この部品に書く
+// 03c：モーダル・トースト・スケルトン・マッチの演出は components/ の部品を使う
 export default function UserPage() {
   // #46：URL の会員の ID は UUID（public_id）
   const { publicId } = useParams()
   const [user, setUser] = useState<any>(null)
   const [liked, setLiked] = useState(false)
-  const [message, setMessage] = useState('')
-  const [matched, setMatched] = useState(false)
+  // 03c：押した瞬間に「いいね済み」に見せる（応答を待たない。FR-UI-027）。失敗したら、終わったときに元に戻る
+  const [shownLiked, setShownLiked] = useOptimistic(liked)
+  const [, startTransition] = useTransition()
+  // マッチの演出に出す自分（写真とニックネーム）
+  const [matchedWith, setMatchedWith] = useState<any>(null)
   // 06：ブロックの確かめのモーダルを開いているか
   const [confirming, setConfirming] = useState(false)
   // 07：誘導のモーダル（いいねの上限を超えたとき）
   const [upsell, setUpsell] = useState(false)
+  const toast = useToast()
   const navigate = useNavigate()
+  const api = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
+  const headers = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+    Authorization: `Bearer ${sessionStorage.getItem('token')}`,
+  }
 
   useEffect(() => {
     // ログインが要るかの守りを、ここにも書く
@@ -22,75 +39,69 @@ export default function UserPage() {
       return
     }
     // 読み込み中・失敗は考えない。すぐ別の人に移ると、前の人の応答があとから上書きする
-    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/users/${publicId}`, {
-      headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
-    })
+    fetch(`${api}/api/users/${publicId}`, { headers })
       .then((r) => r.json())
       .then(setUser)
     // もういいねしたかは、開いたときには分からない（その API がない）。押すまで「いいね」のまま
   }, [publicId])
 
-  const like = () => {
-    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me/likes`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        Authorization: `Bearer ${sessionStorage.getItem('token')}`,
-      },
-      body: JSON.stringify({ user_id: publicId }),
+  const like = () =>
+    startTransition(async () => {
+      setShownLiked(true)
+      const r = await fetch(`${api}/api/me/likes`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ user_id: publicId }),
+      })
+      // 07：無料の男性が1日10回を超えると 403。画面では何回目かが分からないので、断られてからモーダルを出す
+      if (r.status === 403) {
+        setUpsell(true)
+        return
+      }
+      if (!r.ok) {
+        // 2回目のいいね（500）などは、失敗のトースト。ハートは元に戻る
+        toast('いいねできませんでした', 'error')
+        return
+      }
+      const d = await r.json()
+      setLiked(true)
+      if (d.matched) {
+        // マッチの演出に出す自分の写真を、ここで読む（ホームと同じ2本を写す）
+        const me = await fetch(`${api}/api/me`, { headers }).then((x) => x.json())
+        const mine = await fetch(`${api}/api/users/${me.public_id}`, { headers }).then((x) => x.json())
+        setMatchedWith(mine.profile ?? {})
+      } else {
+        toast('いいねしました')
+      }
     })
-      .then((r) => {
-        // 07：無料の男性が1日10回を超えると 403。画面では何回目かが分からないので、断られてからモーダルを出す
-        if (r.status === 403) {
-          setUpsell(true)
-          return null
-        }
-        return r.json()
-      })
-      .then((d) => {
-        if (!d) return
-        // ステータスを見ない。2回目は API が 500 を返すが、matched がないので「いいねしました」と出る
-        setLiked(true)
-        if (d.matched) {
-          setMatched(true)
-        } else {
-          setMessage('いいねしました')
-        }
-      })
-  }
 
   // 06：ブロックする。ステータスを見ない（2回目は 500 でも「ブロックしました」と出る）
   const block = () => {
-    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me/blocks`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        Authorization: `Bearer ${sessionStorage.getItem('token')}`,
-      },
-      body: JSON.stringify({ user_id: publicId }),
-    }).then(() => {
+    fetch(`${api}/api/me/blocks`, { method: 'POST', headers, body: JSON.stringify({ user_id: publicId }) }).then(() => {
       setConfirming(false)
-      setMessage('ブロックしました')
-      // トーストを少し見せてから、ひとつ前の画面に戻る（戻った先は読み直さないので、まだ出ていることがある）
-      setTimeout(() => navigate(-1), 1000)
+      toast('ブロックしました')
+      // 前の画面に戻る（戻った先は読み直すが、検索の一覧は条件を残したまま1ページ目から）
+      navigate(-1)
     })
   }
 
   // 年齢の計算もここに書く（年の引き算なので、誕生日の前だと1歳多い）
   const age = user?.profile?.birthday ? new Date().getFullYear() - Number(user.profile.birthday.slice(0, 4)) : ''
   // 画像のパスは API の側にあるので、送り先を前に付ける
-  const image = user?.profile?.image
-    ? `${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}${user.profile.image}`
-    : ''
+  const image = user?.profile?.image ? `${api}${user.profile.image}` : ''
 
-  if (!user) return null
+  // 03c：読み込み中は、中身と同じ形のスケルトン（FR-UI-025）
+  if (!user) return <SkeletonProfile />
 
   return (
     <div className="profile">
-      <div className="photo">
-        {image ? <img className="photo-img" src={image} /> : <div className="photo-empty">写真なし</div>}
+      {/* 03c：検索のカードの写真と同じ名前を付け、写真がそのまま大きくなってつながる（FR-UI-029） */}
+      <div className="photo" style={{ viewTransitionName: `photo-${publicId}` }}>
+        {image ? (
+          <img className="photo-img" src={image} alt="" />
+        ) : (
+          <div className="photo-empty">{(user.profile?.nickname ?? '?').slice(0, 1)}</div>
+        )}
         <div className="photo-caption">
           <div className="photo-name">
             {user.profile?.nickname} <span className="photo-age">{age}歳</span>
@@ -110,61 +121,40 @@ export default function UserPage() {
           <p className="intro">{user.profile?.introduction || 'まだ書いていません'}</p>
         </div>
 
-        {message && <p className="toast">{message}</p>}
-
         <div className="like-bar">
-          <button className="like-button" onClick={like} disabled={liked}>
-            <span className="like-heart">♥</span>
-            {liked ? 'いいね済み' : 'いいね'}
+          <button
+            type="button"
+            className={shownLiked ? 'like-button is-liked' : 'like-button'}
+            onClick={like}
+            disabled={shownLiked}
+            aria-pressed={shownLiked}
+          >
+            <span className="like-heart">
+              <Icon name="heart" filled={shownLiked} />
+            </span>
+            {shownLiked ? 'いいね済み' : 'いいね'}
           </button>
         </div>
 
-        <button className="danger-link" onClick={() => setConfirming(true)}>
+        <button type="button" className="danger-link" onClick={() => setConfirming(true)}>
           ブロック
         </button>
       </div>
 
-      {upsell && (
-        // 07：誘導のモーダル（送る・検索・いいねの画面に、同じものを書く）
-        <div className="modal-back" onClick={() => setUpsell(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <p className="modal-title">有料会員になると使えます</p>
-            <p>メッセージを送る・いいねを何回でも・身長で探す、が使えるようになります。</p>
-            <button className="button" onClick={() => navigate('/plans')}>
-              有料会員になる
-            </button>
-            <button className="button button-ghost" onClick={() => setUpsell(false)}>
-              閉じる
-            </button>
-          </div>
-        </div>
-      )}
-      {confirming && (
-        // 06：確かめのモーダル（ホームの退会・トーク画面にも、同じものを書く）
-        <div className="modal-back" onClick={() => setConfirming(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <p className="modal-title">{user.profile?.nickname}さんをブロックしますか？</p>
-            <p>お互いに、検索・いいね・メッセージに出なくなります。あとで解除できます。</p>
-            <button className="button button-danger" onClick={block}>
-              ブロックする
-            </button>
-            <button className="button button-ghost" onClick={() => setConfirming(false)}>
-              キャンセル
-            </button>
-          </div>
-        </div>
-      )}
+      <UpsellDialog open={upsell} onClose={() => setUpsell(false)} />
+      <ConfirmDialog
+        open={confirming}
+        title={`${user.profile?.nickname}さんをブロックしますか？`}
+        confirmLabel="ブロックする"
+        danger
+        onConfirm={block}
+        onClose={() => setConfirming(false)}
+      >
+        <p>お互いに、検索・いいね・メッセージに出なくなります。あとで解除できます。</p>
+      </ConfirmDialog>
 
-      {matched && (
-        // マッチしたときは、画面いっぱいに知らせる
-        <div className="match-overlay">
-          <p className="match-title">マッチしました！</p>
-          {image && <img className="match-avatar" src={image} />}
-          <p className="match-text">{user.profile?.nickname}さんも、あなたにいいねしていました</p>
-          <button className="button button-white" onClick={() => setMatched(false)}>
-            閉じる
-          </button>
-        </div>
+      {matchedWith && (
+        <MatchCelebration me={matchedWith} partner={user.profile ?? {}} onClose={() => setMatchedWith(null)} />
       )}
     </div>
   )

@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
+import Button from './components/Button'
+import { SkeletonCards } from './components/Skeleton'
+import UpsellDialog from './components/UpsellDialog'
 
 // レガシー版（04）。検索のタブ（/search）＝条件で相手を探して、2列のカードで見る。
 // 条件・取る・続き・見せるを、全部この部品に書く（03b と同じ形）。
@@ -235,29 +238,34 @@ export default function SearchPage() {
               </button>
             ))}
           </div>
-          <button className="button">この条件で探す</button>
+          <Button type="submit">この条件で探す</Button>
         </form>
       )}
 
       {!loading && users.length === 0 && (
-        <div className="soon">
-          <p>条件に合う相手がいません</p>
-          <button className="button button-small" onClick={() => setOpen(true)}>
+        <div className="empty">
+          <p className="empty-text">条件に合う相手がいません</p>
+          <Button small onClick={() => setOpen(true)}>
             条件を変える
-          </button>
+          </Button>
         </div>
       )}
+      {/* 03c：最初の読み込みは、カードと同じ形のスケルトン（FR-UI-025） */}
+      {loading && users.length === 0 && <SkeletonCards />}
 
       <ul className="user-grid">
         {users.map((u) => (
           // 続きで同じ人が2回来ると、key が重なる（React が警告を出す）
           <li key={u.public_id}>
-            <Link to={`/users/${u.public_id}`} className="user-card">
-              {u.profile?.image ? (
-                <img className="photo-img" src={`${api}${u.profile.image}`} />
-              ) : (
-                <div className="photo-empty">写真なし</div>
-              )}
+            {/* 03c：写真に会員ごとの名前を付け、相手のプロフィールの写真へ大きくなってつながる（FR-UI-029） */}
+            <Link to={`/users/${u.public_id}`} viewTransition className="user-card">
+              <span className="user-card-photo" style={{ viewTransitionName: `photo-${u.public_id}` }}>
+                {u.profile?.image ? (
+                  <img className="photo-img" src={`${api}${u.profile.image}`} alt="" />
+                ) : (
+                  <span className="photo-empty">{(u.profile?.nickname ?? '?').slice(0, 1)}</span>
+                )}
+              </span>
               <div className="user-card-caption">
                 <div className="user-card-name">
                   {u.profile?.nickname} {/* 年齢の計算を、また写した（誕生日の前だと1歳多い） */}
@@ -272,23 +280,9 @@ export default function SearchPage() {
         ))}
       </ul>
 
-      {loading && <p className="soon">読み込み中…</p>}
+      {loading && users.length > 0 && <p className="soon">読み込み中…</p>}
       {done && users.length > 0 && <p className="soon">これで全員です</p>}
-      {upsell && (
-        // 07：誘導のモーダル（送る・検索・いいねの画面に、同じものを書く）
-        <div className="modal-back" onClick={() => setUpsell(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <p className="modal-title">有料会員になると使えます</p>
-            <p>メッセージを送る・いいねを何回でも・身長で探す、が使えるようになります。</p>
-            <button className="button" onClick={() => navigate('/plans')}>
-              有料会員になる
-            </button>
-            <button className="button button-ghost" onClick={() => setUpsell(false)}>
-              閉じる
-            </button>
-          </div>
-        </div>
-      )}
+      <UpsellDialog open={upsell} onClose={() => setUpsell(false)} />
     </div>
   )
 }

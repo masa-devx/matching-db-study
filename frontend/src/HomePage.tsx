@@ -1,12 +1,21 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
+import Avatar from './components/Avatar'
+import Button from './components/Button'
+import ConfirmDialog from './components/ConfirmDialog'
+import { SkeletonProfile } from './components/Skeleton'
+import { useToast } from './components/Toast'
 
 // レガシー版（03b）。ホーム（/home）＝自分のプロフィールを見て直す。全部この部品に書く
 export default function HomePage(props: any) {
   const [me, setMe] = useState<any>(null)
   const [form, setForm] = useState<any>({})
   const [editing, setEditing] = useState(false)
-  const [message, setMessage] = useState('')
+  // 03c：保存の結果はトーストで出す（FR-UI-024）。ログアウトは確認のモーダルを通す（FR-UI-023）
+  const toast = useToast()
+  const [saving, setSaving] = useState(false)
+  const [confirmLogout, setConfirmLogout] = useState(false)
+  const [withdrawBusy, setWithdrawBusy] = useState(false)
   // 06：退会のモーダル（開いているか・入れたパスワード・失敗の文）
   const [withdrawing, setWithdrawing] = useState(false)
   const [password, setPassword] = useState('')
@@ -51,6 +60,7 @@ export default function HomePage(props: any) {
 
   // 06：退会する。422 のときだけ、モーダルの中に出す（ほかの失敗は考えない）
   const withdraw = async () => {
+    setWithdrawBusy(true)
     const res = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me`, {
       method: 'DELETE',
       headers: {
@@ -60,6 +70,7 @@ export default function HomePage(props: any) {
       },
       body: JSON.stringify({ password }),
     })
+    setWithdrawBusy(false)
     if (res.status === 422) {
       setWithdrawError('パスワードがちがいます')
       return
@@ -72,6 +83,7 @@ export default function HomePage(props: any) {
 
   const save = async (e: any) => {
     e.preventDefault()
+    setSaving(true)
     // 入力を確かめない。API も確かめないので、何でも入る
     const res = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/users/${me.public_id}`, {
       method: 'PUT',
@@ -89,25 +101,26 @@ export default function HomePage(props: any) {
       }),
     })
     const profile = await res.json()
+    setSaving(false)
     setMe({ ...me, profile })
     setEditing(false)
-    setMessage('保存しました')
+    // 失敗（500 など）は考えない。いつも「保存しました」と出る（FR-UI-013 はまだ守れていない）
+    toast('保存しました')
   }
 
   // 年齢の計算を、相手の画面からここにも写した（誕生日の前だと1歳多い）
   const age = me?.profile?.birthday ? new Date().getFullYear() - Number(me.profile.birthday.slice(0, 4)) : ''
   const api = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
 
-  if (!me) return null
+  // 03c：読み込み中は、中身と同じ形のスケルトン（FR-UI-025）
+  if (!me) return <SkeletonProfile />
 
   return (
     <div className="profile">
       <div className="me-head">
-        {me.profile?.image ? (
-          <img className="me-avatar" src={`${api}${me.profile.image}`} />
-        ) : (
-          <div className="me-avatar me-avatar-empty">?</div>
-        )}
+        <span className="me-avatar">
+          <Avatar image={me.profile?.image} name={me.profile?.nickname} size={120} />
+        </span>
         <div className="photo-name me-name">
           {me.profile?.nickname} <span className="photo-age">{age}歳</span>
         </div>
@@ -115,8 +128,6 @@ export default function HomePage(props: any) {
       </div>
 
       <div className="profile-body">
-        {message && <p className="toast">{message}</p>}
-
         {!editing ? (
           <>
             <div className="chips">
@@ -127,15 +138,7 @@ export default function HomePage(props: any) {
               <h2 className="section-title">自己紹介</h2>
               <p className="intro">{me.profile?.introduction || 'まだ書いていません'}</p>
             </div>
-            <button
-              className="button"
-              onClick={() => {
-                setMessage('')
-                setEditing(true)
-              }}
-            >
-              プロフィールを編集
-            </button>
+            <Button onClick={() => setEditing(true)}>プロフィールを編集</Button>
           </>
         ) : (
           <form className="card" onSubmit={save}>
@@ -188,27 +191,27 @@ export default function HomePage(props: any) {
                 onChange={(e) => setForm({ ...form, introduction: e.target.value })}
               />
             </label>
-            <button className="button" type="submit">
+            <Button type="submit" loading={saving}>
               保存する
-            </button>
-            <button className="button button-ghost button-space" type="button" onClick={() => setEditing(false)}>
+            </Button>
+            <Button variant="ghost" className="button-space" onClick={() => setEditing(false)}>
               やめる
-            </button>
+            </Button>
           </form>
         )}
       </div>
       {/* 07：有料会員の入口は、男性にだけ出す。状態は is_paid だけを見る（期限が過ぎていても「有料会員」） */}
       {me.profile?.gender === 'male' && (
-        <Link to="/plans" className="button button-ghost logout">
+        <Link to="/plans" viewTransition className="button button-ghost logout">
           {me.is_paid ? `有料会員（${new Date(me.paid_until).toLocaleDateString('ja-JP')} まで）` : '有料会員になる'}
         </Link>
       )}
-      <Link to="/blocks" className="button button-ghost logout">
+      <Link to="/blocks" viewTransition className="button button-ghost logout">
         ブロックした相手
       </Link>
-      <button className="button button-ghost logout" onClick={logout}>
+      <Button variant="ghost" className="logout" onClick={() => setConfirmLogout(true)}>
         ログアウト
-      </button>
+      </Button>
       <button
         className="danger-link"
         onClick={() => {
@@ -220,26 +223,33 @@ export default function HomePage(props: any) {
         退会する
       </button>
 
-      {withdrawing && (
-        // 06：確かめのモーダル（相手のプロフィールのブロックから写して、パスワードを足した）
-        <div className="modal-back" onClick={() => setWithdrawing(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <p className="modal-title">退会しますか？</p>
-            <p>同じメールアドレスで、あとから登録し直せます。今のマッチやメッセージは引き継げません。</p>
-            <label className="label">
-              パスワード
-              <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-            </label>
-            {withdrawError && <p className="modal-error">{withdrawError}</p>}
-            <button className="button button-danger" onClick={withdraw}>
-              退会する
-            </button>
-            <button className="button button-ghost" onClick={() => setWithdrawing(false)}>
-              キャンセル
-            </button>
-          </div>
-        </div>
-      )}
+      {/* 03c：ログアウトの前に確かめる（FR-UI-023） */}
+      <ConfirmDialog
+        open={confirmLogout}
+        title="ログアウトしますか？"
+        confirmLabel="ログアウトする"
+        danger
+        onConfirm={logout}
+        onClose={() => setConfirmLogout(false)}
+      />
+
+      {/* 06：退会の確かめ（部品の確認のモーダルに、パスワードの入力を入れる） */}
+      <ConfirmDialog
+        open={withdrawing}
+        title="退会しますか？"
+        confirmLabel="退会する"
+        danger
+        busy={withdrawBusy}
+        onConfirm={withdraw}
+        onClose={() => setWithdrawing(false)}
+      >
+        <p>同じメールアドレスで、あとから登録し直せます。今のマッチやメッセージは引き継げません。</p>
+        <label className="label">
+          パスワード
+          <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        </label>
+        {withdrawError && <p className="modal-error">{withdrawError}</p>}
+      </ConfirmDialog>
     </div>
   )
 }
