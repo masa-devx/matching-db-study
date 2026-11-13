@@ -23,6 +23,9 @@ services:
       MAIL_MAILER: smtp
       MAIL_HOST: mailpit
       MAIL_PORT: "1025"
+      # 05c：Firestore の Emulator の場所（compose の中の名前）。本物の Firebase にはつながない。秘密の値ではない
+      FIRESTORE_EMULATOR_HOST: firebase:8080
+      FIREBASE_PROJECT_ID: demo-matching
     # php artisan serve は環境変数の多くを子のプロセスに渡さず .env を読み直すので、上の接続先が届かない。
     # そのため、artisan serve が中で使う PHP の組み込みサーバーを直接起動する（server.php は今いるフォルダを public として扱う）
     command: sh -c "cd public && exec php -S 0.0.0.0:8000 ../vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php"
@@ -63,6 +66,31 @@ services:
     ports:
       - "127.0.0.1:51025:1025" # SMTP（Laravel がメールを送る先）
       - "127.0.0.1:58025:8025" # 受信箱の画面
+
+  # 05c：Firebase Emulator（手元の Firestore と Auth）。プロジェクトの ID が demo- で始まるので、本物にはつながらない。
+  # データは止めるときに firebase/.emulator-data に書き出し、次に起動したときに読み込む（書き出しがまだなければ読み込まない）。
+  # Emulator は今いるフォルダに書いてから移すので、書き出し先も同じ bind mount の中にする（ボリュームだと移せずに失敗する）
+  firebase:
+    build: ./docker/firebase
+    volumes:
+      - ./firebase:/app/firebase
+    command: >
+      sh -c 'if [ -f .emulator-data/firebase-export-metadata.json ]; then IMPORT="--import .emulator-data"; fi;
+      exec firebase emulators:start --project demo-matching --only firestore,auth $$IMPORT --export-on-exit .emulator-data'
+    # 止めるとき（SIGTERM）に書き出すので、少し待つ
+    stop_grace_period: 30s
+    ports:
+      - "127.0.0.1:8080:8080" # Firestore（画面が直接つなぐ）
+      - "127.0.0.1:9099:9099" # Auth
+      - "127.0.0.1:4000:4000" # Emulator の画面
+      - "127.0.0.1:4400:4400" # Emulator どうしをつなぐハブ（画面が使う）
+      - "127.0.0.1:4500:4500" # ログ（画面が使う）
+      - "127.0.0.1:9150:9150" # Emulator の画面が Firestore の変化を受け取る
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8080').then(()=>process.exit(0)).catch(()=>process.exit(1))\""]
+      interval: 5s
+      timeout: 3s
+      retries: 30
 
 volumes:
   db-data:
