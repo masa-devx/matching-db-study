@@ -15,6 +15,7 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 | 言語・実行環境 | PHP（Docker の `app`）・Node（手元・mise。03b から）・Docker | PHP 8.5・Node 26.13.0 | PHP と DB を Docker にそろえ、だれの PC でも同じ版で動かす（D-011） |
 | フレームワーク | Laravel（API）・React＋TypeScript＋Vite＋React Router（03b から） | Laravel は入れたときの最新。React 19.3.1・TypeScript 7.0.2・Vite 8.3.8・React Router 8.5.1 | 仕事で使ってきた形で、Eloquent の裏の SQL を確かめる |
 | DB・ORM | PostgreSQL（Docker compose）・Eloquent | 18・Laravel と同じ | 流れた SQL は `DB::listen` でログに出し、`->explain()` で実行計画を見る |
+| NoSQL（05c から） | Firebase Emulator（Firestore と Auth。Docker の `firebase`）・Firebase JS SDK（画面） | firebase-tools 15.34.2・Node 24.22.2・JDK 21・firebase 13.1.0 | ドキュメント DB を RDB と比べる。手元だけで動かし、クラウドのアカウントは作らない（D-008。プロジェクトは `demo-matching`） |
 | 状態の管理（画面） | React の Context → Zustand（05b から） | React と同じ・入れたときの最新 | 標準の限界を体験してから移す。TanStack Query・OpenAPI は使わない |
 | テスト | Pest（バックエンド。テスト用の PostgreSQL に対して実行）・Vitest（画面） | 入れたときの最新 | SQLite ではロックや UNIQUE の動きが違うため、本物の PostgreSQL で確かめる |
 | 静的検査・整形 | Larastan（PHPStan）・Pint（API）・Biome（画面。lint と整形を1つで受け持つ） | Larastan・Pint は入れたときの最新。Biome 2.6.7 | 型の抜けと書き方のずれを機械で見つける |
@@ -31,8 +32,9 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 | backend/ | Laravel（API）。Laravel の標準の形のまま（`app/Models`・`app/Http/Controllers`・`app/Http/Resources`・`database/migrations`） |
 | backend/tests/ | Pest のテスト。`Unit/`（ロジック）・`Feature/`（DB と API をまたぐもの） |
 | frontend/ | React（03b から）。テストは `src/**/*.test.tsx` |
-| compose.yaml | PHP（`app`）・PostgreSQL（開発用とテスト用）・Mailpit |
-| docker/ | コンテナの作り方（`php/Dockerfile`）と、DB を最初に作る SQL（`db/init/`） |
+| compose.yaml | PHP（`app`）・PostgreSQL（開発用とテスト用）・Mailpit・Firebase Emulator（`firebase`。05c） |
+| docker/ | コンテナの作り方（`php/Dockerfile`・`firebase/Dockerfile`）と、DB を最初に作る SQL（`db/init/`） |
+| firebase/ | Firebase Emulator の設定（`firebase.json`）・セキュリティルール（`firestore.rules`）・インデックス（`firestore.indexes.json`）。止めたときのデータは `firebase/.emulator-data/`（git に入れない） |
 | docs/ | 何を作るか（product.md・requirements/）と、なぜそうしたか（decisions.md）。目次は docs/README.md |
 | explanations/ | 一歩ごとの解説と図（HTML）。目次は index.html、ひな形は _template.html |
 | agents/ | 開発ルール（rules/）・手順（skills/） |
@@ -56,6 +58,7 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 | 流れた SQL を見る | リポジトリのルート | `tail -n 20 backend/storage/logs/sql-$(date -u +%F).log`（日付は UTC） | app が起動していて、`APP_ENV=local` | `php artisan db:show`・`docker compose config`（接続の設定や秘密の値をまとめて出すため、AI は使わない） |
 | 試しの会員を入れる（04） | リポジトリのルート | `docker compose exec app php artisan db:seed --class=SearchMembersSeeder`（会員 2万人。`search00001@example.test`〜・パスワードは `password`。流し直すと入れ直す。約1秒） | app と db が起動している・`legacy-repo` 系のブランチ | テスト用の DB に入れる（テストの前提が変わるため）。`DatabaseSeeder` から呼ぶ（ふだんのシードでも2万人になるため） |
 | 試しのメッセージを入れる（05） | リポジトリのルート | `docker compose exec app php artisan db:seed --class=MessagesSeeder`（マッチ 1000組・メッセージ 10万件。`search00001` はルーム 100。ルームのない前からのマッチにもルームを作る。流し直すと入れ直す。約3秒） | 先に「試しの会員を入れる（04）」を流す・`legacy-repo` 系のブランチ | テスト用の DB に入れる・`DatabaseSeeder` から呼ぶ（04 と同じ理由） |
+| 試しのメッセージを Firestore に写す（05c） | リポジトリのルート | `docker compose exec app php artisan db:seed --class=FirestoreMessagesSeeder`（PostgreSQL のルーム・受信箱・メッセージ 10万件を、Emulator の中身を消してから写す。約5秒）。中身は `http://localhost:4000/firestore` で見る | 先に「試しのメッセージを入れる（05）」を流す・`firebase` が起動している | 本物の Firebase のプロジェクトにつなぐ（`FIREBASE_PROJECT_ID` が `demo-` で始まらなければ、シーダーは止まる） |
 | DB に入る | リポジトリのルート | `docker compose exec db psql -U postgres -d matching_dev`（テスト用は `-d matching_test`） | db が起動している | ― |
 | ブランチを切り替えたあと | リポジトリのルート | `docker compose restart app` | ― | 切り替え先に `backend/` がないと、動いているサーバーのフォルダが一度消えて、API がエラーを返し続けるため |
 | CI | GitHub（PR と push で自動） | `.github/workflows/backend.yml`（`legacy-repo` にある）。中身と決まりは [docs/ci.md](docs/ci.md)。結果は `gh pr checks <番号>` で見る | ― | CI の設定を緩めて通す（レベルを下げる・対象から外す） |
