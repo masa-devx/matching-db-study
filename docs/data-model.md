@@ -18,6 +18,8 @@
 
 07 で、有料会員を足す（#80）。`users` に有料かどうか（`is_paid`）といつまで有料か（`paid_until`）、プランの表 `plans`（期間と今の値段。3行はマイグレーションで入れる）、購入の記録 `purchases`（どのプランを買ったかだけ）。設計を考えずに「とりあえず使える」形で、機能を使えるかは `is_paid` だけで決める（期限が過ぎても、だれも false に戻さない）。購入の記録は値段と期間を持たないので、プランの値段を変えると、前の記録の値段も変わって見える。主キーと外部キーだけで、インデックスは足さない。
 
+12 で、管理画面の表を足す（#89）。管理者 `admins`（会員とは別にログインする。役割は `owner`・`viewer`）と、監査ログ `admin_audit_logs`（だれが・いつ・何に・何をしたか）。会員の利用を止めた日時と理由（`users.suspended_at`・`suspended_reason`）。表は会員の側と共通の DB に置き、表の作りは `backend/client` にまとめる。管理画面（`backend/admin`）は読み書きするだけ。主キー・UNIQUE・外部キーだけで、インデックスは足さない。監査ログの書き換え・削除を止める仕組みはない。
+
 ### ER 図
 
 ```mermaid
@@ -36,6 +38,7 @@ erDiagram
   USERS ||--o{ BLOCKS : "blocked_id（外部キー・blocked_id だけで探すインデックスはない）"
   USERS ||--o{ PURCHASES : "user_id（外部キー・インデックスなし）"
   PLANS ||--o{ PURCHASES : "plan_id（外部キー）"
+  ADMINS ||--o{ ADMIN_AUDIT_LOGS : "admin_id（外部キー・インデックスなし）"
   USERS {
     bigint id PK "中で使う。つながりと JWT の sub"
     uuid public_id UK "URL で会員を指す ID。既定は uuidv7()（#46）"
@@ -43,6 +46,8 @@ erDiagram
     timestamp deleted_at "退会した日時（06）。NULL なら会員。インデックスなし"
     boolean is_paid "有料会員か（07）。既定は false。期限が過ぎても true のまま"
     timestamp paid_until "いつまで有料か（07）。NULL 可。機能の判断では見ない"
+    timestamp suspended_at "利用を止めた日時（12。管理画面が書く）。NULL なら止めていない"
+    varchar suspended_reason "止めた理由（12）。NULL 可"
     varchar email UK
     timestamp email_verified_at "NULL 可。時間帯なし"
     varchar password "bcrypt のハッシュ"
@@ -116,6 +121,25 @@ erDiagram
     timestamp created_at "買った日時。時間帯なし"
     timestamp updated_at "時間帯なし"
   }
+  ADMINS {
+    bigint id PK
+    varchar email UK
+    varchar password "bcrypt のハッシュ"
+    varchar name
+    varchar role "owner・viewer（CHECK なし）"
+    timestamp last_login_at "NULL 可"
+    timestamp created_at "時間帯なし"
+    timestamp updated_at "時間帯なし"
+  }
+  ADMIN_AUDIT_LOGS {
+    bigint id PK
+    bigint admin_id FK "外部キー（ON DELETE なし）。インデックスなし"
+    varchar action "member.view・member.suspend など"
+    varchar target_type "user・plan など。NULL 可"
+    varchar target_id "会員の public_id など。NULL 可・外部キーなし"
+    jsonb detail "変えた前と後・理由。NULL 可"
+    timestamp created_at "書き足した日時。既定は今"
+  }
   BLOCKS {
     bigint id PK
     bigint blocker_id FK "ブロックした会員。UK（blocked_id と組で）。ON DELETE CASCADE"
@@ -129,7 +153,7 @@ erDiagram
 
 | 表 | 一歩 | 中身 | 制約 |
 | --- | --- | --- | --- |
-| `users` | 00（ひな形）・01・01b・#46・04・06・07 | アカウント（ログインのための情報）・最終ログイン・退会した日時（06。論理削除）・有料会員か（07） | 主キー `id`・`email` の UNIQUE（`users_email_unique`。大文字と小文字は区別する）・`public_id` の UNIQUE（`NOT NULL`・既定は `uuidv7()`。D-022）。`last_login_at` は NULL 可でインデックスなし（desc で並べると、ログインしていない会員が先頭に出る。検索は表を全部読む）。`deleted_at` は NULL 可でインデックスなし。退会してもメールアドレスの UNIQUE はそのまま（退会の API が書き換えて空ける）。`is_paid` は既定 false・`paid_until` は NULL 可（07。どちらもインデックスなし） |
+| `users` | 00（ひな形）・01・01b・#46・04・06・07 | アカウント（ログインのための情報）・最終ログイン・退会した日時（06。論理削除）・有料会員か（07） | 主キー `id`・`email` の UNIQUE（`users_email_unique`。大文字と小文字は区別する）・`public_id` の UNIQUE（`NOT NULL`・既定は `uuidv7()`。D-022）。`last_login_at` は NULL 可でインデックスなし（desc で並べると、ログインしていない会員が先頭に出る。検索は表を全部読む）。`deleted_at` は NULL 可でインデックスなし。退会してもメールアドレスの UNIQUE はそのまま（退会の API が書き換えて空ける）。`is_paid` は既定 false・`paid_until` は NULL 可（07。どちらもインデックスなし）。`suspended_at`・`suspended_reason` は NULL 可（12。管理画面が書く） |
 | `profiles` | 01 | その会員についての情報 | 主キー `id` だけ。`user_id` に外部キーも UNIQUE もないので、1人に2つのプロフィール・ない会員を指すプロフィールができる |
 | `likes` | 02 | いいね（だれから・だれへ・いつ）。会員と会員をつなぐ中間テーブル | 主キー `id`・`(from_user_id, to_user_id)` の UNIQUE（`likes_from_user_id_to_user_id_unique`）だけ。外部キーがないので、ない会員を指せ、会員を消しても残る。自分から自分も入る。`to_user_id` から探すと表を全部読む |
 | `user_matches` | 03 | マッチ（お互いにいいねした2人の組と、いつ）。Model は `UserMatch`（`match` は PHP の予約語） | 主キー `id` だけ。同じ組が2行入り、(A, B) と (B, A) も両方入る。自分とのマッチ・ない会員を指すマッチも入り、会員を消しても残る。自分のマッチを探す `user1_id = ? or user2_id = ?` は表を全部読む |
@@ -139,6 +163,8 @@ erDiagram
 | `blocks` | 06 | ブロック（だれが・だれを・いつ）。マッチ・メッセージは消さずに、読むときに除く | 主キー `id`・`(blocker_id, blocked_id)` の UNIQUE・2つの列の外部キー（`ON DELETE CASCADE`）。自分で自分をブロックする行も入る。UNIQUE は `blocker_id` が先なので、私をブロックした人（`blocked_id = ?`）を探すと表を全部読む |
 | `plans` | 07 | 有料のプラン（期間と今の値段）。1か月 3,980円・3か月 9,800円・6か月 16,800円の3行をマイグレーションで入れる | 主キー `id` だけ。同じ期間が2行入る・値段が0や負の数でも入る |
 | `purchases` | 07 | 購入の記録（だれが・どのプランを・いつ） | 主キー `id`・`user_id`（`ON DELETE CASCADE`）と `plan_id` の外部キーだけ。値段と期間を持たないので、プランの値段を変えると前の記録の値段も変わる。`user_id` から探すと表を全部読む |
+| `admins` | 12 | 管理画面の管理者（会員とは別にログインする）と役割 | 主キー `id`・`email` の UNIQUE。`role` に CHECK はなく、何でも入る。読み書きするのは管理画面（`backend/admin`） |
+| `admin_audit_logs` | 12 | 監査ログ（だれが・いつ・何に・何をしたか） | 主キー `id`・`admin_id` の外部キーだけ。対象は `target_type` と `target_id`（文字）で指すので外部キーはない。書き換え・削除を DB で止めていない |
 
 Laravel のひな形が作った表（この学習では扱わない）：`password_reset_tokens`・`sessions`・`cache`・`cache_locks`・`jobs`・`job_batches`・`failed_jobs`・`personal_access_tokens`（`install:api` が足した Sanctum の表。D-014 で JWT にしたので使わない）。
 
