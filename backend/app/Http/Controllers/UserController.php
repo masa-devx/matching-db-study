@@ -24,6 +24,7 @@ use Illuminate\Support\Str;
  * 入力を確かめない・トランザクションがない・応答に確認用の文字が出る。改善する段階で、要件 ID のテストにする。
  * 04 で、相手を探す index() を足した（docs/api/04-search.md）。OFFSET で20人ずつ・1＋N 本・条件は文字で比べる。
  * 06 で、退会の destroy() を足し（docs/api/06-blocks-withdrawal.md）、検索からブロックした・された相手と退会した会員を除いた。
+ * 07 で、身長の条件を男性の無料の会員には使わせないようにした（送ったときだけ2本増える。docs/api/07-paid-members.md）。
  */
 class UserController extends Controller
 {
@@ -50,6 +51,16 @@ class UserController extends Controller
             return response()->json(['message' => 'ログインしてください'], 401);
         }
         $payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));
+
+        // 07：身長の条件は、男性の無料の会員は使えない（送ったときだけ確かめる。すぐ下で同じプロフィールをもう一度読む）
+        if ($request->filled('height_min') || $request->filled('height_max')) {
+            // 07：男性の無料の会員は使えない（is_paid だけを見る。paid_until は見ない。送る・いいね・検索に写した）
+            $myProfile = Profile::where('user_id', $payload->sub)->first();
+            $myUser = User::find($payload->sub);
+            if ($myProfile?->gender === 'male' && ! $myUser->is_paid) {
+                return response()->json(['message' => '有料会員になると使えます'], 403);
+            }
+        }
 
         // 性別を送らなければ、自分の反対の性別（male でなければ、みな male を探す）
         $me = Profile::where('user_id', $payload->sub)->first();
