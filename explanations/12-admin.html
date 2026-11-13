@@ -10,7 +10,7 @@
 <main>
   <p class="meta"><a href="index.html">← 目次へ</a></p>
   <h1>12 管理画面</h1>
-  <p class="meta">作成: 2026-11-13 ／ 状態: <span class="status">解説だけ</span> ／ 要件: <code>docs/requirements/admin.md</code>（FR-ADMIN-001〜012・NFR-ADMIN-001〜004）</p>
+  <p class="meta">作成: 2026-11-13 ／ 状態: <span class="status">レガシー版まで</span> ／ 要件: <code>docs/requirements/admin.md</code>（FR-ADMIN-001〜012・NFR-ADMIN-001〜004）</p>
 
   <div class="card point">
     <strong>この一歩でできるようになること</strong>
@@ -436,9 +436,122 @@ order by "month" asc;</code></pre>
   <h2>9. 実装の記録</h2>
   <p class="meta">レガシー版のあと（9-1・9-2）と、改善したあと（9-3・9-4）に、explain-change が書く。</p>
   <h3>9-1. レガシー版</h3>
-  <p>【まだ実装していない】</p>
+  <p class="meta">記録: 2026-11-14（PR #92・#94・#95・#96・#97。Issue #87〜#91・#93）。フォルダの名前は #93 で変えた（会員の側は <code>backend/client</code>・<code>frontend/client</code>、管理画面は <code>backend/admin</code>・<code>frontend/admin</code>）。この上の節の <code>admin/backend</code> などは、当時の名前のまま。</p>
+  <h4>書いたもの</h4>
+  <table>
+    <tr><th>ファイル</th><th>役割</th></tr>
+    <tr><td><code>backend/admin</code>（Laravel 13。compose の <code>admin-app</code>・:8100）</td><td>管理画面の API。マイグレーションは持たない（表の作りは会員の側と共通で、<code>backend/client</code> にまとめる。ユーザーが決めた）。キャッシュ・セッション・キューは DB を使わない</td></tr>
+    <tr><td><code>backend/client/database/migrations/2026_11_14_10000*</code>・<code>AdminsSeeder</code></td><td><code>admins</code>・<code>admin_audit_logs</code>・<code>users.suspended_at</code>・<code>suspended_reason</code>。試しの管理者2人（owner・viewer）</td></tr>
+    <tr><td><code>backend/admin/app/Http/Controllers/</code>（8つ）</td><td>ログイン・ダッシュボード・会員・止める／解く・メッセージ・売上・プラン・監査ログ。<code>DB::table()</code> で表を直接読む</td></tr>
+    <tr><td><code>backend/client/app/Http/Controllers/AuthController.php</code></td><td>止めた会員をログインで断る（ログインだけ）</td></tr>
+    <tr><td><code>frontend/admin/src/domains.tsx</code>・<code>App.tsx</code></td><td>サイドバーとルートの1か所の一覧と、<code>AppShell</code> の枠</td></tr>
+    <tr><td><code>frontend/admin/src/domains/</code>（5つ）</td><td>ダッシュボード（<code>@mantine/charts</code> の折れ線と棒）・会員（一覧と詳細）・メッセージ・有料会員と売上・監査ログ</td></tr>
+  </table>
+
+  <h4>大事な行の読み方</h4>
+  <p><strong>① サイドバーとルートは、1か所の一覧から作る</strong></p>
+  <pre><code class="language-tsx">export const DOMAINS: Domain[] = [
+  { path: '/', label: 'ダッシュボード', icon: 'chart', roles: ['owner', 'viewer'], element: &lt;DashboardPage /&gt; },
+  { path: '/members', …, children: [{ path: '/members/:publicId', element: &lt;MemberDetailPage /&gt; }] },
+  { path: '/audit-logs', label: '監査ログ', icon: 'log', roles: ['owner'], element: &lt;AuditLogsPage /&gt; },
+]
+// App.tsx：DOMAINS.filter((d) =&gt; d.roles.includes(role)) から、NavLink と Route を作る</code></pre>
+  <p>ドメインを足すときに直すのは、<code>src/domains/&lt;名前&gt;/</code> の画面と、この一覧の1行だけです（<code>App.tsx</code> は直さない）。役割に入っていない項目は、サイドバーにもルートにも出ません。ただし、画面で隠すだけで、API は別に確かめる必要があります（下の ③）。</p>
+
+  <p><strong>② 管理者の JWT は、管理画面の鍵で署名する</strong></p>
+  <pre><code class="language-php">$token = JWT::encode(['sub' =&gt; $admin-&gt;id, 'role' =&gt; $admin-&gt;role, 'iat' =&gt; time(), 'exp' =&gt; time() + 60 * 60 * 8],
+    (string) config('app.key'), 'HS256');   // 管理画面の APP_KEY（会員の側とは別）</code></pre>
+  <p>会員の JWT は会員の側の鍵で署名されているので、管理画面では署名が合いません。ただ、例外をつかまえないので <code>401</code> ではなく <code>500</code> になります。役割を JWT に入れているので、DB で役割を変えても、期限（8時間）までは前の役割のままです。</p>
+
+  <p><strong>③ 役割の確かめと監査ログを、コントローラごとに写す（写し忘れが出る）</strong></p>
+  <pre><code class="language-php">// SuspensionController::store（止める）：写した
+if ($admin?-&gt;role !== 'owner') { return response()-&gt;json(['message' =&gt; '権限がありません'], 403); }
+DB::table('admin_audit_logs')-&gt;insert(['action' =&gt; 'member.suspend', …]);
+
+// SuspensionController::destroy（解く）：どちらも写し忘れ
+DB::table('users')-&gt;where('public_id', $publicId)-&gt;update(['suspended_at' =&gt; null, 'suspended_reason' =&gt; null]);</code></pre>
+
+  <p><strong>④ 一覧は 1件ごとに読みに行く（N+1）</strong></p>
+  <pre><code class="language-php">foreach ($rows as $m) {   // メッセージの一覧：1件ごとに6本
+    $senderName = DB::table('profiles')-&gt;where('user_id', $m-&gt;sender_id)-&gt;value('nickname');
+    $senderId = DB::table('users')-&gt;where('id', $m-&gt;sender_id)-&gt;value('public_id');
+    $room = DB::table('talk_rooms')-&gt;where('id', $m-&gt;talk_room_id)-&gt;first();
+    // 相手の参加者・相手のプロフィール・相手の public_id …
+}</code></pre>
+
+  <h4>実際に流れる SQL（クエリログで多かったもの）</h4>
+  <pre><code class="language-sql">-- ダッシュボード：日ごとに1本ずつ（30日 × 3種類）。created_at::date は索引を使えない
+select count(*) as "aggregate" from "users" where "created_at"::date = ?;
+select count(*) as "aggregate" from "user_matches" where "created_at"::date = ?;
+select count(*) as "aggregate" from "messages" where "created_at"::date = ?;
+
+-- 月ごとの売上：今のプランの値段で足す
+select to_char(purchases.created_at, 'YYYY-MM') as month, sum(plans.price) as sales
+from "purchases" inner join "plans" on "plans"."id" = "purchases"."plan_id"
+where "purchases"."created_at" &gt;= ? group by "month" order by "month";
+
+-- 一覧の N+1（測っているあいだに、多い順に 1,101本・750本・351本 流れた）
+select "nickname" from "profiles" where "user_id" = ? limit 1;
+select "public_id" from "users" where "id" = ? limit 1;
+select count(*) as "aggregate" from "purchases" where "user_id" = ?;
+
+-- 監査ログ（会員の詳細を見たとき）
+insert into "admin_audit_logs" ("admin_id", "action", "target_type", "target_id", "created_at") values (?, ?, ?, ?, ?);</code></pre>
+
+  <h4>解説から変えたこと</h4>
+  <ul>
+    <li><strong>表の作り</strong>：解説の初版では「管理画面の表は管理画面のマイグレーションで持つ」としていたが、表は共通にし、すべて <code>backend/client</code> にまとめた（ユーザーが決めた）。管理画面の <code>admin_migrations</code> はやめた</li>
+    <li><strong>フォルダの名前</strong>：<code>admin/backend</code>・<code>admin/frontend</code> から、層で分けてから使う人で分ける形（<code>backend/client</code>・<code>backend/admin</code>・<code>frontend/client</code>・<code>frontend/admin</code>）に変えた（#93）</li>
+    <li><strong>Model</strong>：管理画面は会員の側の Model を読み込まず、<code>DB::table()</code> で表を直接読む形にした</li>
+    <li><strong>メッセージの一覧</strong>：見込みは 2＋5N 本だったが、相手の <code>public_id</code> を読む分が増えて 2＋6N 本になった</li>
+  </ul>
+
+  <h4>気になる点（直していない）</h4>
+  <ul>
+    <li>開発中の React（StrictMode）は読み込みを2回行うので、会員の詳細を1回開くと、監査ログに「詳細を見た」が2行残る（見た回数の数え方が、画面の作りで変わる）</li>
+    <li>月ごとの売上の API は期間で絞らず、75か月ぶんを返している（画面で最後の12か月を出す）</li>
+    <li>JWT を読む処理が、管理画面にも 14か所できた（会員の側の 16か所とは別に）</li>
+    <li>画面の Biome の指摘：エラー 5・警告 16（<code>any</code> など）。管理画面の JS は 925KB（gzip 272KB）。Mantine とグラフの分</li>
+  </ul>
   <h3>9-2. 測った問題と数字</h3>
-  <p>【まだ実装していない】</p>
+  <p>開発用の DB（会員 2万人・メッセージ 10万件・購入 23,594件・管理者 2人）に、手元から本物の HTTP を送った。SQL は管理画面のクエリログで数えた。画面は headless の Chrome（幅 1280px）で、owner と viewer で開いた。止めた会員・値段は戻し、試しの監査ログは消した。時間は手元の Docker で1回ずつ。</p>
+  <h4>SQL の本数と時間</h4>
+  <table>
+    <tr><th>API</th><th>SQL</th><th>時間</th><th>要件</th></tr>
+    <tr><td>ダッシュボード</td><td><strong>97本</strong>（カード 6・日ごと 90・月ごと 1）</td><td>271ms</td><td>NFR-ADMIN-002</td></tr>
+    <tr><td>会員の一覧（1ページ目・200ページ目・語で探す・有料）</td><td>どれも <strong>102本</strong>（2＋2N）</td><td>92〜107ms</td><td>NFR-ADMIN-001</td></tr>
+    <tr><td>会員の詳細</td><td>9本</td><td>―</td><td>FR-ADMIN-005</td></tr>
+    <tr><td>メッセージの一覧（1ページ目・2,000ページ目・本文の語）</td><td>どれも <strong>302本</strong>（2＋6N）</td><td>146〜158ms</td><td>NFR-ADMIN-001</td></tr>
+    <tr><td>購入の一覧</td><td>152本（2＋3N）</td><td>79ms</td><td>FR-ADMIN-008</td></tr>
+    <tr><td>月ごとの売上</td><td>1本（75か月ぶん）</td><td>―</td><td>FR-ADMIN-008</td></tr>
+  </table>
+  <pre><code class="language-sql">-- メッセージの 2,000ページ目（offset 99950）
+explain (analyze, buffers) select * from messages order by created_at desc limit 50 offset 99950;
+--  Sort  (actual rows=100000)  Sort Key: created_at DESC  Sort Method: external merge  Disk: 8304kB
+--  Buffers: shared hit=2533, temp read=1038 written=1041   約29ms</code></pre>
+  <p>10万行を並べ替えてディスクに書き出し、そこから 50行を取っています。件数が増えるほど、並べ替えとディスクの量が増えます。</p>
+
+  <h4>守れていないこと</h4>
+  <table>
+    <tr><th>すること</th><th>結果</th><th>要件</th></tr>
+    <tr><td>会員の JWT で管理画面の API</td><td><strong><code>500</code></strong>（入れないが、<code>401</code> ではない）</td><td>FR-ADMIN-001</td></tr>
+    <tr><td>会員の一覧の1人の行</td><td><strong><code>password</code>（ハッシュ）と <code>verification_token</code> まで出る</strong></td><td>FR-ADMIN-004</td></tr>
+    <tr><td>viewer で止める・値段を変える</td><td><code>403</code>・<code>403</code></td><td>FR-ADMIN-010</td></tr>
+    <tr><td>viewer で解く・監査ログを見る</td><td><strong><code>204</code>・<code>200</code></strong>（役割の確かめの写し忘れ。画面ではボタンも項目も出していないが、API は通る）</td><td>FR-ADMIN-010</td></tr>
+    <tr><td>止めた会員でログイン・止める前の JWT で会員の API</td><td><code>403</code>・<strong><code>200</code></strong>（会員の側はログインでしか見ていない）</td><td>FR-ADMIN-006</td></tr>
+    <tr><td>owner で 1か月を 4,500円にしたあとの、過去の月の売上</td><td><strong>2026-09 が 4,185,020 → 4,283,300 円</strong>（今の値段で足すため）</td><td>FR-ADMIN-009</td></tr>
+    <tr><td>監査ログに残る操作</td><td>詳細を見る・止める・値段を変える。<strong>解く・メッセージの一覧・ダッシュボードは残らない</strong></td><td>FR-ADMIN-011</td></tr>
+    <tr><td>監査ログを DB で直接 <code>delete</code></td><td><strong>できる</strong>（取り消して確かめた）</td><td>FR-ADMIN-011</td></tr>
+    <tr><td>有料会員の数（ダッシュボード）</td><td>3,000人（期限が過ぎた 1,200人も入る。07 と同じ穴）</td><td>FR-ADMIN-003</td></tr>
+  </table>
+
+  <h4>画面（FR-ADMIN-002・010）</h4>
+  <ul>
+    <li>owner：サイドバー5つ（ダッシュボード・会員・メッセージ・有料会員と売上・監査ログ）。帯に名前と「すべてできる」。ダッシュボードはカード6枚とグラフ2つ。会員を探して詳細を開き、モーダルで理由を入れて止める → 「停止中」の印と赤い知らせ → 解く</li>
+    <li>viewer：サイドバー4つ（監査ログなし）。帯に「見るだけ」。詳細に止めるボタンなし・値段の入力なし・<code>/audit-logs</code> を URL で開くと「ページが見つかりません」</li>
+    <li>サイドバーに項目を1つ足すときに直すファイル：画面のファイルと <code>domains.tsx</code> の1行（2つ）</li>
+    <li>画面の例外 0回。<code>npm run build</code> は通った</li>
+  </ul>
   <h3>9-3. 足したテスト</h3>
   <p>【まだ実装していない】</p>
   <h3>9-4. 改善版と、前と後の数字</h3>
