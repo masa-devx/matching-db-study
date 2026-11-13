@@ -10,7 +10,7 @@
 <main>
   <p class="meta"><a href="index.html">← 目次へ</a></p>
   <h1>05c Firestore と比べる</h1>
-  <p class="meta">作成: 2026-11-13 ／ 状態: <span class="status">解説だけ</span> ／ 要件: <code>docs/requirements/messages.md</code>（05 と同じ FR-MSG-001〜014・NFR-MSG-001〜003）／ 決めたこと: D-008（手元の Firebase Emulator で比べる）</p>
+  <p class="meta">作成: 2026-11-13 ／ 状態: <span class="status">レガシー版まで</span> ／ 要件: <code>docs/requirements/messages.md</code>（05 と同じ FR-MSG-001〜014・NFR-MSG-001〜003）／ 決めたこと: D-008（手元の Firebase Emulator で比べる）</p>
 
   <div class="card point">
     <strong>この一歩でできるようになること</strong>
@@ -351,9 +351,128 @@ Http::withToken('owner')->post(
   <h2>10. 実装の記録</h2>
   <p class="meta">レガシー版のあと（10-1・10-2）と、改善したあと（10-3・10-4）に、explain-change が書く。</p>
   <h3>10-1. レガシー版</h3>
-  <p>【まだ実装していない】</p>
+  <p class="meta">記録: 2026-11-13（PR #69・#70・#71。Issue #66・#67・#68）</p>
+  <h4>書いたもの</h4>
+  <table>
+    <tr><th>ファイル</th><th>役割</th></tr>
+    <tr><td><code>docker/firebase/Dockerfile</code>・<code>compose.yaml</code> の <code>firebase</code></td><td>Node 24 と JDK 21 の上に firebase-tools 15.34.2。ポートは <code>127.0.0.1</code> だけに開く。止めたときのデータは <code>firebase/.emulator-data/</code>（bind mount）</td></tr>
+    <tr><td><code>firebase/firebase.json</code>・<code>firestore.rules</code>・<code>firestore.indexes.json</code></td><td>Emulator の設定。ルールは <code>request.auth != null</code> だけ。インデックスは空</td></tr>
+    <tr><td><code>backend/database/seeders/FirestoreMessagesSeeder.php</code></td><td>PostgreSQL のルーム 1001・受信箱 2002・メッセージ 10万件を、Emulator を消してから <code>documents:commit</code>（500件ずつ）で写す。プロジェクトが <code>demo-</code> でなければ止まる</td></tr>
+    <tr><td><code>backend/app/Http/Controllers/FirebaseTokenController.php</code>（<code>POST /api/me/firebase-token</code>）</td><td>署名のないカスタムトークン（<code>alg: none</code>）を返す。<code>uid</code> は会員の <code>public_id</code></td></tr>
+    <tr><td><code>backend/app/Http/Controllers/LikeController.php</code></td><td>マッチしたら、PostgreSQL のルームのあとに、Firestore のルームと2人の受信箱を別々の HTTP で3回書く</td></tr>
+    <tr><td><code>frontend/src/firebase.ts</code></td><td>Emulator につなぐ・カスタムトークンでログイン・読み取りの数を数える</td></tr>
+    <tr><td><code>frontend/src/MessagesFsPage.tsx</code>（<code>/messages-fs</code>）</td><td>受信箱を全部読み、ルームごとに最新の1件・未読・相手の名前（Laravel）を読む</td></tr>
+    <tr><td><code>frontend/src/TalkFsPage.tsx</code>（<code>/messages-fs/:roomId</code>）</td><td><code>limit</code> のないリスナー・画面の時計で <code>lastReadAt</code> と <code>createdAt</code>・送る</td></tr>
+    <tr><td><code>frontend/src/ReadCounter.tsx</code></td><td>「本番なら読み取り何件分か」を画面に出す（Emulator は課金しないので、自分で数える）</td></tr>
+  </table>
+
+  <h4>大事な行の読み方</h4>
+  <p><strong>① ログイン：Laravel が「この人は uid ＝ public_id」と書いた札を出す</strong></p>
+  <pre><code class="language-php">$custom = $b64(['alg' =&gt; 'none', 'typ' =&gt; 'JWT']).'.'.$b64([
+    'iss' =&gt; 'emulator@demo-matching.iam.gserviceaccount.com',   // 本物ならサービスアカウント
+    'aud' =&gt; 'https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit',
+    'iat' =&gt; $now, 'exp' =&gt; $now + 3600,
+    'uid' =&gt; $uid,                                                // ルールの request.auth.uid になる
+]).'.';                                                           // 署名の部分は空</code></pre>
+  <p>Firestore は Laravel の JWT を知りません。だから Laravel が「この人は Firebase ではこの uid」と書いたカスタムトークンを出し、画面がそれを Auth に渡して、Firebase のログインに替えます。Auth の Emulator は署名を確かめないので、署名なしで通ります。<strong>本物では通らない</strong>ので、改善版では環境ごとに分けます。</p>
+
+  <p><strong>② マッチ：2つの DB に、別々に書く</strong></p>
+  <pre><code class="language-php">Http::withToken('owner')-&gt;post("{$base}/rooms?documentId={$room-&gt;public_id}", [...])-&gt;throw();
+Http::withToken('owner')-&gt;post("{$base}/users/{$meUid}/rooms?documentId={$room-&gt;public_id}", [...])-&gt;throw();
+Http::withToken('owner')-&gt;post("{$base}/users/{$toUid}/rooms?documentId={$room-&gt;public_id}", [...])-&gt;throw();</code></pre>
+  <p>PostgreSQL のトランザクションは Firestore に届きません。PostgreSQL の行を入れたあとに HTTP を3回送るので、途中で止まると「PostgreSQL にはルームがあるのに、Firestore にはない（または片方の受信箱だけ）」が残ります。ドキュメントの ID を PostgreSQL の <code>public_id</code> にそろえているので、あとから突き合わせることはできます。</p>
+
+  <p><strong>③ 一覧：ルームごとに3回読む（N+1 が、そのまま課金になる）</strong></p>
+  <pre><code class="language-tsx">const inbox = await getDocs(collection(db, 'users', uid, 'rooms'))     // limit なし
+inbox.docs.map(async (r) =&gt; {
+  const last = await getDocs(query(msgs, orderBy('createdAt', 'desc'), limit(1)))   // 0件でも1件分
+  const after = await getDocs(query(msgs, where('createdAt', '&gt;', r.data().lastReadAt ?? new Date(0))))
+  const unread = after.docs.filter((m) =&gt; m.data().senderId !== uid).length        // 読んでから数える
+  const partner = await fetch(`${api}/api/users/${r.data().partnerUid}`, ...)       // 名前は RDB から</code></pre>
+  <p>受信箱には <code>partnerUid</code> と <code>lastReadAt</code> しかありません。だから一覧に出すもの（最新の1件・未読・名前）を、ルームごとに取りに行きます。05 のレガシー版の 1＋6N と同じ形ですが、Firestore では「読んだ件数」がそのまま料金になります。未読は「数える」クエリではなく、全部を読んで画面で数えています。</p>
+
+  <p><strong>④ トーク画面：limit のないリスナー</strong></p>
+  <pre><code class="language-tsx">stop = onSnapshot(query(collection(db, 'rooms', roomId!, 'messages'), orderBy('createdAt')), (snap) =&gt; {
+  if (!snap.metadata.hasPendingWrites) countReads(snap.docChanges().length)
+  setMessages(snap.docs.map((d) =&gt; ({ id: d.id, ...d.data() })))
+})</code></pre>
+  <p>リスナーは、最初に結果を全部送り、そのあとは変わったものだけを送ります。だから「開いたまま」は安い（0件）のに、「開く」たびにルームの全部を読みます。<code>docChanges()</code> の数が、本番なら課金される読み取りの数です。自分が送ったばかりのものは、手元の SDK が先に見せるだけ（<code>hasPendingWrites</code>）なので数えません。</p>
+
+  <h4>実際に流れる SQL・書き込み</h4>
+  <p>Firestore には SQL がありません。PostgreSQL の側で変わったのは、マッチの2回目だけです（05 の 7本 → <strong>9本</strong>。会員の <code>public_id</code> とルームの読み直しが増えた）。</p>
+  <pre><code class="language-sql">-- 増えた2本（LikeController::store のマッチのとき。クエリログの 17・18本目）
+select * from "talk_rooms" where "id" = ? limit 1;     -- $room-&gt;refresh()（public_id は DB の既定の値で入るため）
+select "public_id" from "users" where "id" = ? limit 1;   -- 自分の uid</code></pre>
+  <p>そのあとに Firestore への HTTP が3本（ルーム・自分の受信箱・相手の受信箱）。画面から Firestore への読み書きは、Laravel を通りません。</p>
+
+  <h4>図：作った形（マッチしたとき・開いたとき）</h4>
+  <pre class="mermaid">
+sequenceDiagram
+  participant B as 画面
+  participant L as Laravel
+  participant P as PostgreSQL
+  participant F as Firestore（Emulator）
+  B->>L: POST /api/likes（2回目）
+  L->>P: いいね・マッチ・ルーム・参加者（トランザクション）
+  P-->>L: commit
+  L->>F: rooms/{id}
+  L->>F: users/{me}/rooms/{id}
+  L->>F: users/{to}/rooms/{id}
+  Note over L,F: 3本は別々。途中で失敗すると、PostgreSQL だけに残る
+  B->>L: POST /api/me/firebase-token
+  L-->>B: カスタムトークン（uid は public_id）
+  B->>F: signInWithCustomToken（Auth）
+  B->>F: onSnapshot（limit なし）
+  F-->>B: 全部 → そのあとは変わった分だけ
+  </pre>
+
+  <h4>解説から変えたこと</h4>
+  <ul>
+    <li><strong>止めたときのデータの置き場所</strong>：名前つきの volume（<code>/data</code>）→ bind mount の <code>firebase/.emulator-data/</code>。Emulator は書き出すときにフォルダを「移す」ので、volume のマウントの境目をまたげず失敗したため</li>
+    <li><strong>Laravel の書き込み</strong>：解説の見本は改善版の <code>documents:commit</code>（1回で3件）。レガシー版は別々の HTTP 3本にした（途中で失敗したときの問題を見るため）</li>
+    <li><strong>ログインのしかた</strong>：解説では決めていなかった。Laravel のカスタムトークン（署名なし。Emulator だけ）にした</li>
+    <li><strong>Firebase と話す道具</strong>：Laravel は REST を直接呼ぶ（grpc の拡張と kreait/firebase-php を入れない）。画面は Firebase JS SDK 13.1.0</li>
+  </ul>
+
+  <h4>気になる点（直していない）</h4>
+  <ul>
+    <li>カスタムトークンは本物の Firebase では通らない（改善版で、サービスアカウントの鍵で署名する形と、環境ごとの切り替えが要る）</li>
+    <li>JWT の処理を写すのが9か所目になった（04 のリファクタの候補 #51）</li>
+    <li>画面の JS が 279KB → 847KB（gzip 258KB）。Firebase の SDK を全部の画面で読む。改善版で、Firestore 版の画面だけ遅れて読む（<code>lazy</code>）か、<code>firebase/firestore/lite</code> を検討する</li>
+    <li>Biome：新しい4ファイルでエラー 6・警告 10（<code>any</code>・<code>!</code>・<code>img</code> の <code>alt</code> など。レガシー版なので残した）</li>
+  </ul>
   <h3>10-2. 測った問題と数字</h3>
-  <p>【まだ実装していない】</p>
+  <p>手元の Emulator（ルーム 1001・受信箱 2002・メッセージ 10万件。05 と同じ試しのデータを写したもの）で、本番用のビルドを headless の Chrome で開いて測った。<code>search00001</code>（ルーム 100）と相手を、別々のブラウザの文脈でログインした。読み取りの数は、画面の中で数えた「本番なら課金される件数」（Emulator は課金しない）。トークンは出力していない。試しに書いたものは消した。</p>
+  <table>
+    <tr><th>操作</th><th>結果</th><th>何が問題か</th></tr>
+    <tr><td>一覧を開く（ルーム 100）</td><td>100行が出るまで <strong>75秒</strong>・読み取り <strong>300件分</strong>以上・Laravel への GET <strong>100本</strong></td><td>N+1。受信箱 100 ＋ 最新の1件 100 ＋ 未読 100回。そのうえ名前を RDB に100回聞く</td></tr>
+    <tr><td>一覧の未読（2万件のルーム）</td><td>本当は約 9,900件なのに <strong>「1」</strong></td><td>2万件を読むクエリが届かず、SDK が手元のキャッシュから返したと考えられる（見込み。確かめていない）。<strong>失敗が、エラーではなく、まちがった数として出る</strong></td></tr>
+    <tr><td>2万件のルームを開く</td><td>60秒たっても吹き出し <strong>0個</strong>。Firestore から <code>400</code> が10本・つなぎ直しを繰り返す</td><td><code>limit</code> がない。本番なら開くたびに2万件分（1日の無料の枠 5万件を、3回で超える）</td></tr>
+    <tr><td>2000件のルームを開く</td><td>0.8秒で全部出た・読み取り <strong>2,001件分</strong></td><td>届く大きさでも、開くたびに全部を読む</td></tr>
+    <tr><td>開いたまま1分</td><td>読み取り <strong>+0件</strong></td><td>（良いところ）リスナーは、何もなければ読まない。05 のポーリングは同じ1分で 12本・125KB</td></tr>
+    <tr><td>相手が送る</td><td><strong>1.3秒</strong>で押し出しで届いた・読み取り +1件</td><td>（良いところ）05 は最大5秒待つ</td></tr>
+    <tr><td>空のまま送る</td><td>入った</td><td>ルールが中身を確かめない</td></tr>
+    <tr><td>参加していない会員（<code>search00005</code>）で、<code>search00001</code> のルームを読む</td><td><code>200</code>・75件全部</td><td>ルールが「ログインしていれば」だけ。ルームの ID が分かれば読める</td></tr>
+    <tr><td>同じ会員で、<code>search00001</code> の受信箱を読む</td><td><code>200</code>（1ページ目の30件）</td><td>だれとマッチしているかが見える</td></tr>
+    <tr><td>同じ会員で、<code>senderId</code> を <code>search00001</code> にして送る</td><td><code>200</code>（書けた）</td><td>なりすまし。05 のレガシー版の「参加者を確かめない」と同じ穴が、DB の側にある</td></tr>
+    <tr><td>マッチ（いいねの2回目。#67 で測った）</td><td><code>201</code>・SQL 9本・Firestore への HTTP 3本・39ms</td><td>05 より SQL が2本、HTTP が3本増える</td></tr>
+    <tr><td><code>firebase</code> を止めてマッチ</td><td><code>500</code>。PostgreSQL にはいいね・マッチ・ルーム・参加者が残り、Firestore には何もない。送り直すと UNIQUE で <code>500</code></td><td>2つの DB は1つのトランザクションにならない。直す道がない</td></tr>
+    <tr><td>画面の JS</td><td>279KB → <strong>847KB</strong>（gzip 86KB → 258KB）</td><td>05 の画面にも、Firebase の SDK が付いてくる</td></tr>
+  </table>
+
+  <h4>2万件のルームが届かない理由（調べたこと）</h4>
+  <ul>
+    <li>75件や 2000件のルームは届き、2万件だけが届かない。<strong>通信の方式ではなく、結果の大きさ</strong>が原因だった。long polling に切り替えても直らなかったので、元に戻した</li>
+    <li>同じクエリでも、REST や Node の SDK（gRPC）では2万件が約1秒で返る。届かないのは、ブラウザの SDK（WebChannel）と Emulator のあいだだけ。<strong>本物の Firestore でも同じかは、確かめていない</strong></li>
+    <li>届かないリスナーがつなぎ直しを続けると、Emulator が詰まり、シーダーの「中身を消す」が30秒で時間切れになった。Emulator を起動し直すと直った（シーダーの待ち時間は 300秒に延ばした）</li>
+  </ul>
+
+  <h4>確かめていないこと</h4>
+  <ul>
+    <li>端末の時計をずらしたときの並びと未読の境目（解説の「画面の時計」の問題）</li>
+    <li>相手が名前を変えたとき（レガシー版は毎回 RDB から読むので、何もしなくても新しい名前が出る見込み）</li>
+    <li>本物の Firestore での速さと料金（クラウドのアカウントは作らない）</li>
+  </ul>
   <h3>10-3. 足したテスト</h3>
   <p>【まだ実装していない】</p>
   <h3>10-4. 改善版と、前と後の数字</h3>
