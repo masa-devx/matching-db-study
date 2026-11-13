@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 
 // レガシー版（03b）。ホーム（/home）＝自分のプロフィールを見て直す。全部この部品に書く
 export default function HomePage(props: any) {
@@ -7,6 +7,10 @@ export default function HomePage(props: any) {
   const [form, setForm] = useState<any>({})
   const [editing, setEditing] = useState(false)
   const [message, setMessage] = useState('')
+  // 06：退会のモーダル（開いているか・入れたパスワード・失敗の文）
+  const [withdrawing, setWithdrawing] = useState(false)
+  const [password, setPassword] = useState('')
+  const [withdrawError, setWithdrawError] = useState('')
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -40,6 +44,27 @@ export default function HomePage(props: any) {
       headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
     })
     // 応答を待たずに消す。サーバーは何もしないので、消す前に写したトークンは30日使える
+    sessionStorage.removeItem('token')
+    props.setToken(null)
+    navigate('/login')
+  }
+
+  // 06：退会する。422 のときだけ、モーダルの中に出す（ほかの失敗は考えない）
+  const withdraw = async () => {
+    const res = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        Authorization: `Bearer ${sessionStorage.getItem('token')}`,
+      },
+      body: JSON.stringify({ password }),
+    })
+    if (res.status === 422) {
+      setWithdrawError('パスワードがちがいます')
+      return
+    }
+    // ログアウトと同じく、画面のトークンを消すだけ（サーバーはトークンを止めないので、写したものは使える）
     sessionStorage.removeItem('token')
     props.setToken(null)
     navigate('/login')
@@ -172,9 +197,43 @@ export default function HomePage(props: any) {
           </form>
         )}
       </div>
+      <Link to="/blocks" className="button button-ghost logout">
+        ブロックした相手
+      </Link>
       <button className="button button-ghost logout" onClick={logout}>
         ログアウト
       </button>
+      <button
+        className="danger-link"
+        onClick={() => {
+          setPassword('')
+          setWithdrawError('')
+          setWithdrawing(true)
+        }}
+      >
+        退会する
+      </button>
+
+      {withdrawing && (
+        // 06：確かめのモーダル（相手のプロフィールのブロックから写して、パスワードを足した）
+        <div className="modal-back" onClick={() => setWithdrawing(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <p className="modal-title">退会しますか？</p>
+            <p>同じメールアドレスで、あとから登録し直せます。今のマッチやメッセージは引き継げません。</p>
+            <label className="label">
+              パスワード
+              <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            </label>
+            {withdrawError && <p className="modal-error">{withdrawError}</p>}
+            <button className="button button-danger" onClick={withdraw}>
+              退会する
+            </button>
+            <button className="button button-ghost" onClick={() => setWithdrawing(false)}>
+              キャンセル
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

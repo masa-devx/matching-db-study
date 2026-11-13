@@ -9,6 +9,8 @@ export default function UserPage() {
   const [liked, setLiked] = useState(false)
   const [message, setMessage] = useState('')
   const [matched, setMatched] = useState(false)
+  // 06：ブロックの確かめのモーダルを開いているか
+  const [confirming, setConfirming] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -46,6 +48,24 @@ export default function UserPage() {
           setMessage('いいねしました')
         }
       })
+  }
+
+  // 06：ブロックする。ステータスを見ない（2回目は 500 でも「ブロックしました」と出る）
+  const block = () => {
+    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me/blocks`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        Authorization: `Bearer ${sessionStorage.getItem('token')}`,
+      },
+      body: JSON.stringify({ user_id: publicId }),
+    }).then(() => {
+      setConfirming(false)
+      setMessage('ブロックしました')
+      // トーストを少し見せてから、ひとつ前の画面に戻る（戻った先は読み直さないので、まだ出ていることがある）
+      setTimeout(() => navigate(-1), 1000)
+    })
   }
 
   // 年齢の計算もここに書く（年の引き算なので、誕生日の前だと1歳多い）
@@ -88,7 +108,27 @@ export default function UserPage() {
             {liked ? 'いいね済み' : 'いいね'}
           </button>
         </div>
+
+        <button className="danger-link" onClick={() => setConfirming(true)}>
+          ブロック
+        </button>
       </div>
+
+      {confirming && (
+        // 06：確かめのモーダル（ホームの退会・トーク画面にも、同じものを書く）
+        <div className="modal-back" onClick={() => setConfirming(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <p className="modal-title">{user.profile?.nickname}さんをブロックしますか？</p>
+            <p>お互いに、検索・いいね・メッセージに出なくなります。あとで解除できます。</p>
+            <button className="button button-danger" onClick={block}>
+              ブロックする
+            </button>
+            <button className="button button-ghost" onClick={() => setConfirming(false)}>
+              キャンセル
+            </button>
+          </div>
+        </div>
+      )}
 
       {matched && (
         // マッチしたときは、画面いっぱいに知らせる

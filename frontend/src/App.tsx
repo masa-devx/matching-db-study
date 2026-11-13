@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { NavLink, Navigate, Route, Routes } from 'react-router'
 import './App.css'
+import BlocksPage from './BlocksPage'
 import HomePage from './HomePage'
 import LikesPage from './LikesPage'
 import LoginPage from './LoginPage'
@@ -34,6 +35,7 @@ export default function App() {
       <Route path="/messages-fs/:roomId" element={<TalkFsPage />} />
       {/* 04 検索。条件は sessionStorage に置き、戻ってきても残す */}
       <Route path="/search" element={<SearchPage />} />
+      <Route path="/blocks" element={<BlocksPage />} />
       <Route path="*" element={<p>ページが見つかりません</p>} />
     </Routes>
   )
