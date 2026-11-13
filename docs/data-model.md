@@ -106,6 +106,17 @@ erDiagram
 
 Laravel のひな形が作った表（この学習では扱わない）：`password_reset_tokens`・`sessions`・`cache`・`cache_locks`・`jobs`・`job_batches`・`failed_jobs`・`personal_access_tokens`（`install:api` が足した Sanctum の表。D-014 で JWT にしたので使わない）。
 
+## Firestore（05c。レガシー版）
+
+手元の Firebase Emulator（`demo-matching`）に置く。正は PostgreSQL のままで、Firestore はやり取りとその表示に要るものだけを持つ（D-008・`explanations/05c-firestore.html`）。ID は PostgreSQL の `users.public_id`（uid）・`talk_rooms.public_id`（ルーム）・`messages.id` をそのまま使う。
+
+| パス | 中身 | 守り |
+| --- | --- | --- |
+| `users/{uid}` | ドキュメントは置かない（下の受信箱の入れ物だけ） | ― |
+| `users/{uid}/rooms/{roomId}` | 自分から見たルーム（受信箱）。`partnerUid`・`lastReadAt`（最後に開いた時刻。まだなら null）だけ | レガシー版のルールは「ログインしていればだれでも読み書きできる」 |
+| `rooms/{roomId}` | ルーム。`members`（2人の uid） | 同じ |
+| `rooms/{roomId}/messages/{messageId}` | メッセージ。`senderId`・`body`・`createdAt` | 同じ。列の決まりがないので、空の本文も他人の `senderId` も入る |
+
 ## 改善版（refactored-repo）
 
 まだない。01・01b・02・03 を直したら、次の形にする予定（[01 の解説](../explanations/01-members.html)・[01b の解説](../explanations/01b-auth.html)・[02 の解説](../explanations/02-likes.html)・[03 の解説](../explanations/03-matches.html)・D-012〜D-015）。
