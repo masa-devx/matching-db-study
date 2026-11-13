@@ -10,4 +10,4 @@ RUN apt-get update \
 # Composer は公式のイメージから写す（版を固定する）
 COPY --from=composer:2.11.2 /usr/bin/composer /usr/bin/composer
 
-WORKDIR /app/backend
+WORKDIR /app/backend/client

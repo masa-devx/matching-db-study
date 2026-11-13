@@ -5,13 +5,13 @@ on:
   pull_request:
     branches: [legacy-repo, refactored-repo]
     paths:
-      - "backend/**"
+      - "backend/client/**"
       - "compose.yaml"
       - ".github/workflows/backend.yml"
   push:
     branches: [legacy-repo, refactored-repo, "legacy/**", "refactor/**"]
     paths:
-      - "backend/**"
+      - "backend/client/**"
       - "compose.yaml"
       - ".github/workflows/backend.yml"
 
@@ -25,7 +25,7 @@ permissions:
 
 defaults:
   run:
-    working-directory: backend
+    working-directory: backend/client
 
 env:
   PHP_VERSION: "8.5"
@@ -44,8 +44,8 @@ jobs:
           coverage: none
       - uses: actions/cache@v4
         with:
-          path: backend/vendor
-          key: vendor-${{ runner.os }}-${{ env.PHP_VERSION }}-${{ hashFiles('backend/composer.lock') }}
+          path: backend/client/vendor
+          key: vendor-${{ runner.os }}-${{ env.PHP_VERSION }}-${{ hashFiles('backend/client/composer.lock') }}
       - run: composer install --no-interaction --no-progress --prefer-dist
       - run: ./vendor/bin/pint --test
 
@@ -61,8 +61,8 @@ jobs:
           coverage: none
       - uses: actions/cache@v4
         with:
-          path: backend/vendor
-          key: vendor-${{ runner.os }}-${{ env.PHP_VERSION }}-${{ hashFiles('backend/composer.lock') }}
+          path: backend/client/vendor
+          key: vendor-${{ runner.os }}-${{ env.PHP_VERSION }}-${{ hashFiles('backend/client/composer.lock') }}
       - run: composer install --no-interaction --no-progress --prefer-dist
       - run: ./vendor/bin/phpstan analyse --memory-limit=1G --no-progress
 
@@ -97,8 +97,8 @@ jobs:
           coverage: none
       - uses: actions/cache@v4
         with:
-          path: backend/vendor
-          key: vendor-${{ runner.os }}-${{ env.PHP_VERSION }}-${{ hashFiles('backend/composer.lock') }}
+          path: backend/client/vendor
+          key: vendor-${{ runner.os }}-${{ env.PHP_VERSION }}-${{ hashFiles('backend/client/composer.lock') }}
       - run: composer install --no-interaction --no-progress --prefer-dist
       # アプリの鍵は、CI の中でその場で作る（本物の秘密の値は使わない）
       - run: cp .env.example .env && php artisan key:generate --no-interaction

@@ -1,4 +1,4 @@
-# 12 管理画面の API（admin/backend の Laravel）の CI。会員の側（backend.yml）とは別に、admin/backend だけを見る
+# 12 管理画面の API（backend/admin の Laravel）の CI。会員の側（backend.yml）とは別に、backend/admin だけを見る
 # レガシー版はテストを書かないので、整形（Pint）と静的解析（Larastan）だけ
 name: admin-backend
 
@@ -6,12 +6,12 @@ on:
   pull_request:
     branches: [legacy-repo, refactored-repo]
     paths:
-      - "admin/backend/**"
+      - "backend/admin/**"
       - ".github/workflows/admin-backend.yml"
   push:
     branches: [legacy-repo, refactored-repo, "legacy/**", "refactor/**"]
     paths:
-      - "admin/backend/**"
+      - "backend/admin/**"
       - ".github/workflows/admin-backend.yml"
 
 # 同じブランチで続けて push したら、前の実行は止める
@@ -24,7 +24,7 @@ permissions:
 
 defaults:
   run:
-    working-directory: admin/backend
+    working-directory: backend/admin
 
 env:
   PHP_VERSION: "8.5"
@@ -43,8 +43,8 @@ jobs:
           coverage: none
       - uses: actions/cache@v4
         with:
-          path: admin/backend/vendor
-          key: admin-vendor-${{ runner.os }}-${{ env.PHP_VERSION }}-${{ hashFiles('admin/backend/composer.lock') }}
+          path: backend/admin/vendor
+          key: admin-vendor-${{ runner.os }}-${{ env.PHP_VERSION }}-${{ hashFiles('backend/admin/composer.lock') }}
       - run: composer install --no-interaction --no-progress --prefer-dist
       - run: ./vendor/bin/pint --test
 
@@ -60,7 +60,7 @@ jobs:
           coverage: none
       - uses: actions/cache@v4
         with:
-          path: admin/backend/vendor
-          key: admin-vendor-${{ runner.os }}-${{ env.PHP_VERSION }}-${{ hashFiles('admin/backend/composer.lock') }}
+          path: backend/admin/vendor
+          key: admin-vendor-${{ runner.os }}-${{ env.PHP_VERSION }}-${{ hashFiles('backend/admin/composer.lock') }}
       - run: composer install --no-interaction --no-progress --prefer-dist
       - run: ./vendor/bin/phpstan analyse --memory-limit=1G --no-progress
