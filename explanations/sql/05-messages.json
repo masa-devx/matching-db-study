@@ -1,0 +1,177 @@
+{
+  "operations": [
+    {
+      "title": "マッチしたときにトークルームを作る（<code>POST /api/me/likes</code> の中。マッチ 12 ができた）",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "3本（いいねとマッチの SQL に足す）",
+          "code": "// マッチを入れたあとに続けて書く（トランザクションなし）\n$room = TalkRoom::create(['match_id' => $match->id]);\nTalkRoomMember::create([\n    'talk_room_id' => $room->id, 'user_id' => $toUserId]);\nTalkRoomMember::create([\n    'talk_room_id' => $room->id, 'user_id' => $me]);",
+          "sql": "insert into \"talk_rooms\"\n  (\"match_id\", \"updated_at\", \"created_at\")\nvalues (12, '2026-11-13 10:51:27', '2026-11-13 10:51:27')\nreturning \"id\";\n\n-- 2人分を1行ずつ\ninsert into \"talk_room_members\"\n  (\"talk_room_id\", \"user_id\", \"updated_at\", \"created_at\")\nvalues (7, 5, '2026-11-13 10:51:27', '2026-11-13 10:51:27')\nreturning \"id\";\ninsert into \"talk_room_members\"\n  (\"talk_room_id\", \"user_id\", \"updated_at\", \"created_at\")\nvalues (7, 23, '2026-11-13 10:51:27', '2026-11-13 10:51:27')\nreturning \"id\";",
+          "notes": [
+            "表がまだないので <code>DB::pretend()</code> で作らせた（以下も同じ）",
+            "<code>talk_rooms.match_id</code> の UNIQUE で、同じマッチにルームが2つできることは防げる。03 で2行になったマッチ（(A, B) と (B, A)）には、それぞれルームができる",
+            "トランザクションがないので、途中で失敗すると「マッチはあるのにルームがない・1人しかいないルーム」が残る"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版",
+          "count": "2本（いいねとマッチと同じトランザクション）",
+          "code": "DB::transaction(function () use (...) {\n    // いいね・マッチ（03 の改善版）のあとに\n    $roomId = DB::table('talk_rooms')->insertGetId([\n        'match_id' => $matchId, 'created_at' => now()]);\n    DB::table('talk_room_members')->insert([\n        ['talk_room_id' => $roomId, 'user_id' => $toUserId],\n        ['talk_room_id' => $roomId, 'user_id' => $me],\n    ]);\n});",
+          "sql": "begin;\n-- （03 のいいね・マッチの SQL）\n\n-- public_id は DB の既定の値（uuidv7()）で入る\ninsert into \"talk_rooms\" (\"match_id\", \"created_at\")\nvalues (12, '2026-11-13 10:51:27')\nreturning \"id\";\n\n-- 2人分を1本で\ninsert into \"talk_room_members\" (\"talk_room_id\", \"user_id\")\nvalues (7, 5), (7, 23);\ncommit;",
+          "notes": [
+            "<code>begin</code>・<code>commit</code> はログに出ないので手で書き足した",
+            "全部入るか、全部入らないか。マッチだけ・ルームだけが残らない",
+            "03 の改善版でマッチが1組1行になるので、ルームも1組に1つになる"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "トークの一覧（<code>GET /api/me/talk-rooms</code>）。会員 23 が、相手ごとの最新の1件と未読の数を見る",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "1＋6N 本",
+          "code": "$members = TalkRoomMember::where('user_id', $me)->get();\nforeach ($members as $member) {\n    $room = TalkRoom::where('id', $member->talk_room_id)->first();\n    $partner = TalkRoomMember::where('talk_room_id', $room->id)\n        ->where('user_id', '!=', $me)->first();\n    $profile = Profile::where('user_id', $partner->user_id)->first();\n    $publicId = User::where('id', $partner->user_id)\n        ->value('public_id');\n    $last = Message::where('talk_room_id', $room->id)\n        ->orderBy('created_at', 'desc')->first();\n    $unread = Message::where('talk_room_id', $room->id)\n        ->where('sender_id', '!=', $me)\n        ->where('created_at', '>', $member->last_read_at)\n        ->count();\n}",
+          "sql": "-- ① 自分のルーム（1本）。UNIQUE は (talk_room_id, user_id)\n--   の並びなので、user_id だけでは使えず、全部読む\nselect * from \"talk_room_members\"\nwhere \"user_id\" = 23;\n\n-- ② ルーム1つごとに6本（ルーム 7・相手 5 のとき）\nselect * from \"talk_rooms\" where \"id\" = 7 limit 1;\n-- これは UNIQUE (talk_room_id, user_id) が効く\nselect * from \"talk_room_members\"\nwhere \"talk_room_id\" = 7 and \"user_id\" != 23 limit 1;\nselect * from \"profiles\" where \"user_id\" = 5 limit 1;\nselect \"public_id\" from \"users\" where \"id\" = 5 limit 1;\n-- 外部キーはあるがインデックスがないので、\n-- messages を全部読んで並べ替える\nselect * from \"messages\"\nwhere \"talk_room_id\" = 7\norder by \"created_at\" desc limit 1;\n-- これも messages を全部読む\nselect count(*) as \"aggregate\" from \"messages\"\nwhere \"talk_room_id\" = 7\n  and \"sender_id\" != 23\n  and \"created_at\" > '2026-11-13 09:00:00';\n-- ルームが100あれば、合計601本",
+          "notes": [
+            "外部キー <code>messages.talk_room_id</code> は「指す先があるか」を守るだけで、検索を速くしない（PostgreSQL は外部キーの列にインデックスを自動で作らない）",
+            "まだ一度も開いていないルームは <code>last_read_at</code> が <code>null</code>。<code>created_at &gt; null</code> はどの行にも当てはまらないので、未読が 0 と出る見込み",
+            "同じ秒に届いたメッセージは、<code>created_at</code> の比べで既読と未読の境目がずれる"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版（LATERAL と相関サブクエリ）",
+          "count": "1本＋ガード1本",
+          "code": "$latest = DB::table('messages as m')\n    ->select('m.body', 'm.created_at')\n    ->whereColumn('m.talk_room_id', 'me.talk_room_id')\n    ->orderByDesc('m.id')->limit(1);\n$unread = DB::table('messages as m2')->selectRaw('count(*)')\n    ->whereColumn('m2.talk_room_id', 'me.talk_room_id')\n    ->where('m2.sender_id', '<>', $me)\n    ->whereRaw('m2.id > coalesce(me.last_read_message_id, 0)');\nDB::table('talk_room_members as me')\n    ->join('talk_rooms as tr', 'tr.id', '=', 'me.talk_room_id')\n    ->join('talk_room_members as other', fn ($j) => $j\n        ->on('other.talk_room_id', '=', 'me.talk_room_id')\n        ->on('other.user_id', '<>', 'me.user_id'))\n    ->join('users as u', 'u.id', '=', 'other.user_id')\n    ->leftJoin('profiles as p', 'p.user_id', '=', 'u.id')\n    ->leftJoinLateral($latest, 'lm')\n    ->where('me.user_id', $me)\n    ->select(...)->selectSub($unread, 'unread_count')\n    ->orderByRaw('coalesce(lm.created_at, tr.created_at) desc')\n    ->get();",
+          "sql": "select \"tr\".\"public_id\" as \"room_id\",\n       \"u\".\"public_id\" as \"user_id\",\n       \"p\".\"nickname\", \"p\".\"birthdate\", \"p\".\"image\",\n       \"lm\".\"body\" as \"last_body\",\n       \"lm\".\"created_at\" as \"last_at\",\n       -- 未読：読んだ位置より新しい、相手のもの\n       (select count(*) from \"messages\" as \"m2\"\n        where \"m2\".\"talk_room_id\" = \"me\".\"talk_room_id\"\n          and \"m2\".\"sender_id\" <> 23\n          and m2.id > coalesce(me.last_read_message_id, 0)\n       ) as \"unread_count\"\n-- 自分の行：(user_id, talk_room_id) のインデックス\nfrom \"talk_room_members\" as \"me\"\ninner join \"talk_rooms\" as \"tr\"\n  on \"tr\".\"id\" = \"me\".\"talk_room_id\"\n-- 同じルームの、自分でないほう（相手）\ninner join \"talk_room_members\" as \"other\"\n  on \"other\".\"talk_room_id\" = \"me\".\"talk_room_id\"\n and \"other\".\"user_id\" <> \"me\".\"user_id\"\ninner join \"users\" as \"u\" on \"u\".\"id\" = \"other\".\"user_id\"\nleft join \"profiles\" as \"p\" on \"p\".\"user_id\" = \"u\".\"id\"\n-- ルームごとに最新を1件：(talk_room_id, id) を後ろから1行\nleft join lateral (\n  select \"m\".\"body\", \"m\".\"created_at\"\n  from \"messages\" as \"m\"\n  where \"m\".\"talk_room_id\" = \"me\".\"talk_room_id\"\n  order by \"m\".\"id\" desc limit 1\n) as \"lm\" on true\nwhere \"me\".\"user_id\" = 23\norder by coalesce(lm.created_at, tr.created_at) desc;",
+          "notes": [
+            "相手が何人でも1本（NFR-MSG-001）。ガードの1本は、ログインした会員を読む SQL",
+            "<code>left join lateral</code> は「左の1行ごとに、右のサブクエリを1回動かす」。<code>messages (talk_room_id, id)</code> を後ろから1行読んで止まる",
+            "<code>left</code> なので、まだやり取りのないルームも残る（<code>lm</code> が <code>null</code>）。並びはルームを作った日時で代わりにする",
+            "未読は <code>last_read_message_id</code>（ID）で比べるので、同じ秒に届いても境目がずれない。一度も開いていなければ 0 から数える"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "トークの履歴（<code>GET /api/me/talk-rooms/{public_id}/messages</code>）。2回目の続き（51〜100件目）",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "3本（読む2本・書き込み1本）",
+          "code": "$room = TalkRoom::where('public_id', $roomId)->first();\n// 自分のルームかを確かめない\n$messages = Message::where('talk_room_id', $room->id)\n    ->orderBy('created_at', 'desc')\n    ->offset(($page - 1) * 50)->limit(50)->get();\n// 開いたら読んだことにする（GET の中で書き込む）\nTalkRoomMember::where('talk_room_id', $room->id)\n    ->where('user_id', $me)\n    ->update(['last_read_at' => now()]);",
+          "sql": "-- public_id の UNIQUE が効く\nselect * from \"talk_rooms\"\nwhere \"public_id\" = '019a7c1e-…-000000000007'\nlimit 1;\n\n-- インデックスがないので messages を全部読み、\n-- 並べ替えて、先の50件を捨てる\nselect * from \"messages\"\nwhere \"talk_room_id\" = 7\norder by \"created_at\" desc\nlimit 50 offset 50;\n\n-- UNIQUE (talk_room_id, user_id) で1行を書き換える\nupdate \"talk_room_members\"\nset \"last_read_at\" = '2026-11-13 10:51:27',\n    \"updated_at\" = '2026-11-13 10:51:27'\nwhere \"talk_room_id\" = 7 and \"user_id\" = 23;",
+          "notes": [
+            "ルームの持ち主かを確かめないので、ルームの UUID を知っていれば、他人のトークを読める（FR-MSG-003）。UNIQUE と外部キーは、だれが読めるかは守らない",
+            "画面は5秒ごとに1ページ目をこの形で読み直すので、開いているあいだ、5秒ごとに3本（うち1本は書き込み）が流れ、毎回 messages を全部読む",
+            "<code>created_at</code> だけで並べるので、同じ秒に送られたものの順が決まらない（04 と同じ）"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版（持ち主の確かめとカーソル）",
+          "count": "2本＋ガード1本",
+          "code": "$roomId = DB::table('talk_rooms as tr')\n    ->join('talk_room_members as m', fn ($j) => $j\n        ->on('m.talk_room_id', '=', 'tr.id')\n        ->where('m.user_id', $me))\n    ->where('tr.public_id', $publicId)\n    ->value('tr.id') ?? abort(404);\nDB::table('messages')->where('talk_room_id', $roomId)\n    ->where('id', '<', fn ($q) => $q->from('messages')\n        ->select('id')->where('public_id', $before))\n    ->orderByDesc('id')->limit(51)\n    ->get(['public_id', 'sender_id', 'body', 'created_at']);",
+          "sql": "-- ① 自分のルームか（違えば 404）。\n--    public_id の UNIQUE と (talk_room_id, user_id) の UNIQUE\nselect \"tr\".\"id\" from \"talk_rooms\" as \"tr\"\ninner join \"talk_room_members\" as \"m\"\n  on \"m\".\"talk_room_id\" = \"tr\".\"id\"\n and \"m\".\"user_id\" = 23\nwhere \"tr\".\"public_id\" = '019a7c1e-…-000000000007'\nlimit 1;\n\n-- ② カーソル：前に読んだいちばん古いものより前\nselect \"public_id\", \"sender_id\", \"body\", \"created_at\"\nfrom \"messages\"\nwhere \"talk_room_id\" = 7\n  and \"id\" < (select \"id\" from \"messages\"\n              where \"public_id\" = '019a7c20-…-000000000050')\norder by \"id\" desc\nlimit 51;",
+          "notes": [
+            "①で持ち主を確かめる。ほかの人のルームも、ないルームも同じ <code>404</code>（あるかどうかも分からない）。足すインデックスなしで、今ある UNIQUE 2つで済む",
+            "カーソルの値はメッセージの <code>public_id</code>（D-022。連番を出さない）。<code>messages.public_id</code> の UNIQUE で <code>id</code> に読み替え、並びは <code>id</code> で決める",
+            "51件読み、51件目があれば「まだ古いものがある」。<code>messages (talk_room_id, id)</code> を後ろから51行読んで止まる",
+            "読んだことにするのは別の API（下）。GET では書き込まない"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "新しいメッセージを取りに行く（5秒ごと）",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "3本（履歴の1ページ目と同じ）",
+          "code": "// 画面が 5秒ごとに、履歴の1ページ目（新しい50件）を\n// もう一度読み、今の一覧と入れ替える\nsetInterval(() => load(1), 5000)",
+          "sql": "-- 上の履歴と同じ3本（offset 0）が、5秒ごとに流れる\nselect * from \"messages\"\nwhere \"talk_room_id\" = 7\norder by \"created_at\" desc\nlimit 50 offset 0;\n-- 新しいものがなくても、messages を全部読んで50件を返す",
+          "notes": [
+            "新しいものが0件でも、毎回 messages を全部読んで50件を返す。1人が1分開くと 12回 × 3本",
+            "入れ替えるので、上にさかのぼって読んだ古いものが、5秒たつと消える"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版（新しいものだけ）",
+          "count": "2本＋ガード1本",
+          "code": "DB::table('messages')->where('talk_room_id', $roomId)\n    ->where('id', '>', fn ($q) => $q->from('messages')\n        ->select('id')->where('public_id', $after))\n    ->orderBy('id')->limit(100)\n    ->get(['public_id', 'sender_id', 'body', 'created_at']);",
+          "sql": "-- ①（自分のルームか）は履歴と同じ\n\n-- ② 最後に受け取ったものより新しいものだけ\nselect \"public_id\", \"sender_id\", \"body\", \"created_at\"\nfrom \"messages\"\nwhere \"talk_room_id\" = 7\n  and \"id\" > (select \"id\" from \"messages\"\n              where \"public_id\" = '019a7c20-…-000000000099')\norder by \"id\" asc\nlimit 100;",
+          "notes": [
+            "新しいものがなければ、<code>(talk_room_id, id)</code> を1か所見て0件を返す（NFR-MSG-003）",
+            "画面は、受け取ったものを下に足すだけ。さかのぼって読んだものは消えない",
+            "罠：<code>id</code> の順と、書き込みが見えるようになる順（コミットの順）は同じとは限らない（7章）"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "送る（<code>POST /api/me/talk-rooms/{public_id}/messages</code>）",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "2本",
+          "code": "$room = TalkRoom::where('public_id', $roomId)->first();\n// 入力も、自分のルームかも確かめない\nMessage::create([\n    'talk_room_id' => $room->id,\n    'sender_id' => $me,\n    'body' => $request->input('body'),\n]);",
+          "sql": "select * from \"talk_rooms\"\nwhere \"public_id\" = '019a7c1e-…-000000000007'\nlimit 1;\n\n-- 外部キーの確かめ（talk_rooms・users に行があるか）は、\n-- 主キーで探すので速い\ninsert into \"messages\"\n  (\"talk_room_id\", \"sender_id\", \"body\",\n   \"updated_at\", \"created_at\")\nvalues (7, 23, 'こんにちは',\n        '2026-11-13 10:51:27', '2026-11-13 10:51:27')\nreturning \"id\";",
+          "notes": [
+            "ルームの UUID を知っていれば、そのルームの2人でない人も送れる（不変条件 6・FR-MSG-002）。外部キーが守るのは「ルームと会員が存在する」ことだけ",
+            "ないルームなら <code>$room</code> が <code>null</code> で 500。本文が空でも1万文字でも入る"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版",
+          "count": "2本＋ガード1本",
+          "code": "// SendMessageRequest：body は必須・前後の空白を除いて 1〜1000文字\n$roomId = ...;   // 履歴の①と同じ（違えば 404）\nDB::table('messages')->insertGetId([\n    'talk_room_id' => $roomId,\n    'sender_id' => $me,\n    'type' => 'text',\n    'body' => $request->validated('body'),\n    'created_at' => now(),\n]);",
+          "sql": "-- ①（自分のルームか）は履歴と同じ\n\n-- public_id は DB の既定の値（uuidv7()）で入る\ninsert into \"messages\"\n  (\"talk_room_id\", \"sender_id\", \"type\", \"body\", \"created_at\")\nvalues (7, 23, 'text', 'こんにちは', '2026-11-13 10:51:27')\nreturning \"id\";",
+          "notes": [
+            "本文の長さは FormRequest で 422 にし、DB の CHECK（<code>char_length(body) between 1 and 1000</code>）でも守る",
+            "<code>type</code> は 05 では <code>text</code> だけ。画像・スタンプ・システムの文を、表を分けずに足せるようにしておく",
+            "書き込むたびに、インデックス3つ（主キー・<code>public_id</code>・<code>(talk_room_id, id)</code>。<code>sender_id</code> も張れば4つ）も書き換わる。読む速さと引き換えの書き込みの手間"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "読んだことにする（改善版の <code>PUT /api/me/talk-rooms/{public_id}/read</code>）",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "履歴の GET の中で1本",
+          "code": "// 別の API はない。履歴の GET の中で、\n// 自分の行の last_read_at を今にする（上の履歴の3本目）",
+          "sql": "update \"talk_room_members\"\nset \"last_read_at\" = '2026-11-13 10:51:27',\n    \"updated_at\" = '2026-11-13 10:51:27'\nwhere \"talk_room_id\" = 7 and \"user_id\" = 23;",
+          "notes": [
+            "GET を5秒ごとに呼ぶので、そのたびに書き込みが流れ、<code>updated_at</code> も変わる",
+            "時刻で持つので、読み込んだあと同じ秒に届いたものが、既読の扱いになることがある"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版（読んだ位置を ID で持つ）",
+          "count": "2本＋ガード1本",
+          "code": "$roomId = ...;   // 履歴の①と同じ\nDB::table('talk_room_members')\n    ->where('talk_room_id', $roomId)->where('user_id', $me)\n    ->update(['last_read_message_id' => DB::raw(\n        \"greatest(coalesce(last_read_message_id, 0),\n          (select coalesce(max(id), 0) from messages\n           where talk_room_id = $roomId))\")]);",
+          "sql": "-- ①（自分のルームか）は履歴と同じ\n\n-- 今の最新まで読んだことにする。戻ることはない\nupdate \"talk_room_members\"\nset \"last_read_message_id\" = greatest(\n      coalesce(last_read_message_id, 0),\n      (select coalesce(max(id), 0) from messages\n       where talk_room_id = 7))\nwhere \"talk_room_id\" = 7 and \"user_id\" = 23;",
+          "notes": [
+            "書き換えるのは自分の1行だけ。<code>max(id)</code> は <code>(talk_room_id, id)</code> の端を1つ見るだけ",
+            "<code>greatest</code> で、2つのタブから古い値で上書きしても戻らない",
+            "通知を切る・非表示・ピン留めも、あとからこの1行の列として足せる"
+          ]
+        }
+      ]
+    }
+  ]
+}

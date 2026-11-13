@@ -1,0 +1,654 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>05 メッセージ</title>
+<link rel="stylesheet" href="assets/page.css">
+</head>
+<body>
+<main>
+  <p class="meta"><a href="index.html">← 目次へ</a></p>
+  <h1>05 メッセージ</h1>
+  <p class="meta">作成: 2026-11-13 ／ 状態: <span class="status">解説だけ</span> ／ Issue: <a href="https://github.com/masa-devx/matching-db-study/issues/56">#56</a> ／ 要件: <code>docs/requirements/messages.md</code>（FR-MSG-001〜014・NFR-MSG-001〜003）・<code>docs/requirements/screens.md</code>（FR-UI-019〜022） ／ 決めたこと: D-023</p>
+
+  <div class="card point">
+    <strong>この一歩でできるようになること</strong>
+    <ul>
+      <li>マッチ（関係）・トークルーム（場所）・参加者（一人ひとりの状態）・メッセージ（中身）を別の表に分ける理由と、あとから足す列がどこに入るかを説明できる</li>
+      <li>「外部キーと UNIQUE はあるが、インデックスは足していない」表で何が起きるかを実行計画で示し、PostgreSQL が外部キーの列にインデックスを作らないことと、足すインデックスの選び方を説明できる</li>
+      <li>「相手ごとの最新の1件」を、ループ（N+1）・<code>DISTINCT ON</code>・<code>ROW_NUMBER</code>・<code>LATERAL</code> で書き分け、5秒ごとのポーリングで読む量を、マッチ 1000組・メッセージ 10万件で比べられる</li>
+    </ul>
+  </div>
+
+  <h2>1. 何を作るか</h2>
+  <p>マッチした2人が、文字のメッセージを送り合えるようにします。マッチしたときに<strong>トークルーム</strong>を1つ作り、2人を参加者として入れます。メッセージのタブ（<code>/messages</code>）は、03b の「マッチした相手の一覧」を、相手ごとの最新の1件と未読の数が出る<strong>トークの一覧</strong>に変えます。相手を押すと<strong>トーク画面</strong>（<code>/messages/&lt;ルームの public_id&gt;</code>）に移ります。</p>
+  <table>
+    <tr><th>子 Issue</th><th>作るもの</th><th>要件</th></tr>
+    <tr><td><a href="https://github.com/masa-devx/matching-db-study/issues/57">#57</a> DB</td><td><code>talk_rooms</code>・<code>talk_room_members</code>・<code>messages</code>（主キー・UNIQUE・外部キーあり、インデックスは足さない）・マッチしたときにルームを作る・試しのデータ（マッチ 1000組・メッセージ 10万件）</td><td>FR-MSG-001・009・010・014・制約</td></tr>
+    <tr><td><a href="https://github.com/masa-devx/matching-db-study/issues/58">#58</a> API</td><td>トークの一覧（<code>GET /api/me/talk-rooms</code>）・履歴（古い続き）・送る・読んだことにする</td><td>FR-MSG-001〜014・NFR-MSG-001〜003</td></tr>
+    <tr><td><a href="https://github.com/masa-devx/matching-db-study/issues/59">#59</a> 画面</td><td>トークの一覧・トーク画面・上までスクロールで古い続き・5秒ごとに新しいものを取りに行く</td><td>FR-UI-019〜022</td></tr>
+  </table>
+  <p>送れるのは文字だけ（1〜1000文字）。相手に「既読」は見せず、自分の側の未読の数だけを出します。新しいメッセージは、WebSocket で押し出さず、画面が5秒ごとに取りに行きます（リアルタイムは 05c の Firestore と比べる）。ブロック（<code>blocks</code>）・通報（<code>reports</code>）は 06 で別の表にします。</p>
+
+  <h2>2. 先に知っておく言葉</h2>
+  <table>
+    <tr><th>言葉</th><th>意味（1〜2文）</th></tr>
+    <tr><td>外部キーとインデックス</td><td>外部キーは「指す先の行があるか」を守る制約で、検索を速くするものではない。PostgreSQL は、外部キーの列にインデックスを<strong>自動で作らない</strong>（MySQL の InnoDB は作る）。作られるのは主キーと UNIQUE の分だけ。</td></tr>
+    <tr><td>複合インデックスの列の順</td><td><code>(talk_room_id, user_id)</code> のインデックスは、電話帳のように先に <code>talk_room_id</code> で並ぶ。<code>talk_room_id</code> だけ・両方での検索には効くが、<code>user_id</code> だけの検索には効かない。</td></tr>
+    <tr><td>グループごとの最新の1件</td><td>「ルームごとに、いちばん新しいメッセージを1行」。<code>group by</code> と <code>max(created_at)</code> では時刻しか取れず、その行の本文が取れないので、別の書き方が要る。</td></tr>
+    <tr><td><code>DISTINCT ON</code></td><td>PostgreSQL だけの書き方。<code>select distinct on (talk_room_id) … order by talk_room_id, id desc</code> で、ルームごとに並びの先頭の1行だけを残す。</td></tr>
+    <tr><td>ウィンドウ関数（<code>ROW_NUMBER</code>）</td><td>行を減らさずに、グループの中での番号を付ける関数。<code>row_number() over (partition by talk_room_id order by id desc)</code> が 1 の行が、ルームごとの最新。どの DB でも使える。</td></tr>
+    <tr><td><code>LATERAL</code></td><td>「左の表の1行ごとに、右のサブクエリを1回動かす」JOIN。サブクエリの中で左の列を使えるので、「このルームの最新を1件」をそのまま書ける。</td></tr>
+    <tr><td>ポーリング</td><td>画面が決まった間隔（今回は5秒）で、API に「新しいものはあるか」を聞きに行くこと。WebSocket より簡単だが、何もなくても毎回リクエストが来る。</td></tr>
+    <tr><td>既読の位置</td><td>「この人はこのルームでここまで読んだ」を1行で持つ方法。未読は「それより新しい、相手のもの」を数える。レガシー版は時刻（<code>last_read_at</code>）、改善版は ID（<code>last_read_message_id</code>）で持つ。</td></tr>
+    <tr><td>相関サブクエリ</td><td>外側の行の値を使うサブクエリ。外側の1行ごとに動く。1本の SQL の中なので N+1 ではないが、行ごとの手間はかかる。</td></tr>
+  </table>
+
+  <h2>3. 図で見る</h2>
+  <p>1枚目は、この一歩で使う表。新しく作るのは <code>talk_rooms</code>・<code>talk_room_members</code>・<code>messages</code> の3つです。どれもレガシー版から主キー・UNIQUE・外部キーを持ち、<strong>インデックスは改善版で足します</strong>。注記の「idx」が改善版で足すインデックスです。</p>
+  <pre class="mermaid">
+erDiagram
+  users ||--o{ user_matches : "user1_id・user2_id（03）"
+  user_matches ||--o| talk_rooms : "マッチしたら1つ作る"
+  talk_rooms ||--|{ talk_room_members : "2人"
+  users ||--o{ talk_room_members : "user_id"
+  talk_rooms ||--o{ messages : "talk_room_id"
+  users ||--o{ messages : "sender_id"
+  talk_rooms {
+    bigint id PK
+    uuid public_id UK "ルームの ID（D-022）"
+    bigint match_id FK,UK "マッチ1つにルーム1つ"
+    timestamp created_at
+  }
+  talk_room_members {
+    bigint id PK
+    bigint talk_room_id FK "UK（user_id と組で）"
+    bigint user_id FK "idx (user_id, talk_room_id)"
+    timestamp last_read_at "レガシー版。改善版は last_read_message_id"
+  }
+  messages {
+    bigint id PK
+    bigint talk_room_id FK "idx (talk_room_id, id)"
+    bigint sender_id FK "idx (sender_id)"
+    text body "改善版は 1〜1000文字の CHECK"
+    uuid public_id UK "改善版。カーソルに使う"
+    varchar type "改善版。05 は text だけ"
+    timestamp created_at
+  }
+  </pre>
+
+  <p>2枚目は、トークの一覧を作るとき、レガシー版と改善版がどこで何をするか。レガシー版はルーム1つごとに6回 DB へ行き、そのうち2本は messages を全部読みます。</p>
+  <pre class="mermaid">
+flowchart TB
+  REQ["GET /api/me/talk-rooms（トークの一覧）"] --> L1
+  REQ --> I1
+  subgraph LEG["レガシー版（1＋6N 本）"]
+    L1["自分の参加者の行を探す（user_id のインデックスがなく全部読む）"] --> L2["ルームごとに：ルーム・相手・プロフィール・public_id"]
+    L2 --> L3["ルームごとに：最新の1件と未読の数（messages を全部読む × 2）"]
+  end
+  subgraph IMP["改善版（1本＋ガード1本）"]
+    I1["自分の行から、ルーム・相手・プロフィールを JOIN"] --> I2["LATERAL で最新を1件、相関サブクエリで未読の数（どちらも talk_room_id, id のインデックス）"]
+  end
+  L3 --> RES["最新の新しい順に返す"]
+  I2 --> RES
+  </pre>
+
+  <p>3枚目は、トーク画面を開いているあいだの、5秒ごとの取りに行き方。</p>
+  <pre class="mermaid">
+sequenceDiagram
+  participant A as 会員 A（トーク画面）
+  participant API as API
+  participant B as 会員 B
+  A->>API: 開く：新しい50件
+  API-->>A: 50件（いちばん新しいのは m100）
+  A->>API: 上までスクロール：古い続き
+  API-->>A: 50件（m1〜m50）
+  B->>API: 送る（m101）
+  Note over A,API: レガシー版：5秒後に新しい50件を読み直して入れ替える。m101 は出るが m1〜m50 が消える。何もなくても毎回 messages を全部読み、書き込みも1本
+  Note over A,API: 改善版：5秒後に「m100 より新しいもの」を読む。m101 の1件だけが返り、下に足す。何もなければ0件
+  </pre>
+
+  <h2>4. 設計の選択肢を比べる</h2>
+  <h3>表の分け方</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. マッチの行をそのままルームにする（<code>messages.match_id</code>）</td><td>表が増えない</td><td>マッチ（関係）の列と、ルーム（場所）の列が1つの表に混ざる。マッチのないルーム（運営からのお知らせ・マッチ前に送れる有料の機能）を作れない。未読の位置を「組のどちら側か」で2列に分けることになる</td><td>やり取りの機能を広げる予定がないとき</td></tr>
+    <tr><td>B. <code>talk_rooms</code> と <code>talk_room_members</code> を分ける（選ぶ）</td><td>関係・場所・一人ひとりの状態・中身が、それぞれ1つの表になる。あとから足す列の置き場所が決まっている（下の表）。持ち主の確かめが「参加者に自分の行があるか」の1つの形になる</td><td>表が2つ増え、マッチしたときに書く行が3つ増える（トランザクションが要る）</td><td>今回。やり取りの機能が育っていくとき</td></tr>
+  </table>
+  <table>
+    <tr><th>表</th><th>何を表すか</th><th>あとから足す列の例</th></tr>
+    <tr><td><code>user_matches</code></td><td>お互いにいいねした関係（03）</td><td>マッチの解除（<code>unmatched_at</code>・<code>unmatched_by</code>）・どこから生まれたか</td></tr>
+    <tr><td><code>talk_rooms</code></td><td>やり取りの場所</td><td><code>type</code>（マッチ・お知らせ）・<code>closed_at</code>（解除・ブロック・退会で読むだけにする）・<code>last_message_at</code>（一覧が重いと測れたら写す）。<code>match_id</code> は、マッチのないルームを作るときに NULL を許す</td></tr>
+    <tr><td><code>talk_room_members</code></td><td>ルームの中の一人ひとりの状態</td><td>既読の位置・通知を切る・非表示・ピン留め・入った日時</td></tr>
+    <tr><td><code>messages</code></td><td>やり取りの中身</td><td><code>type</code>（画像・スタンプ・システムの文）・<code>edited_at</code>・<code>deleted_at</code>（取り消し）・返信先・運営が隠した日時</td></tr>
+    <tr><td><code>blocks</code>・<code>reports</code>（06）</td><td>会員から会員への拒否・通報</td><td>マッチしていない相手にも起きるので、<code>user_matches</code> には持たない。通報は <code>talk_room_id</code>・<code>message_id</code>（NULL を許す）で、どのやり取りかを指す</td></tr>
+  </table>
+  <p><strong>受け取った人（<code>receiver_id</code>）は持たない</strong>：受け取った人は「そのルームの参加者のうち、送った人でない人」なので、<code>talk_room_members</code> から必ず求められます（<code>join talk_room_members tm on tm.talk_room_id = m.talk_room_id and tm.user_id &lt;&gt; m.sender_id</code>）。未読の数は「自分のルームで <code>sender_id &lt;&gt; 自分</code>」、トーク画面の左右は「<code>sender_id</code> が自分か」で決まるので、どちらにも要りません。持つと、参加者の表の写しになり、ずれたとき（ルームにいない人・送った人と同じ人が入る）を CHECK や外部キーでは防げず、3人以上のルームでは1つの列に入りません。<code>receiver_id</code> を持つのは、ルームの表を作らず <code>sender_id</code> と <code>receiver_id</code> の組でやり取りを表す設計のときです。受け取った人ごとに「読んだ」を1件ずつ持ちたくなったら、<code>messages</code> に列を足さず、<code>message_receipts (message_id, user_id, read_at)</code> を別に作ります。</p>
+
+  <h3>インデックス（レガシー版は足さない）</h3>
+  <table>
+    <tr><th>インデックス</th><th>レガシー版で起きること</th><th>改善版で効く SQL</th><th>弱いところ</th></tr>
+    <tr><td><code>messages (talk_room_id, id)</code></td><td>外部キーはあるが、履歴・5秒ごと・最新の1件・未読の数のたびに、messages を全部読む</td><td>履歴（<code>id &lt; ?</code>）・新しいもの（<code>id &gt; ?</code>）・LATERAL の最新・未読（<code>id &gt; 既読の位置</code>）。外部キー <code>talk_room_id</code> の検索も、先頭の列で受け持つ</td><td>送るたびに書き換わる</td></tr>
+    <tr><td><code>talk_room_members (user_id, talk_room_id)</code></td><td>UNIQUE は <code>(talk_room_id, user_id)</code> の順なので、「自分のルーム」（<code>user_id = ?</code>）で全部読む</td><td>トークの一覧の起点。外部キー <code>user_id</code> の検索も受け持つ</td><td>ほぼ同じ中身のインデックスが2つになる</td></tr>
+    <tr><td><code>messages (sender_id)</code></td><td>会員を消すとき（<code>ON DELETE CASCADE</code>）、消す1人ごとに messages を全部読む</td><td>06 の退会・12 の「この人が送ったもの」</td><td>05 の画面では使わない。06 で測ってから足してもよい</td></tr>
+    <tr><td>（足さない）UNIQUE の4つ</td><td colspan="2"><code>talk_rooms.public_id</code>・<code>talk_rooms.match_id</code>・<code>talk_room_members (talk_room_id, user_id)</code>・<code>messages.public_id</code>。ルームを探す・持ち主の確かめ・カーソルの読み替えは、レガシー版からこれで効く</td><td>―</td></tr>
+  </table>
+  <p>9-4 では、<code>messages (talk_room_id, id) include (sender_id)</code> も比べます。未読の数を、表を読まずにインデックスだけで数えられる（Index Only Scan）代わりに、インデックスが大きくなります。<code>messages (created_at)</code> は、並びを <code>id</code> で決めるので作りません。</p>
+
+  <h3>相手ごとの最新の1件</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. ループで1件ずつ（レガシー版）</td><td>Eloquent で素直に書ける</td><td>ルームの数だけ SQL が増える（N+1）。インデックスがないので、1本ごとに messages を全部読む</td><td>ルームがいつも数個のとき</td></tr>
+    <tr><td>B. <code>DISTINCT ON (talk_room_id)</code></td><td>短く書ける。1回の並べ替えで済む</td><td>PostgreSQL だけ。自分のルームのメッセージを全部読んでから捨てるので、やり取りが長い人ほど遅い</td><td>メッセージが少なく、ルームが多いとき</td></tr>
+    <tr><td>C. <code>ROW_NUMBER() OVER (PARTITION BY …)</code></td><td>どの DB でも使える。「最新の3件」にも広げやすい</td><td>B と同じく全部読んで番号を付ける。サブクエリで包む必要がある</td><td>ほかの DB に移す見込みがあるとき</td></tr>
+    <tr><td>D. <code>LEFT JOIN LATERAL (… limit 1)</code>（改善版）</td><td><code>(talk_room_id, id)</code> があれば、ルームごとに1行読んで止まる。やり取りが何万件あっても変わらない</td><td>ルームの数だけインデックスを探す</td><td>1つのルームのやり取りが長くなる、今回の形</td></tr>
+    <tr><td>E. <code>talk_rooms</code> に最新の1件を写す</td><td>一覧の SQL は JOIN だけになり、いちばん速い</td><td>送るたびに2つの表を書く。正が2つになる</td><td>一覧がとても多く読まれ、D で足りないと測れたとき</td></tr>
+  </table>
+
+  <h3>未読の数と、新しいメッセージの届け方</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>未読 A. 最後に読んだ時刻 <code>last_read_at</code>（レガシー版）</td><td>参加者の1行を書き換えるだけ</td><td>同じ秒に届いたものの境目がずれる。一度も開いていないと <code>null</code> で、<code>created_at &gt; null</code> が当てはまらず未読が 0 に見える見込み</td><td>―</td></tr>
+    <tr><td>未読 B. 読んだメッセージの ID <code>last_read_message_id</code>（改善版）</td><td>境目がずれない。<code>(talk_room_id, id)</code> の範囲で数えられる</td><td>「途中の1件だけ読んでいない」は表せない（今回は要らない）</td><td>未読の数だけを出す、今回の形</td></tr>
+    <tr><td>未読 C. メッセージごとの <code>read_at</code></td><td>相手に1件ずつ既読を見せられる</td><td>開くたびに未読の行をすべて書き換える</td><td>既読の印を見せたいとき（対象外）</td></tr>
+    <tr><td>届け方 A. 5秒ごとに新しい50件を読み直す（レガシー版）</td><td>履歴の API をそのまま使える</td><td>何もなくても毎回50件。入れ替えるので、さかのぼって読んだものが消える</td><td>作り始めの試し</td></tr>
+    <tr><td>届け方 B. 5秒ごとに「最後に受け取ったものより新しいもの」（改善版）</td><td>何もなければ0件。インデックスを1か所見るだけ</td><td>何もなくてもリクエストは来る。<code>id</code> の順とコミットの順のずれ（7章）</td><td>今回。数秒の遅れが許せるとき</td></tr>
+    <tr><td>届け方 C. WebSocket・Firestore で押し出す</td><td>すぐ届き、何もないときのリクエストがない</td><td>常につながるサーバーか、もう1つの DB が要る。切れたときの取り直しも要る</td><td>05c で比べる</td></tr>
+  </table>
+  <p>履歴の古い続きは、04 と同じく、レガシー版は OFFSET（<code>?page=2</code>）、改善版はカーソル（<code>?before=&lt;メッセージの public_id&gt;</code>）にします。</p>
+  <div class="card point"><strong>この一歩で選ぶもの</strong>：表は B（<code>talk_rooms</code>・<code>talk_room_members</code>・<code>messages</code>）に分け、レガシー版から主キー・UNIQUE・外部キーを持たせる。レガシー版は、インデックスを足さない・ループ（A）・<code>last_read_at</code>・5秒ごとに読み直す・OFFSET・持ち主を確かめない・マッチとルームを別々に入れる、で作る。改善版は、インデックス3つ・<code>LATERAL</code>（D）・<code>last_read_message_id</code>・新しいものだけ・カーソル・持ち主の確かめ・トランザクションにする。一覧・履歴・新しいもの・未読の数を、どれも「1つのルームの中を、新しいほうから少し読む」形にそろえれば、<code>messages (talk_room_id, id)</code> の1つで全部に効くから。B と C（<code>DISTINCT ON</code>・<code>ROW_NUMBER</code>）は、改善したあとに同じデータで実行計画を並べる。</div>
+
+  <h2>5. 見本：レガシー版と改善版</h2>
+  <h3>レガシー版（Fat Controller・テストなし）</h3>
+  <pre><code class="language-php">// database/migrations/…_create_messages_table.php（外部キーはあるが、インデックスは足さない）
+Schema::create('messages', function (Blueprint $table) {
+    $table-&gt;id();
+    $table-&gt;foreignId('talk_room_id')-&gt;constrained()-&gt;cascadeOnDelete();   // PostgreSQL では索引は作られない
+    $table-&gt;foreignId('sender_id')-&gt;constrained('users')-&gt;cascadeOnDelete();
+    $table-&gt;text('body');
+    $table-&gt;timestamps();
+});
+
+// app/Http/Controllers/MessageController.php の index()（JWT を読む6行は6か所目の写し）
+$room = TalkRoom::where('public_id', $roomId)-&gt;first();   // 自分のルームかを確かめない
+$messages = Message::where('talk_room_id', $room-&gt;id)
+    -&gt;orderBy('created_at', 'desc')
+    -&gt;offset(($request-&gt;input('page', 1) - 1) * 50)-&gt;limit(50)
+    -&gt;get();
+TalkRoomMember::where('talk_room_id', $room-&gt;id)-&gt;where('user_id', $payload-&gt;sub)
+    -&gt;update(['last_read_at' =&gt; now()]);   // GET の中で書き込む（5秒ごとに呼ばれる）
+return response()-&gt;json($messages);       // sender_id（中の連番）がそのまま出る</code></pre>
+  <div class="card warn"><ul>
+    <li><strong>外部キーの列にインデックスがない</strong>：<code>foreignId()-&gt;constrained()</code> は制約だけを作る。履歴・最新の1件・未読の数・5秒ごとの読み直しのたびに、messages を全部読む。会員を消すと、CASCADE のために messages を全部読む</li>
+    <li><strong>UNIQUE の列の順</strong>：<code>(talk_room_id, user_id)</code> では「自分のルーム」（<code>user_id</code> だけ）を探せず、参加者の表を全部読む</li>
+    <li><strong>他人のトークが読める・送れる</strong>：ルームの UUID だけで探すので、UUID を知っていれば読めて送れる。制約は「だれが読めるか」を守らない（不変条件 6・8）</li>
+    <li><strong>トークの一覧が 1＋6N 本</strong>：ルームごとに、ルーム・相手・プロフィール・<code>public_id</code>・最新の1件・未読の数</li>
+    <li><strong>マッチとルームを別々に入れる</strong>：途中で失敗すると、マッチはあるのにルームがない</li>
+    <li><strong>読み直しで消える・GET で書き込む・入力を確かめない</strong>：さかのぼって読んだものが5秒で消える。空の本文も1万文字も入る</li>
+  </ul></div>
+
+  <h3>改善版</h3>
+  <pre><code class="language-php">// マイグレーション：検索に使う列の組に、インデックスを足す
+Schema::table('messages', function (Blueprint $table) {
+    $table-&gt;index(['talk_room_id', 'id']);   // 履歴・新しいもの・最新の1件・未読の数
+    $table-&gt;index('sender_id');              // 会員を消すときの CASCADE
+});
+Schema::table('talk_room_members', fn ($t) =&gt; $t-&gt;index(['user_id', 'talk_room_id']));   // 自分のルーム
+
+// app/Http/Controllers/TalkRoomMessageController.php（認証はミドルウェア、入力は FormRequest）
+public function index(Request $request, string $publicId): JsonResponse
+{
+    $roomId = TalkRooms::idFor($publicId, $request-&gt;user());   // 参加者に自分がいなければ 404
+    $rows = MessageQuery::page($roomId, before: $request-&gt;query('before'), after: $request-&gt;query('after'))
+        -&gt;limit(51)-&gt;get();
+
+    return response()-&gt;json([
+        'data' =&gt; MessageResource::collection($rows-&gt;take(50)),   // is_mine を付け、中の ID は出さない
+        'has_more' =&gt; $rows-&gt;count() &gt; 50,
+    ]);
+}</code></pre>
+  <p>大事なのは3つです。① インデックスは「どの SQL の、どの条件と並びに効かせるか」から決める（外部キーだから張る、ではない）。<code>(talk_room_id, id)</code> は条件の <code>talk_room_id = ?</code> と並びの <code>id</code> の両方に効く。② ルームを探すときは必ず参加者の表と JOIN し、ほかの人のルームとないルームを同じ 404 にする。③ 読んだことにするのは別の API（<code>PUT …/read</code>）にし、GET では書き込まない。</p>
+
+  <h3>画面（レガシー版と改善版の違い）</h3>
+  <pre><code class="language-tsx">// レガシー版 src/TalkPage.tsx：5秒ごとに1ページ目を読み直して、入れ替える
+useEffect(() =&gt; {
+  const t = setInterval(() =&gt; load(1), 5000)   // 前の呼び出しが終わっていなくても、次を呼ぶ
+  return () =&gt; clearInterval(t)
+}, [])
+
+// 改善版：最後に受け取ったものより新しいものだけを取り、public_id で重なりを除いて下に足す
+const poll = async () =&gt; {
+  const res = await getMessages(roomId, { after: messages.at(-1)?.public_id })
+  setMessages((now) =&gt; mergeById(now, res.data))
+  timer.current = setTimeout(poll, 5000)   // 終わってから次を予約する（呼び出しが重ならない）
+}</code></pre>
+  <p>上に古いものを足すときは、足す前の高さを覚えておき、足したあとに <code>scrollTop</code> を「増えた高さ」だけ下げます。そうしないと、読んでいた位置が下に押し出されます（FR-UI-021）。</p>
+
+  <h3>Eloquent が発行する SQL（レガシー版と改善版を並べる）</h3>
+  <p>左がレガシー版、右が改善版です。SQL は Laravel に作らせて確かめたもので（表がまだないので、どれも <code>DB::pretend()</code> で、流さずに SQL だけを取り出した）、例は会員 23 が、相手 5 とのルーム（中の <code>id</code> は 7）を使う場合です。中身は <code>explanations/sql/05-messages.json</code> にあり、<code>explanations/tools/compare-block.py</code> で作り直せます。</p>
+  <p class="meta">ログ（<code>sql-*.log</code>）では、値は <code>?</code> になり、別に渡されます（プリペアドステートメント）。読みやすいよう、ここでは値を入れて、行を分けて書きました。UUID は <code>…</code> で略しています。</p>
+  <!-- compare: sql/05-messages.json -->
+  <h4>マッチしたときにトークルームを作る（<code>POST /api/me/likes</code> の中。マッチ 12 ができた）</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">3本（いいねとマッチの SQL に足す）</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">// マッチを入れたあとに続けて書く（トランザクションなし）
+$room = TalkRoom::create(['match_id' =&gt; $match-&gt;id]);
+TalkRoomMember::create([
+    'talk_room_id' =&gt; $room-&gt;id, 'user_id' =&gt; $toUserId]);
+TalkRoomMember::create([
+    'talk_room_id' =&gt; $room-&gt;id, 'user_id' =&gt; $me]);</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">insert into "talk_rooms"
+  ("match_id", "updated_at", "created_at")
+values (12, '2026-11-13 10:51:27', '2026-11-13 10:51:27')
+returning "id";
+
+-- 2人分を1行ずつ
+insert into "talk_room_members"
+  ("talk_room_id", "user_id", "updated_at", "created_at")
+values (7, 5, '2026-11-13 10:51:27', '2026-11-13 10:51:27')
+returning "id";
+insert into "talk_room_members"
+  ("talk_room_id", "user_id", "updated_at", "created_at")
+values (7, 23, '2026-11-13 10:51:27', '2026-11-13 10:51:27')
+returning "id";</code></pre>
+      <ul><li>表がまだないので <code>DB::pretend()</code> で作らせた（以下も同じ）</li><li><code>talk_rooms.match_id</code> の UNIQUE で、同じマッチにルームが2つできることは防げる。03 で2行になったマッチ（(A, B) と (B, A)）には、それぞれルームができる</li><li>トランザクションがないので、途中で失敗すると「マッチはあるのにルームがない・1人しかいないルーム」が残る</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版<span class="count">2本（いいねとマッチと同じトランザクション）</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">DB::transaction(function () use (...) {
+    // いいね・マッチ（03 の改善版）のあとに
+    $roomId = DB::table('talk_rooms')-&gt;insertGetId([
+        'match_id' =&gt; $matchId, 'created_at' =&gt; now()]);
+    DB::table('talk_room_members')-&gt;insert([
+        ['talk_room_id' =&gt; $roomId, 'user_id' =&gt; $toUserId],
+        ['talk_room_id' =&gt; $roomId, 'user_id' =&gt; $me],
+    ]);
+});</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">begin;
+-- （03 のいいね・マッチの SQL）
+
+-- public_id は DB の既定の値（uuidv7()）で入る
+insert into "talk_rooms" ("match_id", "created_at")
+values (12, '2026-11-13 10:51:27')
+returning "id";
+
+-- 2人分を1本で
+insert into "talk_room_members" ("talk_room_id", "user_id")
+values (7, 5), (7, 23);
+commit;</code></pre>
+      <ul><li><code>begin</code>・<code>commit</code> はログに出ないので手で書き足した</li><li>全部入るか、全部入らないか。マッチだけ・ルームだけが残らない</li><li>03 の改善版でマッチが1組1行になるので、ルームも1組に1つになる</li></ul>
+    </section>
+  </div>
+  <h4>トークの一覧（<code>GET /api/me/talk-rooms</code>）。会員 23 が、相手ごとの最新の1件と未読の数を見る</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">1＋6N 本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$members = TalkRoomMember::where('user_id', $me)-&gt;get();
+foreach ($members as $member) {
+    $room = TalkRoom::where('id', $member-&gt;talk_room_id)-&gt;first();
+    $partner = TalkRoomMember::where('talk_room_id', $room-&gt;id)
+        -&gt;where('user_id', '!=', $me)-&gt;first();
+    $profile = Profile::where('user_id', $partner-&gt;user_id)-&gt;first();
+    $publicId = User::where('id', $partner-&gt;user_id)
+        -&gt;value('public_id');
+    $last = Message::where('talk_room_id', $room-&gt;id)
+        -&gt;orderBy('created_at', 'desc')-&gt;first();
+    $unread = Message::where('talk_room_id', $room-&gt;id)
+        -&gt;where('sender_id', '!=', $me)
+        -&gt;where('created_at', '&gt;', $member-&gt;last_read_at)
+        -&gt;count();
+}</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① 自分のルーム（1本）。UNIQUE は (talk_room_id, user_id)
+--   の並びなので、user_id だけでは使えず、全部読む
+select * from "talk_room_members"
+where "user_id" = 23;
+
+-- ② ルーム1つごとに6本（ルーム 7・相手 5 のとき）
+select * from "talk_rooms" where "id" = 7 limit 1;
+-- これは UNIQUE (talk_room_id, user_id) が効く
+select * from "talk_room_members"
+where "talk_room_id" = 7 and "user_id" != 23 limit 1;
+select * from "profiles" where "user_id" = 5 limit 1;
+select "public_id" from "users" where "id" = 5 limit 1;
+-- 外部キーはあるがインデックスがないので、
+-- messages を全部読んで並べ替える
+select * from "messages"
+where "talk_room_id" = 7
+order by "created_at" desc limit 1;
+-- これも messages を全部読む
+select count(*) as "aggregate" from "messages"
+where "talk_room_id" = 7
+  and "sender_id" != 23
+  and "created_at" &gt; '2026-11-13 09:00:00';
+-- ルームが100あれば、合計601本</code></pre>
+      <ul><li>外部キー <code>messages.talk_room_id</code> は「指す先があるか」を守るだけで、検索を速くしない（PostgreSQL は外部キーの列にインデックスを自動で作らない）</li><li>まだ一度も開いていないルームは <code>last_read_at</code> が <code>null</code>。<code>created_at &gt; null</code> はどの行にも当てはまらないので、未読が 0 と出る見込み</li><li>同じ秒に届いたメッセージは、<code>created_at</code> の比べで既読と未読の境目がずれる</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版（LATERAL と相関サブクエリ）<span class="count">1本＋ガード1本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$latest = DB::table('messages as m')
+    -&gt;select('m.body', 'm.created_at')
+    -&gt;whereColumn('m.talk_room_id', 'me.talk_room_id')
+    -&gt;orderByDesc('m.id')-&gt;limit(1);
+$unread = DB::table('messages as m2')-&gt;selectRaw('count(*)')
+    -&gt;whereColumn('m2.talk_room_id', 'me.talk_room_id')
+    -&gt;where('m2.sender_id', '&lt;&gt;', $me)
+    -&gt;whereRaw('m2.id &gt; coalesce(me.last_read_message_id, 0)');
+DB::table('talk_room_members as me')
+    -&gt;join('talk_rooms as tr', 'tr.id', '=', 'me.talk_room_id')
+    -&gt;join('talk_room_members as other', fn ($j) =&gt; $j
+        -&gt;on('other.talk_room_id', '=', 'me.talk_room_id')
+        -&gt;on('other.user_id', '&lt;&gt;', 'me.user_id'))
+    -&gt;join('users as u', 'u.id', '=', 'other.user_id')
+    -&gt;leftJoin('profiles as p', 'p.user_id', '=', 'u.id')
+    -&gt;leftJoinLateral($latest, 'lm')
+    -&gt;where('me.user_id', $me)
+    -&gt;select(...)-&gt;selectSub($unread, 'unread_count')
+    -&gt;orderByRaw('coalesce(lm.created_at, tr.created_at) desc')
+    -&gt;get();</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">select "tr"."public_id" as "room_id",
+       "u"."public_id" as "user_id",
+       "p"."nickname", "p"."birthdate", "p"."image",
+       "lm"."body" as "last_body",
+       "lm"."created_at" as "last_at",
+       -- 未読：読んだ位置より新しい、相手のもの
+       (select count(*) from "messages" as "m2"
+        where "m2"."talk_room_id" = "me"."talk_room_id"
+          and "m2"."sender_id" &lt;&gt; 23
+          and m2.id &gt; coalesce(me.last_read_message_id, 0)
+       ) as "unread_count"
+-- 自分の行：(user_id, talk_room_id) のインデックス
+from "talk_room_members" as "me"
+inner join "talk_rooms" as "tr"
+  on "tr"."id" = "me"."talk_room_id"
+-- 同じルームの、自分でないほう（相手）
+inner join "talk_room_members" as "other"
+  on "other"."talk_room_id" = "me"."talk_room_id"
+ and "other"."user_id" &lt;&gt; "me"."user_id"
+inner join "users" as "u" on "u"."id" = "other"."user_id"
+left join "profiles" as "p" on "p"."user_id" = "u"."id"
+-- ルームごとに最新を1件：(talk_room_id, id) を後ろから1行
+left join lateral (
+  select "m"."body", "m"."created_at"
+  from "messages" as "m"
+  where "m"."talk_room_id" = "me"."talk_room_id"
+  order by "m"."id" desc limit 1
+) as "lm" on true
+where "me"."user_id" = 23
+order by coalesce(lm.created_at, tr.created_at) desc;</code></pre>
+      <ul><li>相手が何人でも1本（NFR-MSG-001）。ガードの1本は、ログインした会員を読む SQL</li><li><code>left join lateral</code> は「左の1行ごとに、右のサブクエリを1回動かす」。<code>messages (talk_room_id, id)</code> を後ろから1行読んで止まる</li><li><code>left</code> なので、まだやり取りのないルームも残る（<code>lm</code> が <code>null</code>）。並びはルームを作った日時で代わりにする</li><li>未読は <code>last_read_message_id</code>（ID）で比べるので、同じ秒に届いても境目がずれない。一度も開いていなければ 0 から数える</li></ul>
+    </section>
+  </div>
+  <h4>トークの履歴（<code>GET /api/me/talk-rooms/{public_id}/messages</code>）。2回目の続き（51〜100件目）</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">3本（読む2本・書き込み1本）</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$room = TalkRoom::where('public_id', $roomId)-&gt;first();
+// 自分のルームかを確かめない
+$messages = Message::where('talk_room_id', $room-&gt;id)
+    -&gt;orderBy('created_at', 'desc')
+    -&gt;offset(($page - 1) * 50)-&gt;limit(50)-&gt;get();
+// 開いたら読んだことにする（GET の中で書き込む）
+TalkRoomMember::where('talk_room_id', $room-&gt;id)
+    -&gt;where('user_id', $me)
+    -&gt;update(['last_read_at' =&gt; now()]);</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- public_id の UNIQUE が効く
+select * from "talk_rooms"
+where "public_id" = '019a7c1e-…-000000000007'
+limit 1;
+
+-- インデックスがないので messages を全部読み、
+-- 並べ替えて、先の50件を捨てる
+select * from "messages"
+where "talk_room_id" = 7
+order by "created_at" desc
+limit 50 offset 50;
+
+-- UNIQUE (talk_room_id, user_id) で1行を書き換える
+update "talk_room_members"
+set "last_read_at" = '2026-11-13 10:51:27',
+    "updated_at" = '2026-11-13 10:51:27'
+where "talk_room_id" = 7 and "user_id" = 23;</code></pre>
+      <ul><li>ルームの持ち主かを確かめないので、ルームの UUID を知っていれば、他人のトークを読める（FR-MSG-003）。UNIQUE と外部キーは、だれが読めるかは守らない</li><li>画面は5秒ごとに1ページ目をこの形で読み直すので、開いているあいだ、5秒ごとに3本（うち1本は書き込み）が流れ、毎回 messages を全部読む</li><li><code>created_at</code> だけで並べるので、同じ秒に送られたものの順が決まらない（04 と同じ）</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版（持ち主の確かめとカーソル）<span class="count">2本＋ガード1本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$roomId = DB::table('talk_rooms as tr')
+    -&gt;join('talk_room_members as m', fn ($j) =&gt; $j
+        -&gt;on('m.talk_room_id', '=', 'tr.id')
+        -&gt;where('m.user_id', $me))
+    -&gt;where('tr.public_id', $publicId)
+    -&gt;value('tr.id') ?? abort(404);
+DB::table('messages')-&gt;where('talk_room_id', $roomId)
+    -&gt;where('id', '&lt;', fn ($q) =&gt; $q-&gt;from('messages')
+        -&gt;select('id')-&gt;where('public_id', $before))
+    -&gt;orderByDesc('id')-&gt;limit(51)
+    -&gt;get(['public_id', 'sender_id', 'body', 'created_at']);</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① 自分のルームか（違えば 404）。
+--    public_id の UNIQUE と (talk_room_id, user_id) の UNIQUE
+select "tr"."id" from "talk_rooms" as "tr"
+inner join "talk_room_members" as "m"
+  on "m"."talk_room_id" = "tr"."id"
+ and "m"."user_id" = 23
+where "tr"."public_id" = '019a7c1e-…-000000000007'
+limit 1;
+
+-- ② カーソル：前に読んだいちばん古いものより前
+select "public_id", "sender_id", "body", "created_at"
+from "messages"
+where "talk_room_id" = 7
+  and "id" &lt; (select "id" from "messages"
+              where "public_id" = '019a7c20-…-000000000050')
+order by "id" desc
+limit 51;</code></pre>
+      <ul><li>①で持ち主を確かめる。ほかの人のルームも、ないルームも同じ <code>404</code>（あるかどうかも分からない）。足すインデックスなしで、今ある UNIQUE 2つで済む</li><li>カーソルの値はメッセージの <code>public_id</code>（D-022。連番を出さない）。<code>messages.public_id</code> の UNIQUE で <code>id</code> に読み替え、並びは <code>id</code> で決める</li><li>51件読み、51件目があれば「まだ古いものがある」。<code>messages (talk_room_id, id)</code> を後ろから51行読んで止まる</li><li>読んだことにするのは別の API（下）。GET では書き込まない</li></ul>
+    </section>
+  </div>
+  <h4>新しいメッセージを取りに行く（5秒ごと）</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">3本（履歴の1ページ目と同じ）</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">// 画面が 5秒ごとに、履歴の1ページ目（新しい50件）を
+// もう一度読み、今の一覧と入れ替える
+setInterval(() =&gt; load(1), 5000)</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- 上の履歴と同じ3本（offset 0）が、5秒ごとに流れる
+select * from "messages"
+where "talk_room_id" = 7
+order by "created_at" desc
+limit 50 offset 0;
+-- 新しいものがなくても、messages を全部読んで50件を返す</code></pre>
+      <ul><li>新しいものが0件でも、毎回 messages を全部読んで50件を返す。1人が1分開くと 12回 × 3本</li><li>入れ替えるので、上にさかのぼって読んだ古いものが、5秒たつと消える</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版（新しいものだけ）<span class="count">2本＋ガード1本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">DB::table('messages')-&gt;where('talk_room_id', $roomId)
+    -&gt;where('id', '&gt;', fn ($q) =&gt; $q-&gt;from('messages')
+        -&gt;select('id')-&gt;where('public_id', $after))
+    -&gt;orderBy('id')-&gt;limit(100)
+    -&gt;get(['public_id', 'sender_id', 'body', 'created_at']);</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ①（自分のルームか）は履歴と同じ
+
+-- ② 最後に受け取ったものより新しいものだけ
+select "public_id", "sender_id", "body", "created_at"
+from "messages"
+where "talk_room_id" = 7
+  and "id" &gt; (select "id" from "messages"
+              where "public_id" = '019a7c20-…-000000000099')
+order by "id" asc
+limit 100;</code></pre>
+      <ul><li>新しいものがなければ、<code>(talk_room_id, id)</code> を1か所見て0件を返す（NFR-MSG-003）</li><li>画面は、受け取ったものを下に足すだけ。さかのぼって読んだものは消えない</li><li>罠：<code>id</code> の順と、書き込みが見えるようになる順（コミットの順）は同じとは限らない（7章）</li></ul>
+    </section>
+  </div>
+  <h4>送る（<code>POST /api/me/talk-rooms/{public_id}/messages</code>）</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">2本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$room = TalkRoom::where('public_id', $roomId)-&gt;first();
+// 入力も、自分のルームかも確かめない
+Message::create([
+    'talk_room_id' =&gt; $room-&gt;id,
+    'sender_id' =&gt; $me,
+    'body' =&gt; $request-&gt;input('body'),
+]);</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">select * from "talk_rooms"
+where "public_id" = '019a7c1e-…-000000000007'
+limit 1;
+
+-- 外部キーの確かめ（talk_rooms・users に行があるか）は、
+-- 主キーで探すので速い
+insert into "messages"
+  ("talk_room_id", "sender_id", "body",
+   "updated_at", "created_at")
+values (7, 23, 'こんにちは',
+        '2026-11-13 10:51:27', '2026-11-13 10:51:27')
+returning "id";</code></pre>
+      <ul><li>ルームの UUID を知っていれば、そのルームの2人でない人も送れる（不変条件 6・FR-MSG-002）。外部キーが守るのは「ルームと会員が存在する」ことだけ</li><li>ないルームなら <code>$room</code> が <code>null</code> で 500。本文が空でも1万文字でも入る</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版<span class="count">2本＋ガード1本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">// SendMessageRequest：body は必須・前後の空白を除いて 1〜1000文字
+$roomId = ...;   // 履歴の①と同じ（違えば 404）
+DB::table('messages')-&gt;insertGetId([
+    'talk_room_id' =&gt; $roomId,
+    'sender_id' =&gt; $me,
+    'type' =&gt; 'text',
+    'body' =&gt; $request-&gt;validated('body'),
+    'created_at' =&gt; now(),
+]);</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ①（自分のルームか）は履歴と同じ
+
+-- public_id は DB の既定の値（uuidv7()）で入る
+insert into "messages"
+  ("talk_room_id", "sender_id", "type", "body", "created_at")
+values (7, 23, 'text', 'こんにちは', '2026-11-13 10:51:27')
+returning "id";</code></pre>
+      <ul><li>本文の長さは FormRequest で 422 にし、DB の CHECK（<code>char_length(body) between 1 and 1000</code>）でも守る</li><li><code>type</code> は 05 では <code>text</code> だけ。画像・スタンプ・システムの文を、表を分けずに足せるようにしておく</li><li>書き込むたびに、インデックス3つ（主キー・<code>public_id</code>・<code>(talk_room_id, id)</code>。<code>sender_id</code> も張れば4つ）も書き換わる。読む速さと引き換えの書き込みの手間</li></ul>
+    </section>
+  </div>
+  <h4>読んだことにする（改善版の <code>PUT /api/me/talk-rooms/{public_id}/read</code>）</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">履歴の GET の中で1本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">// 別の API はない。履歴の GET の中で、
+// 自分の行の last_read_at を今にする（上の履歴の3本目）</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">update "talk_room_members"
+set "last_read_at" = '2026-11-13 10:51:27',
+    "updated_at" = '2026-11-13 10:51:27'
+where "talk_room_id" = 7 and "user_id" = 23;</code></pre>
+      <ul><li>GET を5秒ごとに呼ぶので、そのたびに書き込みが流れ、<code>updated_at</code> も変わる</li><li>時刻で持つので、読み込んだあと同じ秒に届いたものが、既読の扱いになることがある</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版（読んだ位置を ID で持つ）<span class="count">2本＋ガード1本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$roomId = ...;   // 履歴の①と同じ
+DB::table('talk_room_members')
+    -&gt;where('talk_room_id', $roomId)-&gt;where('user_id', $me)
+    -&gt;update(['last_read_message_id' =&gt; DB::raw(
+        "greatest(coalesce(last_read_message_id, 0),
+          (select coalesce(max(id), 0) from messages
+           where talk_room_id = $roomId))")]);</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ①（自分のルームか）は履歴と同じ
+
+-- 今の最新まで読んだことにする。戻ることはない
+update "talk_room_members"
+set "last_read_message_id" = greatest(
+      coalesce(last_read_message_id, 0),
+      (select coalesce(max(id), 0) from messages
+       where talk_room_id = 7))
+where "talk_room_id" = 7 and "user_id" = 23;</code></pre>
+      <ul><li>書き換えるのは自分の1行だけ。<code>max(id)</code> は <code>(talk_room_id, id)</code> の端を1つ見るだけ</li><li><code>greatest</code> で、2つのタブから古い値で上書きしても戻らない</li><li>通知を切る・非表示・ピン留めも、あとからこの1行の列として足せる</li></ul>
+    </section>
+  </div>
+  <!-- /compare -->
+  <table>
+    <tr><th>操作</th><th>レガシー版</th><th>改善版</th><th>違いのもと</th></tr>
+    <tr><td>マッチしたときにルームを作る</td><td>3本（トランザクションなし）</td><td>2本（いいね・マッチと同じトランザクション）</td><td>参加者2人を1本で入れ、全部入るか全部入らないかにする</td></tr>
+    <tr><td>トークの一覧</td><td>1＋6N 本（ルーム 100 で 601本。うち 200本が messages を全部読む）</td><td>1本＋ガード1本</td><td>ルームごとの6本を、JOIN・LATERAL・相関サブクエリで1本にまとめ、インデックスで1ルームあたり少しだけ読む</td></tr>
+    <tr><td>履歴（古い続き）</td><td>3本（読む2本・書き込み1本）</td><td>2本＋ガード1本</td><td>持ち主の確かめを足し、既読の書き込みを別の API に分ける。OFFSET をカーソルに</td></tr>
+    <tr><td>新しいものを取りに行く（5秒ごと）</td><td>3本（履歴の1ページ目と同じ）</td><td>2本＋ガード1本</td><td>本数は近いが、読む行と返す行が「全部読んで50件」から「新しい分だけ（ふつう0件）」になる</td></tr>
+    <tr><td>送る</td><td>2本</td><td>2本＋ガード1本</td><td>本数は同じ。ルームを探す SQL に持ち主の条件が入る</td></tr>
+    <tr><td>読んだことにする</td><td>履歴の GET の中で1本（時刻）</td><td>2本＋ガード1本（ID）</td><td>GET から分け、時刻ではなく ID で持つ</td></tr>
+  </table>
+  <p class="meta">「ガード1本」は、改善版の認証のミドルウェアがログインした会員を読む SQL（01b の改善版の形）。#58 で <code>docs/api/05-messages.md</code> の「流れる SQL の目安」を書くときに、この本数と合わせる。</p>
+
+  <h2>6. どう確かめるか</h2>
+  <table>
+    <tr><th>段階</th><th>確かめること</th></tr>
+    <tr><td>① レガシー版で問題を見る</td><td>
+      <ul>
+        <li>psql の <code>\d messages</code> で、外部キーはあるがインデックスがないことを見る</li>
+        <li>トークの一覧の SQL の本数を、ルーム 1・10・100 で数える（<code>DB::listen</code>）。NFR-MSG-001</li>
+        <li>マッチ 1000組・メッセージ 10万件で、一覧の各 SQL・履歴（1ページ目と 20ページ目）・最新の1件・自分のルームの <code>EXPLAIN (ANALYZE, BUFFERS)</code>。<code>Seq Scan</code> と <code>Rows Removed by Filter</code> を見る。NFR-MSG-002</li>
+        <li>トーク画面を開いたまま1分：CDP で <code>GET</code> の本数と受け取った量、DB で <code>update</code> の回数。NFR-MSG-003</li>
+        <li>メッセージの多い会員を1人消す時間（CASCADE。<code>EXPLAIN ANALYZE delete …</code> の Trigger の時間）</li>
+        <li>他人のルームの UUID で読む・送る（FR-MSG-002・003）。空・1001文字を送る（FR-MSG-004）。一度も開いていないルームの未読の数（FR-MSG-009）</li>
+        <li>上までさかのぼってから5秒待ち、古いものが消えるか。続きを読むあいだに送られたとき、OFFSET で重なるか（FR-MSG-006・FR-UI-021）</li>
+      </ul></td></tr>
+    <tr><td>② 振る舞いを固定するテスト</td><td>要件 ID を名前に入れる。例：<code>FR-MSG-002 マッチしていない相手には送れない</code>・<code>FR-MSG-003 他人のルームは見られない</code>・<code>FR-MSG-006 さかのぼるあいだに届いても重ならない</code>・<code>FR-MSG-009 未読の数は相手のものだけ</code>・<code>FR-MSG-010 開くと未読が0になる</code>・<code>NFR-MSG-001 トークの一覧はルームが増えても3本以内</code>（SQL の本数を数えるテスト）</td></tr>
+    <tr><td>③ 改善したあとに比べる数字</td><td>一覧の SQL の本数（ルーム 100 で 601本 → 2本）・同じデータでの実行計画の時間と Buffers（一覧・履歴の深い続き・新しいもの・自分のルーム）・1分のポーリングで読んだ行と返した件数・会員を1人消す時間・インデックスの大きさ（<code>pg_relation_size</code>）と送る時間の変化・<code>DISTINCT ON</code>・<code>ROW_NUMBER</code>・<code>LATERAL</code> の3つと、<code>include (sender_id)</code> の有無の実行計画</td></tr>
+  </table>
+
+  <h2>7. 気をつけること（罠）</h2>
+  <div class="card warn"><ul>
+    <li><strong>外部キー＝インデックスではない</strong>：MySQL（InnoDB）は外部キーの列にインデックスを自動で作るが、PostgreSQL は作らない。同じマイグレーションでも、DB によって速さが変わる。外部キーの列で検索するか・親を消すか（CASCADE）を見て、インデックスを決める</li>
+    <li><strong>複合インデックスは列の順で効き方が変わる</strong>：<code>(talk_room_id, user_id)</code> は <code>user_id</code> だけの検索に効かない。逆の順のものがもう1つ要る</li>
+    <li><strong>インデックスは書き込みを重くする</strong>：messages に4つ張れば、送るたびに4つを書き換える。読む SQL から必要なものだけを選び、測ってから足す</li>
+    <li><strong>UUID は鍵ではない</strong>：ルームの ID を UUID にしても、URL は履歴やログに残る。参加者に自分がいるかの確かめを、すべての API に入れる</li>
+    <li><strong><code>id</code> の順とコミットの順は違う</strong>：A の送信が <code>id</code> 100、B が 101 を取り、B が先にコミットすると、ポーリングは 101 を受け取り、次は「101 より新しいもの」を聞くので、あとから見えた 100 を取りこぼす。少し前から読み直して画面で重なりを除くか、起きうることを記録する</li>
+    <li><strong>NULL との比べ</strong>：<code>created_at &gt; null</code> はどの行にも当てはまらない。まだ開いていないルームの未読が 0 に見える</li>
+    <li><strong><code>group by</code> で最新を取ろうとする</strong>：<code>select talk_room_id, max(created_at), body … group by talk_room_id</code> は PostgreSQL ではエラー、MySQL の設定によっては別の行の本文が混ざる</li>
+    <li><strong>ポーリングを <code>setInterval</code> で回す</strong>：遅い回線では前の呼び出しが終わる前に次が飛び、返ってくる順も入れ替わる</li>
+  </ul></div>
+
+  <h2>8. 理解を確かめる6つの問い</h2>
+  <p>先に自分で答えてから、開いて見る。</p>
+  <details><summary>なぜそうするのか？（なぜ表を4つに分け、インデックスをこの3つにするのか）</summary><p>マッチ（関係）・ルーム（場所）・参加者（一人ひとりの状態）・メッセージ（中身）は、変わる理由が違うので、あとから足す列の置き場所が決まる（解除はマッチ、閉じるはルーム、通知を切るは参加者、取り消しはメッセージ）。インデックスは、一覧・履歴・新しいもの・未読の数を、どれも「1つのルームの中を、新しいほうから少し読む」形にそろえ、<code>messages (talk_room_id, id)</code> の1つで全部に効かせる。一覧の起点の「自分のルーム」には <code>(user_id, talk_room_id)</code>、会員を消すときの CASCADE には <code>(sender_id)</code> が要る。</p></details>
+  <details><summary>ほかの方法は？なぜ選ばなかったか？</summary><p>マッチの行をそのままルームにすると表は少ないが、マッチのないルームを作れず、未読の位置を組のどちら側かで2列に持つことになる。最新の1件は <code>DISTINCT ON</code> と <code>ROW_NUMBER</code> でも書けるが、自分のルームのメッセージを全部読んでから捨てるので、やり取りが長いほど遅い（改善版で並べて測る）。<code>talk_rooms</code> に最新の1件を写す案はいちばん速いが、正が2つになる。外部キーの列すべてにインデックスを張る案は、使わないもの（<code>talk_rooms.match_id</code> は UNIQUE で足りる）まで張り、書き込みを重くする。<code>messages</code> に <code>receiver_id</code> を持つ案は、参加者の表から分かることの写しで、ずれても DB が防げず、グループのトークで形が崩れるので選ばない。</p></details>
+  <details><summary>弱点は？</summary><p>マッチしたときに書く行が3つ増え、トランザクションが要る。messages のインデックスは、送るたびに書き換わる。ポーリングは、何もなくても会員1人につき5秒に1回のリクエストが来る（1000人が開いていれば、毎秒200回）。<code>id</code> の順とコミットの順がずれると、取りこぼしが起きうる。<code>talk_room_members</code> の2つのインデックスは中身がほぼ同じで、容量が2倍になる。</p></details>
+  <details><summary>問題が起きたら、どう調べて直すか？</summary><p>「一覧が遅い」なら、まず SQL の本数を見る（同じ形の SQL が値を変えて並んでいれば N+1）。1本でも遅ければ <code>EXPLAIN (ANALYZE, BUFFERS)</code> で、<code>Seq Scan on messages</code> と <code>Rows Removed by Filter</code> を探し、その条件の列にインデックスがあるかを <code>\d messages</code> で見る。外部キーの列でも、インデックスがなければ全部読む。「退会が遅い」なら、<code>EXPLAIN ANALYZE delete from users where id = …</code> の Trigger の時間で、どの外部キーの CASCADE が重いかが分かる。「他人のトークが見えた」なら、ルームを探す SQL に参加者との JOIN があるかを、すべての API で見る。</p></details>
+  <details><summary>データが10倍・100倍になったら？</summary><p>メッセージが 100万・1000万件になっても、インデックスを片側から読む形なので、1つのルームの履歴と新しいものの速さはほとんど変わらない（レガシー版は件数に比例して遅くなり、5秒ごとの読み直しがそのまま DB の負荷になる）。インデックスは表と一緒に大きくなり、メモリに載らなくなると読む量が増えるので、<code>pg_relation_size</code> で大きさを見る。ルームの多い会員では、一覧の LATERAL と未読の数がルームの数だけ動くので、一覧にもページ送りを入れるか、<code>talk_rooms.last_message_at</code> を写して並べる（案 E）。開いている会員が多くなれば、ポーリングの間隔を延ばす・見えていないときは止める・WebSocket や Firestore に移す。古いメッセージは、月ごとに表を分ける（パーティション）ことも候補になる。</p></details>
+  <details><summary>Eloquent でどんな SQL が流れ、どう直したか？ Rails（ActiveRecord）・Prisma ならどう書くか？</summary>
+    <p>Eloquent では、参加者の <code>foreach</code> の中でルーム・相手・プロフィール・最新の1件・未読の数を読むと、ルームごとに6本ずつ増える（N+1）。<code>foreignId()-&gt;constrained()</code> は外部キーだけを作り、インデックスは作らない（<code>-&gt;index()</code> を足すか、別に <code>$table-&gt;index([...])</code> を書く）。改善版は、クエリビルダーの <code>leftJoinLateral()</code> と <code>selectSub()</code> で1本にした。</p>
+    <table>
+      <tr><th>ORM</th><th>外部キーとインデックス</th><th>最新の1件をまとめる書き方</th></tr>
+      <tr><td>Eloquent</td><td><code>foreignId('talk_room_id')-&gt;constrained()</code> は制約だけ。<code>$table-&gt;index(['talk_room_id', 'id'])</code> を足す</td><td><code>hasOne(Message::class)-&gt;latestOfMany()</code> と <code>with()</code>・<code>withCount()</code>、または <code>leftJoinLateral()</code></td></tr>
+      <tr><td>Rails（ActiveRecord）</td><td><code>t.references :talk_room, foreign_key: true</code> は、既定でインデックスも作る（<code>index: true</code>）</td><td><code>includes(:latest_message)</code> は全件を読むことがあるので、<code>joins("LEFT JOIN LATERAL …")</code> か <code>select("DISTINCT ON …")</code></td></tr>
+      <tr><td>Prisma</td><td><code>@relation</code> は、PostgreSQL ではインデックスを作らない。<code>@@index([talkRoomId, id])</code> を書く</td><td><code>include: { messages: { take: 1, orderBy: { id: 'desc' } } }</code>（裏では別のクエリ）。未読の数は <code>_count</code> に条件か、<code>$queryRaw</code> で LATERAL</td></tr>
+    </table>
+  </details>
+
+  <h2>9. 実装の記録</h2>
+  <p class="meta">レガシー版のあと（9-1・9-2）と、改善したあと（9-3・9-4）に、explain-change が書く。</p>
+  <h3>9-1. レガシー版</h3>
+  <p>【まだ実装していない】</p>
+  <h3>9-2. 測った問題と数字</h3>
+  <p>【まだ実装していない】</p>
+  <h3>9-3. 足したテスト</h3>
+  <p>【まだ実装していない】</p>
+  <h3>9-4. 改善版と、前と後の数字</h3>
+  <p>【まだ実装していない】</p>
+</main>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+  // page.js が選んだ表示（data-scheme）に合わせる。なければ端末の設定
+  const scheme = document.documentElement.dataset.scheme;
+  const dark = scheme ? scheme.startsWith("dark") : (document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches));
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/page.js"></script>
+</body>
+</html>
