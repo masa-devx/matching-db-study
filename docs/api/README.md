@@ -44,3 +44,5 @@ API の正本。作る前に設計を書き、確かめてもらってから実�
 | [05](05-messages.md) | `POST /api/me/talk-rooms/{public_id}/messages` | 送る | 実装済み（レガシー版） |
 | [05](05-messages.md) | `PUT /api/me/talk-rooms/{public_id}/read`（改善版だけ） | 読んだことにする | 確定 |
 | [02](02-likes.md) | `POST /api/me/likes`（05 の変更） | マッチしたらトークルームと参加者2人を作る | 実装済み（レガシー版。PR #60） |
+| [05c](05c-firestore.md) | `POST /api/me/firebase-token` | 画面が Firebase（手元の Emulator）にログインするトークンを出す | 実装済み（レガシー版） |
+| [05c](05c-firestore.md) | `POST /api/me/likes`（05c の変更） | マッチしたら、Firestore にもルームと2人の受信箱を作る | 実装済み（レガシー版） |
