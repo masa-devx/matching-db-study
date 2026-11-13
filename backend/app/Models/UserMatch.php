@@ -6,6 +6,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * マッチ（レガシー版。03）。お互いにいいねした2人の組を1行で持つ。
@@ -37,5 +38,15 @@ class UserMatch extends Model
     public function user2(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user2_id');
+    }
+
+    /**
+     * このマッチのトークルーム（05。マッチしたときに作る。03 より前のマッチにはないことがある）
+     *
+     * @return HasOne<TalkRoom, $this>
+     */
+    public function talkRoom(): HasOne
+    {
+        return $this->hasOne(TalkRoom::class, 'match_id');
     }
 }

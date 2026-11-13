@@ -6,6 +6,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Like;
 use App\Models\Profile;
+use App\Models\TalkRoom;
+use App\Models\TalkRoomMember;
 use App\Models\User;
 use App\Models\UserMatch;
 use Firebase\JWT\JWT;
@@ -19,6 +21,7 @@ use Illuminate\Http\Request;
  * エラーは扱わない（UNIQUE の違反も例外も 500）。一覧は 1＋N 本。改善する段階で、要件 ID のテストにする。
  * 03 で、送るときにマッチを作り（docs/api/02-likes.md の「03 で変えること」）、一覧に「マッチ済み」を足した（1＋2N 本）。
  * #46 で、相手を public_id（UUID）で受け取り・返すようにした（送るときは1本、一覧は1件ごとに1本増える）。
+ * 05 で、マッチしたときにトークルームと参加者2人を作るようにした（送ってマッチしたときに3本増える）。
  */
 class LikeController extends Controller
 {
@@ -48,10 +51,15 @@ class LikeController extends Controller
         $matched = false;
         if ($reverse) {
             // user1_id に送り返した人、user2_id に先に送っていた人（向きがそろわない。組の UNIQUE もない）
-            UserMatch::create([
+            $match = UserMatch::create([
                 'user1_id' => $payload->sub,
                 'user2_id' => $toUserId,
             ]);
+            // 05：マッチしたらトークルームを作り、2人を参加者に入れる（D-023）。トランザクションなし（3本がそれぞれすぐ確定する）。
+            // 途中で失敗すると、マッチはあるのにルームがない・1人しかいないルームが残る
+            $room = TalkRoom::create(['match_id' => $match->id]);
+            TalkRoomMember::create(['talk_room_id' => $room->id, 'user_id' => $toUserId]);
+            TalkRoomMember::create(['talk_room_id' => $room->id, 'user_id' => $payload->sub]);
             $matched = true;
         }
 
