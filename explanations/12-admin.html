@@ -15,7 +15,7 @@
   <div class="card point">
     <strong>この一歩でできるようになること</strong>
     <ul>
-      <li>会員の側と管理画面を、別のアプリ（別の Laravel と別の React）に分け、共有するのを DB だけにする理由と、表の持ち主の決め方を説明できる</li>
+      <li>会員の側と管理画面を、別のアプリ（別の Laravel と別の React）に分け、表は共通にして、表の作り（マイグレーション）を1か所にまとめる理由を説明できる</li>
       <li>管理者と会員の権限の分け方（別の表・役割）と、「だれが何を見たか」を残す監査ログの持ち方が分かる</li>
       <li>大量のデータの一覧（N+1・<code>offset</code>・<code>count(*)</code>）と、日ごとの集計を、1本の SQL と索引で速くできる</li>
       <li>サイドバーの項目を「1か所の一覧」から作り、ドメインを足すときに直す場所を1つにできる</li>
@@ -37,7 +37,7 @@
   <table>
     <tr><th>言葉</th><th>意味（1〜2文）</th></tr>
     <tr><td>境界（バウンダリ）</td><td>どこまでが1つのアプリ（チーム）の持ち物かの線。ここでは「会員の側」と「管理画面」の線で、越えるのは DB だけにする。</td></tr>
-    <tr><td>表の持ち主</td><td>その表の作り（列・制約・マイグレーション）を決めて変えてよいアプリ。会員の表の持ち主は <code>backend/</code>、管理者と監査ログの表の持ち主は <code>admin/backend</code>。</td></tr>
+    <tr><td>表の持ち主</td><td>その表の作り（列・制約・マイグレーション）を決めて変えてよい場所。ここでは、管理者と監査ログの表も含めて、すべての表の作りを <code>backend/</code> にまとめる（ユーザーが決めた）。管理画面は表を読み書きするだけ。</td></tr>
     <tr><td>役割による権限（RBAC）</td><td>人に役割（<code>owner</code>・<code>viewer</code>）を付け、役割ごとにできる操作を決めること。人ごとに決めるより、増えても管理しやすい。</td></tr>
     <tr><td>監査ログ</td><td>だれが・いつ・何に・何をしたかを、あとから確かめるための記録。書き足すだけで、消さない・書き換えない（追記だけ）。</td></tr>
     <tr><td>集計の表（ロールアップ）</td><td>日ごと・月ごとの数を、あらかじめ数えて別の表に入れておくこと。ダッシュボードは、その小さな表を読むだけになる。PostgreSQL のマテリアライズドビューも同じ考え。</td></tr>
@@ -58,8 +58,8 @@ flowchart LR
   end
   B --> DB[("PostgreSQL matching_dev")]
   AB --> DB
-  B -. "会員の表の持ち主（users・likes・messages…）" .- DB
-  AB -. "管理の表の持ち主（admins・admin_audit_logs）" .- DB
+  B -. "表の作り（マイグレーション）はすべてここ。admins・admin_audit_logs も" .- DB
+  AB -. "読み書きだけ（migrate は流さない）" .- DB
   </pre>
   <pre class="mermaid">
 erDiagram
@@ -407,7 +407,7 @@ order by "month" asc;</code></pre>
   <h2>7. 気をつけること（罠）</h2>
   <div class="card warn"><ul>
     <li><strong>2つのアプリで同じ表を読む</strong>：会員の側が列の名前を変えると、管理画面の SQL が動かなくなる。会員の側の表を変えるときは、管理画面が読む列の一覧（data-model.md）を見る</li>
-    <li><strong>マイグレーションの表が1つ</strong>：2つの Laravel が同じ DB の <code>migrations</code> の表を使うと、お互いのマイグレーションが混ざる。管理画面は <code>admin_migrations</code> のように別の名前にする</li>
+    <li><strong>マイグレーションを2か所に置く</strong>：2つの Laravel がそれぞれマイグレーションを持つと、同じ DB の <code>migrations</code> の表で記録が混ざり、どちらで流したかが分からなくなる。表の作りは <code>backend/</code> の1か所にまとめ、管理画面では <code>migrate</code> を流さない（Laravel の雛形のマイグレーションは、会員の側の <code>users</code> などの表とぶつかるので消す）</li>
     <li><strong>画面で隠すだけ</strong>：<code>viewer</code> にボタンを出さなくても、API を直接呼べば変えられる。役割は API で必ず確かめる</li>
     <li><strong><code>count(*)</code> は速くない</strong>：PostgreSQL は件数を持っていないので、毎回数える。10万件の一覧の「全部で何件」を毎回出すのは重い</li>
     <li><strong>個人の情報の出しすぎ</strong>：管理者でも、要る列だけを返す。メッセージの本文を見たことは監査ログに残す</li>
