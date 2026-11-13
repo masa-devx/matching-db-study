@@ -58,6 +58,16 @@ class User extends Authenticatable
     }
 
     /**
+     * この会員の購入の記録（07）
+     *
+     * @return HasMany<Purchase, $this>
+     */
+    public function purchases(): HasMany
+    {
+        return $this->hasMany(Purchase::class);
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
@@ -70,6 +80,9 @@ class User extends Authenticatable
             'last_login_at' => 'datetime',
             // 06：退会した日時（論理削除）。NULL なら会員のまま
             'deleted_at' => 'datetime',
+            // 07：有料会員か（真偽値）と、いつまで有料か（機能を使えるかは is_paid だけで決める）
+            'is_paid' => 'boolean',
+            'paid_until' => 'datetime',
             // 保存するときに bcrypt でハッシュ化する（元に戻せない形。FR-014）
             'password' => 'hashed',
         ];
