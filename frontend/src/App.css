@@ -597,3 +597,92 @@
 .user-card-sub {
   font-size: 14px;
 }
+
+/* ---- 05 で足した。トークの一覧の未読と、トーク画面。値は上と同じものを、また書く ---- */
+.row-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.badge {
+  min-width: 20px;
+  padding: 0 6px;
+  font-size: 12px;
+  line-height: 20px;
+  color: #fff;
+  text-align: center;
+  background: #d6336c;
+  border-radius: 10px;
+}
+
+.talk-head {
+  position: sticky;
+  top: -16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: -16px -16px 12px;
+  padding: 8px 16px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.talk-head .row-avatar {
+  width: 36px;
+  height: 36px;
+}
+
+.talk-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0 0 72px;
+  list-style: none;
+}
+
+.bubble {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 80%;
+}
+
+.bubble-body {
+  padding: 8px 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 16px;
+}
+
+.bubble-time {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: #6c757d;
+}
+
+.bubble-mine {
+  flex-direction: row-reverse;
+  align-self: flex-end;
+}
+
+.bubble-mine .bubble-body {
+  color: #fff;
+  background: #d6336c;
+  border-color: #d6336c;
+}
+
+.talk-form {
+  position: sticky;
+  bottom: -16px;
+  display: flex;
+  gap: 8px;
+  margin: 0 -16px -16px;
+  padding: 8px 16px;
+  background: #f8f9fa;
+  border-top: 1px solid #dee2e6;
+}
