@@ -46,3 +46,8 @@ API の正本。作る前に設計を書き、確かめてもらってから実�
 | [02](02-likes.md) | `POST /api/me/likes`（05 の変更） | マッチしたらトークルームと参加者2人を作る | 実装済み（レガシー版。PR #60） |
 | [05c](05c-firestore.md) | `POST /api/me/firebase-token` | 画面が Firebase（手元の Emulator）にログインするトークンを出す | 実装済み（レガシー版） |
 | [05c](05c-firestore.md) | `POST /api/me/likes`（05c の変更） | マッチしたら、Firestore にもルームと2人の受信箱を作る | 実装済み（レガシー版） |
+| [06](06-blocks-withdrawal.md) | `POST /api/me/blocks` | ブロックする | 実装済み（レガシー版） |
+| [06](06-blocks-withdrawal.md) | `GET /api/me/blocks` | ブロックした相手の一覧 | 実装済み（レガシー版） |
+| [06](06-blocks-withdrawal.md) | `DELETE /api/me/blocks/{public_id}` | 解除する | 実装済み（レガシー版） |
+| [06](06-blocks-withdrawal.md) | `DELETE /api/me` | 退会する | 実装済み（レガシー版） |
+| [06](06-blocks-withdrawal.md) | `GET /api/users`・`GET /api/me/likes`・`GET /api/me/matches`・`GET /api/me/talk-rooms`（06 の変更） | ブロックした・された相手を除く（退会した相手は検索だけ除く） | 実装済み（レガシー版） |
