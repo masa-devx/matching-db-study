@@ -5,7 +5,7 @@
 一歩：03b（会員を探す一覧は 04、メッセージは 05、見た目と動きは 03c、Zustand は 05b）
 目的：[product.md](../product.md) の主要な機能を、ブラウザから使えるようにする
 
-このファイルは、画面（`frontend/`）を長く表す。あとの一歩で画面を足すときは、ここに書き足す。レガシー版も改善版も、この要件を守る（レガシー版で守れていないものは、改善する段階のテストの対象になる）。要件 ID は `FR-UI-` で始める。
+このファイルは、画面（`frontend/client/`）を長く表す。あとの一歩で画面を足すときは、ここに書き足す。レガシー版も改善版も、この要件を守る（レガシー版で守れていないものは、改善する段階のテストの対象になる）。要件 ID は `FR-UI-` で始める。
 
 ## 目的と対象
 
@@ -101,7 +101,7 @@
 - NFR-UI-005（03c）：押せる場所は 44×44px 以上。キーボードで動かしたとき、今いる場所に枠が出る（`:focus-visible`）。文字と地のコントラストは 4.5 以上（[design.md](../design.md)）
 - NFR-UI-006（03c）：動かすのは `transform` と `opacity` だけ。Lighthouse（スマホ）の CLS を 0.1 以下に保つ。03c の前と後で、LCP・INP・CLS と `vite build` の大きさを測って残す
 - NFR-UI-007（03c）：動きと部品のために、新しい依存（ライブラリ・Web フォント）を入れない。ブラウザの標準（`<dialog>`・View Transitions・CSS）と React 19 の標準（`useOptimistic` など）で作る
-- 制約：React 19・TypeScript・Vite・React Router。Node は mise の版（26.13.0）。置き場所は `frontend/`。OpenAPI は使わず、型は `docs/api/` に合わせて手で書く（D-006）
+- 制約：React 19・TypeScript・Vite・React Router。Node は mise の版（26.13.0）。置き場所は `frontend/client/`。OpenAPI は使わず、型は `docs/api/` に合わせて手で書く（D-006）
 - 制約：CSS は、レガシー版はひな形の `index.css`・`App.css` に書く。改善版は部品ごとの CSS Modules と、色・余白・文字の大きさを CSS の変数（カスタムプロパティ）にまとめる
 
 ## 前提と要確認事項

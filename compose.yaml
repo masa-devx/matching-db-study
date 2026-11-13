@@ -5,7 +5,8 @@ name: matching-db-study
 services:
   app:
     build: ./docker/php
-    # リポジトリ全体を /app に置く。Laravel は /app/backend
+    working_dir: /app/backend/client
+    # リポジトリ全体を /app に置く。会員の側の Laravel は /app/backend/client（#93 で backend/ から移した）
     volumes:
       - .:/app
       - composer-cache:/root/.composer/cache
@@ -34,14 +35,14 @@ services:
         condition: service_healthy
 
 
-  # 12：管理画面の API（admin/backend の Laravel）。会員の側（app）と同じ PHP のイメージで、別のコンテナ・別のポート。
-  # 表は会員の側と共通（同じ DB の matching_dev）。表の作り（マイグレーション）は backend/ にまとめ、管理画面では流さない
+  # 12：管理画面の API（backend/admin の Laravel）。会員の側（app）と同じ PHP のイメージで、別のコンテナ・別のポート。
+  # 表は会員の側と共通（同じ DB の matching_dev）。表の作り（マイグレーション）は backend/client にまとめ、管理画面では流さない
   admin-app:
     build: ./docker/php
     volumes:
       - .:/app
       - composer-cache:/root/.composer/cache
-    working_dir: /app/admin/backend
+    working_dir: /app/backend/admin
     ports:
       - "127.0.0.1:8100:8000"
     # どれも手元だけの捨ててよい値（app と同じ）。秘密の値（APP_KEY など）はここに書かない

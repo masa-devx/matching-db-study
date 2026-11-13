@@ -5,9 +5,9 @@
 要件：[requirements/screens.md](requirements/screens.md) の FR-UI-023〜033・NFR-UI-004〜007
 解説：[../explanations/03c-ui.html](../explanations/03c-ui.html)
 
-画面（`frontend/`）の色・文字・余白・角丸・影・動きと、部品の見た目と動きの正本。レガシー版も改善版も、この値を使う。
+画面（`frontend/client/`）の色・文字・余白・角丸・影・動きと、部品の見た目と動きの正本。レガシー版も改善版も、この値を使う。
 
-- レガシー版：値を CSS に**そのまま書く**（`App.css`・`index.css`）。モーダル・トースト・スケルトンなどの部品は、`frontend/src/components/` に1つずつ置き、どの画面からも使う（#63 で、ユーザーの指示で「画面ごとに書く」から変えた）
+- レガシー版：値を CSS に**そのまま書く**（`App.css`・`index.css`）。モーダル・トースト・スケルトンなどの部品は、`frontend/client/src/components/` に1つずつ置き、どの画面からも使う（#63 で、ユーザーの指示で「画面ごとに書く」から変えた）
 - 改善版：値を `tokens.css` の CSS の変数（カスタムプロパティ）にまとめ、部品は1つずつ分ける
 
 ## トーン
