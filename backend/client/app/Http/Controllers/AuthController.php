@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Hash;
  * 01b ログイン・自分の情報・ログアウト（レガシー版。docs/api/01b-auth.md）。
  * JWT は 30日・止める仕組みなし・中身に個人情報。鍵は APP_KEY を使い回す。何回でもログインを試せる。
  * 改善する段階で、要件 ID のテストにする。
+ * 12 で、管理画面で止めた会員をログインで断るようにした（ログインだけ。docs/api/12-admin.md）。
  */
 class AuthController extends Controller
 {
@@ -29,6 +30,11 @@ class AuthController extends Controller
         // 会員がいないときは、ここ（bcrypt の照合）を飛ばすので、返るまでの時間でも見分けられる
         if (! Hash::check($request->input('password'), $user->password)) {
             return response()->json(['message' => 'パスワードが違います'], 401);
+        }
+
+        // 12：管理画面で利用を止めた会員は、ログインさせない（ここにだけ書いた。止める前の JWT は、ほかの API でそのまま使える）
+        if ($user->suspended_at !== null) {
+            return response()->json(['message' => '利用を停止しています'], 403);
         }
 
         // 04：最終ログインを残す（検索の並び）。save() は updated_at も書き換える。時刻はアプリのサーバーの時計
