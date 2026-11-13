@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>03c 画面の見た目と動き</title>
+<link rel="stylesheet" href="assets/page.css">
+</head>
+<body>
+<main>
+  <style>
+    /* 見本の中だけの見た目。値は docs/design.md と同じ。アプリはライトだけなので、見本の枠の中は色をすべて自分で決める */
+    .ds { --bg:#faf6f4; --surface:#fff; --surface2:#f4eeec; --text:#231c20; --muted:#6f6368; --line:#ece3e1;
+      --primary:#d12f5f; --soft:#fdecf1; --grad:linear-gradient(135deg,#d63a5f 0%,#dc4e3c 100%);
+      --ok:#2f9e6a; --danger:#c23a3a; --overlay:rgba(35,28,32,.45);
+      --ease:cubic-bezier(.2,.8,.2,1); --bounce:cubic-bezier(.34,1.56,.64,1);
+      --font:"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",system-ui,sans-serif;
+      display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); gap:20px; margin:20px 0 8px; }
+    .ds-phone { position:relative; overflow:hidden; min-width:0; background:var(--bg); color:var(--text); font-family:var(--font);
+      border:1px solid var(--line); border-radius:28px; height:560px; display:flex; flex-direction:column;
+      box-shadow:0 12px 40px rgba(35,28,32,.12); font-size:15px; line-height:1.6; }
+    .ds-head { padding:16px 16px 8px; display:flex; align-items:center; justify-content:space-between; }
+    .ds-h { font-size:22px; font-weight:800; letter-spacing:.02em; margin:0; color:var(--text); }
+    .ds-body { flex:1; overflow:auto; padding:4px 16px 16px; display:flex; flex-direction:column; gap:12px; }
+    .ds-row { display:flex; align-items:center; gap:12px; padding:12px; background:var(--surface); border-radius:20px;
+      box-shadow:0 1px 2px rgba(35,28,32,.04),0 8px 24px rgba(35,28,32,.06); }
+    .ds-av { flex:none; width:48px; height:48px; border-radius:999px; background:var(--grad); color:#fff; display:grid; place-items:center; font-weight:700; }
+    .ds-av.lg { width:96px; height:96px; font-size:36px; border:4px solid #fff; }
+    .ds-name { font-weight:600; color:var(--text); }
+    .ds-sub { font-size:13px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .ds-meta { margin-left:auto; text-align:right; font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; display:grid; gap:4px; justify-items:end; }
+    .ds-badge { min-width:20px; height:20px; padding:0 6px; border-radius:999px; background:var(--grad); color:#fff; font-size:12px; font-weight:700; display:inline-grid; place-items:center; }
+    .ds-txt { min-width:0; flex:1; }
+    .ds-sk { background:var(--surface2); border-radius:8px; position:relative; overflow:hidden; }
+    .ds-sk::after { content:""; position:absolute; inset:0; transform:translateX(-100%);
+      background:linear-gradient(90deg,transparent,rgba(255,255,255,.7),transparent); animation:ds-shine 1.4s ease-in-out infinite; }
+    @keyframes ds-shine { to { transform:translateX(100%); } }
+    .ds-tabs { display:flex; border-top:1px solid var(--line); background:rgba(255,255,255,.8); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); }
+    .ds-tab { flex:1; min-height:56px; display:grid; place-items:center; gap:0; font:600 11px var(--font); color:var(--muted); background:none; border:0; cursor:pointer; position:relative; transition:color .15s var(--ease); }
+    .ds-tab svg { width:24px; height:24px; fill:none; stroke:currentColor; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; }
+    .ds-tab[aria-current="page"] { color:var(--primary); }
+    .ds-tab[aria-current="page"]::after { content:""; position:absolute; bottom:5px; width:4px; height:4px; border-radius:99px; background:var(--primary); }
+    .ds-tab .ds-badge { position:absolute; top:6px; left:calc(50% + 6px); height:18px; min-width:18px; font-size:11px; }
+    .ds-btn { font:600 15px var(--font); min-height:44px; padding:0 20px; border-radius:999px; border:0; cursor:pointer; color:#fff; background:var(--grad);
+      box-shadow:0 6px 20px rgba(214,58,95,.32); transition:transform .15s var(--ease), opacity .15s var(--ease); display:inline-grid; place-items:center; }
+    .ds-btn:active { transform:scale(.97); }
+    .ds-btn.ghost { background:var(--surface); color:var(--primary); border:1px solid var(--line); box-shadow:none; }
+    .ds-btn.danger { background:var(--danger); box-shadow:none; }
+    .ds-btn:focus-visible, .ds-tab:focus-visible, .ds-like:focus-visible, .ds-input:focus-visible { outline:3px solid #f7b7c8; outline-offset:2px; }
+    .ds-btn[aria-busy="true"] { pointer-events:none; }
+    .ds-btn[aria-busy="true"] span { visibility:hidden; }
+    .ds-btn[aria-busy="true"]::after { content:""; position:absolute; width:18px; height:18px; border-radius:99px; border:2px solid rgba(255,255,255,.4); border-top-color:#fff; animation:ds-spin .7s linear infinite; }
+    .ds-btn { position:relative; }
+    @keyframes ds-spin { to { transform:rotate(360deg); } }
+    .ds-actions { display:flex; flex-wrap:wrap; gap:8px; }
+    .ds-card { background:var(--surface); border-radius:20px; overflow:hidden; box-shadow:0 1px 2px rgba(35,28,32,.04),0 8px 24px rgba(35,28,32,.06); }
+    .ds-photo { aspect-ratio:4/3; max-width:100%; background:linear-gradient(160deg,#f6c9d4,#f8d9c4 60%,#f4eeec); position:relative; display:grid; place-items:center; color:#fff; font-size:56px; font-weight:800; }
+    .ds-like { position:absolute; right:12px; bottom:-22px; width:56px; height:56px; border-radius:999px; border:0; background:#fff; cursor:pointer; display:grid; place-items:center; box-shadow:0 8px 24px rgba(35,28,32,.16); }
+    .ds-like svg { width:28px; height:28px; stroke:var(--primary); stroke-width:2; fill:transparent; transition:fill .15s var(--ease); }
+    .ds-like[aria-pressed="true"] svg { fill:var(--primary); animation:ds-pop .4s var(--bounce); }
+    @keyframes ds-pop { 0% { transform:scale(.6); } 60% { transform:scale(1.25); } 100% { transform:scale(1); } }
+    .ds-info { padding:28px 16px 16px; display:grid; gap:2px; }
+    .ds-talk { display:flex; flex-direction:column; gap:8px; }
+    .ds-bub { max-width:78%; padding:8px 14px; border-radius:20px; border-bottom-left-radius:6px; background:var(--surface2); color:var(--text); align-self:flex-start; animation:ds-in .25s var(--ease); transition:opacity .25s var(--ease); overflow-wrap:anywhere; }
+    .ds-bub.mine { align-self:flex-end; background:var(--grad); color:#fff; border-radius:20px; border-bottom-right-radius:6px; }
+    .ds-bub.sending { opacity:.5; }
+    @keyframes ds-in { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+    .ds-form { display:flex; gap:8px; padding:8px 12px 12px; border-top:1px solid var(--line); background:var(--surface); }
+    .ds-input { flex:1; min-width:0; font:15px var(--font); min-height:44px; padding:0 14px; border-radius:12px; border:1px solid var(--line); background:var(--surface); color:var(--text); transition:border-color .15s var(--ease); }
+    .ds-input:focus { border-color:var(--primary); }
+    .ds-toast { position:absolute; top:14px; left:50%; transform:translate(-50%,-8px); opacity:0; pointer-events:none; z-index:5;
+      background:#fff; color:var(--text); border-radius:999px; padding:8px 16px; font-size:14px; font-weight:600; white-space:nowrap;
+      box-shadow:0 12px 40px rgba(35,28,32,.18); display:flex; align-items:center; gap:8px; transition:transform .25s var(--ease), opacity .25s var(--ease); }
+    .ds-toast::before { content:""; width:8px; height:8px; border-radius:99px; background:var(--ok); }
+    .ds-toast.err::before { background:var(--danger); }
+    .ds-toast.show { opacity:1; transform:translate(-50%,0); }
+    .ds-sheet { position:absolute; inset:0; z-index:6; display:flex; align-items:flex-end; background:var(--overlay); opacity:0; pointer-events:none; transition:opacity .25s var(--ease); }
+    .ds-sheet.open { opacity:1; pointer-events:auto; }
+    .ds-sheet-in { width:100%; background:#fff; color:var(--text); border-radius:28px 28px 0 0; padding:24px 20px 20px; display:grid; gap:12px; transform:translateY(16px); transition:transform .25s var(--ease); }
+    .ds-sheet.open .ds-sheet-in { transform:none; }
+    .ds-sheet-in p { margin:0; color:var(--muted); font-size:14px; }
+    .ds-match { position:absolute; inset:0; z-index:7; background:var(--grad); color:#fff; display:grid; place-content:center; justify-items:center; gap:20px; padding:24px; text-align:center; opacity:0; pointer-events:none; transition:opacity .25s var(--ease); }
+    .ds-match.open { opacity:1; pointer-events:auto; }
+    .ds-pair { display:flex; }
+    .ds-pair .ds-av { background:rgba(255,255,255,.25); }
+    .ds-pair .ds-av:first-child { transform:translateX(-60px); opacity:0; }
+    .ds-pair .ds-av:last-child { transform:translateX(60px); opacity:0; margin-left:-18px; }
+    .ds-match.open .ds-pair .ds-av { transform:none; opacity:1; transition:transform .4s var(--bounce) .1s, opacity .25s var(--ease) .1s; }
+    .ds-match-t { font-size:32px; font-weight:800; letter-spacing:.02em; margin:0; color:#fff; }
+    .ds-match .ds-btn { background:#fff; color:var(--primary); box-shadow:none; }
+    .ds-match .ds-btn.ghost { background:transparent; color:#fff; border-color:rgba(255,255,255,.6); }
+    .ds-empty { display:grid; justify-items:center; gap:12px; text-align:center; padding:32px 8px; color:var(--muted); }
+    .ds-empty-i { width:72px; height:72px; border-radius:999px; background:var(--soft); display:grid; place-items:center; }
+    .ds-empty-i svg { width:32px; height:32px; fill:none; stroke:var(--primary); stroke-width:1.75; }
+    .ds-cap { font-size:.88rem; color:var(--muted); margin:6px 4px 0; }
+    @media (prefers-reduced-motion: reduce) {
+      .ds *, .ds *::before, .ds *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; }
+    }
+  </style>
+
+  <p class="meta"><a href="index.html">← 目次へ</a></p>
+  <h1>03c 画面の見た目と動き</h1>
+  <p class="meta">作成: 2026-11-13 ／ 状態: <span class="status">解説だけ</span></p>
+
+  <div class="card point">
+    <strong>この一歩でできるようになること</strong>
+    <ul>
+      <li>モーダル・トースト・スケルトン・マッチの演出を、ライブラリを入れずにブラウザの標準で作れる</li>
+      <li>「応答を待たずに先に見せる」（楽観的な表示）の良いところと、失敗したときの扱いを説明できる</li>
+      <li>動きを足しても表示速度（CLS・バンドルの大きさ）を悪くしない作り方を、前と後の数字で説明できる</li>
+    </ul>
+  </div>
+
+  <h2>1. 何を作るか</h2>
+  <p>今の画面は、押しても反応が返らず、読み込み中は真っ白で、マッチしても1行の文字が出るだけです。03c では、色・文字・余白をそろえ直し、押したとき・待つとき・うれしいときに動きで返す画面にします。値と部品の決まりは <a href="../docs/design.md">docs/design.md</a>、受け入れ条件は <a href="../docs/requirements/screens.md">screens.md</a> の FR-UI-023〜033 です。</p>
+  <p>下は、決めた値で作った見本です。ボタンを押して動きを試せます（ここで動くのは見本だけで、アプリのコードではありません）。</p>
+
+  <div class="ds" id="ds">
+    <div>
+      <div class="ds-phone" id="ds-p1">
+        <div class="ds-toast" id="ds-toast" role="status" aria-live="polite">いいねしました</div>
+        <div class="ds-head"><h3 class="ds-h" style="border:0;padding:0;margin:0">メッセージ</h3>
+          <button class="ds-btn ghost" id="ds-reload" type="button" style="min-height:36px;padding:0 14px;font-size:13px"><span>読み込む</span></button></div>
+        <div class="ds-body" id="ds-list"></div>
+        <nav class="ds-tabs" aria-label="見本のタブ">
+          <button class="ds-tab" type="button"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>検索</button>
+          <button class="ds-tab" type="button"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>いいね</button>
+          <button class="ds-tab" type="button" aria-current="page"><svg viewBox="0 0 24 24"><path d="M4 6h16v10H8l-4 4z"/></svg>メッセージ<span class="ds-badge">5</span></button>
+          <button class="ds-tab" type="button"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>ホーム</button>
+        </nav>
+        <div class="ds-sheet" id="ds-sheet">
+          <div class="ds-sheet-in" role="dialog" aria-modal="true" aria-labelledby="ds-sheet-t">
+            <strong id="ds-sheet-t" style="font-size:18px">ログアウトしますか？</strong>
+            <p>もう一度使うときは、メールアドレスとパスワードを入れます。</p>
+            <button class="ds-btn danger" type="button" data-close><span>ログアウトする</span></button>
+            <button class="ds-btn ghost" type="button" data-close><span>キャンセル</span></button>
+          </div>
+        </div>
+      </div>
+      <p class="ds-cap">トークの一覧・スケルトン・未読のバッジ・確認のシート・トースト</p>
+      <div class="ds-actions" style="margin-top:8px">
+        <button class="ds-btn ghost" type="button" id="ds-open-sheet"><span>ログアウトの確認を開く</span></button>
+        <button class="ds-btn ghost" type="button" id="ds-err"><span>失敗のトースト</span></button>
+      </div>
+    </div>
+
+    <div>
+      <div class="ds-phone">
+        <div class="ds-body" style="padding-top:16px">
+          <div class="ds-card">
+            <div class="ds-photo">美<button class="ds-like" id="ds-like" type="button" aria-pressed="false" aria-label="いいね"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg></button></div>
+            <div class="ds-info"><span class="ds-name" style="font-size:20px">美咲　27歳</span><span class="ds-sub">東京都・162cm</span>
+              <p style="margin:8px 0 0;font-size:14px;color:var(--text)">休みの日はカフェを巡っています。おすすめのお店があれば教えてください。</p></div>
+          </div>
+          <p class="ds-sub" style="white-space:normal">ハートを押すとすぐ「済み」になり、少し待つとマッチの演出が出ます。</p>
+          <button class="ds-btn" type="button" id="ds-busy"><span>保存する（送信中を見る）</span></button>
+        </div>
+        <div class="ds-match" id="ds-match" role="dialog" aria-modal="true" aria-labelledby="ds-match-t">
+          <div class="ds-pair"><div class="ds-av lg">あ</div><div class="ds-av lg">美</div></div>
+          <p class="ds-match-t" id="ds-match-t">マッチしました</p>
+          <p style="margin:0;opacity:.9">美咲さんも、あなたにいいねしていました</p>
+          <button class="ds-btn" type="button" data-close-match><span>メッセージを送る</span></button>
+          <button class="ds-btn ghost" type="button" data-close-match><span>あとで</span></button>
+        </div>
+      </div>
+      <p class="ds-cap">相手のプロフィール・いいねのボタン・マッチの演出・送信中のボタン</p>
+    </div>
+
+    <div>
+      <div class="ds-phone">
+        <div class="ds-head"><span class="ds-av" style="width:36px;height:36px;font-size:14px">美</span><span class="ds-name" style="margin-right:auto;margin-left:10px">美咲</span></div>
+        <div class="ds-body"><div class="ds-talk" id="ds-talk">
+          <div class="ds-bub">はじめまして！カフェ巡りが好きなんですね</div>
+          <div class="ds-bub mine">はい、週末によく行きます</div>
+          <div class="ds-bub">渋谷のあたりですか？</div>
+        </div></div>
+        <form class="ds-form" id="ds-form">
+          <label for="ds-in" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">メッセージ</label>
+          <input class="ds-input" id="ds-in" placeholder="メッセージを入力" autocomplete="off" value="中目黒が多いです">
+          <button class="ds-btn" type="submit" style="padding:0 16px"><span>送る</span></button>
+        </form>
+      </div>
+      <p class="ds-cap">トーク：送った吹き出しは薄く出て、届くと濃くなる</p>
+    </div>
+  </div>
+
+  <script>
+  (() => {
+    const $ = (id) => document.getElementById(id);
+    const list = $("ds-list");
+    const rows = [["美","美咲","中目黒が多いです","10:42",3],["結","結衣","メッセージを送ってみましょう","昨日",0],["香","香織","来週の土曜はどうですか？","月曜",2]];
+    const sk = () => '<div class="ds-row"><div class="ds-av ds-sk" style="background:#f4eeec"></div><div class="ds-txt" style="display:grid;gap:8px"><div class="ds-sk" style="height:12px;width:40%"></div><div class="ds-sk" style="height:10px;width:75%"></div></div></div>';
+    const real = () => rows.map(([i,n,m,t,u]) => `<div class="ds-row" style="animation:ds-in .25s cubic-bezier(.2,.8,.2,1)"><div class="ds-av">${i}</div><div class="ds-txt"><div class="ds-name">${n}</div><div class="ds-sub">${m}</div></div><div class="ds-meta">${t}${u ? `<span class="ds-badge">${u}</span>` : ""}</div></div>`).join("");
+    const load = () => { list.innerHTML = sk() + sk() + sk(); setTimeout(() => { list.innerHTML = real(); }, 1200); };
+    list.innerHTML = real();
+    $("ds-reload").onclick = load;
+
+    let tt;
+    const toast = (msg, err) => { const t = $("ds-toast"); t.textContent = msg; t.classList.toggle("err", !!err); t.classList.add("show"); clearTimeout(tt); tt = setTimeout(() => t.classList.remove("show"), 3000); };
+    $("ds-err").onclick = () => toast("送れませんでした", true);
+
+    const sheet = $("ds-sheet"); let opener;
+    $("ds-open-sheet").onclick = (e) => { opener = e.currentTarget; sheet.classList.add("open"); sheet.querySelector("[data-close]").focus(); };
+    const closeSheet = () => { sheet.classList.remove("open"); opener && opener.focus(); };
+    sheet.addEventListener("click", (e) => { if (e.target === sheet || e.target.closest("[data-close]")) closeSheet(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") { if (sheet.classList.contains("open")) closeSheet(); $("ds-match").classList.remove("open"); } });
+
+    const like = $("ds-like"), match = $("ds-match");
+    like.onclick = () => {
+      if (like.getAttribute("aria-pressed") === "true") { like.setAttribute("aria-pressed","false"); return; }
+      like.setAttribute("aria-pressed","true");
+      setTimeout(() => { match.classList.add("open"); match.querySelector("[data-close-match]").focus(); }, 700);
+    };
+    match.addEventListener("click", (e) => { if (e.target.closest("[data-close-match]")) { match.classList.remove("open"); like.focus(); } });
+
+    const busy = $("ds-busy");
+    busy.onclick = () => { busy.setAttribute("aria-busy","true"); setTimeout(() => { busy.removeAttribute("aria-busy"); toast("保存しました"); }, 1500); };
+
+    $("ds-form").addEventListener("submit", (e) => {
+      e.preventDefault(); const inp = $("ds-in"); const v = inp.value.trim(); if (!v) return;
+      const b = document.createElement("div"); b.className = "ds-bub mine sending"; b.textContent = v;
+      $("ds-talk").appendChild(b); inp.value = ""; b.scrollIntoView({ block: "nearest" });
+      setTimeout(() => b.classList.remove("sending"), 900);
+    });
+  })();
+  </script>
+
+  <h2>2. 先に知っておく言葉</h2>
+  <table>
+    <tr><th>言葉</th><th>意味（1〜2文）</th></tr>
+    <tr><td>モーダル</td><td>画面の上に重ねて出し、閉じるまで後ろを触れなくする箱。確認や大事なお知らせに使う。</td></tr>
+    <tr><td><code>&lt;dialog&gt;</code></td><td>モーダルを作るための HTML の標準の要素。<code>showModal()</code> で開くと、Esc で閉じる・後ろを触れなくする・一番上に出す、をブラウザが受け持つ。</td></tr>
+    <tr><td>トースト</td><td>画面の端に少しだけ出て、数秒で消えるお知らせ。操作を止めない。</td></tr>
+    <tr><td>スケルトン</td><td>読み込み中に、中身と同じ形の灰色の枠を出すこと。待つ時間が短く感じられ、中身が出たときに位置がずれない。</td></tr>
+    <tr><td>楽観的な表示（optimistic UI）</td><td>応答を待たずに、成功したものとして先に画面を変えること。失敗したら元に戻す。React 19 では <code>useOptimistic</code> で書ける。</td></tr>
+    <tr><td>View Transitions</td><td>画面が切り替わる前と後の様子をブラウザが写して、その間をなめらかにつなぐ仕組み。React Router は <code>&lt;Link viewTransition&gt;</code> で使える。</td></tr>
+    <tr><td>CLS</td><td>Cumulative Layout Shift。表示の途中で、もう出ていたものがどれだけ動いたかの数字。0.1 以下が良い。04 で測った Web Vitals の1つ。</td></tr>
+    <tr><td><code>prefers-reduced-motion</code></td><td>OS で「動きを減らす」を選んだ人を見分ける CSS の条件。動きで酔う人のために、動きを止める。</td></tr>
+    <tr><td>フォーカス</td><td>キーボードで今操作している場所。モーダルを開いたら中に移し、閉じたら開いたボタンに戻す。</td></tr>
+  </table>
+
+  <h2>3. 図で見る</h2>
+  <p>いいねを押してから、マッチの演出が出るまでの流れです。画面は応答を待たずに先に変わり、応答の <code>matched</code> を見て演出を出します。</p>
+  <pre class="mermaid">
+sequenceDiagram
+  actor U as 会員
+  participant P as 相手のプロフィール
+  participant API as POST /api/me/likes
+  U->>P: ハートを押す
+  P->>P: すぐ「いいね済み」にしてハートを弾ませる（useOptimistic）
+  P->>API: いいねを送る
+  alt matched が true
+    API-->>P: 201 matched true
+    P->>U: マッチの演出（2人の写真が寄る）
+  else matched が false
+    API-->>P: 201 matched false
+    P->>U: トースト「いいねしました」
+  else 409・500
+    API-->>P: 失敗
+    P->>U: 改善版は元に戻してトースト。レガシー版は扱わない
+  end
+  </pre>
+  <p>確認モーダルの開き方と閉じ方です。どの閉じ方でも、フォーカスを開いたボタンに戻します。</p>
+  <pre class="mermaid">
+flowchart LR
+  A["ログアウトを押す"] --> B["showModal で開く<br>フォーカスを中へ"]
+  B --> C{"どう閉じたか"}
+  C -->|"ログアウトする"| D["POST /api/auth/logout<br>/login へ"]
+  C -->|"キャンセル・Esc・後ろ"| E["閉じる<br>フォーカスを元のボタンへ"]
+  </pre>
+
+  <h2>4. 設計の選択肢を比べる</h2>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. ブラウザと React の標準だけ（<code>&lt;dialog&gt;</code>・CSS の <code>@keyframes</code>・View Transitions・<code>useOptimistic</code>）</td><td>依存が増えず、バンドルが大きくならない。Esc やフォーカスの閉じ込めをブラウザが受け持つ。04 の数字とそのまま比べられる</td><td>閉じるときの動きや、指で引っぱる動きは自分で書く。View Transitions は古いブラウザで動かない（動かなくても困らない）</td><td>部品が少なく、動きが決まった形のとき</td></tr>
+    <tr><td>B. 動きのライブラリ（Motion）</td><td>消えるときの動き・指の動き・ばねの動きが楽に書ける</td><td>バンドルが数十 KB 増える。動きの書き方がライブラリに縛られる</td><td>指で操作する動きが多いアプリ（スワイプでいいね など）</td></tr>
+    <tr><td>C. 部品のライブラリ（Radix・shadcn/ui）</td><td>読み上げ・キーボード操作がよくできた部品がそろう</td><td>入れる量が多く、レガシー版の「1画面に1つの部品」の形と合わない。何をブラウザが受け持つかが見えにくい</td><td>部品が多く、何人かで作る画面（12 の管理画面で考える）</td></tr>
+  </table>
+  <div class="card point"><strong>この一歩で選ぶもの</strong>：A。依存を増やさずに作ると、動きを足した前と後で、バンドルの大きさと CLS の変化を動きそのものの分だけで測れます。標準の <code>&lt;dialog&gt;</code> を使うと、読み上げとキーボードの扱いを自分で作らずにすみます（D-024）。</div>
+
+  <h2>5. 見本：レガシー版と改善版</h2>
+  <h3>レガシー版（1画面に1つの大きな部品）</h3>
+  <p>03c のレガシー版は、見た目と動きだけを足します。モーダルやトーストは、使う画面ごとに書きます。</p>
+  <pre><code class="language-tsx">// HomePage.tsx の中。ログアウトの確認を、この画面のためだけに書く（いいねの画面にも、ほぼ同じものをもう1つ書く）
+const [confirmOpen, setConfirmOpen] = useState(false)
+const [toast, setToast] = useState('')
+const dialogRef = useRef&lt;any&gt;(null)
+useEffect(() =&gt; {
+  if (confirmOpen) dialogRef.current?.showModal()
+  else dialogRef.current?.close()
+}, [confirmOpen])
+
+const save = () =&gt; {
+  fetch(`${api}/api/users/${me.public_id}`, { method: 'PUT', headers, body: JSON.stringify(form) })
+    .then(() =&gt; {
+      setToast('保存しました')
+      setTimeout(() =&gt; setToast(''), 3000) // 3秒を、画面ごとに書く。続けて押すと、前のタイマーが新しいトーストを消す
+    }) // 失敗は考えない（FR-UI-013 は守れていないまま）
+}</code></pre>
+  <div class="card warn">同じモーダル・トーストが画面ごとにコピーされます。3秒・250ms などの値もあちこちに書くので、1つ直すと全部を探して直すことになります。タイマーを止めないので、続けて出すと新しいトーストが早く消えます。失敗・<code>401</code>・連打の扱いはこれまでどおり直しません（改善する段階で測って直すため）。</div>
+  <h3>改善版</h3>
+  <pre><code class="language-tsx">// 部品を1つにして、どの画面からも同じ形で呼ぶ
+const toast = useToast()               // 1つだけ出す・新しいものが来たらタイマーごと入れ替える
+const confirm = useConfirm()           // &lt;dialog&gt; を開き、押されたほうを Promise で返す
+
+const onLogout = async () =&gt; {
+  if (await confirm({ title: 'ログアウトしますか？', danger: 'ログアウトする' })) logout()
+}
+
+// いいね：応答を待たずに済みに見せ、失敗したら元に戻る
+const [liked, setOptimisticLiked] = useOptimistic(user.liked)
+const like = () =&gt; startTransition(async () =&gt; {
+  setOptimisticLiked(true)
+  const res = await api.like(user.id)  // 失敗したら、transition が終わると liked は元の値に戻る
+  if (res.ok) res.data.matched ? openMatch(user) : toast.show('いいねしました')
+  else toast.show('いいねできませんでした', 'error')
+})</code></pre>
+  <p>大事なのは <code>useOptimistic</code> の行です。先に見せた値は、処理が終わると元の値（サーバーから来た値）に戻るので、成功したときは元の値も <code>true</code> に変え、失敗したときは何もしなければ自然に戻ります。</p>
+  <p class="meta">この一歩は画面だけで、流れる SQL は変わらないので、SQL を並べる節はありません。</p>
+
+  <h2>6. どう確かめるか</h2>
+  <table>
+    <tr><th>段階</th><th>確かめること</th></tr>
+    <tr><td>① 作る前に今を測る</td><td>Lighthouse（スマホ・シークレットウィンドウ）で <code>/search</code>・<code>/messages</code> の LCP・INP・CLS。<code>npm run build</code> の JS と CSS の大きさ（gzip）。今の画面のスクリーンショット</td></tr>
+    <tr><td>② レガシー版で作ったあと</td><td>FR-UI-023〜033 を手で試す。DevTools の Network を「Slow 4G」にしてスケルトンと送信中のボタンを見る。OS の「視差効果を減らす」を入れて動きが止まるか（NFR-UI-004）。Tab キーだけでモーダルを開いて閉じ、フォーカスが戻るか。① と同じ数字をもう一度測る</td></tr>
+    <tr><td>③ 改善する段階で固定するテスト</td><td>Vitest＋Testing Library で <code>FR-UI-023 ログアウトの前に確かめる</code>（Esc で閉じる・フォーカスが戻る）・<code>FR-UI-027 いいねを押すと、すぐ返ってくる</code>（応答の前に済みになる・失敗で戻る）・<code>FR-UI-024</code>（続けて出しても3秒出る）</td></tr>
+    <tr><td>④ 比べる数字</td><td>CLS（0.1 以下を保つ）・バンドルの大きさの増え方・モーダルとトーストのコードがいくつの画面にコピーされているか（レガシー版）と、部品1つ（改善版）</td></tr>
+  </table>
+
+  <h2>7. 気をつけること（罠）</h2>
+  <div class="card warn"><ul>
+    <li><code>height</code>・<code>top</code>・<code>margin</code> を動かすと、まわりの並べ直しが毎回起きて重くなり、CLS も悪くなる。動かすのは <code>transform</code> と <code>opacity</code> だけ</li>
+    <li>スケルトンの大きさが中身と違うと、出た瞬間に下のものが押し出される（CLS が上がる）。写真は <code>aspect-ratio</code> で枠を先に取る</li>
+    <li>送信中のボタンで文字をスピナーに替えるとき、幅が変わると隣のものが動く。文字は <code>visibility: hidden</code> で残し、幅を保つ</li>
+    <li><code>&lt;dialog&gt;</code> を <code>open</code> 属性だけで開くと、モーダルにならない（後ろが触れる・Esc で閉じない）。<code>showModal()</code> で開く</li>
+    <li>トーストのタイマーを止めずに次を出すと、前のタイマーが新しいトーストを早く消す</li>
+    <li>楽観的な表示は、失敗したときに戻すところまでで1つ。戻さないと、画面とサーバーで違う状態が残る（レガシー版はわざと戻さない）</li>
+    <li>StrictMode では、開発中に effect が2回動く。開いた・閉じたを effect の中で数えると、2回になる</li>
+    <li>View Transitions の名前（<code>view-transition-name</code>）は、同じ画面に同じ名前が2つあると、動きが出ない。カードごとに会員の ID を名前に入れる</li>
+  </ul></div>
+
+  <h2>8. 理解を確かめる6つの問い</h2>
+  <p>先に自分で答えてから、開いて見る。</p>
+  <details><summary>なぜそうするのか？</summary><p>押しても反応がない画面は、会員が「押せたのか」を分からず、もう一度押す（いいねの二重送信・409 につながる）。読み込み中に真っ白だと、壊れていると思われる。動きは飾りではなく、「受け付けた」「待っている」「うまくいった」を伝えるために使う。だから時間は短く、動かす場所はマッチの演出に絞る。</p></details>
+  <details><summary>ほかの方法は？なぜ選ばなかったか？</summary><p>Motion（動きのライブラリ）や Radix・shadcn/ui（部品のライブラリ）がある。選ばなかったのは、バンドルが増えて 04 の数字と比べにくくなることと、今の画面に要る動き（開く・閉じる・弾む・光る）は CSS と <code>&lt;dialog&gt;</code> で足りるため。指で引っぱる動きや部品の数が増えたら、12 の管理画面で考え直す。</p></details>
+  <details><summary>弱点は？</summary><p>閉じるときの動き（消える前に縮む）は、CSS だけだと書きにくい（<code>@starting-style</code> や <code>transitionend</code> を使う）。View Transitions は古いブラウザで動かない。楽観的な表示は、失敗したときに一度「済み」に見えてから戻るので、会員がまぎらわしく感じることがある。レガシー版は部品がコピーされるので、直す場所が増える。</p></details>
+  <details><summary>問題が起きたら、どう調べて直すか？</summary><p>カクつくなら、DevTools の Performance で記録し、Layout（並べ直し）が動きの間に出ていないかを見る。出ていれば、動かしている性質を <code>transform</code> に替える。CLS が上がったら、Lighthouse の「レイアウトのずれ」でずれた要素を見て、スケルトンや写真の枠の大きさを中身に合わせる。モーダルが閉じないなら、<code>showModal()</code> で開いているか、<code>close</code> のイベントで状態を戻しているかを見る。</p></details>
+  <details><summary>データが10倍・100倍になったら？</summary><p>一覧が長くなると、行ごとに動き（入ってくるフェード）を付けると、描く量が増えて重くなる。最初に見える行だけに付けるか、04 の改善で考える長い一覧（見えている行だけ描く）と合わせる。トークの吹き出しが数千になっても、動かすのは足した1つだけにする。スケルトンの数は、画面に入る分（4〜6個）で止める。</p></details>
+  <details><summary>Eloquent でどんな SQL が流れ、どう直したか？ Rails（ActiveRecord）・Prisma ならどう書くか？</summary>
+    <p>03c は画面だけなので、流れる SQL は変わらない。ただし未読のバッジ（FR-UI-032）を出すために、レガシー版はどの画面でもトークの一覧（<code>GET /api/me/talk-rooms</code>）をもう1回呼ぶ。05 のレガシー版のこの API は、ルームごとにルーム・相手・プロフィール・<code>public_id</code>・最新の1件・未読の数を1本ずつ読む（1＋6N 本）ので、バッジの数字1つのために、どの画面を開いても 1＋6N 本が流れる。</p>
+    <table>
+      <tr><th></th><th>流れる SQL</th><th>問題</th><th>直し方</th></tr>
+      <tr><td>Eloquent（レガシー版）</td><td>一覧の API を丸ごと呼ぶ。未読はルームごとに <code>select count(*) from messages where talk_room_id = ? and sender_id != ? and created_at &gt; ?</code></td><td>バッジの合計1つのために 1＋6N 本</td><td>合計だけを返す API（1本の <code>count</code>）にするか、一覧の応答を画面で使い回す</td></tr>
+      <tr><td>Rails（ActiveRecord）</td><td>同じ形で <code>room.messages.where("created_at &gt; ?", last_read_at).count</code> を回すと 1＋N</td><td>同じ</td><td><code>Message.joins(:talk_room_members).where(...).count</code> で1本にする</td></tr>
+      <tr><td>Prisma</td><td><code>prisma.message.count</code> をルームごとに呼ぶと 1＋N</td><td>同じ</td><td><code>prisma.$queryRaw</code> で1本の <code>count</code>、または <code>groupBy</code></td></tr>
+    </table>
+  </details>
+
+  <h2>9. 実装の記録</h2>
+  <p class="meta">レガシー版のあと（9-1・9-2）と、改善したあと（9-3・9-4）に、explain-change が書く。</p>
+  <h3>9-1. レガシー版</h3>
+  <p>まだ実装していない</p>
+  <h3>9-2. 測った問題と数字</h3>
+  <p>まだ実装していない</p>
+  <h3>9-3. 足したテスト</h3>
+  <p>まだ実装していない</p>
+  <h3>9-4. 改善版と、前と後の数字</h3>
+  <p>まだ実装していない</p>
+</main>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+  // page.js が選んだ表示（data-scheme）に合わせる。なければ端末の設定
+  const scheme = document.documentElement.dataset.scheme;
+  const dark = scheme ? scheme.startsWith("dark") : (document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches));
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/page.js"></script>
+</body>
+</html>
