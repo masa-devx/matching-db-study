@@ -10,6 +10,8 @@ export default function TalkPage() {
   const [me, setMe] = useState<any>(null)
   const [partner, setPartner] = useState<any>(null)
   const [body, setBody] = useState('')
+  // 06：ブロックの確かめのモーダルを開いているか
+  const [confirming, setConfirming] = useState(false)
   const navigate = useNavigate()
 
   const api = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
@@ -87,6 +89,15 @@ export default function TalkPage() {
     })
   }
 
+  // 06：相手をブロックする（相手の public_id は、トークの一覧から探したもの）。ステータスを見ない
+  const block = () => {
+    fetch(`${api}/api/me/blocks`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: partner?.user_id }),
+    }).then(() => navigate('/messages'))
+  }
+
   return (
     <div className="talk">
       <div className="talk-head">
@@ -95,7 +106,26 @@ export default function TalkPage() {
         </button>
         {partner?.image && <img className="row-avatar" src={`${api}${partner.image}`} />}
         <span className="row-name">{partner?.nickname ?? ''}</span>
+        <button className="danger-link talk-block" onClick={() => setConfirming(true)}>
+          ブロック
+        </button>
       </div>
+
+      {confirming && (
+        // 06：確かめのモーダル（相手のプロフィールから写した）
+        <div className="modal-back" onClick={() => setConfirming(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <p className="modal-title">{partner?.nickname}さんをブロックしますか？</p>
+            <p>お互いに、検索・いいね・メッセージに出なくなります。あとで解除できます。</p>
+            <button className="button button-danger" onClick={block}>
+              ブロックする
+            </button>
+            <button className="button button-ghost" onClick={() => setConfirming(false)}>
+              キャンセル
+            </button>
+          </div>
+        </div>
+      )}
 
       {done && messages.length > 0 && <p className="soon">これより前のメッセージはありません</p>}
 
