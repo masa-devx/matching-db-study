@@ -1,0 +1,4 @@
+# Emulator が書くログと、止めたときに書き出すデータ（05c）
+*-debug.log
+.emulator-data/
+firebase-export-*/
