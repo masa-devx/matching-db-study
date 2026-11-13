@@ -10,7 +10,7 @@
 <main>
   <p class="meta"><a href="index.html">← 目次へ</a></p>
   <h1>07 有料会員</h1>
-  <p class="meta">作成: 2026-11-13 ／ 状態: <span class="status">解説だけ</span> ／ 要件: <code>docs/requirements/paid-members.md</code>（FR-PAID-001〜017・NFR-PAID-001〜004）・<code>screens.md</code> の FR-UI-038〜040</p>
+  <p class="meta">作成: 2026-11-13 ／ 状態: <span class="status">レガシー版まで</span> ／ 要件: <code>docs/requirements/paid-members.md</code>（FR-PAID-001〜017・NFR-PAID-001〜004）・<code>screens.md</code> の FR-UI-038〜040</p>
 
   <div class="card point">
     <strong>この一歩でできるようになること</strong>
@@ -396,9 +396,129 @@ commit;</code></pre>
   <h2>9. 実装の記録</h2>
   <p class="meta">レガシー版のあと（9-1・9-2）と、改善したあと（9-3・9-4）に、explain-change が書く。</p>
   <h3>9-1. レガシー版</h3>
-  <p>【まだ実装していない】</p>
+  <p class="meta">記録: 2026-11-13（PR #83・#84・#85。Issue #80・#81・#82）</p>
+  <h4>書いたもの</h4>
+  <table>
+    <tr><th>ファイル</th><th>役割</th></tr>
+    <tr><td><code>backend/database/migrations/2026_11_13_130000〜130002_*.php</code></td><td><code>users.is_paid</code>・<code>paid_until</code>、<code>plans</code>（3行をマイグレーションで入れる）、<code>purchases</code>（<code>user_id</code>・<code>plan_id</code> だけ）。主キーと外部キーだけで、インデックスは足さない</td></tr>
+    <tr><td><code>backend/app/Models/Plan.php</code>・<code>Purchase.php</code>・<code>User.php</code></td><td>Model と <code>User::purchases()</code>・<code>Purchase::plan()</code></td></tr>
+    <tr><td><code>backend/database/seeders/PaidMembersSeeder.php</code></td><td>男性 3,000人（期限の中 1,500・もうすぐ切れる 300・期限が過ぎた 1,200）・購入 23,594件</td></tr>
+    <tr><td><code>backend/app/Http/Controllers/PlanController.php</code>・<code>PurchaseController.php</code></td><td><code>GET /api/plans</code>・<code>POST</code>・<code>GET /api/me/purchases</code>（ログインが要る・男性だけ）</td></tr>
+    <tr><td><code>MessageController.php</code>・<code>LikeController.php</code>・<code>UserController.php</code></td><td>送る・いいね（1日10回）・検索（身長の条件）に、「男性で <code>is_paid</code> でなければ 403」を写した</td></tr>
+    <tr><td><code>frontend/src/PlansPage.tsx</code>・<code>PurchasePage.tsx</code></td><td><code>/plans</code>（今の状態・プラン・購入の記録）と <code>/plans/:planId</code>（購入の確かめ）</td></tr>
+    <tr><td><code>HomePage.tsx</code>・<code>TalkPage.tsx</code>・<code>SearchPage.tsx</code>・<code>UserPage.tsx</code></td><td>男性にだけ入口・無料の男性に「有料」の印と誘導のモーダル（判断は画面ごとに写した）</td></tr>
+  </table>
+
+  <h4>大事な行の読み方</h4>
+  <p><strong>① 判断を、入口ごとに写す（有料か：API 3か所・画面 2か所。男性か：API 3か所・画面 1か所）</strong></p>
+  <pre><code class="language-php">$myProfile = Profile::where('user_id', $payload-&gt;sub)-&gt;first();
+$myUser = User::find($payload-&gt;sub);
+if ($myProfile?-&gt;gender === 'male' &amp;&amp; ! $myUser-&gt;is_paid) {
+    return response()-&gt;json(['message' =&gt; '有料会員になると使えます'], 403);
+}</code></pre>
+  <pre><code class="language-tsx">const locked = myGender === 'male' &amp;&amp; !me?.is_paid   // TalkPage・SearchPage にも同じ判断</code></pre>
+  <p>「どの機能が有料か」と「有料か」の判断が、コントローラ（送る・いいね・検索）と画面（トーク・検索・ホーム）に散らばっています。有料の機能を1つ無料にするだけで、API と画面の両方を探して直すことになります（FR-PAID-017 は守れない）。<code>paid_until</code> はどこも見ないので、期限が過ぎても有料のままです。</p>
+
+  <p><strong>② 購入：古い期限から足す・トランザクションなし</strong></p>
+  <pre><code class="language-php">Purchase::create(['user_id' =&gt; $user-&gt;id, 'plan_id' =&gt; $plan-&gt;id]);   // 値段も期間も写さない
+$user-&gt;update([
+    'is_paid' =&gt; true,
+    'paid_until' =&gt; ($user-&gt;paid_until ?? now())-&gt;addMonths($plan-&gt;months),
+]);</code></pre>
+  <p>期限が過ぎた人も、過去の期限から足します。<code>addMonths()</code> は月末があふれます。<code>is_paid</code> がもう true の人では、Eloquent が変わった列だけを書くので、<code>update</code> は <code>paid_until</code> だけになります（下の SQL）。</p>
+
+  <p><strong>③ いいねの上限：UTC の日付で数えてから入れる</strong></p>
+  <pre><code class="language-php">$today = Like::where('from_user_id', $payload-&gt;sub)-&gt;whereDate('created_at', now()-&gt;toDateString())-&gt;count();
+if ($today &gt;= 10) { /* 403 */ }</code></pre>
+  <p>アプリの時計は UTC なので、日本時間の 0時〜9時のいいねは「前の日」に数えられます。数えてから入れるまでのあいだに、ほかのいいねが入れます。</p>
+
+  <p><strong>④ 購入の記録：値段は今のプランから</strong></p>
+  <pre><code class="language-php">$plan = Plan::where('id', $purchase-&gt;plan_id)-&gt;first();   // 1件ごとに1本
+$result[] = ['name' =&gt; $plan?-&gt;name, 'months' =&gt; $plan?-&gt;months, 'price' =&gt; $plan?-&gt;price, ...];</code></pre>
+
+  <h4>実際に流れる SQL（クエリログ）</h4>
+  <pre><code class="language-sql">-- 送る（男性の無料。2本で断る）
+select * from "profiles" where "user_id" = ? limit 1;
+select * from "users" where "users"."id" = ? limit 1;
+
+-- いいね（男性の無料・今日 0回。6本）
+select * from "profiles" where "user_id" = ? limit 1;
+select * from "users" where "users"."id" = ? limit 1;
+select count(*) as "aggregate" from "likes" where "from_user_id" = ? and "created_at"::date = ?;
+select "id" from "users" where "public_id" = ? limit 1;
+insert into "likes" ("from_user_id", "to_user_id", "updated_at", "created_at") values (?, ?, ?, ?) returning "id";
+select * from "likes" where "from_user_id" = ? and "to_user_id" = ? limit 1;
+
+-- 購入する（期限が過ぎた会員・1か月。5本）
+select * from "profiles" where "user_id" = ? limit 1;
+select * from "plans" where "plans"."id" = ? limit 1;
+select * from "users" where "users"."id" = ? limit 1;
+insert into "purchases" ("user_id", "plan_id", "updated_at", "created_at") values (?, ?, ?, ?) returning "id";
+update "users" set "paid_until" = ?, "updated_at" = ? where "id" = ?;   -- is_paid はもう true なので書かない
+
+-- 購入の記録（14件で 16本＝2＋N）
+select * from "profiles" where "user_id" = ? limit 1;
+select * from "purchases" where "user_id" = ? order by "created_at" desc;
+select * from "plans" where "id" = ? limit 1;   -- 1件ごとに</code></pre>
+  <p>5章の見本と比べると、購入に性別の確かめ（プロフィール）と会員の読み込みが増えて5本です。いいねを数える SQL は、見本どおり <code>created_at::date</code> です。</p>
+
+  <h4>解説から変えたこと</h4>
+  <ul>
+    <li><strong>購入まわりは男性だけ</strong>：解説の初版では「性別を見ないので女性も買える」と書いたが、要件どおり、レガシー版でもプランの一覧・購入・記録で性別を確かめる形にした（ユーザーの指摘）。性別はプロフィールの今の値で見るので、編集で書き換えると抜けられる</li>
+    <li><strong>プランの一覧もログインが要る</strong>：<code>GET /api/plans</code> も JWT を読む（ユーザーの指摘）</li>
+    <li><strong>画面を2つに分けた</strong>：プランの一覧（<code>/plans</code>）から購入の画面（<code>/plans/:planId</code>）へ進む</li>
+    <li><strong>いいねの数え方の実行計画</strong>：<code>Seq Scan</code> を見込んでいたが、<code>from_user_id</code> が UNIQUE の先頭なので索引を使っていた（日付の条件には効かない。9-2）</li>
+  </ul>
+
+  <h4>気になる点（直していない）</h4>
+  <ul>
+    <li>JWT の処理を写すのが 16か所になった（#51 のリファクタの候補）</li>
+    <li>いつもの API のサーバー（PHP の組み込みのサーバー）は1本ずつ処理するので、同時の問題は、ふだんの画面の操作では表に出ない。本番の形（PHP-FPM など）では起きる</li>
+    <li>購入の画面の「購入したあとの期限」は、画面でも API と同じ計算を写した（JS の <code>setMonth()</code> も月末があふれる）</li>
+    <li>画面の Biome の指摘が、エラー 62・警告 33 → 88・39 に増えた</li>
+  </ul>
   <h3>9-2. 測った問題と数字</h3>
-  <p>【まだ実装していない】</p>
+  <p>開発用の DB（会員 2万人・有料にしたことがある男性 3,000人・購入 23,594件）に、手元から本物の HTTP を送った。SQL はクエリログの増えた行で数えた。会員は、男性の無料 <code>search00001</code>・期限の中 <code>search00304</code>・期限が過ぎた <code>search00306</code>（期限 2026-04-19）・女性。画面は headless の Chrome（幅 375px）。書いたものは消すか戻し、最後に <code>PaidMembersSeeder</code> を流し直した。</p>
+  <h4>出し分けの表（API と画面）</h4>
+  <table>
+    <tr><th>会員</th><th>送る</th><th>身長の条件</th><th>11回目のいいね</th><th>購入まわり</th><th>画面</th></tr>
+    <tr><td>男性の無料</td><td><code>403</code></td><td><code>403</code></td><td><code>403</code></td><td>使える</td><td>印とモーダルが出る</td></tr>
+    <tr><td>男性の有料（期限の中）</td><td><code>201</code></td><td><code>200</code></td><td>―</td><td>使える</td><td>印なし</td></tr>
+    <tr><td><strong>男性の期限が過ぎた会員</strong></td><td><strong><code>201</code></strong></td><td><strong><code>200</code></strong></td><td><strong>（数えない）</strong></td><td>使える</td><td><strong>「有料会員（2026/4/19 まで）」・印なし</strong></td></tr>
+    <tr><td>女性</td><td><code>201</code></td><td><code>200</code></td><td>（数えない）</td><td><code>403</code>・<code>403</code>・<code>403</code></td><td>入口なし・<code>/plans</code> はホームへ</td></tr>
+    <tr><td><strong>性別を書き換えた会員</strong></td><td colspan="5"><strong>無料の男性が女性に変えると送れる（<code>201</code>）。女性が男性に変えると買える（<code>201</code>）</strong></td></tr>
+  </table>
+
+  <h4>数字</h4>
+  <table>
+    <tr><th>操作</th><th>結果</th><th>要件</th></tr>
+    <tr><td>送る（男性の無料）</td><td><code>403</code>・SQL 2本で終わる</td><td>FR-PAID-007</td></tr>
+    <tr><td>検索（身長の条件あり・なし）</td><td>有料なら 27本・条件なしは 25本（身長があると2本増える）</td><td>NFR-PAID-001</td></tr>
+    <tr><td>いいね（男性の無料・今日 0回から 11回）</td><td>10回目まで <code>201</code>（1本目は SQL 6本）・11回目 <code>403</code></td><td>FR-PAID-008</td></tr>
+    <tr><td><strong>今日 9回のあとに同時に 11本</strong>（同時に処理できるサーバーを、コンテナの中だけで一時的に立てて試した）</td><td><strong><code>201</code> が 4本・合計 13件</strong></td><td>NFR-PAID-002</td></tr>
+    <tr><td><strong>日本時間の今日 01:00 に 10回のあとの 11回目</strong></td><td><strong><code>201</code></strong>（UTC の日付では前の日に数える）</td><td>FR-PAID-008</td></tr>
+    <tr><td>購入する（期限の中）</td><td><code>201</code>・SQL 5本・2027-04-23 → 2027-05-23</td><td>FR-PAID-001・003</td></tr>
+    <tr><td><strong>購入する（期限が過ぎた会員・1か月）</strong></td><td><strong>2026-04-19 → 2026-05-19（今は 2026-11-13。過去のまま）</strong></td><td>FR-PAID-001・003</td></tr>
+    <tr><td>ないプラン</td><td><code>500</code></td><td>FR-PAID-001</td></tr>
+    <tr><td>購入の記録（14件）</td><td>SQL 16本（2＋N）</td><td>FR-PAID-006</td></tr>
+    <tr><td><strong>1か月を 4,500円に変えてから記録を見る</strong></td><td><strong>前に 3,980円で買った行も 4,500円</strong></td><td>FR-PAID-004</td></tr>
+    <tr><td>有料の機能を1つ無料にするとき、直す場所</td><td>API 1か所＋画面 1か所（有料かの <code>if</code> が API に3か所・画面に2か所ある。男性かの確かめは別に API 3か所・画面 1か所）</td><td>FR-PAID-017</td></tr>
+  </table>
+
+  <h4>EXPLAIN（ANALYZE, BUFFERS）</h4>
+  <pre><code class="language-sql">explain (analyze, buffers)
+select count(*) from likes where from_user_id = :search00001の id and created_at::date = now()::date;
+--  Bitmap Index Scan on likes_from_user_id_to_user_id_unique  (actual rows=110)
+--  Bitmap Heap Scan on likes  (actual rows=10)  Rows Removed by Filter: 100
+--  Buffers: shared hit=8   Execution Time: 0.085 ms</code></pre>
+  <p>UNIQUE <code>(from_user_id, to_user_id)</code> の先頭の列で、その会員のいいねを全部読み（110行）、日付で 100行を捨てています。<code>created_at::date</code> は列に関数をかけるので、日付の条件に索引は効きません。いいねが多い会員ほど、読む行が増えます。</p>
+
+  <h4>画面（FR-UI-038〜040）</h4>
+  <ul>
+    <li>男性の無料：ホームに「有料会員になる」。検索の身長は「身長で探す（有料）」に替わり、押すとモーダル。送るボタンに「有料」の印、押すとモーダル（メッセージは増えない）。11回目のいいねもモーダル。「有料会員になる」で <code>/plans</code></li>
+    <li>購入：<code>/plans</code> で「3か月」→ 購入の画面に「2027/2/13 まで」→ 購入するとトーストと期限が出て、トークの印が消える</li>
+    <li>女性：入口なし。<code>/plans</code> を URL で開くとホームに戻る</li>
+  </ul>
   <h3>9-3. 足したテスト</h3>
   <p>【まだ実装していない】</p>
   <h3>9-4. 改善版と、前と後の数字</h3>
