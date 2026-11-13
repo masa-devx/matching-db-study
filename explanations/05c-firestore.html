@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>05c Firestore と比べる</title>
+<link rel="stylesheet" href="assets/page.css">
+</head>
+<body>
+<main>
+  <p class="meta"><a href="index.html">← 目次へ</a></p>
+  <h1>05c Firestore と比べる</h1>
+  <p class="meta">作成: 2026-11-13 ／ 状態: <span class="status">解説だけ</span> ／ 要件: <code>docs/requirements/messages.md</code>（05 と同じ FR-MSG-001〜014・NFR-MSG-001〜003）／ 決めたこと: D-008（手元の Firebase Emulator で比べる）</p>
+
+  <div class="card point">
+    <strong>この一歩でできるようになること</strong>
+    <ul>
+      <li>「なぜ NoSQL を使うのか・RDB ではだめなのか」に、RDB でも作れることを認めたうえで、「何を DB に任せたくて、代わりに何を払うのか」で答えられる</li>
+      <li>「画面がどう読むか」から形を決めるドキュメント DB の設計（コレクション・サブコレクション・会員ごとの受信箱・写して持つ）を、05 の RDB（正規化・JOIN）と並べて説明できる</li>
+      <li>読んだドキュメントの数で料金が決まる仕組みを、レガシー版（最低限の形）と改善版で画面ごとに数え、どこでふくらむかを数字で言える</li>
+    </ul>
+  </div>
+
+  <h2>1. 何を作るか</h2>
+  <p>05 のメッセージ（トークの一覧・トーク画面・送る・未読の数）を、もう1つ、<strong>Firestore</strong> で作ります。本物の Firestore（Google Cloud）は使わず、手元の Docker の中で動く <strong>Firebase Emulator</strong> を使います。クラウドのアカウントを作らないので、料金はかかりません（D-008）。それでも設計を比べるために、「本番ならドキュメントを何件読むか」を画面ごとに数えます。</p>
+  <table>
+    <tr><th>だれが</th><th>何をするか</th></tr>
+    <tr><td>Laravel（今の API）</td><td>マッチしたら、PostgreSQL のトークルームに加えて、Firestore にもルームと2人の受信箱を作る（REST を直接呼ぶ）。画面が Firebase にログインするためのトークン（カスタムトークン）を出す</td></tr>
+    <tr><td>画面（React）</td><td>Firebase の JS SDK で、Firestore を<strong>直接</strong>読み書きする。リスナーで、新しいものは押し出しで届く。05 の画面（<code>/messages</code>）は残し、<code>/messages-fs</code> を足して並べる</td></tr>
+    <tr><td>Firestore（Emulator）</td><td>メッセージと、会員ごとの「自分のルームの一覧」を持つ。だれが読めるかを、セキュリティルールで守る</td></tr>
+  </table>
+  <p>会員・いいね・マッチ・ルームの正は PostgreSQL のままです。Firestore が持つのは「やり取り」とその表示に要るものだけです。ルームの ID は PostgreSQL の <code>talk_rooms.public_id</code>、会員の ID は <code>users.public_id</code>（D-022）を、そのまま使います。</p>
+  <p>05 と同じく、まず<strong>レガシー版</strong>（必要な情報だけを持つ最低限の形）で作って測り、そのあと<strong>改善版</strong>（写して持つ・<code>limit</code>・厳しいルール）に直します。</p>
+
+  <h2>2. なぜ NoSQL を使うのか（RDB ではだめなのか）</h2>
+  <div class="card point"><strong>結論</strong>：RDB でもチャットは作れる（05 で作った）。NoSQL を選ぶのは、RDB が足りないからではなく、<strong>「リアルタイムに届ける仕組み・画面からの直接の読み書き・広げること」を、DB ごと任せたいとき</strong>。代わりに、JOIN・表をまたいだトランザクション・自由な集計・正が1つであること、を手放す。</div>
+
+  <h3>RDB でチャットを作るとき、自分で用意するもの</h3>
+  <table>
+    <tr><th>要るもの</th><th>RDB（05）での作り方</th><th>Firestore での作り方</th></tr>
+    <tr><td>新しいものを届ける</td><td>ポーリング（05 のレガシー版。何もなくても5秒ごとにリクエスト）か、WebSocket のサーバー（Laravel Reverb・API Gateway など）を足す</td><td>リスナー（<code>onSnapshot</code>）。DB が押し出す</td></tr>
+    <tr><td>つながりの管理</td><td>だれがどのルームを開いているか・切れたら付け直す・取りこぼしたら取り直す、をサーバーで書く。何台にも広げるなら Redis などでつなぐ</td><td>SDK が受け持つ（切れても、つながったら差分が届く）</td></tr>
+    <tr><td>だれが読めるか</td><td>API のコントローラで確かめる（05 のレガシー版はここが抜けた）</td><td>セキュリティルールに書く（画面が DB を直接読むので、ここが唯一の守り）</td></tr>
+    <tr><td>API のサーバー</td><td>読むのも書くのも、Laravel を通る（サーバーに負荷が来る）</td><td>画面が直接読み書きする（Laravel はルームを作るだけ）</td></tr>
+    <tr><td>電波が切れたとき</td><td>画面で自分で書く</td><td>SDK が手元に残し、つながったら送る（オフラインの保存）</td></tr>
+    <tr><td>書き込みが増えたとき</td><td>DB のサーバーを大きくする・分ける（パーティション・読み取りの複製）</td><td>Google が広げる（設計で「1つのドキュメントに書き込みを集めない」だけ守る）</td></tr>
+  </table>
+
+  <h3>代わりに払うもの</h3>
+  <table>
+    <tr><th>手放すもの</th><th>チャットで困る場面</th></tr>
+    <tr><td>JOIN</td><td>一覧に相手の名前や最新の1件を出すには、書くときに写しておく（非正規化）。名前を変えたら写しを全部直す</td></tr>
+    <tr><td>正が1つであること</td><td>会員・マッチ・ブロック（06）は RDB、やり取りは Firestore。2つの DB をまたぐトランザクションはないので、片方だけ失敗するとずれる</td></tr>
+    <tr><td>自由なクエリと集計</td><td>「先月いちばん送った会員」「この言葉を含むメッセージ」は、そのままでは書けない。管理画面（12）では別の仕組みが要る</td></tr>
+    <tr><td>列の決まり（型・NOT NULL・CHECK）</td><td>古い形のドキュメントが混ざっても、DB は止めない。ルールとアプリで守る</td></tr>
+    <tr><td>料金の見通し</td><td>RDB はサーバーの大きさで決まる（ほぼ固定）。Firestore は読んだ数で決まり、書き方の誤り（<code>limit</code> なし・付け直し）がそのまま請求になる</td></tr>
+    <tr><td>乗り換えやすさ</td><td>SDK とルールは Firebase だけのもの。ほかの DB に移すときは書き直しになる</td></tr>
+  </table>
+
+  <h3>チャットが NoSQL に向く理由（データの使われ方）</h3>
+  <ul>
+    <li><strong>足すだけで、ほとんど直さない</strong>：メッセージは送ったら終わりで、更新や削除が少ない</li>
+    <li><strong>読み方が決まっている</strong>：「このルームの新しいもの」と「自分のルームの一覧」の2つがほとんど。いろいろな条件で探さない</li>
+    <li><strong>ほかの表と組み合わせることが少ない</strong>：一覧に出す名前と写真だけを写せば、JOIN がなくても困らない</li>
+    <li><strong>件数が多く、届く速さが大事</strong>：1人が1日に何十件も送り、相手にすぐ届いてほしい</li>
+  </ul>
+
+  <h3>判断の物差し</h3>
+  <table>
+    <tr><th>こういうとき</th><th>向くもの</th></tr>
+    <tr><td>リアルタイムに届けたい・リアルタイムのサーバーを持つ人手がない・画面から直接読ませたい</td><td>Firestore などのリアルタイムの NoSQL</td></tr>
+    <tr><td>お金・在庫・予約など、表をまたいで必ずそろっていてほしい</td><td>RDB</td></tr>
+    <tr><td>いろいろな条件で探す・集計する（04 の検索・12 の管理画面）</td><td>RDB</td></tr>
+    <tr><td>小さく始めて、数秒の遅れが許せる</td><td>RDB ＋ ポーリング（05 の改善版）。DB を増やさない</td></tr>
+    <tr><td>DB は1つのまま、すぐ届けたい</td><td>RDB ＋ WebSocket（Reverb・AppSync Events など）</td></tr>
+  </table>
+
+  <h3>「RDB ではだめなのか？」と聞かれたときの答え方</h3>
+  <p>「だめではない」から始め、何を優先し、何を払ったかを言います。</p>
+  <ol>
+    <li><strong>事実</strong>：会員とマッチは RDB、メッセージは Firestore に分けた</li>
+    <li><strong>優先したこと</strong>：リアルタイムに届けることと、そのためのサーバーを持たないこと。チャットは読み方が決まっていて JOIN が要らない</li>
+    <li><strong>払ったもの</strong>：正が2つになり、名前の変更・ブロック・退会で2つの DB を直す。集計が苦手。料金は読んだ数で決まる</li>
+    <li><strong>今ならどうするか</strong>：規模が小さいうちは RDB ＋ ポーリングか WebSocket で始め、届く速さやサーバーの手間が問題になってから分ける。分けるなら、何を正にし、写しをどう直すかを先に決める</li>
+  </ol>
+
+  <h2>3. 先に知っておく言葉</h2>
+  <table>
+    <tr><th>言葉</th><th>意味（1〜2文）</th></tr>
+    <tr><td>ドキュメント・コレクション</td><td>Firestore の1件が<strong>ドキュメント</strong>（JSON に近い入れもの。上限は 1MiB）で、ドキュメントの集まりが<strong>コレクション</strong>。表と行に近いが、列の決まり（型・NOT NULL）はない。</td></tr>
+    <tr><td>サブコレクション</td><td>ドキュメントの下に置くコレクション。<code>rooms/{roomId}/messages</code> のように、ルームの下にメッセージを置ける。親を消しても、子は自動では消えない。親のドキュメントがなくても、子は置ける。</td></tr>
+    <tr><td>受信箱（会員ごとのルームの一覧）</td><td><code>users/{uid}/rooms/{roomId}</code> のように、会員ごとに「自分から見たルーム」を1件ずつ持つ形。05 の <code>talk_room_members</code> の1行に当たる。</td></tr>
+    <tr><td>非正規化（写して持つ）</td><td>JOIN がないので、一覧に出したいもの（最新の1件・相手の名前・未読の数）を、書くときに一覧のドキュメントへ写しておくこと。読むのは速く安くなるが、写しがずれないように書く側が気をつける。</td></tr>
+    <tr><td>リスナー（<code>onSnapshot</code>）</td><td>クエリを聞きっぱなしにして、結果が変わったら DB から押し出しで届く仕組み。最初に結果の全部が届き、あとは変わったドキュメントだけが届く。</td></tr>
+    <tr><td>セキュリティルール</td><td>画面が DB を直接読み書きするので、「だれが何を読める・書けるか」を DB の側に書く決まり。<strong>ルールは絞り込みではない</strong>ので、クエリが読めないものを含みうるなら、全体が拒まれる。</td></tr>
+    <tr><td>読み取りの課金</td><td>本番の料金は、読んだ・書いた・消したドキュメントの数で決まる。リスナーは、結果に足された・変わったドキュメントごとに1件。0件のクエリも最低1件。ルールの中の <code>get()</code> も1件。offset は飛ばした分も1件ずつ。</td></tr>
+    <tr><td>複合インデックス</td><td>2つ以上のフィールドで絞り込みと並べ替えをするクエリに要るインデックス。本物の Firestore では、なければクエリがエラーになる。<strong>Emulator は複合インデックスを見ずに、どのクエリも通す</strong>。</td></tr>
+    <tr><td>カスタムトークン</td><td>自分のサーバー（Laravel）が「この人は uid X」と保証して出すトークン。画面はこれで Firebase にログインする。本番はサービスアカウントの鍵で署名するが、Auth の Emulator は署名のないトークンを受け付ける。</td></tr>
+    <tr><td><code>serverTimestamp()</code>・<code>increment()</code></td><td>時刻を DB の時計で入れる値と、数を読まずに足す値。画面の時計（<code>new Date()</code>）は端末ごとにずれ、「読んでから +1 して書く」は同時に送られたときに数がずれる。</td></tr>
+    <tr><td>Emulator</td><td>Firebase のサービスを手元で動かすプログラム。プロジェクトの ID を <code>demo-</code> で始めると、本物のプロジェクトにつながらない。止めるとデータが消える（書き出しと読み込みで残せる）。</td></tr>
+  </table>
+
+  <h2>4. 図で見る</h2>
+  <p>1枚目は、データの形。左がレガシー版（必要な情報だけ）、右が改善版（一覧に出すものを受信箱に写す）です。どちらも、ルームとメッセージは共有し、会員ごとに「自分のルームの一覧」を持ちます。</p>
+  <pre class="mermaid">
+flowchart LR
+  subgraph LEG["レガシー版（最低限）"]
+    LU["users/{uid}（中身なし）"] --> LUR["users/{uid}/rooms/{roomId}
+partnerUid
+lastReadAt"]
+    LR["rooms/{roomId}
+members"] --> LM["rooms/{roomId}/messages/{id}
+senderId・body
+createdAt（画面の時計）"]
+  end
+  subgraph IMP["改善版（写して持つ）"]
+    IU["users/{uid}
+nickname・image（相手に写す元）"] --> IUR["users/{uid}/rooms/{roomId}
+partnerUid・partnerInfo
+lastMessage・lastActivityAt
+unread"]
+    IR["rooms/{roomId}
+members・createdAt"] --> IM["rooms/{roomId}/messages/{id}
+senderId・body
+sentAt（DB の時計）"]
+  end
+  PG["PostgreSQL：users.public_id・talk_rooms.public_id"] -. "ID をそのまま使う" .-> LR
+  PG -. "相手の名前と写真（レガシー版は毎回 API で読む）" .-> LUR
+  </pre>
+
+  <p>2枚目は、改善版で送ったものが相手に届くまで。Laravel はルームと受信箱を作り、トークンを出すだけです。送る・届くは、画面と Firestore のあいだで済みます。</p>
+  <pre class="mermaid">
+sequenceDiagram
+  participant A as 会員 A（画面）
+  participant L as Laravel
+  participant P as PostgreSQL
+  participant F as Firestore（Emulator）
+  participant B as 会員 B（画面）
+  A->>L: いいねを送り返す
+  L->>P: マッチ・トークルーム・参加者2人
+  L->>F: rooms/{id} と、2人の users/{uid}/rooms/{id} を作る（REST）
+  A->>L: Firebase のトークンをください
+  L-->>A: カスタムトークン（uid は A の public_id）
+  A->>F: ログインして、自分の受信箱とトークをリスナーで聞く
+  B->>F: バッチで書く：messages に1件・A の受信箱（最新の1件・未読 +1）・B の受信箱（最新の1件）
+  F-->>A: 押し出し：新しいメッセージ1件と、受信箱の変わった1件
+  Note over A,F: 読み取りの課金は、届いたドキュメントの数（ここでは2件）
+  </pre>
+
+  <p>3枚目は、トークの一覧を作るとき、RDB と Firestore で何をするか。RDB は読むときに JOIN で組み立て、Firestore の改善版は書くときに組み立てておきます。Firestore のレガシー版は、05 のレガシー版と同じ N+1 になります。</p>
+  <pre class="mermaid">
+flowchart TB
+  subgraph RDB["05 の RDB（改善版）"]
+    P1["自分の参加者の行から、ルーム・相手・プロフィールを JOIN"] --> P2["LATERAL で最新の1件・相関サブクエリで未読の数（1本）"]
+  end
+  subgraph FL["05c のレガシー版"]
+    L1["自分の受信箱を全部読む（limit なし）"] --> L2["ルームごとに：最新の1件・未読のメッセージ・相手の名前（RDB の API）"]
+  end
+  subgraph FI["05c の改善版"]
+    I1["自分の受信箱を lastActivityAt の新しい順に 20件"] --> I2["そのまま見せる（写しがもう入っている）"]
+  end
+  </pre>
+
+  <h2>5. 設計の選択肢を比べる</h2>
+  <h3>コレクションの形</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. <code>rooms</code> だけ（<code>members</code> の配列で自分のルームを探す）</td><td>コレクションが少ない。送るときの書き込みは2件（メッセージ・ルーム）</td><td>一覧のクエリが <code>array-contains</code> ＋ <code>orderBy</code> で、複合インデックスが要る。未読などの一人ひとりの状態を、ルームの中に人ごとの map で持つので、ルールが長くなる</td><td>一人ひとりの状態がないとき</td></tr>
+    <tr><td>B. <code>users/{uid}/rooms</code>（受信箱）と <code>rooms</code>（選ぶ）</td><td>一覧は自分の受信箱を読むだけ（インデックスは自動）。一人ひとりの状態（未読・通知を切る・非表示）を足しやすい。ルールが「本人だけ」と短く書ける。05 の <code>talk_rooms</code> と <code>talk_room_members</code> の分け方（D-023）とそろう</td><td>送るときの書き込みが3件（メッセージ・2人の受信箱）に増える</td><td>今回。2人のトークで、一覧を開く回数が多い</td></tr>
+    <tr><td>C. ルームのドキュメントの中に、メッセージを配列で持つ</td><td>1件読めば全部ある</td><td>ドキュメントの上限（1MiB）にすぐ届く。1件足すたびに、大きなドキュメントを丸ごと書き直す</td><td>件数が少なく決まっているとき（チャットには向かない）</td></tr>
+  </table>
+
+  <h3>受信箱に何を持つか（レガシー版と改善版の違いの中心）</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. 必要な情報だけ（<code>partnerUid</code>・<code>lastReadAt</code>。レガシー版）</td><td>写しがないので、ずれない。名前を変えても何も直さない。作るのが簡単</td><td>一覧を開くたびに、ルームごとに最新の1件・未読のメッセージ・相手の名前を読む（05 のレガシー版と同じ N+1 が、そのまま読み取りの課金になる）</td><td>ルームが数個のとき。まず動かすとき</td></tr>
+    <tr><td>B. 一覧に出すものを写す（<code>partnerInfo</code>・<code>lastMessage</code>・<code>lastActivityAt</code>・<code>unread</code>。改善版）</td><td>一覧は受信箱を読むだけ（20件なら20件分）。リスナーなら変わった受信箱だけが届く</td><td>送るたびに2人の受信箱を書く。相手が名前を変えたら、その人のルームの数だけ書き直す</td><td>一覧を開く回数が、名前を変える回数よりずっと多いとき（ふつうのチャット）</td></tr>
+  </table>
+
+  <h3>トーク画面の読み方と、だれが読めるか</h3>
+  <table>
+    <tr><th>項目</th><th>レガシー版</th><th>改善版</th></tr>
+    <tr><td>新しいもの</td><td><code>orderBy(createdAt)</code> のリスナーで、<strong><code>limit</code> なし</strong>（開くたびに、そのルームの全部を読む。2万件なら2万件）</td><td><code>orderBy(sentAt, 'desc').limit(50)</code> のリスナー（開いたときに50件、あとは届いた分だけ）</td></tr>
+    <tr><td>古い続き</td><td>要らない（全部読んでいるので）</td><td>カーソル（<code>startAfter(いちばん古いもの)</code>）で50件ずつ</td></tr>
+    <tr><td>時刻</td><td>画面の時計（<code>new Date()</code>。端末ごとにずれる）</td><td><code>serverTimestamp()</code>（DB の時計）</td></tr>
+    <tr><td>未読の数</td><td><code>lastReadAt</code> より新しいメッセージを全部読んで、画面で相手のものを数える</td><td>受信箱の <code>unread</code> を <code>increment(1)</code>、開いたら 0</td></tr>
+    <tr><td>セキュリティルール</td><td><code>allow read, write: if request.auth != null;</code>（ログインしていればだれでも）</td><td>受信箱は本人だけ。メッセージはルームの <code>members</code> だけが読め、<code>senderId</code> は自分・本文は 1〜1000文字だけ書ける</td></tr>
+    <tr><td>Laravel から作る</td><td>REST で3件を別々に書く（途中で失敗すると、片方の受信箱がない）</td><td>REST の <code>commit</code> で3件を一緒に書く</td></tr>
+  </table>
+
+  <h3>Laravel から Firestore への書き込み</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th></tr>
+    <tr><td>A. REST を直接呼ぶ（Laravel の <code>Http</code>。選ぶ）</td><td>拡張も SDK も要らない。送る中身（ドキュメントの JSON）がそのまま見える</td><td>JSON が冗長（<code>{"stringValue": "…"}</code>）。本番では、サービスアカウントでトークンを取る処理が要る</td></tr>
+    <tr><td>B. Admin SDK（<code>kreait/firebase-php</code>）</td><td>本番の書き方に近い</td><td>Firestore の部分は PHP の grpc の拡張が要る（今の <code>app</code> にはない。作るのに時間がかかる）</td></tr>
+    <tr><td>C. Cloud Functions（Node）に任せる</td><td>Firebase でよくある形</td><td>動かすものが増え、DB の学習から離れる</td></tr>
+  </table>
+  <div class="card point"><strong>この一歩で選ぶもの</strong>：形は B（<code>users/{uid}/rooms</code> の受信箱と <code>rooms/{id}/messages</code>）。レガシー版は受信箱に必要な情報だけ（<code>partnerUid</code>・<code>lastReadAt</code>）を持ち、<code>limit</code> のないリスナー・画面の時計・ゆるいルールで作る（測る問題を出すため）。改善版は、一覧に出すものを受信箱に写し、<code>limit</code> とカーソル・<code>serverTimestamp()</code>・<code>increment()</code>・本人だけのルールにする。一覧を開く回数は、名前を変える回数よりずっと多いので、「書くときに組み立て、読むときは読むだけ」にするのが、読み取りの数でも速さでも得だから。Laravel からは REST を直接呼ぶ。</div>
+
+  <h2>6. 見本：レガシー版と改善版</h2>
+  <h3>Docker の構成（<code>compose.yaml</code> に足す。両方で同じ）</h3>
+  <pre><code class="language-yaml">  firebase:
+    build: ./docker/firebase          # Node と JDK 21 の上に firebase-tools（出てから2週間以上の版）を入れる
+    working_dir: /app/firebase        # firebase.json・firestore.rules・firestore.indexes.json を置く
+    command: firebase emulators:start --project demo-matching --only firestore,auth
+             --import /data --export-on-exit /data   # 止めてもデータを残す（最初の1回は --import を外す）
+    ports:
+      - "127.0.0.1:8080:8080"   # Firestore（画面が直接つなぐ）
+      - "127.0.0.1:9099:9099"   # Auth
+      - "127.0.0.1:4000:4000"   # Emulator の画面（ドキュメントとルールの結果を見る）
+    volumes:
+      - ./firebase:/app/firebase
+      - firebase-data:/data</code></pre>
+  <p>Laravel（<code>app</code>）は compose の中の名前で <code>firebase:8080</code> に、画面（ブラウザ）は <code>localhost:8080</code> につなぎます。<code>firebase.json</code> の Emulator の <code>host</code> は <code>0.0.0.0</code> にします（コンテナの外から届くように）。Google のアカウントも鍵も使いません。</p>
+
+  <h3>レガシー版（必要な情報だけ）</h3>
+  <pre><code class="language-tsx">// ルール（firestore.rules）：ログインしていれば、だれでも何でも読み書きできる
+//   match /{document=**} { allow read, write: if request.auth != null; }
+
+// 一覧：自分の受信箱を全部読み、ルームごとに3回読みに行く（N+1）
+const inbox = await getDocs(collection(db, 'users', uid, 'rooms'))          // limit なし
+const rows = await Promise.all(inbox.docs.map(async (r) =&gt; {
+  const msgs = collection(db, 'rooms', r.id, 'messages')
+  const last = await getDocs(query(msgs, orderBy('createdAt', 'desc'), limit(1)))
+  const after = await getDocs(query(msgs, where('createdAt', '&gt;', r.data().lastReadAt ?? new Date(0))))
+  const unread = after.docs.filter((m) =&gt; m.data().senderId !== uid).length   // 読んだ全部を画面で数える
+  const partner = await fetch(`${api}/api/users/${r.data().partnerUid}`, { headers }).then((x) =&gt; x.json())   // 名前は RDB から
+  return { id: r.id, last: last.docs[0]?.data(), unread, partner }
+}))
+
+// トーク画面：limit のないリスナー。開くたびに、そのルームのメッセージを全部読む
+onSnapshot(query(collection(db, 'rooms', roomId, 'messages'), orderBy('createdAt')), (snap) =&gt; setMessages(snap.docs.map((d) =&gt; d.data())))
+updateDoc(doc(db, 'users', uid, 'rooms', roomId), { lastReadAt: new Date() })   // 画面の時計
+
+// 送る：メッセージを1件足すだけ（受信箱は直さない）
+addDoc(collection(db, 'rooms', roomId, 'messages'), { senderId: uid, body, createdAt: new Date() })</code></pre>
+  <div class="card warn"><ul>
+    <li><strong>だれでも読める</strong>：ルールが「ログインしていれば」だけなので、ほかの会員のルームの ID が分かれば読めて書ける。<code>senderId</code> を他人にもできる（05 のレガシー版の「参加者を確かめない」と同じ穴が、DB の側にある）</li>
+    <li><strong>一覧の N+1</strong>：ルーム 100 なら、受信箱 100件 ＋ 最新の1件 100回（0件でも1件分）＋ 未読のメッセージの全部 ＋ Laravel への API 100回。まだ開いていないルームは、相手のメッセージを全部読む</li>
+    <li><strong><code>limit</code> のないリスナー</strong>：2万件のルームを開くたびに、2万件分の読み取り。画面も2万個の吹き出しを描く</li>
+    <li><strong>画面の時計</strong>：端末の時計が進んでいる人のメッセージは、いつも下に並ぶ。<code>lastReadAt</code> も端末の時計なので、未読の境目がずれる</li>
+    <li><strong>一覧の並び</strong>：受信箱に時刻がないので、Firestore では並べられず、全部読んでから画面で並べる</li>
+  </ul></div>
+
+  <h3>改善版（一覧に出すものを写す）</h3>
+  <pre><code class="language-js">// ルール（firestore.rules）
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+    function isMember(roomId) {   // ルームを1件読む（課金は1件）
+      return request.auth.uid in get(/databases/$(db)/documents/rooms/$(roomId)).data.members;
+    }
+    match /users/{uid}/rooms/{roomId} {
+      allow read: if request.auth.uid == uid;                       // 自分の受信箱は自分だけ
+      allow update: if isMember(roomId);                            // 送るときに相手の受信箱も書く（中身の縛りは実装で足す）
+    }
+    match /rooms/{roomId} {
+      allow read: if request.auth.uid in resource.data.members;
+      match /messages/{messageId} {
+        allow read: if isMember(roomId);
+        allow create: if isMember(roomId)
+          &amp;&amp; request.resource.data.senderId == request.auth.uid
+          &amp;&amp; request.resource.data.body is string
+          &amp;&amp; request.resource.data.body.size() &gt;= 1 &amp;&amp; request.resource.data.body.size() &lt;= 1000;
+      }
+    }
+  }
+}</code></pre>
+  <pre><code class="language-tsx">// 一覧：自分の受信箱を新しい順に20件。リスナーなので、変わったものだけが届く
+const stop = onSnapshot(query(collection(db, 'users', uid, 'rooms'), orderBy('lastActivityAt', 'desc'), limit(20)), (snap) =&gt; {
+  reads.current += snap.docChanges().length   // 本番なら課金される読み取りの数（自分で数える）
+  setRooms(snap.docs.map((d) =&gt; ({ id: d.id, ...d.data() })))
+})
+return stop   // 聞くのをやめないと、画面を離れても読み続ける
+
+// 送る：メッセージと2人の受信箱を、バッチで一緒に書く（書き込み3件。どれかだけにはならない）
+const batch = writeBatch(db)
+const last = { body, senderId: uid, sentAt: serverTimestamp() }
+batch.set(doc(collection(db, 'rooms', roomId, 'messages')), { senderId: uid, body, sentAt: serverTimestamp() })
+batch.update(doc(db, 'users', partnerUid, 'rooms', roomId), { lastMessage: last, lastActivityAt: serverTimestamp(), unread: increment(1) })
+batch.update(doc(db, 'users', uid, 'rooms', roomId), { lastMessage: last, lastActivityAt: serverTimestamp() })
+await batch.commit()</code></pre>
+  <pre><code class="language-php">// Laravel：マッチしたら、ルームと2人の受信箱を1回の commit で作る（Emulator だけ：Bearer owner でルールを通らない）
+Http::withToken('owner')->post(
+    'http://firebase:8080/v1/projects/demo-matching/databases/(default)/documents:commit',
+    ['writes' => [
+        ['update' => ['name' => $doc("rooms/{$room}"), 'fields' => ['members' => /* 2人の public_id */]]],
+        ['update' => ['name' => $doc("users/{$a}/rooms/{$room}"), 'fields' => [/* partnerUid・partnerInfo・lastActivityAt・unread: 0 */]]],
+        ['update' => ['name' => $doc("users/{$b}/rooms/{$room}"), 'fields' => [/* 同じ形で、相手は a */]]],
+    ]],
+)->throw();</code></pre>
+  <p>大事なのは3つです。① 一覧の受信箱に、作るときから <code>lastActivityAt</code> を入れる（<code>orderBy</code> したフィールドがないドキュメントは、結果に出ないため）。② 送るときは、メッセージと2人の受信箱をバッチで一緒に書き、未読は <code>increment(1)</code> にする。③ ルールは、受信箱を本人だけ、メッセージをルームの <code>members</code> だけに絞る。</p>
+
+  <h3>RDB と Firestore で、同じ操作に何件読むか（見込み。05 と同じ試しのデータ：ルーム 100・2万件のルーム）</h3>
+  <table>
+    <tr><th>操作</th><th>05 の RDB（改善版）</th><th>05c のレガシー版</th><th>05c の改善版</th></tr>
+    <tr><td>トークの一覧</td><td>SQL 1本（JOIN・LATERAL・相関サブクエリ）</td><td>受信箱 100 ＋ 最新 100 ＋ 未読のメッセージの全部（開いていないルームは相手の全部）＋ Laravel の API 100回</td><td>受信箱 20件。そのあとは変わった分だけ</td></tr>
+    <tr><td>2万件のルームを開く</td><td>SQL 2本（51件）</td><td><strong>2万件</strong></td><td>50件 ＋ ルールの <code>get()</code> 1件</td></tr>
+    <tr><td>開いたまま1分（新しいものなし）</td><td>5秒ごとに「新しいものだけ」（リクエスト 12本・ふつう0件）</td><td>0件（リスナー）</td><td>0件（リスナー）</td></tr>
+    <tr><td>送る</td><td>SQL 2本</td><td>書き込み 1件</td><td>書き込み 3件 ＋ ルールの <code>get()</code></td></tr>
+    <tr><td>相手が名前を変えた</td><td>何もしない（JOIN で最新が出る）</td><td>何もしない（毎回 RDB から読む）</td><td>その人の相手の受信箱を全部書き直す（100 なら 100件）</td></tr>
+  </table>
+  <p>無料の枠は1日に読み取り 5万件です。レガシー版で2万件のルームを3回開くと、6万件を読み、それだけで1日の枠を超えます。改善版なら、同じ3回で約 150件です。</p>
+
+  <h2>7. どう確かめるか</h2>
+  <table>
+    <tr><th>段階</th><th>確かめること</th></tr>
+    <tr><td>① レガシー版で問題を見る</td><td>
+      <ul>
+        <li>Emulator の画面（<code>localhost:4000</code>）で、<code>users/{uid}/rooms</code>・<code>rooms</code>・<code>messages</code> の形を見る</li>
+        <li>画面ごとの読み取りの数（一覧・2万件のルームを開く・送る・名前を変える）を、画面の中で数える（<code>docChanges()</code> と取った件数・キャッシュから来たか <code>metadata.fromCache</code>）。Laravel への API の本数も数える</li>
+        <li>ほかの会員のトークを読む・<code>senderId</code> を他人にして書く（ルールで止まらないこと）</li>
+        <li>端末の時計をずらしたときの並び（画面の時計の問題）</li>
+      </ul></td></tr>
+    <tr><td>② 振る舞いを固定するテスト</td><td>ルールのテスト（<code>@firebase/rules-unit-testing</code>）を要件 ID の名前で書く。例：<code>FR-MSG-003 参加していない会員はメッセージを読めない</code>・<code>FR-MSG-002 参加していない会員は送れない</code>・<code>FR-MSG-004 本文が 1〜1000文字でなければ書けない</code>。レガシー版のゆるいルールでは「今は通ってしまう」を書き、直したら目標の形に書き換える</td></tr>
+    <tr><td>③ 改善したあとに比べる数字</td><td>同じ操作の読み取り・書き込みの数（レガシー版と改善版）と、05 の SQL の本数。数えた数を、本番の料金表の単価で「1日に 1,000人なら月にいくら分か」に直す（払わない。比べるための物差し）。届くまでの時間（05 のポーリングの5秒と押し出し）。名前を変えたとき・ブロックしたとき（06）に直す場所の数</td></tr>
+  </table>
+
+  <h2>8. 気をつけること（罠）</h2>
+  <div class="card warn"><ul>
+    <li><strong>Emulator は複合インデックスを見ない</strong>：本物では、2つ以上のフィールドの絞り込みと並べ替えに、インデックスがないとエラーになる。必要なものを <code>firestore.indexes.json</code> に書く</li>
+    <li><strong><code>orderBy</code> したフィールドがないドキュメントは、結果に出ない</strong>：<code>lastMessage.sentAt</code> で並べると、まだやり取りのないルームが一覧から消える。作るときに入る <code>lastActivityAt</code> で並べる</li>
+    <li><strong>ルールは絞り込みではない</strong>：クエリが読めないものを含みうるなら、全体が拒まれる。クエリに同じ条件を書く（受信箱なら、パスに自分の uid が入っているので満たせる）</li>
+    <li><strong>リスナーの付け直し・止め忘れ</strong>：<code>useEffect</code> の依存の書き方を誤ると、描き直しのたびに聞き直し、そのたびに最初の結果を読み直す。止める関数（<code>unsubscribe</code>）を必ず返す</li>
+    <li><strong>長くつながらないと読み直し</strong>：30分より長くオフラインだったあとにつなぎ直すと、新しいクエリと同じだけ課金される</li>
+    <li><strong><code>serverTimestamp()</code> は、送ったばかりのときは <code>null</code></strong>：自分の画面には先に届くが、時刻がまだ決まっていない（<code>{ serverTimestamps: 'estimate' }</code> で見込みを出す）</li>
+    <li><strong>写しのずれ</strong>：名前の変更・退会・ブロック（06）は PostgreSQL で起きるので、Firestore の受信箱とルームも直す必要がある。直し忘れると、古い名前が残り、ブロックした相手のルームが開ける</li>
+    <li><strong>親を消しても子は消えない・親がなくても子は置ける</strong>：<code>rooms/{id}</code> を消しても <code>messages</code> は残る。<code>users/{uid}</code> に中身がなくても受信箱は置けるが、Emulator の画面では親が斜体（ないドキュメント）で出る</li>
+    <li><strong>署名のないトークンは Emulator だけ</strong>：本番は、サービスアカウントの鍵で署名したカスタムトークンが要る。鍵は秘密の値なので、Laravel の外に出さない</li>
+  </ul></div>
+
+  <h2>9. 理解を確かめる6つの問い</h2>
+  <p>先に自分で答えてから、開いて見る。</p>
+  <details><summary>なぜそうするのか？（なぜチャットに NoSQL を使い、なぜ受信箱に写しを持つのか）</summary><p>チャットは、足すだけで読み方が決まっていて、JOIN が要らず、すぐ届いてほしい。Firestore なら、届ける仕組み（リスナー）・画面からの直接の読み書き（ルール）・広げることを DB ごと任せられ、WebSocket のサーバーを持たずに済む。そのうえで JOIN がなく、料金も速さも「何件読むか」で決まるので、一覧に出すものを書くときに受信箱へ写し、一覧は受信箱を読むだけにする。チャットは一覧を開く回数が、名前を変える回数よりずっと多いので、書くときに手間をかけるほうが得になる。</p></details>
+  <details><summary>ほかの方法は？なぜ選ばなかったか？（RDB ではだめなのか）</summary><p>RDB でも作れる（05）。数秒の遅れが許せるならポーリング、すぐ届けたいなら WebSocket（Laravel Reverb・AppSync Events）を足せば、DB は1つのままにできる。ただ、つながりの管理・切れたときの取り直し・広げ方を自分で持つことになる。Firestore の中でも、<code>rooms</code> だけで <code>members</code> の配列から探す形は、複合インデックスが要り、一人ひとりの状態の置き場所がない。メッセージをルームの配列に入れる形は、ドキュメントの上限（1MiB）にすぐ届く。写しを持たずに毎回集める形（レガシー版）は、写しがずれない代わりに、一覧の N+1 がそのまま課金になる。</p></details>
+  <details><summary>弱点は？</summary><p>正が2つになる（会員・マッチ・ブロックは PostgreSQL、やり取りは Firestore）。名前の変更・退会・ブロックのたびに2つの DB を直す必要があり、片方だけ失敗するとずれる（2つの DB をまたぐトランザクションはない）。画面が DB を直接書くので、守りはルールに頼り、ルールの1行の誤りがそのまま穴になる。送るたびの書き込みが3件に増える。集計や全文検索は苦手で、管理画面（12）では別の仕組みが要る。列の決まりがないので、古い形のドキュメントが混ざっても DB は止めない。</p></details>
+  <details><summary>問題が起きたら、どう調べて直すか？</summary><p>「料金が急に増えた」なら、まず画面ごとの読み取りの数を見る（本番なら Cloud Monitoring の使用量、05c では画面の中の数）。よくある原因は、<code>limit</code> のないリスナー・一覧の N+1・<code>offset</code>・描き直しのたびのリスナーの付け直し。「一覧が拒まれる」なら、Emulator の画面の Requests でルールのどの行で止まったかを見て、クエリに同じ条件があるかを確かめる。「本番でだけクエリが失敗する」なら、複合インデックスがない（Emulator は見ない）かを疑う。「古い名前が出る」なら、名前を変えたときの書き直しが失敗していないかを見る。</p></details>
+  <details><summary>データが10倍・100倍になったら？</summary><p>Firestore は、読むのも書くのも「返す件数」だけで速さが決まるので、メッセージが 100万・1億件になっても、1つのルームの50件を読む速さは変わらない（RDB のようにインデックスを足して計画を見る必要がない代わりに、使えるクエリが限られる）。料金は使った分だけ増えるので、会員が 100倍なら読み取りもほぼ 100倍になる。RDB はサーバーの大きさで決まる費用なので、多くなると RDB のほうが見通しやすいことがある。レガシー版の <code>limit</code> のないリスナーは、件数に比例して読み取りが増えるので、データが増えるほど請求がふくらむ。名前を変えたときの書き直しは、ルームの数に比例して重くなる。</p></details>
+  <details><summary>RDB の SQL と、Firestore の書き方は何が違うか？ ほかのツールならどう書くか？</summary>
+    <p>05 では Eloquent が SQL を作り、SQL の本数と実行計画で設計を確かめた。05c では SDK がクエリを送り、「読んだドキュメントの数」で確かめる。どちらも「一覧で1件ごとに読みに行かない」ことが大事だが、RDB は読むときに JOIN でまとめ、Firestore は書くときに写してまとめる。</p>
+    <table>
+      <tr><th>やりたいこと</th><th>05 の RDB（SQL）</th><th>Firestore（JS SDK）</th><th>DynamoDB（参考）</th></tr>
+      <tr><td>自分のルームを新しい順に</td><td><code>talk_room_members (user_id, talk_room_id)</code> から JOIN して <code>order by</code></td><td><code>collection('users', uid, 'rooms')</code>・<code>orderBy('lastActivityAt', 'desc')</code></td><td><code>PK = USER#uid</code>・<code>SK = 最後の時刻</code> を Query</td></tr>
+      <tr><td>ルームの新しい50件</td><td><code>where talk_room_id = ? order by id desc limit 51</code></td><td><code>collection('rooms', id, 'messages')</code>・<code>orderBy('sentAt', 'desc')</code>・<code>limit(50)</code></td><td><code>PK = ROOM#id</code> を <code>ScanIndexForward: false</code>・<code>Limit: 50</code></td></tr>
+      <tr><td>未読の数</td><td>相関サブクエリで数える</td><td>受信箱の <code>unread</code> を <code>increment()</code></td><td>項目を <code>ADD</code> で更新</td></tr>
+      <tr><td>だれが読めるか</td><td>コントローラ（API）で確かめる</td><td>セキュリティルール</td><td>API（IAM は人ごとには分けにくい）</td></tr>
+      <tr><td>二重を防ぐ</td><td>UNIQUE</td><td>ドキュメントの ID を決めて作る（あれば失敗）</td><td>条件つきの書き込み（<code>attribute_not_exists</code>）</td></tr>
+    </table>
+  </details>
+
+  <h2>10. 実装の記録</h2>
+  <p class="meta">レガシー版のあと（10-1・10-2）と、改善したあと（10-3・10-4）に、explain-change が書く。</p>
+  <h3>10-1. レガシー版</h3>
+  <p>【まだ実装していない】</p>
+  <h3>10-2. 測った問題と数字</h3>
+  <p>【まだ実装していない】</p>
+  <h3>10-3. 足したテスト</h3>
+  <p>【まだ実装していない】</p>
+  <h3>10-4. 改善版と、前と後の数字</h3>
+  <p>【まだ実装していない】</p>
+</main>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+  // page.js が選んだ表示（data-scheme）に合わせる。なければ端末の設定
+  const scheme = document.documentElement.dataset.scheme;
+  const dark = scheme ? scheme.startsWith("dark") : (document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches));
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/page.js"></script>
+</body>
+</html>
