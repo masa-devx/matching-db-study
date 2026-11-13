@@ -1,0 +1,114 @@
+{
+  "operations": [
+    {
+      "title": "ブロックする（<code>POST /api/me/blocks</code>）。会員 1 が会員 3 をブロックする",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "2本",
+          "code": "$to = User::where('public_id', $request->input('user_id'))->value('id');\n// 2回目は UNIQUE の違反で 500。退会した人・自分も、そのまま入る\nBlock::create(['blocker_id' => $me, 'blocked_id' => $to]);",
+          "sql": "-- ① 相手の id（退会したかは見ない）\nselect \"id\" from \"users\"\nwhere \"public_id\" = '01a1cfdc-e66b-7a60-b61c-a0fa99eb727e'\nlimit 1;\n\n-- ② ブロックを1行\ninsert into \"blocks\"\n  (\"blocker_id\", \"blocked_id\", \"updated_at\", \"created_at\")\nvalues (1, 3, '2026-11-13 10:25:09', '2026-11-13 10:25:09')\nreturning \"id\";",
+          "notes": [
+            "表がまだないので <code>DB::pretend()</code> で作らせた（以下も同じ）",
+            "<code>(blocker_id, blocked_id)</code> の UNIQUE があるので、2行にはならない。代わりに2回目は <code>500</code>（FR-BLOCK-002）",
+            "相手がいなければ <code>$to</code> が <code>null</code> になり、NOT NULL の違反で <code>500</code>（FR-BLOCK-004 は <code>404</code>）"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版",
+          "count": "2本",
+          "code": "// SoftDeletes があるので、退会した人は見つからない → 404\n$to = User::where('public_id', $id)->firstOrFail();\nif ($to->id === $me->id) abort(422);\n// あれば何もしない（2回目も成功）\nDB::table('blocks')->insertOrIgnore([\n    'blocker_id' => $me->id, 'blocked_id' => $to->id, ...]);",
+          "sql": "-- ① 退会していない相手だけ\nselect \"id\" from \"users\"\nwhere \"public_id\" = '01a1cfdc-e66b-7a60-b61c-a0fa99eb727e'\n  and \"users\".\"deleted_at\" is null\nlimit 1;\n\n-- ② すでにあれば入れない（UNIQUE とぶつかったら何もしない）\ninsert into \"blocks\"\n  (\"blocker_id\", \"blocked_id\", \"created_at\", \"updated_at\")\nvalues (1, 3, '2026-11-13 10:25:09', '2026-11-13 10:25:09')\non conflict do nothing;",
+          "notes": [
+            "<code>insertOrIgnore()</code> は PostgreSQL では <code>on conflict do nothing</code> になる。先に「あるか」を読まないので、同時に2回送っても1行で、どちらも成功する",
+            "<code>deleted_at is null</code> は、モデルの <code>SoftDeletes</code> が自動で足す"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "検索からブロックした・された相手を除く（<code>GET /api/users</code> のブロックの部分だけ）",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "3本（＋04 の 1＋N）",
+          "code": "// いいねを除くときと同じ形を写す（04）。向きごとに PHP に持ってくる\n$blocked = Block::where('blocker_id', $me)->pluck('blocked_id');\n$blockedMe = Block::where('blocked_id', $me)->pluck('blocker_id');\n\n$users = User::whereNotNull('email_verified_at')\n    ->where('id', '!=', $me)\n    ->whereNull('deleted_at')   // 検索にだけ書いた\n    ->whereNotIn('id', $blocked->merge($blockedMe))\n    ->orderBy('last_login_at', 'desc')->limit(20)->get();",
+          "sql": "-- ① 自分がブロックした相手（UNIQUE の先頭の列なので索引が効く）\nselect \"blocked_id\" from \"blocks\"\nwhere \"blocker_id\" = 1;\n\n-- ② 自分をブロックした相手（blocked_id が先頭の索引がない → 全部読む）\nselect \"blocker_id\" from \"blocks\"\nwhere \"blocked_id\" = 1;\n\n-- ③ ①と②を not in に並べる（例：3・7・12）\nselect * from \"users\"\nwhere \"email_verified_at\" is not null\n  and \"id\" != 1\n  and \"deleted_at\" is null\n  and \"id\" not in (3, 7, 12)\norder by \"last_login_at\" desc\nlimit 20;",
+          "notes": [
+            "③の <code>deleted_at is null</code> は、手で書いた形（<code>whereNull</code>）。<code>DB::pretend()</code> では①②が空になるので、③は値を入れて作らせた",
+            "ブロックが増えるほど ③ の SQL が長くなる。同じ3行を、いいね・マッチ・トークの一覧にも写す（写し忘れると出る）",
+            "<code>NOT IN</code> は、並べたものに <code>NULL</code> が1つでもあると、何も返さなくなる（ここでは FK と NOT NULL で入らない）"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版",
+          "count": "1本",
+          "code": "// どの一覧でも使う形を1か所に（User のスコープ）\npublic function scopeVisibleTo(Builder $q, int $me): void {\n    $q->whereNotExists(fn ($s) => $s->selectRaw('1')->from('blocks as b')\n            ->where('b.blocker_id', $me)->whereColumn('b.blocked_id', 'users.id'))\n      ->whereNotExists(fn ($s) => $s->selectRaw('1')->from('blocks as b')\n            ->whereColumn('b.blocker_id', 'users.id')->where('b.blocked_id', $me));\n}\n\nUser::visibleTo($me)->whereNotNull('email_verified_at')\n    ->where('id', '!=', $me)->orderBy('last_login_at', 'desc')->limit(20)->get();",
+          "sql": "select * from \"users\"\nwhere \"email_verified_at\" is not null\n  and \"id\" != 1\n  -- 自分がブロックした相手ではない（UNIQUE (blocker_id, blocked_id) が効く）\n  and not exists (\n    select 1 from \"blocks\" as \"b\"\n    where \"b\".\"blocker_id\" = 1\n      and \"b\".\"blocked_id\" = \"users\".\"id\")\n  -- 自分をブロックした相手ではない（足す索引 (blocked_id, blocker_id) が効く）\n  and not exists (\n    select 1 from \"blocks\" as \"b\"\n    where \"b\".\"blocker_id\" = \"users\".\"id\"\n      and \"b\".\"blocked_id\" = 1)\n  -- SoftDeletes が自動で足す\n  and \"users\".\"deleted_at\" is null\norder by \"last_login_at\" desc\nlimit 20;",
+          "notes": [
+            "向きごとに <code>NOT EXISTS</code> を分けると、それぞれの索引を使える（<code>OR</code> で1つにまとめると、使いにくくなる）",
+            "ブロックが何件あっても SQL の長さは変わらない。PostgreSQL は <code>NOT EXISTS</code> を「アンチ結合（相手がない行だけ残す結合）」にする"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "退会する（<code>DELETE /api/me</code>）。会員 1 が退会する",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "2本",
+          "code": "$user = User::find($payload->sub);\nif (! Hash::check($request->input('password'), $user->password)) { ... 422 }\n// UNIQUE とぶつからないよう、メールアドレスを書き換えて空ける\n$user->update([\n    'email' => $user->email.'#deleted#'.time(),\n    'deleted_at' => now(),\n]);",
+          "sql": "select * from \"users\"\nwhere \"users\".\"id\" = 1\nlimit 1;\n\n-- 元のメールアドレスは残らない\nupdate \"users\"\nset \"email\" = 'search00001@example.test#deleted#1794560000',\n    \"deleted_at\" = '2026-11-13 10:25:09',\n    \"updated_at\" = '2026-11-13 10:25:09'\nwhere \"id\" = 1;",
+          "notes": [
+            "メールアドレスを書き換えるので、UNIQUE はそのままで登録し直せる（よくある手）",
+            "代わりに、元のメールアドレスで「退会した人か」を探せない。長いメールアドレスは 255文字を超えて <code>500</code>。持っていたトークンは、まだ30日使える（FR-WD-004）"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版",
+          "count": "2本（＋索引を作り直すマイグレーション）",
+          "code": "// User に use SoftDeletes;（delete() が deleted_at を入れるだけになる）\n$me->delete();\n\n// マイグレーション：退会していない行だけに UNIQUE\n// $table->dropUnique(['email']);\n// DB::statement('create unique index users_email_active_unique\n//     on users (email) where deleted_at is null');",
+          "sql": "-- ① だれか（ミドルウェアで1回。退会した人なら 401）\nselect * from \"users\"\nwhere \"users\".\"id\" = 1\n  and \"users\".\"deleted_at\" is null\nlimit 1;\n\n-- ② 退会した日時を入れる（メールアドレスはそのまま）\nupdate \"users\"\nset \"deleted_at\" = '2026-11-13 10:25:09',\n    \"updated_at\" = '2026-11-13 10:25:09'\nwhere \"id\" = 1\n  and \"users\".\"deleted_at\" is null;\n\n-- マイグレーションで1回だけ\nalter table \"users\" drop constraint \"users_email_unique\";\ncreate unique index \"users_email_active_unique\"\n  on \"users\" (\"email\") where \"deleted_at\" is null;",
+          "notes": [
+            "部分インデックス（<code>where deleted_at is null</code>）は、退会していない行だけを集めた索引。UNIQUE にすると「退会していない人のなかで、メールアドレスが重ならない」になる",
+            "Laravel のスキーマビルダーは部分インデックスの <code>where</code> を書けないので、<code>DB::statement()</code> で書く。<code>drop constraint</code> の行は <code>dropUnique()</code> から Laravel に作らせた。<code>create unique index</code> の行は、<code>DB::statement()</code> に渡す文そのもの"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "トークンからだれかを決める（すべての API の入り口）",
+      "columns": [
+        {
+          "kind": "legacy",
+          "title": "レガシー版",
+          "count": "0本（会員を読まない）",
+          "code": "// 9か所に写した形のまま。会員がいるか・退会したかを見ない\n$payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));\n$me = $payload->sub;\n// ここから先は、退会した人の id のまま進む\nProfile::where('user_id', $me)->first();",
+          "sql": "-- JWT を読むだけなので、ここまで SQL はない\n-- そのあとの処理は、退会した人のものでも動く\nselect * from \"profiles\"\nwhere \"user_id\" = 1\nlimit 1;",
+          "notes": [
+            "退会しても、持っていた JWT は期限（30日）まで使える",
+            "9か所すべてに「退会したか」を足すのは、写し忘れのもとになる"
+          ]
+        },
+        {
+          "kind": "improved",
+          "title": "改善版",
+          "count": "1本",
+          "code": "// ミドルウェア（1か所）。SoftDeletes で、退会した人は null\n$me = User::find($payload->sub);\nif (! $me) {\n    return response()->json(['message' => 'ログインしてください'], 401);\n}\n$request->setUserResolver(fn () => $me);",
+          "sql": "select * from \"users\"\nwhere \"users\".\"id\" = 1\n  and \"users\".\"deleted_at\" is null\nlimit 1;",
+          "notes": [
+            "1本増える代わりに、退会した人のトークンは、どの API でもすぐ <code>401</code> になる",
+            "04 のリファクタ（#51・JWT の処理を1か所に）と同じ場所を直す"
+          ]
+        }
+      ]
+    }
+  ]
+}

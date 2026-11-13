@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>06 ブロックと退会</title>
+<link rel="stylesheet" href="assets/page.css">
+</head>
+<body>
+<main>
+  <p class="meta"><a href="index.html">← 目次へ</a></p>
+  <h1>06 ブロックと退会</h1>
+  <p class="meta">作成: 2026-11-13 ／ 状態: <span class="status">解説だけ</span> ／ 要件: <code>docs/requirements/blocks.md</code>（FR-BLOCK-001〜015・NFR-BLOCK-001〜002）・<code>docs/requirements/withdrawal.md</code>（FR-WD-001〜011・NFR-WD-001〜002）・<code>screens.md</code> の FR-UI-034〜037</p>
+
+  <div class="card point">
+    <strong>この一歩でできるようになること</strong>
+    <ul>
+      <li>「ない行だけを残す」を、<code>NOT IN</code> と <code>NOT EXISTS</code> で書き分け、なぜ <code>NOT EXISTS</code> を選ぶかを説明できる</li>
+      <li>論理削除（<code>deleted_at</code>）にしたとき、UNIQUE とぶつかる理由と、部分インデックスで直す方法が分かる</li>
+      <li>「消さずに隠す」条件を、すべての読み取りに漏れなく入れる仕組み（1か所にまとめる）を作れる</li>
+    </ul>
+  </div>
+
+  <h2>1. 何を作るか</h2>
+  <p><strong>ブロック</strong>：会いたくない相手をブロックすると、検索・いいね・マッチ・トーク・プロフィールのどこにも、お互いが出なくなります。マッチやメッセージは消さずに残し、読むときに除きます。解除すれば元に戻ります。</p>
+  <p><strong>退会</strong>：会員が自分でやめられます。行は消さずに、やめた日時（<code>deleted_at</code>）を入れます（論理削除）。やめた人はどこにも出ず、ログインもできず、持っていたトークンも使えなくなります。同じメールアドレスで、新しい会員として登録し直せます。</p>
+  <p>どちらも「行はあるのに、ないことにする」機能です。だから難しいのは書くときではなく、<strong>読むときのすべての場所に、除く条件を入れること</strong>です。今の API には、会員を読む場所が 10 以上あります（検索・いいね・マッチ・トークの一覧・履歴・送る・プロフィール・ログイン・JWT を読む 9か所）。</p>
+
+  <h2>2. 先に知っておく言葉</h2>
+  <table>
+    <tr><th>言葉</th><th>意味（1〜2文）</th></tr>
+    <tr><td>論理削除</td><td>行を消さずに「消した」印（ここでは <code>deleted_at</code> に日時）を入れること。行を本当に消すのは物理削除。</td></tr>
+    <tr><td><code>NOT EXISTS</code></td><td>「条件に合う行が1つもなければ真」。サブクエリが行を返すかだけを見るので、結果の行は増えない。</td></tr>
+    <tr><td><code>NOT IN</code></td><td>「並べた値のどれとも違えば真」。並べた中に <code>NULL</code> が1つあると、どの行も真にならず、何も返さない。</td></tr>
+    <tr><td>アンチ結合</td><td>「相手の表に対応する行がない行」だけを残す結合。PostgreSQL は <code>NOT EXISTS</code> をこれにして、インデックスで相手を探す。</td></tr>
+    <tr><td>部分インデックス</td><td>条件（<code>WHERE</code>）に合う行だけを集めたインデックス。UNIQUE にすると「その条件の行のなかで重ならない」になる。</td></tr>
+    <tr><td>SoftDeletes</td><td>Laravel のモデルに付けると、<code>delete()</code> が <code>deleted_at</code> を入れるだけになり、そのモデルの読み取りに <code>deleted_at is null</code> が自動で足される（グローバルスコープ）。</td></tr>
+    <tr><td>グローバルスコープ</td><td>そのモデルのすべてのクエリに、自動で足される条件。ほかのモデル（<code>Profile::</code>）や <code>DB::table()</code> には足されない。</td></tr>
+  </table>
+
+  <h2>3. 図で見る</h2>
+  <p>1枚目は足す表と列、2枚目は「ある会員 X を、私に見せてよいか」の判断、3枚目は退会したあとのトークンの扱いです。</p>
+  <pre class="mermaid">
+erDiagram
+  USERS ||--o{ BLOCKS : "ブロックする（blocker_id）"
+  USERS ||--o{ BLOCKS : "ブロックされる（blocked_id）"
+  USERS ||--|| PROFILES : "持つ"
+  USERS {
+    bigint id PK
+    uuid public_id UK
+    varchar email "改善版：退会していない行だけで UK（部分インデックス）"
+    timestamp deleted_at "06 で足す。退会した日時。空なら会員"
+  }
+  BLOCKS {
+    bigint id PK
+    bigint blocker_id FK "ブロックした人"
+    bigint blocked_id FK "ブロックされた人"
+    timestamp created_at "ブロックした日時（一覧の並び）"
+  }
+  </pre>
+  <p class="meta"><code>blocks</code> は <code>(blocker_id, blocked_id)</code> で UNIQUE。改善版で <code>(blocked_id, blocker_id)</code> の索引を足す（「私をブロックした人」を探すため）。</p>
+
+  <pre class="mermaid">
+flowchart TD
+  A["会員 X を、私に見せる？"] --> B{"X は退会した？（deleted_at がある）"}
+  B -- "はい" --> N["出さない（一覧から除く・直接開いたら 404）"]
+  B -- "いいえ" --> C{"私が X をブロックした？"}
+  C -- "はい" --> N
+  C -- "いいえ" --> D{"X が私をブロックした？"}
+  D -- "はい" --> N
+  D -- "いいえ" --> Y["見せる（検索・いいね・マッチ・トーク）"]
+  </pre>
+
+  <pre class="mermaid">
+sequenceDiagram
+  participant B as 画面
+  participant L as Laravel
+  participant P as PostgreSQL
+  B->>L: DELETE /api/me（パスワード）
+  L->>P: update users set deleted_at = now()
+  L-->>B: 204
+  Note over B: 古い JWT がまだ手元に残っている
+  B->>L: GET /api/me/matches（古い JWT）
+  alt レガシー版
+    L-->>B: 200（JWT を読むだけで、会員を見ない）
+  else 改善版
+    L->>P: select * from users where id = ? and deleted_at is null
+    P-->>L: 0行
+    L-->>B: 401
+  end
+  </pre>
+
+  <h2>4. 設計の選択肢を比べる</h2>
+  <h3>ブロックの持ち方</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. <code>blocks</code> に1行足し、読むときに除く（消さずに隠す）</td><td>解除で元に戻る。通報や管理画面（12）で、ブロックの前のやり取りを見られる</td><td>すべての読み取りに「除く」条件が要る。書き忘れると見える</td><td>今回（FR-BLOCK-011）</td></tr>
+    <tr><td>B. ブロックしたら、マッチ・ルーム・メッセージを消す</td><td>読み取りは何も変えなくてよい</td><td>解除しても戻らない。いいねの一覧や検索には、やはり除く条件が要る。証拠が残らない</td><td>やり取りを残す必要がないとき</td></tr>
+    <tr><td>C. 1回のブロックで、向きを変えた2行を入れる（A→B と B→A）</td><td>除く条件が「自分が blocker の行」の1つで済む</td><td>「どちらがブロックしたか」「片方だけ解除」（FR-BLOCK-013）が分かりにくい。行が2倍</td><td>向きを問わない関係（友だち）</td></tr>
+  </table>
+  <h3>除く条件の書き方</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. ID を PHP に持ってきて <code>whereNotIn</code>（04 のいいねと同じ）</td><td>書きやすい</td><td>SQL が3本・ブロックが増えるほど長くなる。<code>NULL</code> が混ざると何も返さない</td><td>レガシー版</td></tr>
+    <tr><td>B. <code>NOT EXISTS</code>（向きごとに2つ）</td><td>SQL 1本・長さが変わらない。アンチ結合になり、索引で相手を探す。<code>NULL</code> の罠がない</td><td>サブクエリを読み慣れる必要がある</td><td>改善版</td></tr>
+    <tr><td>C. <code>LEFT JOIN blocks … WHERE b.id IS NULL</code></td><td>B と同じ結果・同じ計画になることが多い</td><td>2方向なら JOIN が2つ。結合の条件を間違えると行が増える</td><td>JOIN で書くほうが読みやすい人</td></tr>
+  </table>
+  <h3>退会とメールアドレスの UNIQUE</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. <code>deleted_at</code> ＋ メールアドレスを書き換えて空ける（<code>…#deleted#時刻</code>）</td><td>UNIQUE を変えなくてよい。よく見る手</td><td>元のメールアドレスが残らない。長いと 255 文字を超える。メールを送る処理が、書き換えた宛先に送る</td><td>レガシー版</td></tr>
+    <tr><td>B. <code>deleted_at</code> ＋ 部分インデックスの UNIQUE（<code>where deleted_at is null</code>）</td><td>元のメールアドレスが残る。DB が「会員のなかで重ならない」を守る（同時に登録しても2人にならない）</td><td>PostgreSQL の機能（MySQL には部分インデックスがない。生成列で代わりを作る）</td><td>改善版</td></tr>
+    <tr><td>C. UNIQUE を外して、PHP で「あるか」を見る</td><td>DB を変えなくてよい</td><td>同時に2回登録すると2人になる（02 の二重のいいねと同じ）</td><td>選ばない</td></tr>
+    <tr><td>D. 退会した行を別の表（<code>withdrawn_users</code>）へ移す</td><td><code>users</code> に除く条件が要らない</td><td>いいね・マッチ・メッセージが指す先が消える（FK）。移す処理が重い</td><td>ほかの表から指されていないとき</td></tr>
+  </table>
+  <div class="card point"><strong>この一歩で選ぶもの</strong>：ブロックは A（<code>blocks</code> に1行・消さずに隠す）、除く条件は B（<code>NOT EXISTS</code> を向きごとに2つ・1か所のスコープにまとめる）、退会は B（<code>deleted_at</code> と部分インデックスの UNIQUE・<code>SoftDeletes</code>・トークンを読むところで退会を見る）。要件で「解除で戻る」「同じメールアドレスで登録し直す」を決めたので、行を残し、DB の制約で重なりを防ぐ形にします。</div>
+
+  <h2>5. 見本：レガシー版と改善版</h2>
+  <h3>レガシー版（Fat Controller・テストなし）</h3>
+  <p>表は 05 と同じく、主キー・UNIQUE・外部キーを持ち、インデックスは足しません。<code>users</code> に <code>deleted_at</code> を足しますが、<code>SoftDeletes</code> は使わず、思い出した場所にだけ <code>whereNull('deleted_at')</code> を書きます。</p>
+  <pre><code class="language-php">// BlockController::store（JWT の処理を写す。10か所目）
+$to = User::where('public_id', $request->input('user_id'))->value('id');
+Block::create(['blocker_id' =&gt; $payload-&gt;sub, 'blocked_id' =&gt; $to]);   // 2回目は 500
+
+// 一覧（検索・いいね・マッチ・トーク）ごとに、同じ3行を写す
+$blocked = Block::where('blocker_id', $me)-&gt;pluck('blocked_id');
+$blockedMe = Block::where('blocked_id', $me)-&gt;pluck('blocker_id');
+$query-&gt;whereNotIn('id', $blocked-&gt;merge($blockedMe));
+
+// UserController::destroy（退会）
+if (! Hash::check($request-&gt;input('password'), $user-&gt;password)) { /* 422 */ }
+$user-&gt;update(['email' =&gt; $user-&gt;email.'#deleted#'.time(), 'deleted_at' =&gt; now()]);</code></pre>
+  <div class="card warn"><ul>
+    <li><strong>写し忘れ</strong>：一覧には除く3行を写すが、直接開く場所（プロフィール・いいねを送る・トークの履歴・送る）には写さない。ブロックした相手のプロフィールが URL で開け、メッセージも送れる</li>
+    <li><strong>退会した人が見える</strong>：<code>deleted_at</code> を見るのは検索だけ。マッチやトークの一覧は <code>Profile::where('user_id', …)</code> で相手を読むので、退会した人が名前つきで残る</li>
+    <li><strong>トークンが生きている</strong>：JWT を読むだけで会員を見ないので、退会した人の JWT が30日使える（FR-WD-004）</li>
+    <li><strong>索引がない</strong>：「私をブロックした人」（<code>blocked_id = ?</code>）は、UNIQUE の先頭の列ではないので、<code>blocks</code> を全部読む</li>
+    <li><strong>二重のブロック</strong>：UNIQUE が止めるが、例外をつかまえないので <code>500</code>（FR-BLOCK-002）</li>
+    <li><strong>メールアドレスの書き換え</strong>：元のメールアドレスが残らない。255文字を超えると <code>500</code></li>
+  </ul></div>
+
+  <h3>改善版</h3>
+  <pre><code class="language-php">// User：退会は SoftDeletes（delete() が deleted_at を入れる・読むときに自動で除く）
+class User extends Authenticatable { use SoftDeletes; }
+
+// 「私に見せてよい会員」を1か所に（検索・いいね・マッチ・トークの一覧・プロフィールで使う）
+public function scopeVisibleTo(Builder $q, int $me): void
+{
+    $q-&gt;whereNotExists(fn ($s) =&gt; $s-&gt;selectRaw('1')-&gt;from('blocks as b')
+            -&gt;where('b.blocker_id', $me)-&gt;whereColumn('b.blocked_id', 'users.id'))
+      -&gt;whereNotExists(fn ($s) =&gt; $s-&gt;selectRaw('1')-&gt;from('blocks as b')
+            -&gt;whereColumn('b.blocker_id', 'users.id')-&gt;where('b.blocked_id', $me));
+}
+
+// マイグレーション
+$table-&gt;index(['blocked_id', 'blocker_id']);                       // 私をブロックした人
+DB::statement('create unique index users_email_active_unique
+    on users (email) where deleted_at is null');                     // 退会していない人だけで UNIQUE</code></pre>
+  <p>大事なのは3つです。① 除く条件を<strong>1か所</strong>（スコープ・ミドルウェア）にまとめ、写さない。② <code>NOT EXISTS</code> を向きごとに分け、それぞれに索引を用意する（<code>(blocker_id, blocked_id)</code> は UNIQUE がそのまま使え、<code>(blocked_id, blocker_id)</code> を足す）。③ 重なりは PHP ではなく、部分インデックスの UNIQUE で DB に守らせる。</p>
+  <p class="meta">注意：<code>SoftDeletes</code> の自動の条件は <code>User::</code> のクエリにだけ付きます。<code>Profile::where('user_id', …)</code> や <code>DB::table('users')</code>、JOIN した <code>users</code> には付きません（7章の罠）。</p>
+
+  <h3>Eloquent が発行する SQL（レガシー版と改善版を並べる）</h3>
+  <p>左がレガシー版、右が改善版です。SQL は Laravel に作らせて確かめたもので（<code>blocks</code> の表と <code>deleted_at</code> はまだないので、すべて <code>DB::pretend()</code> で、流さずに SQL だけを取り出した。改善版の <code>SoftDeletes</code> は、トレイトを付けたその場のモデルで作らせた）、例は会員 1（<code>search00001</code>）が会員 3 をブロックする・会員 1 が退会する場合です。中身は <code>explanations/sql/06-blocks-withdrawal.json</code> にあり、<code>explanations/tools/compare-block.py</code> で作り直せます。</p>
+  <p class="meta">ログ（<code>sql-*.log</code>）では、値は <code>?</code> になり、別に渡されます（プリペアドステートメント）。読みやすいよう、ここでは値を入れて、行を分けて書きました。</p>
+  <!-- compare: sql/06-blocks-withdrawal.json -->
+  <h4>ブロックする（<code>POST /api/me/blocks</code>）。会員 1 が会員 3 をブロックする</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">2本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$to = User::where('public_id', $request-&gt;input('user_id'))-&gt;value('id');
+// 2回目は UNIQUE の違反で 500。退会した人・自分も、そのまま入る
+Block::create(['blocker_id' =&gt; $me, 'blocked_id' =&gt; $to]);</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① 相手の id（退会したかは見ない）
+select "id" from "users"
+where "public_id" = '01a1cfdc-e66b-7a60-b61c-a0fa99eb727e'
+limit 1;
+
+-- ② ブロックを1行
+insert into "blocks"
+  ("blocker_id", "blocked_id", "updated_at", "created_at")
+values (1, 3, '2026-11-13 10:25:09', '2026-11-13 10:25:09')
+returning "id";</code></pre>
+      <ul><li>表がまだないので <code>DB::pretend()</code> で作らせた（以下も同じ）</li><li><code>(blocker_id, blocked_id)</code> の UNIQUE があるので、2行にはならない。代わりに2回目は <code>500</code>（FR-BLOCK-002）</li><li>相手がいなければ <code>$to</code> が <code>null</code> になり、NOT NULL の違反で <code>500</code>（FR-BLOCK-004 は <code>404</code>）</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版<span class="count">2本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">// SoftDeletes があるので、退会した人は見つからない → 404
+$to = User::where('public_id', $id)-&gt;firstOrFail();
+if ($to-&gt;id === $me-&gt;id) abort(422);
+// あれば何もしない（2回目も成功）
+DB::table('blocks')-&gt;insertOrIgnore([
+    'blocker_id' =&gt; $me-&gt;id, 'blocked_id' =&gt; $to-&gt;id, ...]);</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① 退会していない相手だけ
+select "id" from "users"
+where "public_id" = '01a1cfdc-e66b-7a60-b61c-a0fa99eb727e'
+  and "users"."deleted_at" is null
+limit 1;
+
+-- ② すでにあれば入れない（UNIQUE とぶつかったら何もしない）
+insert into "blocks"
+  ("blocker_id", "blocked_id", "created_at", "updated_at")
+values (1, 3, '2026-11-13 10:25:09', '2026-11-13 10:25:09')
+on conflict do nothing;</code></pre>
+      <ul><li><code>insertOrIgnore()</code> は PostgreSQL では <code>on conflict do nothing</code> になる。先に「あるか」を読まないので、同時に2回送っても1行で、どちらも成功する</li><li><code>deleted_at is null</code> は、モデルの <code>SoftDeletes</code> が自動で足す</li></ul>
+    </section>
+  </div>
+  <h4>検索からブロックした・された相手を除く（<code>GET /api/users</code> のブロックの部分だけ）</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">3本（＋04 の 1＋N）</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">// いいねを除くときと同じ形を写す（04）。向きごとに PHP に持ってくる
+$blocked = Block::where('blocker_id', $me)-&gt;pluck('blocked_id');
+$blockedMe = Block::where('blocked_id', $me)-&gt;pluck('blocker_id');
+
+$users = User::whereNotNull('email_verified_at')
+    -&gt;where('id', '!=', $me)
+    -&gt;whereNull('deleted_at')   // 検索にだけ書いた
+    -&gt;whereNotIn('id', $blocked-&gt;merge($blockedMe))
+    -&gt;orderBy('last_login_at', 'desc')-&gt;limit(20)-&gt;get();</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① 自分がブロックした相手（UNIQUE の先頭の列なので索引が効く）
+select "blocked_id" from "blocks"
+where "blocker_id" = 1;
+
+-- ② 自分をブロックした相手（blocked_id が先頭の索引がない → 全部読む）
+select "blocker_id" from "blocks"
+where "blocked_id" = 1;
+
+-- ③ ①と②を not in に並べる（例：3・7・12）
+select * from "users"
+where "email_verified_at" is not null
+  and "id" != 1
+  and "deleted_at" is null
+  and "id" not in (3, 7, 12)
+order by "last_login_at" desc
+limit 20;</code></pre>
+      <ul><li>③の <code>deleted_at is null</code> は、手で書いた形（<code>whereNull</code>）。<code>DB::pretend()</code> では①②が空になるので、③は値を入れて作らせた</li><li>ブロックが増えるほど ③ の SQL が長くなる。同じ3行を、いいね・マッチ・トークの一覧にも写す（写し忘れると出る）</li><li><code>NOT IN</code> は、並べたものに <code>NULL</code> が1つでもあると、何も返さなくなる（ここでは FK と NOT NULL で入らない）</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版<span class="count">1本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">// どの一覧でも使う形を1か所に（User のスコープ）
+public function scopeVisibleTo(Builder $q, int $me): void {
+    $q-&gt;whereNotExists(fn ($s) =&gt; $s-&gt;selectRaw('1')-&gt;from('blocks as b')
+            -&gt;where('b.blocker_id', $me)-&gt;whereColumn('b.blocked_id', 'users.id'))
+      -&gt;whereNotExists(fn ($s) =&gt; $s-&gt;selectRaw('1')-&gt;from('blocks as b')
+            -&gt;whereColumn('b.blocker_id', 'users.id')-&gt;where('b.blocked_id', $me));
+}
+
+User::visibleTo($me)-&gt;whereNotNull('email_verified_at')
+    -&gt;where('id', '!=', $me)-&gt;orderBy('last_login_at', 'desc')-&gt;limit(20)-&gt;get();</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">select * from "users"
+where "email_verified_at" is not null
+  and "id" != 1
+  -- 自分がブロックした相手ではない（UNIQUE (blocker_id, blocked_id) が効く）
+  and not exists (
+    select 1 from "blocks" as "b"
+    where "b"."blocker_id" = 1
+      and "b"."blocked_id" = "users"."id")
+  -- 自分をブロックした相手ではない（足す索引 (blocked_id, blocker_id) が効く）
+  and not exists (
+    select 1 from "blocks" as "b"
+    where "b"."blocker_id" = "users"."id"
+      and "b"."blocked_id" = 1)
+  -- SoftDeletes が自動で足す
+  and "users"."deleted_at" is null
+order by "last_login_at" desc
+limit 20;</code></pre>
+      <ul><li>向きごとに <code>NOT EXISTS</code> を分けると、それぞれの索引を使える（<code>OR</code> で1つにまとめると、使いにくくなる）</li><li>ブロックが何件あっても SQL の長さは変わらない。PostgreSQL は <code>NOT EXISTS</code> を「アンチ結合（相手がない行だけ残す結合）」にする</li></ul>
+    </section>
+  </div>
+  <h4>退会する（<code>DELETE /api/me</code>）。会員 1 が退会する</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">2本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$user = User::find($payload-&gt;sub);
+if (! Hash::check($request-&gt;input('password'), $user-&gt;password)) { ... 422 }
+// UNIQUE とぶつからないよう、メールアドレスを書き換えて空ける
+$user-&gt;update([
+    'email' =&gt; $user-&gt;email.'#deleted#'.time(),
+    'deleted_at' =&gt; now(),
+]);</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">select * from "users"
+where "users"."id" = 1
+limit 1;
+
+-- 元のメールアドレスは残らない
+update "users"
+set "email" = 'search00001@example.test#deleted#1794560000',
+    "deleted_at" = '2026-11-13 10:25:09',
+    "updated_at" = '2026-11-13 10:25:09'
+where "id" = 1;</code></pre>
+      <ul><li>メールアドレスを書き換えるので、UNIQUE はそのままで登録し直せる（よくある手）</li><li>代わりに、元のメールアドレスで「退会した人か」を探せない。長いメールアドレスは 255文字を超えて <code>500</code>。持っていたトークンは、まだ30日使える（FR-WD-004）</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版<span class="count">2本（＋索引を作り直すマイグレーション）</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">// User に use SoftDeletes;（delete() が deleted_at を入れるだけになる）
+$me-&gt;delete();
+
+// マイグレーション：退会していない行だけに UNIQUE
+// $table-&gt;dropUnique(['email']);
+// DB::statement('create unique index users_email_active_unique
+//     on users (email) where deleted_at is null');</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① だれか（ミドルウェアで1回。退会した人なら 401）
+select * from "users"
+where "users"."id" = 1
+  and "users"."deleted_at" is null
+limit 1;
+
+-- ② 退会した日時を入れる（メールアドレスはそのまま）
+update "users"
+set "deleted_at" = '2026-11-13 10:25:09',
+    "updated_at" = '2026-11-13 10:25:09'
+where "id" = 1
+  and "users"."deleted_at" is null;
+
+-- マイグレーションで1回だけ
+alter table "users" drop constraint "users_email_unique";
+create unique index "users_email_active_unique"
+  on "users" ("email") where "deleted_at" is null;</code></pre>
+      <ul><li>部分インデックス（<code>where deleted_at is null</code>）は、退会していない行だけを集めた索引。UNIQUE にすると「退会していない人のなかで、メールアドレスが重ならない」になる</li><li>Laravel のスキーマビルダーは部分インデックスの <code>where</code> を書けないので、<code>DB::statement()</code> で書く。<code>drop constraint</code> の行は <code>dropUnique()</code> から Laravel に作らせた。<code>create unique index</code> の行は、<code>DB::statement()</code> に渡す文そのもの</li></ul>
+    </section>
+  </div>
+  <h4>トークンからだれかを決める（すべての API の入り口）</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">0本（会員を読まない）</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">// 9か所に写した形のまま。会員がいるか・退会したかを見ない
+$payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));
+$me = $payload-&gt;sub;
+// ここから先は、退会した人の id のまま進む
+Profile::where('user_id', $me)-&gt;first();</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- JWT を読むだけなので、ここまで SQL はない
+-- そのあとの処理は、退会した人のものでも動く
+select * from "profiles"
+where "user_id" = 1
+limit 1;</code></pre>
+      <ul><li>退会しても、持っていた JWT は期限（30日）まで使える</li><li>9か所すべてに「退会したか」を足すのは、写し忘れのもとになる</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版<span class="count">1本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">// ミドルウェア（1か所）。SoftDeletes で、退会した人は null
+$me = User::find($payload-&gt;sub);
+if (! $me) {
+    return response()-&gt;json(['message' =&gt; 'ログインしてください'], 401);
+}
+$request-&gt;setUserResolver(fn () =&gt; $me);</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">select * from "users"
+where "users"."id" = 1
+  and "users"."deleted_at" is null
+limit 1;</code></pre>
+      <ul><li>1本増える代わりに、退会した人のトークンは、どの API でもすぐ <code>401</code> になる</li><li>04 のリファクタ（#51・JWT の処理を1か所に）と同じ場所を直す</li></ul>
+    </section>
+  </div>
+  <!-- /compare -->
+  <table>
+    <tr><th>操作</th><th>レガシー版</th><th>改善版</th><th>違いのもと</th></tr>
+    <tr><td>ブロックする</td><td>2本。2回目は <code>500</code></td><td>2本。2回目も成功</td><td><code>insertOrIgnore()</code>（<code>on conflict do nothing</code>）。退会した相手は <code>SoftDeletes</code> で見つからない</td></tr>
+    <tr><td>検索から除く</td><td>3本（＋04 の 1＋N）。ブロックの数だけ長くなる</td><td>1本（＋04 の改善）</td><td>ID を PHP に持ってくる <code>NOT IN</code> から、DB の中の <code>NOT EXISTS</code> へ</td></tr>
+    <tr><td>退会する</td><td>2本。メールアドレスを書き換える</td><td>2本（＋マイグレーションで1回）</td><td>部分インデックスの UNIQUE で、書き換えずに登録し直せる</td></tr>
+    <tr><td>トークンからだれかを決める</td><td>0本（会員を読まない）</td><td>1本</td><td>1本増える代わりに、退会した人は <code>401</code></td></tr>
+  </table>
+  <p class="meta">API の設計（<code>docs/api/06-blocks-withdrawal.md</code>）はまだないので、「流れる SQL の目安」との突き合わせは、API の子 Issue で設計を書くときに行います。</p>
+
+  <h2>6. どう確かめるか</h2>
+  <table>
+    <tr><th>段階</th><th>確かめること</th></tr>
+    <tr><td>① レガシー版で問題を見る</td><td>
+      <ul>
+        <li>試しのデータ：04 の会員 2万人と 05 のメッセージに、ブロック（<code>search00001</code> がした・された相手を混ぜて、全体で数万件）と退会した会員を足す</li>
+        <li>写し忘れ：ブロックした相手・退会した相手を、検索・いいね・マッチ・トークの一覧・プロフィール・トークの履歴・送るで、それぞれ出るか（API ごとの表にする）</li>
+        <li>退会した人の古い JWT で、各 API が何を返すか</li>
+        <li>検索の SQL の本数と、<code>not in (…)</code> の長さ（ブロック 10・1000件）</li>
+        <li><code>EXPLAIN (ANALYZE, BUFFERS)</code> で <code>select … from blocks where blocked_id = ?</code>（Seq Scan になるか・読んだ行）</li>
+        <li>同じ相手を2回ブロック・同時に同じメールアドレスで2回登録したときの結果</li>
+      </ul></td></tr>
+    <tr><td>② 振る舞いを固定するテスト</td><td>要件 ID を名前に入れる。例：<code>FR-BLOCK-005 ブロックした相手は検索に出ない</code>・<code>FR-BLOCK-006 ブロックした相手のプロフィールは 404</code>・<code>FR-BLOCK-009 ブロックした相手には送れない</code>・<code>FR-BLOCK-011 解除すると元に戻る</code>・<code>FR-WD-004 退会したら持っていたトークンも使えない</code>・<code>FR-WD-008 同じメールアドレスで登録し直せる</code>・<code>FR-WD-010 2回退会しても登録し直せる</code>。レガシー版で落ちるものは「今の振る舞い」を書き、直したら目標の形に書き換える</td></tr>
+    <tr><td>③ 改善したあとに比べる数字</td><td>検索の SQL の本数と長さ（ブロック 10・1000件）。<code>blocks</code> を読んだ行とバッファ（Seq Scan → Index Only Scan）。写し忘れの表で、出てしまう場所の数（レガシー版 → 0）。同時に登録したときの会員の数</td></tr>
+  </table>
+
+  <h2>7. 気をつけること（罠）</h2>
+  <div class="card warn"><ul>
+    <li><strong><code>NOT IN</code> と <code>NULL</code></strong>：<code>id not in (3, null)</code> は、どの行でも真にならず、検索の結果が0件になる。列に <code>NULL</code> が入りうるなら、<code>NOT EXISTS</code> を使う</li>
+    <li><strong>グローバルスコープが効かない場所</strong>：<code>SoftDeletes</code> は <code>User::</code> にだけ効く。<code>Profile::where('user_id', …)</code>・<code>DB::table('users')</code>・JOIN した <code>users</code>・<code>withTrashed()</code> では、退会した人が出る</li>
+    <li><strong>片方の向きだけ除く</strong>：「私がブロックした人」だけを除くと、ブロックされた側からは、ブロックした人が見えたまま（FR-BLOCK-005 は両方）</li>
+    <li><strong><code>OR</code> でまとめる</strong>：<code>not exists (… where (blocker = 私 and blocked = X) or (blocker = X and blocked = 私))</code> は正しいが、索引を使いにくくなる。向きごとに分ける</li>
+    <li><strong>部分インデックスの条件と、クエリの条件をそろえる</strong>：<code>where deleted_at is null</code> の索引は、クエリにも同じ条件がないと使われない。ログインの <code>where email = ?</code> は、<code>SoftDeletes</code> が <code>deleted_at is null</code> を足すので使える</li>
+    <li><strong>件数と中身のずれ</strong>：検索の件数（<code>count(*)</code>）にも、同じ除く条件を入れる。中身だけに入れると「20件中 18件」のように数が合わない</li>
+    <li><strong>退会しても残るもの</strong>：相手のトークの一覧に、退会した人とのルームが残っていると、未読の数（タブのバッジ）に数えられる。未読の数にも除く条件が要る</li>
+  </ul></div>
+
+  <h2>8. 理解を確かめる6つの問い</h2>
+  <p>先に自分で答えてから、開いて見る。</p>
+  <details><summary>なぜそうするのか？（消さずに隠す・論理削除にする）</summary><p>ブロックは「解除で元に戻る」と決めたので、マッチやメッセージを消せない。退会も、相手とのやり取りや、あとで通報・管理画面で見るための記録として行を残す。消さないので、「ない」ことにするのは読むときの条件になる。条件がばらけると写し忘れが起きるので、1か所のスコープとミドルウェアにまとめる。</p></details>
+  <details><summary>ほかの方法は？なぜ選ばなかったか？</summary><p>ブロックでマッチやルームを消す形は、解除で戻せない。ブロックを2行（両方向）で持つ形は、除く条件が1つで済むが、どちらがブロックしたか・片方だけ解除が分かりにくい。<code>NOT IN</code> は SQL が長くなり、<code>NULL</code> の罠がある。退会でメールアドレスを書き換える形は、元のメールアドレスが残らない。UNIQUE を外して PHP で見る形は、同時の登録で2人になる。退会した行を別の表へ移す形は、いいね・マッチ・メッセージが指す先が消える。</p></details>
+  <details><summary>弱点は？</summary><p>すべての読み取りに <code>NOT EXISTS</code> が2つ足され、少し重くなる（索引で1回ずつ探すだけなので、増え方は小さい）。<code>SoftDeletes</code> の効かない書き方（<code>Profile::</code>・<code>DB::table()</code>・JOIN）では、自分で条件を足す必要が残る。退会した行が増え続けるので、期間が過ぎたら消す（個人情報）仕組みが、いずれ要る。部分インデックスは PostgreSQL の機能で、MySQL に移すなら生成列で代わりを作る。</p></details>
+  <details><summary>問題が起きたら、どう調べて直すか？</summary><p>「ブロックした相手が見える」と言われたら、その画面の API のクエリログ（<code>sql-*.log</code>）を見て、<code>blocks</code> を読んでいるかを確かめる。読んでいなければ、スコープを通していない場所（<code>Profile::</code> から読んでいるなど）を探す。遅いなら <code>EXPLAIN (ANALYZE, BUFFERS)</code> で、<code>blocks</code> が Seq Scan になっていないか・アンチ結合になっているかを見る。登録で <code>500</code> なら、どの UNIQUE の違反かを例外の制約の名前で見る。</p></details>
+  <details><summary>データが10倍・100倍になったら？</summary><p>レガシー版は、ブロックが増えるほど <code>not in (…)</code> が長くなり、SQL を送る・読む時間が増える。「私をブロックした人」は Seq Scan なので、<code>blocks</code> が 100倍なら読む行も 100倍。改善版は、向きごとの索引で1回ずつ探すので、<code>blocks</code> が増えても1会員あたりの手間はほとんど変わらない。退会した行が会員の大半になったら、<code>users</code> のほかの索引も部分インデックス（<code>where deleted_at is null</code>）にすると、索引が小さくなる。</p></details>
+  <details><summary>Eloquent でどんな SQL が流れ、どう直したか？ Rails（ActiveRecord）・Prisma ならどう書くか？</summary>
+    <p>レガシー版は <code>pluck()</code> で ID を2回持ってきて <code>whereNotIn()</code>（3本）。改善版は <code>whereNotExists()</code> を2つ（1本）。退会は <code>SoftDeletes</code> で <code>deleted_at is null</code> が自動で付き、UNIQUE は部分インデックスにする。</p>
+    <table>
+      <tr><th>やること</th><th>Laravel（Eloquent）</th><th>Rails（ActiveRecord）</th><th>Prisma</th></tr>
+      <tr><td>ブロックした・された相手を除く</td><td><code>whereNotExists(fn ($q) =&gt; …)</code> を2つ</td><td><code>where.not(Block.where(...).where('blocks.blocked_id = users.id').arel.exists)</code>、または <code>where.not(id: Block.where(blocker_id: me).select(:blocked_id))</code>（サブクエリの <code>NOT IN</code>）</td><td><code>where: { blocksReceived: { none: { blockerId: me } }, blocksMade: { none: { blockedId: me } } }</code>（<code>none</code> は <code>NOT EXISTS</code> になる）</td></tr>
+      <tr><td>論理削除</td><td><code>use SoftDeletes</code>（自動で除く）</td><td>標準にはない。<code>discard</code> の gem や <code>default_scope</code>（使いすぎに注意）</td><td>標準にはない。クライアントの拡張（<code>$extends</code>）で <code>deletedAt: null</code> を足す</td></tr>
+      <tr><td>部分インデックスの UNIQUE</td><td><code>DB::statement('create unique index … where deleted_at is null')</code></td><td><code>add_index :users, :email, unique: true, where: 'deleted_at IS NULL'</code></td><td>スキーマでは書けない。マイグレーションの SQL を手で直す</td></tr>
+      <tr><td>二重のブロックを成功にする</td><td><code>insertOrIgnore()</code></td><td><code>insert_all(..., unique_by: …)</code>（<code>on conflict do nothing</code>）</td><td><code>createMany({ skipDuplicates: true })</code></td></tr>
+    </table>
+  </details>
+
+  <h2>9. 実装の記録</h2>
+  <p class="meta">レガシー版のあと（9-1・9-2）と、改善したあと（9-3・9-4）に、explain-change が書く。</p>
+  <h3>9-1. レガシー版</h3>
+  <p>【まだ実装していない】</p>
+  <h3>9-2. 測った問題と数字</h3>
+  <p>【まだ実装していない】</p>
+  <h3>9-3. 足したテスト</h3>
+  <p>【まだ実装していない】</p>
+  <h3>9-4. 改善版と、前と後の数字</h3>
+  <p>【まだ実装していない】</p>
+</main>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+  // page.js が選んだ表示（data-scheme）に合わせる。なければ端末の設定
+  const scheme = document.documentElement.dataset.scheme;
+  const dark = scheme ? scheme.startsWith("dark") : (document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches));
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/page.js"></script>
+</body>
+</html>
