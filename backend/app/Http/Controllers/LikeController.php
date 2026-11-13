@@ -14,6 +14,7 @@ use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 
 /**
  * 02 いいねを送る・送った相手の一覧（レガシー版。docs/api/02-likes.md）。
@@ -22,6 +23,7 @@ use Illuminate\Http\Request;
  * 03 で、送るときにマッチを作り（docs/api/02-likes.md の「03 で変えること」）、一覧に「マッチ済み」を足した（1＋2N 本）。
  * #46 で、相手を public_id（UUID）で受け取り・返すようにした（送るときは1本、一覧は1件ごとに1本増える）。
  * 05 で、マッチしたときにトークルームと参加者2人を作るようにした（送ってマッチしたときに3本増える）。
+ * 05c で、マッチしたときに Firestore（手元の Emulator）にもルームと2人の受信箱を作るようにした（SQL 2本・HTTP 3本が増える）。
  */
 class LikeController extends Controller
 {
@@ -60,6 +62,26 @@ class LikeController extends Controller
             $room = TalkRoom::create(['match_id' => $match->id]);
             TalkRoomMember::create(['talk_room_id' => $room->id, 'user_id' => $toUserId]);
             TalkRoomMember::create(['talk_room_id' => $room->id, 'user_id' => $payload->sub]);
+
+            // 05c：Firestore（手元の Emulator）にも、ルームと2人の受信箱を作る（docs/api/05c-firestore.md）。
+            // 3件を別々の HTTP で書く（途中で失敗すると残りは書かれない）。上の PostgreSQL の行はもう入っているので、
+            // Firestore につながらないと 500 を返すのに、いいね・マッチ・ルームは残る
+            $room->refresh();   // public_id は DB の既定の値で入るので、読み直す
+            $meUid = User::where('id', $payload->sub)->value('public_id');
+            $toUid = $request->input('user_id');
+            $base = 'http://'.getenv('FIRESTORE_EMULATOR_HOST').'/v1/projects/'.getenv('FIREBASE_PROJECT_ID').'/databases/(default)/documents';
+            // Emulator だけの管理者（owner）で書くので、ルールを通らない
+            Http::withToken('owner')->post("{$base}/rooms?documentId={$room->public_id}", ['fields' => [
+                'members' => ['arrayValue' => ['values' => [['stringValue' => $meUid], ['stringValue' => $toUid]]]],
+            ]])->throw();
+            Http::withToken('owner')->post("{$base}/users/{$meUid}/rooms?documentId={$room->public_id}", ['fields' => [
+                'partnerUid' => ['stringValue' => $toUid],
+                'lastReadAt' => ['nullValue' => null],
+            ]])->throw();
+            Http::withToken('owner')->post("{$base}/users/{$toUid}/rooms?documentId={$room->public_id}", ['fields' => [
+                'partnerUid' => ['stringValue' => $meUid],
+                'lastReadAt' => ['nullValue' => null],
+            ]])->throw();
             $matched = true;
         }
 

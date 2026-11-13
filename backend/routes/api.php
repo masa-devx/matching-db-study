@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\EmailVerificationController;
+use App\Http\Controllers\FirebaseTokenController;
 use App\Http\Controllers\LikeController;
 use App\Http\Controllers\MessageController;
 use App\Http\Controllers\ProfileController;
@@ -50,3 +51,7 @@ Route::get('/me/matches', [UserMatchController::class, 'index']);
 Route::get('/me/talk-rooms', [TalkRoomController::class, 'index']);
 Route::get('/me/talk-rooms/{publicId}/messages', [MessageController::class, 'index']);
 Route::post('/me/talk-rooms/{publicId}/messages', [MessageController::class, 'store']);
+
+// 05c Firestore と比べる（docs/api/05c-firestore.md）。画面が手元の Firebase Emulator にログインするトークン。
+// ルームと受信箱は、マッチしたときに LikeController::store が Firestore にも作る
+Route::post('/me/firebase-token', [FirebaseTokenController::class, 'store']);
