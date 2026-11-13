@@ -28,6 +28,10 @@ export default function MessagesPage() {
   return (
     <div>
       <h1 className="page-title">メッセージ</h1>
+      {/* 05c：同じやり取りを Firestore（手元の Emulator）で見る画面へ */}
+      <Link to="/messages-fs" className="button button-small button-ghost">
+        Firestore 版で見る
+      </Link>
       {rooms.length === 0 && <p className="soon">まだマッチした相手はいません</p>}
       <ul className="list">
         {rooms.map((r) => (
