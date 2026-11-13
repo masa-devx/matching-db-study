@@ -16,6 +16,7 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 | フレームワーク | Laravel（API）・React＋TypeScript＋Vite＋React Router（03b から） | Laravel は入れたときの最新。React 19.3.1・TypeScript 7.0.2・Vite 8.3.8・React Router 8.5.1 | 仕事で使ってきた形で、Eloquent の裏の SQL を確かめる |
 | DB・ORM | PostgreSQL（Docker compose）・Eloquent | 18・Laravel と同じ | 流れた SQL は `DB::listen` でログに出し、`->explain()` で実行計画を見る |
 | NoSQL（05c から） | Firebase Emulator（Firestore と Auth。Docker の `firebase`）・Firebase JS SDK（画面） | firebase-tools 15.34.2・Node 24.22.2・JDK 21・firebase 13.1.0 | ドキュメント DB を RDB と比べる。手元だけで動かし、クラウドのアカウントは作らない（D-008。プロジェクトは `demo-matching`） |
+| 管理画面（12 から） | `admin/backend`（Laravel。Docker の `admin-app`）・`admin/frontend`（React・Vite・Mantine） | Laravel は会員の側と同じ 13 系・Mantine（`@mantine/core`・`@mantine/charts`）9.7.4・recharts 3.10.1 | 会員の側と干渉しないよう、別のアプリにする。表は共通（同じ DB）。よくある管理画面の形（サイドバー・表・グラフ）を部品のライブラリでそろえる（12 の解説） |
 | 状態の管理（画面） | React の Context → Zustand（05b から） | React と同じ・入れたときの最新 | 標準の限界を体験してから移す。TanStack Query・OpenAPI は使わない |
 | テスト | Pest（バックエンド。テスト用の PostgreSQL に対して実行）・Vitest（画面） | 入れたときの最新 | SQLite ではロックや UNIQUE の動きが違うため、本物の PostgreSQL で確かめる |
 | 静的検査・整形 | Larastan（PHPStan）・Pint（API）・Biome（画面。lint と整形を1つで受け持つ） | Larastan・Pint は入れたときの最新。Biome 2.6.7 | 型の抜けと書き方のずれを機械で見つける |
@@ -32,7 +33,8 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 | backend/ | Laravel（API）。Laravel の標準の形のまま（`app/Models`・`app/Http/Controllers`・`app/Http/Resources`・`database/migrations`） |
 | backend/tests/ | Pest のテスト。`Unit/`（ロジック）・`Feature/`（DB と API をまたぐもの） |
 | frontend/ | React（03b から）。テストは `src/**/*.test.tsx` |
-| compose.yaml | PHP（`app`）・PostgreSQL（開発用とテスト用）・Mailpit・Firebase Emulator（`firebase`。05c） |
+| admin/ | 管理画面（12）。`backend/`（Laravel の API）と `frontend/`（React）。会員の側のコードは読み込まない。表は会員の側と共通で、表の作り（マイグレーション）は管理画面の表も含めて `backend/`（会員の側）にまとめる |
+| compose.yaml | PHP（`app`）・管理画面の PHP（`admin-app`。12）・PostgreSQL（開発用とテスト用）・Mailpit・Firebase Emulator（`firebase`。05c） |
 | docker/ | コンテナの作り方（`php/Dockerfile`・`firebase/Dockerfile`）と、DB を最初に作る SQL（`db/init/`） |
 | firebase/ | Firebase Emulator の設定（`firebase.json`）・セキュリティルール（`firestore.rules`）・インデックス（`firestore.indexes.json`）。止めたときのデータは `firebase/.emulator-data/`（git に入れない） |
 | docs/ | 何を作るか（product.md・requirements/）と、なぜそうしたか（decisions.md）。目次は docs/README.md |
@@ -55,8 +57,10 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 | セットアップ | リポジトリのルート | ① `docker compose build app` ② `docker compose up -d --wait` ③ `docker compose run --rm app composer install` ④（初めての PC だけ・人が実行）`cp backend/.env.example backend/.env` → `docker compose run --rm app php artisan key:generate` ⑤ `docker compose run --rm app php artisan migrate` | Docker。④の秘密の値のファイルは、AI は作らない・読まない | 手元の PHP・Composer（D-011。版と拡張がそろわないため）。`php.new` のスクリプト・Laravel Boost（`backend/` に AI 向けの指示が置かれるが、方針と合わないので入れない） |
 | 起動 | リポジトリのルート | `docker compose up -d --wait` → API は `http://127.0.0.1:8000/api/health`、メールの受信箱は `http://127.0.0.1:58025`。止めるのは `docker compose stop` | Docker | `php artisan serve`（compose の環境変数を子のプロセスに渡さず、`.env` の SQLite につながるため）。`docker compose down -v`（DB の中身も消える。作り直すときだけ） |
 | 画面を起動 | `frontend/` | 初めてのときは `npm install` → `npm run dev` → `http://localhost:5173/`。API の送り先は `VITE_API_URL`（既定は `http://127.0.0.1:8000`。変えるときは `.env.example` を写して `.env.local` を作る） | `mise install` 済み・API が起動している | `http://127.0.0.1:5173` で開く（`localhost` とは別のオリジンになり、改善版で Cookie が届かなくなるため） |
+| 管理画面を起動 | リポジトリのルート・`admin/frontend/` | API は `docker compose up -d --wait`（`admin-app`）→ `http://127.0.0.1:8100/api/health`。画面は `admin/frontend` で、初めてのときは `npm install` → `npm run dev` → `http://localhost:5174/`。API の送り先は `VITE_ADMIN_API_URL`（既定は `http://127.0.0.1:8100`） | `mise install` 済み | 管理画面の Laravel で `php artisan migrate` を流す（表の作りは `backend/` で流す） |
 | テスト | リポジトリのルート | `docker compose run --rm app ./vendor/bin/pest`（全体）・`docker compose run --rm app ./vendor/bin/pest tests/Feature/HealthTest.php`（対象別） | db が起動している。テスト用の DB `matching_test` に流れる（違えば `tests/TestCase.php` が止める） | SQLite のメモリ DB（D-010）。手元の PHP で `php artisan test`（手元に PHP がない） |
 | 静的検査・整形 | リポジトリのルート | `docker compose run --rm app ./vendor/bin/phpstan analyse --memory-limit=1G`（Larastan。レガシー版はレベル 6・改善版は 9。D-016）・`docker compose run --rm app ./vendor/bin/pint --test`（整形の確かめ）・`docker compose run --rm app ./vendor/bin/pint`（整形する）。画面は `frontend/` で `npm run lint`（Biome。レガシー版は指摘が残ったまま）・`npm run format`（整形する） | なし | ESLint・Prettier・oxlint（画面は Biome に一本化したため） |
+| 管理画面の静的検査・整形 | リポジトリのルート | `docker compose run --rm -w /app/admin/backend app ./vendor/bin/phpstan analyse --memory-limit=1G`・`docker compose run --rm -w /app/admin/backend app ./vendor/bin/pint --test`。画面は `admin/frontend` で `npm run lint`・`npm run build` | なし | ― |
 | 流れた SQL を見る | リポジトリのルート | `tail -n 20 backend/storage/logs/sql-$(date -u +%F).log`（日付は UTC） | app が起動していて、`APP_ENV=local` | `php artisan db:show`・`docker compose config`（接続の設定や秘密の値をまとめて出すため、AI は使わない） |
 | 試しの会員を入れる（04） | リポジトリのルート | `docker compose exec app php artisan db:seed --class=SearchMembersSeeder`（会員 2万人。`search00001@example.test`〜・パスワードは `password`。流し直すと入れ直す。約1秒） | app と db が起動している・`legacy-repo` 系のブランチ | テスト用の DB に入れる（テストの前提が変わるため）。`DatabaseSeeder` から呼ぶ（ふだんのシードでも2万人になるため） |
 | 試しのメッセージを入れる（05） | リポジトリのルート | `docker compose exec app php artisan db:seed --class=MessagesSeeder`（マッチ 1000組・メッセージ 10万件。`search00001` はルーム 100。ルームのない前からのマッチにもルームを作る。流し直すと入れ直す。約3秒） | 先に「試しの会員を入れる（04）」を流す・`legacy-repo` 系のブランチ | テスト用の DB に入れる・`DatabaseSeeder` から呼ぶ（04 と同じ理由） |
