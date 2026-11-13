@@ -48,6 +48,16 @@ class User extends Authenticatable
     }
 
     /**
+     * この会員がしたブロック（06。この会員が blocker）
+     *
+     * @return HasMany<Block, $this>
+     */
+    public function blocks(): HasMany
+    {
+        return $this->hasMany(Block::class, 'blocker_id');
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
@@ -58,6 +68,8 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             // 04：最終ログイン（検索の並び）
             'last_login_at' => 'datetime',
+            // 06：退会した日時（論理削除）。NULL なら会員のまま
+            'deleted_at' => 'datetime',
             // 保存するときに bcrypt でハッシュ化する（元に戻せない形。FR-014）
             'password' => 'hashed',
         ];
