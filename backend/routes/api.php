@@ -5,7 +5,9 @@ declare(strict_types=1);
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\EmailVerificationController;
 use App\Http\Controllers\LikeController;
+use App\Http\Controllers\MessageController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\TalkRoomController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserMatchController;
 use Illuminate\Support\Facades\DB;
@@ -42,3 +44,9 @@ Route::get('/me/likes', [LikeController::class, 'index']);
 
 // 03 マッチ（docs/api/03-matches.md）。送るときのマッチは LikeController::store が作る
 Route::get('/me/matches', [UserMatchController::class, 'index']);
+
+// 05 メッセージ（docs/api/05-messages.md）。ルームはマッチしたときに LikeController::store が作る。
+// レガシー版は、コントローラの中で JWT を読み、ルームの参加者かを確かめない
+Route::get('/me/talk-rooms', [TalkRoomController::class, 'index']);
+Route::get('/me/talk-rooms/{publicId}/messages', [MessageController::class, 'index']);
+Route::post('/me/talk-rooms/{publicId}/messages', [MessageController::class, 'store']);
