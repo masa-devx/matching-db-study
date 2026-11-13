@@ -12,6 +12,8 @@
 
 #46 で、`users` に URL で会員を指すための `public_id`（UUID v7）を足す（D-022。PR #47）。表どうしのつながりと JWT の `sub` は `bigint` の `id` のまま。
 
+05 で、メッセージの表を3つ足す（D-023。#57）。`talk_rooms`（やり取りの場所。マッチしたときに1つ作る）・`talk_room_members`（ルームの中の一人ひとりの状態）・`messages`（中身）。それまでの表と違い、主キー・UNIQUE・外部キーを持つが、インデックスは足さない（PostgreSQL は外部キーの列にインデックスを作らないので、UNIQUE の分しかない）。受け取った人は持たない（参加者のうち、送った人でない人）。
+
 ### ER 図
 
 ```mermaid
@@ -21,6 +23,11 @@ erDiagram
   USERS ||--o{ LIKES : "to_user_id で指す（守りなし）"
   USERS ||--o{ USER_MATCHES : "user1_id で指す（守りなし）"
   USERS ||--o{ USER_MATCHES : "user2_id で指す（守りなし）"
+  USER_MATCHES ||--o| TALK_ROOMS : "match_id（外部キー・UNIQUE）"
+  TALK_ROOMS ||--o{ TALK_ROOM_MEMBERS : "talk_room_id（外部キー）"
+  USERS ||--o{ TALK_ROOM_MEMBERS : "user_id（外部キー）"
+  TALK_ROOMS ||--o{ MESSAGES : "talk_room_id（外部キー・インデックスなし）"
+  USERS ||--o{ MESSAGES : "sender_id（外部キー・インデックスなし）"
   USERS {
     bigint id PK "中で使う。つながりと JWT の sub"
     uuid public_id UK "URL で会員を指す ID。既定は uuidv7()（#46）"
@@ -60,6 +67,29 @@ erDiagram
     timestamp created_at "マッチした日時。時間帯なし"
     timestamp updated_at "時間帯なし"
   }
+  TALK_ROOMS {
+    bigint id PK
+    uuid public_id UK "URL でルームを指す ID。既定は uuidv7()（D-022）"
+    bigint match_id FK,UK "マッチ1つにルーム1つ。ON DELETE CASCADE"
+    timestamp created_at "時間帯なし"
+    timestamp updated_at "時間帯なし"
+  }
+  TALK_ROOM_MEMBERS {
+    bigint id PK
+    bigint talk_room_id FK "UK（user_id と組で）。ON DELETE CASCADE"
+    bigint user_id FK "ON DELETE CASCADE。user_id だけで探すインデックスはない"
+    timestamp last_read_at "最後に読んだ時刻。NULL なら一度も開いていない"
+    timestamp created_at "時間帯なし"
+    timestamp updated_at "時間帯なし"
+  }
+  MESSAGES {
+    bigint id PK
+    bigint talk_room_id FK "ON DELETE CASCADE。インデックスなし"
+    bigint sender_id FK "送った会員。ON DELETE CASCADE。インデックスなし"
+    text body "長さの決まりなし（空も入る）"
+    timestamp created_at "送った日時。時間帯なし"
+    timestamp updated_at "時間帯なし"
+  }
 ```
 
 ### 表の一覧
@@ -70,6 +100,9 @@ erDiagram
 | `profiles` | 01 | その会員についての情報 | 主キー `id` だけ。`user_id` に外部キーも UNIQUE もないので、1人に2つのプロフィール・ない会員を指すプロフィールができる |
 | `likes` | 02 | いいね（だれから・だれへ・いつ）。会員と会員をつなぐ中間テーブル | 主キー `id`・`(from_user_id, to_user_id)` の UNIQUE（`likes_from_user_id_to_user_id_unique`）だけ。外部キーがないので、ない会員を指せ、会員を消しても残る。自分から自分も入る。`to_user_id` から探すと表を全部読む |
 | `user_matches` | 03 | マッチ（お互いにいいねした2人の組と、いつ）。Model は `UserMatch`（`match` は PHP の予約語） | 主キー `id` だけ。同じ組が2行入り、(A, B) と (B, A) も両方入る。自分とのマッチ・ない会員を指すマッチも入り、会員を消しても残る。自分のマッチを探す `user1_id = ? or user2_id = ?` は表を全部読む |
+| `talk_rooms` | 05 | トークルーム（やり取りの場所）。マッチしたときに、いいねの API の中で作る（トランザクションなし） | 主キー `id`・`public_id` の UNIQUE（既定は `uuidv7()`）・`match_id` の UNIQUE と外部キー（`ON DELETE CASCADE`）。03 で2行になった組には、ルームも2つできる |
+| `talk_room_members` | 05 | トークルームの参加者（マッチした2人）と、最後に読んだ時刻 | 主キー `id`・`(talk_room_id, user_id)` の UNIQUE・2つの列の外部キー（`ON DELETE CASCADE`）。UNIQUE は `talk_room_id` が先なので、自分のルーム（`user_id = ?`）を探すと表を全部読む |
+| `messages` | 05 | メッセージ（ルーム・送った人・本文・いつ）。受け取った人は持たない | 主キー `id`・`talk_room_id` と `sender_id` の外部キー（`ON DELETE CASCADE`）だけ。外部キーの列にインデックスがないので、ルームのメッセージを探すたびに表を全部読み、会員を消すと CASCADE のために表を全部読む。本文の長さの決まりなし |
 
 Laravel のひな形が作った表（この学習では扱わない）：`password_reset_tokens`・`sessions`・`cache`・`cache_locks`・`jobs`・`job_batches`・`failed_jobs`・`personal_access_tokens`（`install:api` が足した Sanctum の表。D-014 で JWT にしたので使わない）。
 
