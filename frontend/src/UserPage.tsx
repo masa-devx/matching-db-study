@@ -11,6 +11,8 @@ export default function UserPage() {
   const [matched, setMatched] = useState(false)
   // 06：ブロックの確かめのモーダルを開いているか
   const [confirming, setConfirming] = useState(false)
+  // 07：誘導のモーダル（いいねの上限を超えたとき）
+  const [upsell, setUpsell] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -38,8 +40,16 @@ export default function UserPage() {
       },
       body: JSON.stringify({ user_id: publicId }),
     })
-      .then((r) => r.json())
+      .then((r) => {
+        // 07：無料の男性が1日10回を超えると 403。画面では何回目かが分からないので、断られてからモーダルを出す
+        if (r.status === 403) {
+          setUpsell(true)
+          return null
+        }
+        return r.json()
+      })
       .then((d) => {
+        if (!d) return
         // ステータスを見ない。2回目は API が 500 を返すが、matched がないので「いいねしました」と出る
         setLiked(true)
         if (d.matched) {
@@ -114,6 +124,21 @@ export default function UserPage() {
         </button>
       </div>
 
+      {upsell && (
+        // 07：誘導のモーダル（送る・検索・いいねの画面に、同じものを書く）
+        <div className="modal-back" onClick={() => setUpsell(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <p className="modal-title">有料会員になると使えます</p>
+            <p>メッセージを送る・いいねを何回でも・身長で探す、が使えるようになります。</p>
+            <button className="button" onClick={() => navigate('/plans')}>
+              有料会員になる
+            </button>
+            <button className="button button-ghost" onClick={() => setUpsell(false)}>
+              閉じる
+            </button>
+          </div>
+        </div>
+      )}
       {confirming && (
         // 06：確かめのモーダル（ホームの退会・トーク画面にも、同じものを書く）
         <div className="modal-back" onClick={() => setConfirming(false)}>

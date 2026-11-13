@@ -7,6 +7,8 @@ import LikesPage from './LikesPage'
 import LoginPage from './LoginPage'
 import MessagesFsPage from './MessagesFsPage'
 import MessagesPage from './MessagesPage'
+import PlansPage from './PlansPage'
+import PurchasePage from './PurchasePage'
 import RegisterPage from './RegisterPage'
 import SearchPage from './SearchPage'
 import TalkFsPage from './TalkFsPage'
@@ -36,6 +38,8 @@ export default function App() {
       {/* 04 検索。条件は sessionStorage に置き、戻ってきても残す */}
       <Route path="/search" element={<SearchPage />} />
       <Route path="/blocks" element={<BlocksPage />} />
+      <Route path="/plans" element={<PlansPage />} />
+      <Route path="/plans/:planId" element={<PurchasePage />} />
       <Route path="*" element={<p>ページが見つかりません</p>} />
     </Routes>
   )
