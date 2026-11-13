@@ -33,6 +33,35 @@ services:
       db:
         condition: service_healthy
 
+
+  # 12：管理画面の API（admin/backend の Laravel）。会員の側（app）と同じ PHP のイメージで、別のコンテナ・別のポート。
+  # 表は会員の側と共通（同じ DB の matching_dev）。表の作り（マイグレーション）は backend/ にまとめ、管理画面では流さない
+  admin-app:
+    build: ./docker/php
+    volumes:
+      - .:/app
+      - composer-cache:/root/.composer/cache
+    working_dir: /app/admin/backend
+    ports:
+      - "127.0.0.1:8100:8000"
+    # どれも手元だけの捨ててよい値（app と同じ）。秘密の値（APP_KEY など）はここに書かない
+    environment:
+      APP_ENV: local
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_DATABASE: matching_dev
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      # キャッシュ・セッション・キューを DB の表に置かない（会員の側の cache・sessions・jobs の表を共有しないため）
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+    # app と同じく、PHP の組み込みのサーバーを直接起動する（環境変数を子のプロセスに渡すため）
+    command: sh -c "cd public && exec php -S 0.0.0.0:8000 ../vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php"
+    depends_on:
+      db:
+        condition: service_healthy
   db:
     image: postgres:18.6
     # ポートは手元の PC からだけ開ける（127.0.0.1）。5432 は手元の PostgreSQL とぶつかるので 55432 にする
