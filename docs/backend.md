@@ -44,13 +44,13 @@
 | `Sales` | `SalesQueryService` | ― | ― |
 | `Plans` | `PlanQueryService` | `UpdatePlanPriceUseCase` | `Plans/PlanPrice` |
 | `AuditLogs` | `AuditLogQueryService` | `RecordAuditLogUseCase`（見たことの記録。`member.view` など） | `AuditLogs/AuditLog`・`AuditAction` |
-| `Admins` | `AdminQueryService`（`GET /me`） | `LoginAdminUseCase`（`POST /auth/login`。`last_login_at` を書く） | `Admins/Admin`・`AdminRole`・`Permission` |
+| `Admins` | `AdminQueryService`（`GET /me`） | `LoginAdminUseCase`（`POST /auth/login`。`last_login_at` を書く） | `Admins/Admin/`（`Admin`・`AdminRole`・`Permission`） |
 
 ## 3. 移行の地図（今のファイル → 各層）
 
 | 今のファイル | Http | Application | Domain | Infrastructure |
 | --- | --- | --- | --- | --- |
-| `AuthController`・`EmailVerificationController` | `Auth/` の Controller・`AuthenticateMember` | `Auth/LoginUseCase`・`VerifyEmailUseCase` | `Members/Member`・`Auth/MailerInterface` | `External/Jwt`・`External/Mail` |
+| `AuthController`・`EmailVerificationController` | `Auth/` の Controller・`AuthenticateMember` | `Auth/LoginUseCase`・`VerifyEmailUseCase` | `Members/Member`・`Auth/MailerInterface`・`Auth/TokenServiceInterface` | `External/Jwt`・`External/Mail` |
 | `UserController`・`ProfileController` | `Members/` | `Members/RegisterMemberUseCase`・`WithdrawMemberUseCase`・`UpdateProfileUseCase` | `Members/Member`・`Members/Profile` | `Repositories/Members`・`QueryServices/Members/MemberSearchQueryService` |
 | `LikeController`・`UserMatchController`・`BlockController` | `Matching/` | `Matching/LikeMemberUseCase`・`BlockMemberUseCase` | `Matching/Like`・`UserMatch`・`Block` | `Repositories/Matching` |
 | `TalkRoomController`・`MessageController`・`FirebaseTokenController` | `Messaging/` | `Messaging/SendMessageUseCase` | `Messaging/TalkRoom`・`Message` | `Repositories/Messaging`・`External/Firestore` |

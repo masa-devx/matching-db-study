@@ -43,7 +43,7 @@ Providers：interface と実装をつなぐ（全部を知ってよい唯一の�
 | Http | 外との入出力 | Application・Domain の例外と型・Infrastructure の QueryService（と、その読み取りの DTO）・`App\Support` | Infrastructure の QueryService 以外（Repository・Model・External・Transaction・Clock） | 使ってよい |
 | Application | 1つの操作の手順・トランザクションの区切り | Domain | Http・Infrastructure・`App\Support`・`App\Models` | **使わない** |
 | Domain | 業務の決まり | なし（PHP の標準だけ） | ほかの全部の層・`App\Support`・`App\Models` | **使わない** |
-| Infrastructure | 約束の実装・DB・外のサービス | Domain・Application の interface と Dto・`App\Support` | Http・Application の UseCase | 使ってよい |
+| Infrastructure | 約束の実装・DB・外のサービス | Domain・Application の interface と Dto・`App\Support`（QueryService は Domain と Application を使わない。ID は int、性別などは string で受け取る） | Http・Application の UseCase | 使ってよい |
 
 - 「Laravel を使わない」には、ファサード（`DB::`・`Log::`・`Cache::`）・ヘルパー（`now()`・`config()`・`env()`・`collect()`・`abort()`）・Carbon・Eloquent・`Illuminate\` のクラスをすべて含む
 - ログ（`App\Support\Logging`）を出すのは Http と Infrastructure だけ。業務の出来事を残したいときは、Infrastructure の実装（Repository・外への書き込み）の中で出す
@@ -67,6 +67,7 @@ app/
 ├── Domain/
 │   ├── Shared/ClockInterface.php
 │   ├── <まとまり>/<集約>/      エンティティ・値オブジェクト・enum・〜RepositoryInterface・〜Exception
+│   ├── <まとまり>/〜Interface.php  集約を持たないまとまり（Auth など）の、外のサービスの約束だけは直下に置いてよい
 │   └── <まとまり>/Services/    ドメインサービス
 ├── Infrastructure/
 │   ├── Models/
@@ -378,9 +379,15 @@ final class EloquentMemberRepository implements MemberRepositoryInterface
 }
 ```
 
-読み取りの QueryService は、画面の形の DTO を返す（Model を返さない。Resource がリレーションを読みに行き、N+1 になるため）。DTO は同じフォルダに置き、Http から使ってよい。JOIN・`with()`・項目の選び方・並び・ページをここで決める。**出してはいけない人（退会・ブロック）の条件も、ここに1か所で書く。**
+読み取りの QueryService は、画面の形の DTO を返す（Model を返さない。Resource がリレーションを読みに行き、N+1 になるため）。DTO は同じフォルダに置き、Http から使ってよい。見つからないときは `null` を返し、Controller が 404 にする（7章）。JOIN・`with()`・項目の選び方・並び・ページをここで決める。**出してはいけない人（退会・ブロック）の条件も、ここに1か所で書く。**
 
 ```php
+// app/Infrastructure/QueryServices/Members/MemberSearchCriteria.php
+final readonly class MemberSearchCriteria
+{
+    public function __construct(public string $gender, public int $limit) {}   // Domain の Gender を使わず string
+}
+
 // app/Infrastructure/QueryServices/Members/MemberSearchQueryService.php
 final class MemberSearchQueryService
 {
@@ -393,7 +400,7 @@ final class MemberSearchQueryService
             ->whereNotExists(fn ($q) => $q->from('blocks')
                 ->whereColumn('blocks.blocked_id', 'users.id')
                 ->where('blocks.blocker_id', $memberId))
-            ->where('profiles.gender', $criteria->gender->value)
+            ->where('profiles.gender', $criteria->gender)
             ->orderByDesc('users.last_login_at')
             ->limit($criteria->limit)
             ->get(['users.public_id', 'profiles.nickname', 'profiles.birthday'])
@@ -484,11 +491,12 @@ final class BindingServiceProvider extends ServiceProvider
 | 入力の形が違う | Request | 422（Laravel の形のまま） |
 | 役割が足りない（管理画面） | Domain（`PermissionDeniedException`） | 403 |
 | 業務の決まりに反する | Domain の例外 | 403・404・409 |
+| 読み取りで見つからない | Controller（QueryService が返した `null` を見て、Laravel の標準の `NotFoundHttpException` を投げる） | 404 |
 | DB・外のサービスが落ちた | どこでも握りつぶさない（`logging.md`） | 500 |
 
 ## 8. アーキテクチャのテスト
 
-2章（依存の向き）と、3章の名前の一部（末尾の名前・`final`・`strict_types`）を、Pest の `arch()` で守る。
+2章（依存の向き）と、3章の名前の一部（末尾の名前・`final`）と、`strict_types` を、Pest の `arch()` で守る。
 
 - 置き場：`tests/Arch/LayersTest.php`。`phpunit.xml` のテストの組に `Arch`（`tests/Arch`）を足す。CI でほかのテストと一緒に流れる
 - 正本は会員の側（`backend/client/tests/Arch/`）。管理画面（`backend/admin`）にも Pest と `pestphp/pest-plugin-arch` を入れ、同じファイルを写す。違うのは例外の一覧だけ
@@ -496,12 +504,14 @@ final class BindingServiceProvider extends ServiceProvider
 
 ```php
 // tests/Arch/LayersTest.php
-// まだ移していない古いファイル。この一覧が、そのまま移行の残り。移したら消す
-const LEGACY = [
+// まだ移していない古いファイル。この2つの一覧が、そのまま移行の残り。移したら消す
+// ignoring に渡すのは古いコントローラーだけ。ignoring は、渡した名前で始まる「使われる側」の依存も消すので、
+// App\Models を渡すと、新しいコードが App\Models を使っても落ちなくなる
+const LEGACY_CONTROLLERS = [
     'App\Http\Controllers\LikeController',
     // …（app/Http/Controllers の直下の古いコントローラー）
-    'App\Models',
 ];
+const LEGACY_MODELS = 'App\Models';   // 移行の残り（app/Models）。ignoring には渡さない
 
 $laravelHelpers = ['now', 'today', 'config', 'env', 'app', 'collect', 'abort', 'response', 'request', 'logger', 'info'];
 
@@ -519,14 +529,14 @@ arch('Domain と Application は Laravel のヘルパー関数を使わない')
 
 arch('Http が使ってよい Infrastructure は QueryService だけ')
     ->expect('App\Http')
-    ->not->toUse(['App\Infrastructure\Models', 'App\Infrastructure\Repositories', 'App\Infrastructure\External', 'App\Infrastructure\Transaction', 'App\Infrastructure\Clock', 'App\Models'])
-    ->ignoring(LEGACY);
+    ->not->toUse(['App\Infrastructure\Models', 'App\Infrastructure\Repositories', 'App\Infrastructure\External', 'App\Infrastructure\Transaction', 'App\Infrastructure\Clock', LEGACY_MODELS])
+    ->ignoring(LEGACY_CONTROLLERS);
 
 arch('Infrastructure は UseCase と Http を使わない')
     ->expect('App\Infrastructure')
     ->not->toUse(['App\Application\UseCases', 'App\Http']);
 
-arch('QueryService は書き込みの道（UseCase・Repository・Domain のエンティティ）を使わない')
+arch('QueryService は Application・Repository・Domain を使わない')
     ->expect('App\Infrastructure\QueryServices')
     ->not->toUse(['App\Application', 'App\Infrastructure\Repositories', 'App\Domain']);   // ID は int で受け取る
 
@@ -535,10 +545,15 @@ arch('Domain の interface は Interface で終わる')
     ->interfaces()
     ->toHaveSuffix('Interface');
 
-arch('UseCase は final で、UseCase で終わる')
+// 1つの arch() に1つの期待。鎖の2つ目以降には classes() の絞り込みが効かないため
+arch('UseCase は final')
     ->expect('App\Application\UseCases')
     ->classes()
-    ->toBeFinal()
+    ->toBeFinal();
+
+arch('UseCase は UseCase で終わる')
+    ->expect('App\Application\UseCases')
+    ->classes()
     ->toHaveSuffix('UseCase');
 
 arch('QueryService のフォルダのクラス（QueryService と読み取りの DTO）は final')
@@ -547,13 +562,13 @@ arch('QueryService のフォルダのクラス（QueryService と読み取りの
     ->toBeFinal();
 
 arch('新しい層のファイルは strict_types')
-    ->expect(['App\Http\Controllers', 'App\Application', 'App\Domain', 'App\Infrastructure'])
+    ->expect(['App\Http', 'App\Application', 'App\Domain', 'App\Infrastructure', 'App\Support'])
     ->toUseStrictTypes()
-    ->ignoring(LEGACY);
+    ->ignoring(LEGACY_CONTROLLERS);
 ```
 
-- 書いたら、わざと違反を1つ作って（Domain に `use Illuminate\Support\Facades\DB;`・`now()`）落ちるのを見る。`toBeUsedIn`・`ignoring` の動きは、入れるチケットで確かめ、違えばこのファイルを直す
-- 古いファイルは `LEGACY` に並べる。移したら一覧から消す。基底の `App\Http\Controllers\Controller` は移す対象ではないので、一覧に入れない
+- 書いたら、わざと違反を作って落ちるのを見る（Domain に `use Illuminate\Support\Facades\DB;`・`now()`、新しい Controller に `use App\Models\User;`）。`toBeUsedIn`・`ignoring` の動きは、入れるチケットで確かめ、違えばこのファイルを直す
+- 古いコントローラーは `LEGACY_CONTROLLERS` に並べる。Model を全部 `app/Infrastructure/Models` へ移したら `LEGACY_MODELS` を消す。基底の `App\Http\Controllers\Controller` は移す対象ではないので、一覧に入れない
 
 ## 9. 共通の原則（画面にも当てはめる）
 
@@ -583,7 +598,7 @@ arch('新しい層のファイルは strict_types')
 ## 10. まだ移していない古いコード
 
 - 既存の API を触るチケットでは、**先にその API の振る舞いを固める API テストを足し、それから**この形へ移す。移す単位はコントローラーのファイルなので、そのファイルの全メソッドに API テストがあること
-- 「API テストで守っている」とは、その API に、成功が1本と、`docs/api/` に書いた失敗（401・404・422・403 など）ごとに1本があること
+- 「API テストで守っている」とは、その API に、**少なくとも**成功が1本と、`docs/api/` に書いた失敗（401・404・422・403 など）ごとに1本があること。どの観点（他人の行が変わらない・境界の両側・出してはいけない人など）を書くかは、`testing.md` の API テストの観点に従う
 - 移すコミットと、振る舞いを変えるコミット（不具合の直し・性能）を分ける。移すコミットでは API テストが1本も変わらずに通る
 - そのために、API テストは中の作りに頼らない
   - DB は表の名前で確かめる（`assertDatabaseHas('likes', [...])`・`assertDatabaseCount('likes', 0)`）。テストに Model の名前空間（`App\Models\…`）を書かない
@@ -638,13 +653,14 @@ throw new PaidPlanRequiredException();
 骨組みと依存の向きは同じ。違いは使い方だけ。
 
 - 読み取り（API の9割）は、Controller から QueryService を直接呼ぶ
-- 書き込みは UseCase を通し、必ず役割を確かめ（`Admin::assertCan()`）、同じトランザクションで監査ログを保存する
+- 書き込みは UseCase を通す。運営の操作（停止・解除・値段の変更）は、必ず役割を確かめ（`Admin::assertCan()`）、同じトランザクションで監査ログを保存する
+- 例外：ログイン（`LoginAdminUseCase`。役割はまだ分からない）と、見たことの記録（`RecordAuditLogUseCase`。それ自体が監査ログ）は、役割を確かめない
 - 管理画面の Domain は「運営の権限と監査」。まとまりと集約の一覧は [docs/backend.md](../../docs/backend.md) の 2-2
 - 「見たこと」の監査ログ（会員の詳細を開いた・`member.view`）も書き込みなので、Controller が QueryService で読んだあとに `RecordAuditLogUseCase` を呼んで書く。QueryService の中で書かない
 - 管理画面は会員の側のコードを読み込まない。書いてよい表と列は [docs/backend.md](../../docs/backend.md) の表に従う
 
 ```php
-// backend/admin/app/Domain/Admins/AdminRole.php
+// backend/admin/app/Domain/Admins/Admin/AdminRole.php
 enum AdminRole: string
 {
     case Owner = 'owner';

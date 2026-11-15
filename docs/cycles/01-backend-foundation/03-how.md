@@ -89,14 +89,14 @@ app/
 - Application 層は Laravel の機能をはみ出して使わない（`DB::transaction()` も直接は使わない。トランザクションの扱いは下で決める）
 - QueryService は必要に応じて（検索・管理画面の集計など）
 - 聞き慣れない名前（Ports・Queries・Listeners）は使わない。外のサービスの約束は、使う Domain のフォルダに `〜Interface.php` で置く
-- トランザクションは `Application/Transaction/TransactionManagerInterface.php`（実装は `Infrastructure/Transaction/LaravelTransactionManager.php`）、日時は `Domain/Shared/ClockInterface.php`（実装は `Infrastructure/Clock/SystemClock.php`。PHP 標準の `DateTimeImmutable` を返す）を通す
+- トランザクションは `Application/Transaction/TransactionManagerInterface.php`（実装は `Infrastructure/Transaction/LaravelTransactionManager.php`）、日時は `Domain/Shared/ClockInterface.php`（実装は `Infrastructure/Clock/SystemClock.php`。PHP 標準の `DateTimeImmutable` を返す。見直し（2026-11-15）：`CarbonImmutable::now('UTC')` を返す。型は `DateTimeImmutable` のまま。API テストの `travelTo()` を効かせるため。07-review の M3）を通す
 - 方針：今の段階に合う設計にする。機能・会員・ファイルが増えて問題が出たら、そのときに設計をやり直す。やり直しのきっかけ（数字）を決めて振り返りで見る。変えたら `docs/decisions.md` に、きっかけと前と後を1行残す
 
 ### 管理画面の形（2026-11-15 に決めた。同じ日に見直した）
 
 - **会員の側と同じ4層の骨組み**（Http・Application・Domain・Infrastructure。層の中は画面の領域ごとのフォルダ。一覧は `docs/backend.md` の 2-2。`frontend/admin/src/domains/` とそろえる）
 - 読み取り（一覧・詳細・集計。API の9割）は、Controller から Infrastructure の QueryService を直接呼ぶ。Domain を通さない
-- 書き込み（停止・解除・値段の変更）だけ、UseCase と Domain を通す。管理画面の Domain は「運営の権限と監査」：`Admins/`（Admin・AdminRole・Permission）・`Members/MemberSuspension`・`Plans/PlanPrice`・`AuditLogs/`
+- 書き込み（停止・解除・値段の変更）だけ、UseCase と Domain を通す（見直し（2026-11-15）：ログインと見たことの記録も UseCase を通す。一覧は `docs/backend.md` の 2-2）。管理画面の Domain は「運営の権限と監査」：`Admins/`（Admin・AdminRole・Permission）・`Members/MemberSuspension`・`Plans/PlanPrice`・`AuditLogs/`
 - Application と Domain では Laravel を使わない（会員の側と同じ。トランザクションと日時は interface 越し）。依存の向き・アーキテクチャのテストも会員の側と同じ
 - 見直した理由：書く手間は AI で小さくなるが、読む・レビューする・説明する手間は残る。形を1つにすれば、覚えるのも AI が真似するのもテストも1種類で済む。役割・停止・監査の決まり（12 の 9-2 で問題が出たところ）を、Domain で単体テストできる
 - 最初の案（機能ごとのモジュール・Domain なし・Laravel をそのまま使う）は取り消した
