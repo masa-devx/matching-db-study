@@ -81,6 +81,22 @@ agents/ の目次。作業内容に合うルールを読み、スキルで進め
 | 雛形を写した直後に、【記入】を順番に埋める | [harness-setup](skills/harness-setup/SKILL.md) |
 | スキル・ルール・サブエージェントを、型どおりに足す | [harness-extend](skills/harness-extend/SKILL.md) |
 
+### 改訂版（refactored-repo）の開発サイクル
+
+回し方の正本は [../docs/process.md](../docs/process.md)。
+
+| 作業 | スキル |
+| --- | --- |
+| PM とビジネス側の役で、仕分け・なぜ作るか・何を作るか・振り返り・ロードマップ | [pm](skills/pm/SKILL.md) |
+| リーダーの役で、どう作るか・設計のレビュー・チケットの分け方・理解度チェック | [tech-lead](skills/tech-lead/SKILL.md) |
+| 10種類のチケットを作り、ボードの項目を付ける | [ticket](skills/ticket/SKILL.md) |
+| チケット1つを設計どおりに実装し、PR を作る | [implement](skills/implement/SKILL.md) |
+| PR のディレクトリとメソッドの設計を解説し、説明の練習をする | [code-walkthrough](skills/code-walkthrough/SKILL.md) |
+| PR をいろいろな角度のレビュー役に見せ、PR にコメントを残す | [pr-review](skills/pr-review/SKILL.md) |
+| 手元でリリースする（バックアップ・マイグレーション・戻し方・タグ） | [release](skills/release/SKILL.md) |
+| 割り込みの出来事（障害・急増など）を起こして対応する | [incident](skills/incident/SKILL.md) |
+| 人からの提案を、PM とリーダーの役で相談する | [proposal](skills/proposal/SKILL.md) |
+
 ## 相互レビューを依頼する
 
 実装とは別のセッションで、差分と判定の基準を渡す。実装の対話履歴や経緯は渡さない。別のセッションは、実装の会話を持たないサブエージェントで代えてよい。8ステップの Step 2・3（プランのレビュー）も同じ。
@@ -98,5 +114,13 @@ agents/ の目次。作業内容に合うルールを読み、スキルで進め
 | 6 実装のレビュー | [edge-case-reviewer](../.claude/agents/edge-case-reviewer.md) | 異常系・境界値の抜け | しない |
 | 6 実装のレビュー | [security-reviewer](../.claude/agents/security-reviewer.md) | 入力検証・認可・秘密情報 | しない |
 | 8 リファクタリング | [refactorer](../.claude/agents/refactorer.md) | テストを Green に保ったまま、1変更ずつ直す | する |
+| 改訂版の設計・PR レビュー | [requirements-reviewer](../.claude/agents/requirements-reviewer.md) | 受け入れの条件と要件を満たすか・範囲の外が混ざっていないか | しない |
+| 改訂版の設計・PR レビュー | [design-reviewer](../.claude/agents/design-reviewer.md) | 責務・ディレクトリ・依存の向き・名前・重複・やりすぎ・API の形 | しない |
+| 改訂版の設計・PR レビュー | [db-reviewer](../.claude/agents/db-reviewer.md) | 制約・インデックス・ロック・マイグレーション・SQL の本数・10倍のとき | しない |
+| 改訂版の設計・PR レビュー | [ops-reviewer](../.claude/agents/ops-reviewer.md) | ログ・エラー通知・監視・リリースの順番・戻し方 | しない |
+| 改訂版の PR レビュー | [test-reviewer](../.claude/agents/test-reviewer.md) | 要件 ID との対応・骨抜き・独立性・足りない場面 | しない |
+| 改訂版の PR レビュー | [frontend-reviewer](../.claude/agents/frontend-reviewer.md) | 状態・読み込みと失敗・アクセシビリティ・API とのずれ | しない |
+
+改訂版の PR レビューでは、上の6体と edge-case-reviewer・security-reviewer を `pr-review` が選んで並列に呼ぶ（[docs/process.md](../docs/process.md) の7章）。
 
 - 編集する担当（refactorer）も、コミット・push・PR の作成はしない
