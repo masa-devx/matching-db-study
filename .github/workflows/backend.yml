@@ -9,7 +9,7 @@ on:
       - "compose.yaml"
       - ".github/workflows/backend.yml"
   push:
-    branches: [legacy-repo, refactored-repo, "legacy/**", "refactor/**"]
+    branches: [legacy-repo, refactored-repo, "legacy/**", "refactor/**", "feature/**", "fix/**", "hotfix/**", "chore/**"]
     paths:
       - "backend/client/**"
       - "compose.yaml"
