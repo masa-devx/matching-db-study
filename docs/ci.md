@@ -17,7 +17,7 @@ PR を出したとき・ブランチに push したときに、GitHub の上で�
 | きっかけ | 対象のブランチ |
 | --- | --- |
 | PR | 行き先が `legacy-repo`・`refactored-repo` のもの |
-| push | `legacy-repo`・`refactored-repo`・`legacy/**`・`refactor/**` |
+| push | `legacy-repo`・`refactored-repo`・`legacy/**`・`refactor/**`・`feature/**`・`fix/**`・`hotfix/**`・`chore/**`（改訂版のブランチ名は docs/process.md の2章。`spike/**`・`harness/**` は取り込まない・コードを変えないので外す） |
 
 `backend/**`・`compose.yaml`・`.github/workflows/backend.yml` のどれかが変わったときだけ動かす（文書だけの変更では動かさない）。
 
