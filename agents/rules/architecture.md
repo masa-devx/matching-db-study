@@ -25,7 +25,7 @@ paths:
 3. **HTTP の形か？**（入力の形・状態コード・JSON の項目）→ Http
 4. **DB・外のサービス・Laravel の都合か？**（SQL・Eloquent・Firestore・JWT・トランザクションの張り方）→ Infrastructure
 5. **読み取り（一覧・検索・集計）だけか？** → Infrastructure の QueryService（Domain を通さない）
-6. どの業務のまとまりにも属さない基盤（SQL のログ・リクエスト ID）→ `app/Support/`
+6. どの業務のまとまりにも属さない基盤（SQL のログ・リクエスト ID）→ `app/Support/`。使ってよいのは Http と Infrastructure だけ（2章）
 
 ## 2. 層と依存の向き
 
@@ -40,17 +40,18 @@ Providers：interface と実装をつなぐ（全部を知ってよい唯一の�
 
 | 層 | 受け持ち | 使ってよい相手 | 使ってはいけない相手 | Laravel |
 | --- | --- | --- | --- | --- |
-| Http | 外との入出力 | Application・Domain の例外と型・Infrastructure の QueryService | Infrastructure の Repository と Model | 使ってよい |
-| Application | 1つの操作の手順・トランザクションの区切り | Domain | Http・Infrastructure | **使わない** |
-| Domain | 業務の決まり | なし（PHP の標準だけ） | ほかの全部の層 | **使わない** |
-| Infrastructure | 約束の実装・DB・外のサービス | Domain・Application の interface と Dto | Http・Application の UseCase | 使ってよい |
+| Http | 外との入出力 | Application・Domain の例外と型・Infrastructure の QueryService（と、その読み取りの DTO）・`App\Support` | Infrastructure の QueryService 以外（Repository・Model・External・Transaction・Clock） | 使ってよい |
+| Application | 1つの操作の手順・トランザクションの区切り | Domain | Http・Infrastructure・`App\Support`・`App\Models` | **使わない** |
+| Domain | 業務の決まり | なし（PHP の標準だけ） | ほかの全部の層・`App\Support`・`App\Models` | **使わない** |
+| Infrastructure | 約束の実装・DB・外のサービス | Domain・Application の interface と Dto・`App\Support` | Http・Application の UseCase | 使ってよい |
 
 - 「Laravel を使わない」には、ファサード（`DB::`・`Log::`・`Cache::`）・ヘルパー（`now()`・`config()`・`env()`・`collect()`・`abort()`）・Carbon・Eloquent・`Illuminate\` のクラスをすべて含む
+- ログ（`App\Support\Logging`）を出すのは Http と Infrastructure だけ。業務の出来事を残したいときは、Infrastructure の実装（Repository・外への書き込み）の中で出す
 - この表は `tests/Arch/LayersTest.php` で機械で守る（8章）。破るときは、先にこのファイルを直す
 
 ## 3. ディレクトリと名前
 
-各層の中は**業務のまとまり**（会員の側：`Auth`・`Members`・`Matching`・`Messaging`・`Billing`。管理画面：`Dashboard`・`Members`・`Messages`・`Sales`・`Plans`・`AuditLogs`・`Admins`）のフォルダで分け、**名前を全部の層でそろえる**。Domain の中は、さらに集約でフォルダを分ける。まとまりの一覧は [docs/backend.md](../../docs/backend.md)。
+各層の中は**業務のまとまり**のフォルダで分け、**名前を全部の層でそろえる**。Domain の中は、さらに集約でフォルダを分ける。まとまりの一覧は [docs/backend.md](../../docs/backend.md) の2章だけに書く（ここには写さない）。
 
 ```text
 app/
@@ -70,34 +71,40 @@ app/
 ├── Infrastructure/
 │   ├── Models/
 │   ├── Repositories/<まとまり>/Eloquent〜Repository.php
-│   ├── QueryServices/<まとまり>/〜QueryService.php
+│   ├── QueryServices/<まとまり>/〜QueryService.php・読み取りの DTO（〜Summary・〜Detail・〜Criteria）
 │   ├── External/<サービス>/
 │   ├── Transaction/LaravelTransactionManager.php
 │   └── Clock/SystemClock.php
-├── Providers/RepositoryServiceProvider.php
-└── Support/                    どのまとまりにも属さない基盤
+├── Providers/BindingServiceProvider.php
+└── Support/                    どのまとまりにも属さない基盤（Http と Infrastructure だけが使う）
 ```
+
+- Eloquent の Model は `app/Infrastructure/Models/` に置く（DB を扱うので Infrastructure。2026-11-15 に決めた）。まだ移していない Model は `app/Models/` に残り、8章の例外の一覧に並べる
 
 | もの | 名前 | 例 |
 | --- | --- | --- |
 | Controller | `<名詞>Controller`。メソッドは `index`・`show`・`store`・`update`・`destroy` | `LikeController::store` |
-| Request | `<動詞><名詞>Request`。書き込みは `toInput()` で Input を返す | `StoreLikeRequest` |
+| Request | `<動詞><名詞>Request`。書き込みは `toInput()` で Input を、読み取りは `toCriteria()` で Criteria を返す | `StoreLikeRequest`・`SearchMembersRequest` |
 | Resource | `<名詞>Resource` | `LikeResultResource` |
 | UseCase | `<動詞><名詞>UseCase`。公開するメソッドは `execute()` だけ | `LikeMemberUseCase` |
 | Dto | UseCase の名前から `UseCase` を除いて `Input`・`Output` | `LikeMemberInput` |
 | interface | `〜Interface` | `LikeRepositoryInterface`・`ChatSyncInterface` |
 | Repository の実装 | `Eloquent〜Repository` | `EloquentLikeRepository` |
-| QueryService | `<名詞>QueryService` | `SearchMembersQueryService` |
+| QueryService | `<名詞>QueryService`。メソッドは `search`・`list`・`find`・`summarize` など読む動詞 | `MemberSearchQueryService::search` |
+| 読み取りの DTO | `<名詞>Summary`（一覧の1行）・`<名詞>Detail`（詳細）・`<名詞>Criteria`（条件） | `MemberSummary`・`MemberSearchCriteria` |
 | 外のサービスの実装 | `<仕組み><役割>` | `FirestoreChatSync`・`JwtTokenService` |
 | 業務の例外 | `〜Exception` | `PaidPlanRequiredException` |
 | エンティティの作り方 | 新しく作る `create()`（確かめる）・DB から作り直す `reconstruct()`（確かめを省く） | `Like::create()` |
 
 - 1ファイル1クラス。クラスはすべて `final`（継承させる理由があるときだけ外す）。値を運ぶだけのものは `final readonly`
 - `declare(strict_types=1);` と型は `quality-types.md` に従う
+- Model の名前は Laravel の標準のまま（表の単数形。`User`・`Like`）。Domain のエンティティと同じ名前になるときは、使う側で `use ... as UserModel` のように別名を付ける
 
 ## 4. 層ごとの書き方
 
 例は「いいねする」（`POST /api/me/likes`）。各層の見本は、移したら [docs/backend.md](../../docs/backend.md) の「見本のファイル」に書く。
+
+> **この見本は書き方（層・名前・依存の向き）の見本。** ロック・日付の区切り・有料かどうか・応答の項目など、振る舞いの正しさは要件（`docs/requirements/`）と `docs/api/` を正とし、見本を写さない。見本と要件が違えば、要件に合わせる。
 
 ### 4-1. Http
 
@@ -161,6 +168,7 @@ final class LikeResultResource extends JsonResource
 // app/Http/Middleware/AuthenticateMember.php
 public function handle(Request $request, Closure $next): Response
 {
+    // $this->tokens は Domain/Auth/TokenServiceInterface（実装は Infrastructure/External/Jwt）。Http は External を直接使わない
     $memberId = $this->tokens->memberIdFrom($request->bearerToken());   // 読めなければ null
     if ($memberId === null) {
         return response()->json(['message' => 'ログインしてください'], 401);
@@ -173,7 +181,7 @@ public function handle(Request $request, Closure $next): Response
 
 ### 4-2. Application
 
-UseCase は**手順だけ**を書く。業務の判断の if を書かない（Domain に置く）。Laravel を使わない。
+UseCase は**手順だけ**を書く。業務の判断（「10回を超えたか」「お互いにいいねしたか」）は Domain が決めて返す。UseCase は、その**結果で手順を分ける if だけ**を書いてよい（例：マッチしたならルームを作る）。条件の中身（性別・回数・期限の比較）を UseCase に書かない。Laravel を使わない。
 
 ```php
 // app/Application/Dtos/Matching/LikeMemberInput.php
@@ -294,7 +302,7 @@ final class Like
 // app/Domain/Matching/Like/LikeQuota.php
 final class LikeQuota
 {
-    public const FREE_MALE_DAILY_LIMIT = 10;
+    public const FREE_MALE_DAILY_LIMIT = 10;   // 要件（FR-PAID-008）で決まった値。運営が画面から変える値ではないので、設定の表にしない
 
     public static function assertNotExceeded(Member $member, int $sentToday): void
     {
@@ -346,7 +354,10 @@ interface ChatSyncInterface
 
 ### 4-4. Infrastructure
 
-Eloquent が出てくるのはここだけ。Eloquent の Model と Domain のエンティティの詰め替えも、ここで行う。**Model を Repository の外へ返さない。**
+Eloquent が出てくるのはここだけ。Eloquent の Model と Domain のエンティティの詰め替えも、ここで行う。**Model を Repository の外へ返さない。** DB から作り直すときは、エンティティの `reconstruct()` を使う（`new` しない）。
+
+- UNIQUE の違反など、DB が断ったことのうち業務の意味があるもの（「もういいねしている」）は、Repository が Domain の例外に変えて投げる。`QueryException` を上へ出さない
+- Model の Factory は `database/factories/` のまま。Model の名前空間が `App\Infrastructure\Models` でも見つかるように、`AppServiceProvider` で `Factory::guessFactoryNamesUsing()` を1か所だけ設定する（Model ごとに `newFactory()` を書かない）
 
 ```php
 // app/Infrastructure/Repositories/Members/EloquentMemberRepository.php
@@ -357,7 +368,7 @@ final class EloquentMemberRepository implements MemberRepositoryInterface
         $row = User::query()->with('profile')->where('public_id', $publicId)->first()
             ?? throw new MemberNotFoundException();
 
-        return new Member(
+        return Member::reconstruct(
             id: new MemberId($row->id),
             publicId: $row->public_id,
             gender: Gender::from($row->profile->gender),
@@ -367,21 +378,21 @@ final class EloquentMemberRepository implements MemberRepositoryInterface
 }
 ```
 
-読み取りの QueryService は、画面の形の DTO（または Model）を直接返す。JOIN・`with()`・項目の選び方・並び・ページをここで決める。**出してはいけない人（退会・ブロック）の条件も、ここに1か所で書く。**
+読み取りの QueryService は、画面の形の DTO を返す（Model を返さない。Resource がリレーションを読みに行き、N+1 になるため）。DTO は同じフォルダに置き、Http から使ってよい。JOIN・`with()`・項目の選び方・並び・ページをここで決める。**出してはいけない人（退会・ブロック）の条件も、ここに1か所で書く。**
 
 ```php
-// app/Infrastructure/QueryServices/Members/SearchMembersQueryService.php
-final class SearchMembersQueryService
+// app/Infrastructure/QueryServices/Members/MemberSearchQueryService.php
+final class MemberSearchQueryService
 {
     /** @return list<MemberSummary> */
-    public function search(MemberId $me, SearchCriteria $criteria): array
+    public function search(int $memberId, MemberSearchCriteria $criteria): array   // Domain の型を使わない（8章）
     {
         return User::query()
             ->join('profiles', 'profiles.user_id', '=', 'users.id')
             ->whereNull('users.deleted_at')
             ->whereNotExists(fn ($q) => $q->from('blocks')
                 ->whereColumn('blocks.blocked_id', 'users.id')
-                ->where('blocks.blocker_id', $me->value))
+                ->where('blocks.blocker_id', $memberId))
             ->where('profiles.gender', $criteria->gender->value)
             ->orderByDesc('users.last_login_at')
             ->limit($criteria->limit)
@@ -409,18 +420,18 @@ final class SystemClock implements ClockInterface
 {
     public function now(): DateTimeImmutable
     {
-        return new DateTimeImmutable('now', new DateTimeZone('UTC'));
+        return CarbonImmutable::now('UTC');   // DateTimeImmutable を継ぐ。テストの travelTo() で止まる
     }
 }
 ```
 
 ### 4-5. Providers
 
-interface と実装をつなぐのは `RepositoryServiceProvider` だけ。
+interface と実装（Repository・外のサービス・トランザクション・時計）をつなぐのは `BindingServiceProvider` だけ。ほかのことはここに書かない。
 
 ```php
-// app/Providers/RepositoryServiceProvider.php
-final class RepositoryServiceProvider extends ServiceProvider
+// app/Providers/BindingServiceProvider.php
+final class BindingServiceProvider extends ServiceProvider
 {
     /** @var array<class-string, class-string> */
     public array $bindings = [
@@ -437,29 +448,33 @@ final class RepositoryServiceProvider extends ServiceProvider
 | 道 | 流れ | 使うとき |
 | --- | --- | --- |
 | 書き込み | Controller → Request（`toInput()`）→ UseCase → Domain の決まり → Repository の interface → Output → Resource | 状態を変える。業務の決まりを守る |
-| 読み取り | Controller → Request → QueryService → Resource | 一覧・詳細・検索・集計 |
+| 読み取り | Controller → Request（`toCriteria()`）→ QueryService → 読み取りの DTO → Resource | 一覧・詳細・検索・集計 |
 
 - 会員の側：QueryService は必要なときだけ作る（検索・重い一覧）。簡単な読み取りは、UseCase から Repository の `find〜` を使ってよい
 - 管理画面：読み取りはすべて QueryService（まとまりごとに1つ）。Controller から直接呼ぶ
-- QueryService は書き込まない。書き込みは必ず UseCase を通す
+- QueryService は書き込まない。書き込みは必ず UseCase を通す（使ってよい部品はアーキテクチャのテストで守り、`save()`・`update()`・`delete()` を呼んでいないかはレビューで見る。8章）
 
 ## 6. トランザクション・日時・外への書き込み
 
 - トランザクションは UseCase が `TransactionManagerInterface::run()` で張る。Controller・Repository・QueryService では張らない
 - 読んでから書く処理で、同時に2回来ると壊れるもの（停止・購入・回数の上限）は、Repository に `〜ForUpdate()`（行のロック）を作って使う
-- 日時は `ClockInterface::now()` から取る（`DateTimeImmutable`・UTC）。テストでは固定した時刻の偽物に差し替える
+- 日時は `ClockInterface::now()` から取る（`DateTimeImmutable`・UTC）。UseCase の単体テストでは固定した時刻の偽物に差し替え、API テストでは `$this->travelTo()` で止める（`SystemClock` は Carbon の時刻を返すので、止めた時刻が届く）
 - 外への書き込み（Firestore・メール・将来の決済と AI）は、**`run()` の外、コミットのあと**で行う。トランザクションの中で外へ書かない（DB が巻き戻っても、外には残るため）
 
 ## 7. エラー
 
 - 業務の決まりに反したら、Domain の例外（`〜Exception`）を投げる。Domain と Application は状態コードを知らない
 - 例外を状態コードとメッセージに変えるのは、各アプリの `bootstrap/app.php` の1か所だけ
+- 業務の例外を足したら、`render` と `dontReport` の両方に足す。API テストで、下の表の行ごとに状態コードとメッセージを固める
 
 ```php
 // bootstrap/app.php
 ->withExceptions(function (Exceptions $exceptions): void {
     $exceptions->render(fn (PaidPlanRequiredException $e) => response()->json(['message' => '有料会員になると使えます'], 403));
     $exceptions->render(fn (MemberNotFoundException $e) => response()->json(['message' => '会員が見つかりません'], 404));
+
+    // 業務の例外は、決まりどおりに断っただけなので、エラーのログに出さない（logging.md の「ノイズを増やさない」）
+    $exceptions->dontReport([PaidPlanRequiredException::class, MemberNotFoundException::class]);
 })
 ```
 
@@ -473,37 +488,72 @@ final class RepositoryServiceProvider extends ServiceProvider
 
 ## 8. アーキテクチャのテスト
 
-2章と3章は `tests/Arch/LayersTest.php` で守る。会員の側と管理画面で同じものを使う。
+2章（依存の向き）と、3章の名前の一部（末尾の名前・`final`・`strict_types`）を、Pest の `arch()` で守る。
+
+- 置き場：`tests/Arch/LayersTest.php`。`phpunit.xml` のテストの組に `Arch`（`tests/Arch`）を足す。CI でほかのテストと一緒に流れる
+- 正本は会員の側（`backend/client/tests/Arch/`）。管理画面（`backend/admin`）にも Pest と `pestphp/pest-plugin-arch` を入れ、同じファイルを写す。違うのは例外の一覧だけ
+- テストで守れないこと（QueryService が `->save()`・`->update()`・`->delete()` を呼ばない・UseCase の if が判断の中身を持たない）は、レビューで見る（`pr-review`）
 
 ```php
 // tests/Arch/LayersTest.php
-arch('Domain はほかの層と Laravel を使わない')
+// まだ移していない古いファイル。この一覧が、そのまま移行の残り。移したら消す
+const LEGACY = [
+    'App\Http\Controllers\LikeController',
+    // …（app/Http/Controllers の直下の古いコントローラー）
+    'App\Models',
+];
+
+$laravelHelpers = ['now', 'today', 'config', 'env', 'app', 'collect', 'abort', 'response', 'request', 'logger', 'info'];
+
+arch('Domain はほかの層・Laravel・Carbon・基盤を使わない')
     ->expect('App\Domain')
-    ->not->toUse(['App\Http', 'App\Application', 'App\Infrastructure', 'Illuminate']);
+    ->not->toUse(['App\Http', 'App\Application', 'App\Infrastructure', 'App\Models', 'App\Support', 'Illuminate', 'Carbon']);
 
-arch('Application は Http・Infrastructure・Laravel を使わない')
+arch('Application は Http・Infrastructure・Laravel・Carbon・基盤を使わない')
     ->expect('App\Application')
-    ->not->toUse(['App\Http', 'App\Infrastructure', 'Illuminate']);
+    ->not->toUse(['App\Http', 'App\Infrastructure', 'App\Models', 'App\Support', 'Illuminate', 'Carbon']);
 
-arch('Http は Repository と Model を直接使わない')
+arch('Domain と Application は Laravel のヘルパー関数を使わない')
+    ->expect($laravelHelpers)
+    ->not->toBeUsedIn(['App\Domain', 'App\Application']);
+
+arch('Http が使ってよい Infrastructure は QueryService だけ')
     ->expect('App\Http')
-    ->not->toUse(['App\Infrastructure\Repositories', 'App\Infrastructure\Models']);
+    ->not->toUse(['App\Infrastructure\Models', 'App\Infrastructure\Repositories', 'App\Infrastructure\External', 'App\Infrastructure\Transaction', 'App\Infrastructure\Clock', 'App\Models'])
+    ->ignoring(LEGACY);
 
 arch('Infrastructure は UseCase と Http を使わない')
     ->expect('App\Infrastructure')
     ->not->toUse(['App\Application\UseCases', 'App\Http']);
 
-arch('QueryService は書き込みの道を使わない')
+arch('QueryService は書き込みの道（UseCase・Repository・Domain のエンティティ）を使わない')
     ->expect('App\Infrastructure\QueryServices')
-    ->not->toUse(['App\Application']);
+    ->not->toUse(['App\Application', 'App\Infrastructure\Repositories', 'App\Domain']);   // ID は int で受け取る
 
 arch('Domain の interface は Interface で終わる')
     ->expect('App\Domain')
     ->interfaces()
     ->toHaveSuffix('Interface');
+
+arch('UseCase は final で、UseCase で終わる')
+    ->expect('App\Application\UseCases')
+    ->classes()
+    ->toBeFinal()
+    ->toHaveSuffix('UseCase');
+
+arch('QueryService のフォルダのクラス（QueryService と読み取りの DTO）は final')
+    ->expect('App\Infrastructure\QueryServices')
+    ->classes()
+    ->toBeFinal();
+
+arch('新しい層のファイルは strict_types')
+    ->expect(['App\Http\Controllers', 'App\Application', 'App\Domain', 'App\Infrastructure'])
+    ->toUseStrictTypes()
+    ->ignoring(LEGACY);
 ```
 
-- まだ移していない古いファイル（`app/Http/Controllers/` の直下・`app/Models/`）は、テストの中で例外として並べる。この一覧が、そのまま移行の残り。移したら一覧から消す
+- 書いたら、わざと違反を1つ作って（Domain に `use Illuminate\Support\Facades\DB;`・`now()`）落ちるのを見る。`toBeUsedIn`・`ignoring` の動きは、入れるチケットで確かめ、違えばこのファイルを直す
+- 古いファイルは `LEGACY` に並べる。移したら一覧から消す。基底の `App\Http\Controllers\Controller` は移す対象ではないので、一覧に入れない
 
 ## 9. 共通の原則（画面にも当てはめる）
 
@@ -515,25 +565,32 @@ arch('Domain の interface は Interface で終わる')
 
 ### 過剰設計の禁止
 
-- 要件にない汎用化・設定項目・抽象化を足さない。interface は、Repository と外のサービスと、トランザクション・日時にだけ作る。それ以外の1か所でしか使わないクラスに interface を作らない
+- 要件にない汎用化・設定項目・抽象化を足さない。interface は、Repository と外のサービスと、トランザクション・日時にだけ作る。それ以外の1か所でしか使わないクラスに interface を作らない（乱数・ID の生成などが要るようになったら、この一覧に足してから作る）
 - 起こりえない入力への防御を足さない。形の確かめは入口（Request）、業務の確かめは Domain
 - 凝った書き方より、読んですぐ分かる書き方を選ぶ
 
 ### 1ファイル1責務
 
 - ファイルの担当を一文で言えること。「いいねの回数の上限を判定する」は合格、「いいねまわりの処理いろいろ」は失格
-- UseCase が 300行を超えたら、手順か決まりのどちらかが混ざっている。決まりを Domain へ出す
+- UseCase が 100行を超えたら、手順か決まりのどちらかが混ざっている。決まりを Domain へ出す
 
 ### 副作用の分離
 
 - 業務の判断・計算は Domain の純粋な関数とエンティティに集める
-- DB・外のサービス・時刻・乱数・環境変数は Infrastructure に寄せ、interface 越しに使う
+- DB・外のサービス・時刻は Infrastructure に寄せ、interface 越しに使う。環境変数（`config()`）を読むのも Infrastructure と Http だけ
 - 狙いは、業務の決まりを DB なしで速くテストできる形に保つこと
 
 ## 10. まだ移していない古いコード
 
-- 既存の API を触るチケットでは、**先にその API の振る舞いを固める API テストを足し、それから**この形へ移す
+- 既存の API を触るチケットでは、**先にその API の振る舞いを固める API テストを足し、それから**この形へ移す。移す単位はコントローラーのファイルなので、そのファイルの全メソッドに API テストがあること
+- 「API テストで守っている」とは、その API に、成功が1本と、`docs/api/` に書いた失敗（401・404・422・403 など）ごとに1本があること
 - 移すコミットと、振る舞いを変えるコミット（不具合の直し・性能）を分ける。移すコミットでは API テストが1本も変わらずに通る
+- そのために、API テストは中の作りに頼らない
+  - DB は表の名前で確かめる（`assertDatabaseHas('likes', [...])`・`assertDatabaseCount('likes', 0)`）。テストに Model の名前空間（`App\Models\…`）を書かない
+  - データは `tests/Support/` の作る関数（例：`createMember()`・`createLike()`）で作る。Model の Factory を呼ぶのは、この関数の中だけ
+  - 時刻は `$this->travelTo()` で止める。ログインは、本物のトークンを作って送る（`actingAsMember()`）
+  - 外への書き込み（Firestore）は、移す前と後で同じ方法で確かめる（Emulator の中身を読む）
+- Model を `app/Models` から `app/Infrastructure/Models` へ移すのは、それだけのコミットにする。そのコミットでは `tests/Support/` の `use` の書き換えだけを許す
 - 新しく書くコードは、必ずこの形で書く。古いコントローラー（`app/Http/Controllers/` の直下）に機能を足さない
 - 古いコードの中で見つけた問題は、移すときに直さず、改善のチケットにする（測った問題の一覧は各一歩の解説の 9-2）
 
@@ -582,7 +639,8 @@ throw new PaidPlanRequiredException();
 
 - 読み取り（API の9割）は、Controller から QueryService を直接呼ぶ
 - 書き込みは UseCase を通し、必ず役割を確かめ（`Admin::assertCan()`）、同じトランザクションで監査ログを保存する
-- 管理画面の Domain は「運営の権限と監査」（`Admins/`・`Members/MemberSuspension`・`Plans/PlanPrice`・`AuditLogs/`）
+- 管理画面の Domain は「運営の権限と監査」。まとまりと集約の一覧は [docs/backend.md](../../docs/backend.md) の 2-2
+- 「見たこと」の監査ログ（会員の詳細を開いた・`member.view`）も書き込みなので、Controller が QueryService で読んだあとに `RecordAuditLogUseCase` を呼んで書く。QueryService の中で書かない
 - 管理画面は会員の側のコードを読み込まない。書いてよい表と列は [docs/backend.md](../../docs/backend.md) の表に従う
 
 ```php
@@ -611,7 +669,7 @@ public function execute(SuspendMemberInput $input): void
     $this->transaction->run(function () use ($input, $admin, $now): void {
         $suspended = $this->suspensions->findByPublicIdForUpdate($input->memberPublicId)->suspend($input->reason, $now);
         $this->suspensions->save($suspended);
-        $this->auditLogs->save(new AuditLog($admin->id, AuditAction::SuspendMember, 'users', $suspended->memberId, ['reason' => $input->reason], $now));
+        $this->auditLogs->save(AuditLog::create($admin->id, AuditAction::SuspendMember, 'users', $suspended->memberId, ['reason' => $input->reason], $now));
     });
 }
 ```

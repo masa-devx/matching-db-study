@@ -43,21 +43,41 @@
 | `Messages` | `MessageQueryService` | ― | ― |
 | `Sales` | `SalesQueryService` | ― | ― |
 | `Plans` | `PlanQueryService` | `UpdatePlanPriceUseCase` | `Plans/PlanPrice` |
-| `AuditLogs` | `AuditLogQueryService` | ― | `AuditLogs/AuditLog`・`AuditAction` |
-| `Admins` | ― | ― | `Admins/Admin`・`AdminRole`・`Permission` |
+| `AuditLogs` | `AuditLogQueryService` | `RecordAuditLogUseCase`（見たことの記録。`member.view` など） | `AuditLogs/AuditLog`・`AuditAction` |
+| `Admins` | `AdminQueryService`（`GET /me`） | `LoginAdminUseCase`（`POST /auth/login`。`last_login_at` を書く） | `Admins/Admin`・`AdminRole`・`Permission` |
 
 ## 3. 移行の地図（今のファイル → 各層）
 
 | 今のファイル | Http | Application | Domain | Infrastructure |
 | --- | --- | --- | --- | --- |
 | `AuthController`・`EmailVerificationController` | `Auth/` の Controller・`AuthenticateMember` | `Auth/LoginUseCase`・`VerifyEmailUseCase` | `Members/Member`・`Auth/MailerInterface` | `External/Jwt`・`External/Mail` |
-| `UserController`・`ProfileController` | `Members/` | `Members/RegisterMemberUseCase`・`WithdrawMemberUseCase`・`UpdateProfileUseCase` | `Members/Member`・`Members/Profile` | `Repositories/Members`・`QueryServices/Members/SearchMembersQueryService` |
+| `UserController`・`ProfileController` | `Members/` | `Members/RegisterMemberUseCase`・`WithdrawMemberUseCase`・`UpdateProfileUseCase` | `Members/Member`・`Members/Profile` | `Repositories/Members`・`QueryServices/Members/MemberSearchQueryService` |
 | `LikeController`・`UserMatchController`・`BlockController` | `Matching/` | `Matching/LikeMemberUseCase`・`BlockMemberUseCase` | `Matching/Like`・`UserMatch`・`Block` | `Repositories/Matching` |
 | `TalkRoomController`・`MessageController`・`FirebaseTokenController` | `Messaging/` | `Messaging/SendMessageUseCase` | `Messaging/TalkRoom`・`Message` | `Repositories/Messaging`・`External/Firestore` |
 | `PlanController`・`PurchaseController` | `Billing/` | `Billing/PurchasePlanUseCase` | `Billing/Plan`・`Purchase`・`Money` | `Repositories/Billing` |
-| 管理画面の8つのコントローラー | 2-2 の各まとまり | 2-2 の UseCase | 2-2 の Domain | `QueryServices/<まとまり>`・`Repositories/<まとまり>` |
+| `app/Models/*`（会員の側の10個） | ― | ― | ― | `Models/`（Model を移すだけのコミットで。10章） |
+| `app/Mail/VerifyMail.php` | ― | ― | `Auth/MailerInterface` | `External/Mail/` |
+| `app/Support/Logging/` | ― | ― | ― | そのまま `app/Support/Logging/`（Http と Infrastructure だけが使う） |
 
-移す順は、触るチケットが来た順。移し方の決まりは [architecture.md](../agents/rules/architecture.md) の10章。
+管理画面（`backend/admin`）：
+
+| 今のファイル | Http | Application | Infrastructure |
+| --- | --- | --- | --- |
+| `AuthController`（`login`・`me`） | `Admins/` | `Admins/LoginAdminUseCase` | `QueryServices/Admins/AdminQueryService`・`Repositories/Admins` |
+| `DashboardController` | `Dashboard/` | ― | `QueryServices/Dashboard/DashboardQueryService` |
+| `MemberController`（`index`・`show`） | `Members/` | `AuditLogs/RecordAuditLogUseCase`（`show` の見たことの記録） | `QueryServices/Members/MemberQueryService` |
+| `SuspensionController`（`store`・`destroy`） | `Members/` | `Members/SuspendMemberUseCase`・`UnsuspendMemberUseCase` | `Repositories/Members` |
+| `MessageController` | `Messages/` | ― | `QueryServices/Messages/MessageQueryService` |
+| `SalesController`（`purchases`・`monthly`） | `Sales/` | ― | `QueryServices/Sales/SalesQueryService` |
+| `PlanController`（`index`・`update`） | `Plans/` | `Plans/UpdatePlanPriceUseCase` | `QueryServices/Plans/PlanQueryService`・`Repositories/Plans` |
+| `AuditLogController` | `AuditLogs/` | ― | `QueryServices/AuditLogs/AuditLogQueryService` |
+| `Controller.php`（基底） | 移さない | ― | ― |
+
+Domain の行き先は 2-2 の表。
+
+移す順は、触るチケットが来た順。移し方の決まりは [architecture.md](../agents/rules/architecture.md) の10章。移す前に、その API が「API テストで守っている」状態（成功1本と、`docs/api/` に書いた失敗ごとに1本）にする。
+
+Model を `app/Infrastructure/Models/` へ移すときは、同じチケットで AGENTS.md の「エディタの補完のファイルを作る」のコマンドに、Model のフォルダの指定（`--dir`）を足す。
 
 **見本のファイル**：各層の最初の見本は「いいねする」（`LikeMemberUseCase` まわり）。移したら、ここにパスを書く（まだない）。
 

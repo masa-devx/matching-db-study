@@ -61,6 +61,8 @@
 
 比べた資料：`explanations/architecture-styles.html`
 
+> 下の表は**取り消した最初の案**（議事録として残す）。今の決定は、この下の「会員の側の形」「管理画面の形」（どちらも DIP を用いた4層）。
+
 | 場所 | 形 | 理由（人の言葉） |
 | --- | --- | --- |
 | 会員の側（`backend/client`） | レイヤードアーキテクチャ（3層：プレゼンテーション・ビジネスロジック・データアクセス） | 当時の規模は中くらい。いろいろな現場で取り入れられていて、入ってきた人がすぐ読める |
@@ -92,7 +94,7 @@ app/
 
 ### 管理画面の形（2026-11-15 に決めた。同じ日に見直した）
 
-- **会員の側と同じ4層の骨組み**（Http・Application・Domain・Infrastructure。層の中は画面の領域ごとのフォルダ：`Dashboard`・`Members`・`Messages`・`Sales`・`Plans`・`AuditLogs`。`frontend/admin/src/domains/` とそろえる）
+- **会員の側と同じ4層の骨組み**（Http・Application・Domain・Infrastructure。層の中は画面の領域ごとのフォルダ。一覧は `docs/backend.md` の 2-2。`frontend/admin/src/domains/` とそろえる）
 - 読み取り（一覧・詳細・集計。API の9割）は、Controller から Infrastructure の QueryService を直接呼ぶ。Domain を通さない
 - 書き込み（停止・解除・値段の変更）だけ、UseCase と Domain を通す。管理画面の Domain は「運営の権限と監査」：`Admins/`（Admin・AdminRole・Permission）・`Members/MemberSuspension`・`Plans/PlanPrice`・`AuditLogs/`
 - Application と Domain では Laravel を使わない（会員の側と同じ。トランザクションと日時は interface 越し）。依存の向き・アーキテクチャのテストも会員の側と同じ
