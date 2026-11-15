@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>モジュラーモノリスへの道</title>
+<link rel="stylesheet" href="assets/page.css">
+</head>
+<body>
+<main>
+  <p class="meta"><a href="index.html">← 目次へ</a></p>
+  <h1>レイヤードからモジュラーモノリスへ・フレームワークを替えられる設計</h1>
+  <p class="meta">作成: 2026-11-15 ／ 状態: <span class="status">将来のイメージ（サイクル 01「どう作るか」の資料。決まった計画ではない）</span></p>
+
+  <div class="card point">
+    <strong>このページでわかること</strong>
+    <ul>
+      <li>レイヤードの考え方（層と依存の向き）を残したまま、モジュラーモノリスにしたときのディレクトリ</li>
+      <li>モジュールの境目の守り方：公開する入口・イベント・表の持ち主・JOIN できないときの読み方</li>
+      <li>今のレイヤードから、どの順で移るか（いきなり作り直さない）</li>
+      <li>Laravel から別のフレームワークや言語へ移るときに備える設計と、その費用</li>
+    </ul>
+  </div>
+
+  <h2>1. 先に知っておく言葉</h2>
+  <table>
+    <tr><th>言葉</th><th>意味（1〜2文）</th></tr>
+    <tr><td>モジュール</td><td>業務のまとまり1つ分のコード（会員・マッチング・メッセージ・課金など）。中に、レイヤードの層を持つ</td></tr>
+    <tr><td>公開する入口（コントラクト）</td><td>ほかのモジュールに使わせてよいクラスとメソッドだけを集めたもの。それ以外はモジュールの中だけで使う</td></tr>
+    <tr><td>モジュールのイベント</td><td>「マッチした」「購入した」のような出来事の知らせ。知らせた側は、だれが受け取るかを知らない</td></tr>
+    <tr><td>表の持ち主</td><td>その表に書いてよいモジュール。ほかのモジュールは、持ち主の公開する入口を通して読む</td></tr>
+    <tr><td>読むための写し（リードモデル）</td><td>ほかのモジュールのデータを、読みやすい形で自分の側に写した表。JOIN の代わりに使う</td></tr>
+    <tr><td>共有カーネル</td><td>どのモジュールも使う、小さな共通の部品（会員の ID の型・金額・時刻）。大きくしない</td></tr>
+    <tr><td>移植しやすさ</td><td>フレームワークや言語を替えるとき、書き直さずに残せるコードの多さ</td></tr>
+  </table>
+
+  <h2>2. 横に切るか、縦に切るか</h2>
+  <p>レイヤードは<strong>層で横に</strong>切る。モジュラーモノリスは<strong>業務で縦に</strong>切り、その中をレイヤードの層で横に切る。つまり「縦に切ってから、中を横に切る」。</p>
+  <pre class="mermaid">
+flowchart TB
+  subgraph L["レイヤード（今の目標）"]
+    direction TB
+    L1["入口の層（いいね・会員・メッセージ・課金）"] --> L2["業務の層（いいね・会員・メッセージ・課金）"] --> L3["DB の層（いいね・会員・メッセージ・課金）"]
+  end
+  subgraph M["モジュラーモノリス（将来）"]
+    direction LR
+    subgraph MA["会員"]
+      A1[入口] --> A2[業務] --> A3[DB]
+    end
+    subgraph MB["マッチング"]
+      B1[入口] --> B2[業務] --> B3[DB]
+    end
+    subgraph MC["メッセージ"]
+      C1[入口] --> C2[業務] --> C3[DB]
+    end
+    subgraph MD["課金"]
+      D1[入口] --> D2[業務] --> D3[DB]
+    end
+  end
+  </pre>
+
+  <h2>3. モジュールの切り方（このアプリなら）</h2>
+  <p>切り口は「言葉の意味が同じ範囲」と「一緒に変わるもの」。DDD の境界づけられたコンテキストの考え方を使う。</p>
+  <table>
+    <tr><th>モジュール</th><th>受け持ち</th><th>持つ表（書いてよい表）</th><th>ほかに公開するもの</th><th>出すイベント</th></tr>
+    <tr><td>Identity（認証）</td><td>登録・ログイン・トークン・メールの確認・停止</td><td><code>users</code> の認証の列・<code>personal_access_tokens</code></td><td>トークンから会員 ID を出す・停止しているか</td><td>登録した・停止した</td></tr>
+    <tr><td>Members（会員）</td><td>プロフィール・検索・退会</td><td><code>profiles</code>・<code>users.deleted_at</code></td><td>会員の公開の情報・出会える相手か（退会していない）</td><td>退会した・プロフィールを変えた</td></tr>
+    <tr><td>Matching（マッチング）</td><td>いいね・マッチ・ブロック</td><td><code>likes</code>・<code>user_matches</code>・<code>blocks</code></td><td>2人がマッチしているか・ブロックしているか</td><td><strong>マッチした</strong>・ブロックした</td></tr>
+    <tr><td>Messaging（メッセージ）</td><td>トークルーム・メッセージ・Firestore への写し</td><td><code>talk_rooms</code>・<code>talk_room_members</code>・<code>messages</code></td><td>未読の数</td><td>送った</td></tr>
+    <tr><td>Billing（課金）</td><td>プラン・購入・有料かどうか・期限</td><td><code>plans</code>・<code>purchases</code>・<code>users.is_paid</code> と <code>paid_until</code></td><td><strong>有料かどうか（機能を使えるか）</strong></td><td>購入した・期限が切れた</td></tr>
+    <tr><td>Shared（共有カーネル）</td><td>どのモジュールも使う小さな部品</td><td>なし</td><td><code>MemberId</code>・<code>Money</code>・<code>Clock</code>（時刻）</td><td>―</td></tr>
+  </table>
+  <p>今は1つの <code>users</code> 表に、認証・退会・有料の列が同居している。モジュラーモノリスでは、<strong>列ごとに持ち主を決める</strong>か、将来は表を分ける（<code>users</code> から <code>member_subscriptions</code> を切り出す、など）。</p>
+
+  <h2>4. ディレクトリ（レイヤードの考え方を残したモジュラーモノリス）</h2>
+<pre><code class="language-bash">backend/client/
+├── app/                                 # Laravel の起動に要るものだけ（Providers・例外の扱い）
+├── modules/
+│   ├── Matching/
+│   │   ├── Contracts/                   # ① 公開する入口（ほかのモジュールはここだけを使う）
+│   │   │   ├── MatchingApi.php          #    interface：isMatched(a, b)・isBlocked(a, b)
+│   │   │   └── Events/
+│   │   │       └── Matched.php          #    出すイベント（中身は ID と時刻だけ）
+│   │   ├── Presentation/                # ② 入口の層（レイヤードの1層め）
+│   │   │   ├── Http/
+│   │   │   │   ├── LikeController.php
+│   │   │   │   ├── StoreLikeRequest.php
+│   │   │   │   └── LikeResultResource.php
+│   │   │   ├── Console/                 #    コマンド
+│   │   │   └── routes.php               #    このモジュールのルート
+│   │   ├── Application/                 # ③ 業務の層（2層め）
+│   │   │   ├── LikeService.php
+│   │   │   ├── MatchingApiImpl.php      #    Contracts の実装
+│   │   │   └── Listeners/               #    ほかのモジュールのイベントを受ける（「退会した」→ いいねを隠す）
+│   │   ├── Domain/                      # ④ 業務の部品（フレームワークに依存しない）
+│   │   │   ├── LikeQuota.php
+│   │   │   └── Exceptions/
+│   │   ├── Infrastructure/              # ⑤ DB の層（3層め）
+│   │   │   ├── Models/                  #    Like・UserMatch・Block（このモジュールの表だけ）
+│   │   │   └── Repositories/
+│   │   ├── Database/migrations/         # ⑥ このモジュールの表の作り
+│   │   ├── Tests/                       #    このモジュールのテスト
+│   │   └── MatchingServiceProvider.php  #    ルート・イベント・差し替え口を登録する
+│   ├── Members/      （同じ形）
+│   ├── Messaging/    （同じ形。Listeners で「マッチした」を受けてトークルームを作る）
+│   ├── Billing/      （同じ形）
+│   ├── Identity/     （同じ形）
+│   └── Shared/                          # 共有カーネル（小さく保つ）
+│       ├── MemberId.php
+│       ├── Money.php
+│       └── Clock.php
+└── tests/Arch/ModulesTest.php           # モジュールの境目を機械で守る</code></pre>
+  <ul>
+    <li><strong>モジュールの中はレイヤード</strong>（Presentation → Application → Infrastructure、全部が Domain を使う）。今のレイヤードで覚えた決まりが、そのまま中で生きる</li>
+    <li><strong>モジュールの外に見せるのは <code>Contracts/</code> だけ</strong>。ほかのモジュールの <code>Application/</code>・<code>Infrastructure/</code>・Model を直接使わない</li>
+    <li>ルート・マイグレーション・テストもモジュールの中に置き、ServiceProvider で読み込む。モジュールを1つ足すとき、フォルダ1つと登録1行で済む</li>
+    <li>Laravel で動かすには、<code>composer.json</code> の <code>autoload</code> に <code>"Modules\\": "modules/"</code> を足し、各モジュールの ServiceProvider を登録する（パッケージを使う方法もあるが、自分で書いても数十行）</li>
+  </ul>
+
+  <h2>5. モジュールどうしのやり取り</h2>
+
+  <h3>5-1. 3つのやり方</h3>
+  <table>
+    <tr><th>やり方</th><th>いつ使うか</th><th>例</th><th>気をつけること</th></tr>
+    <tr><td>公開する入口を呼ぶ（同期）</td><td>答えがすぐ要るとき</td><td>メッセージを送る前に、Matching の <code>isMatched()</code> と <code>isBlocked()</code> を聞く</td><td>呼ぶ側が相手に依存する。依存が輪にならないように（A → B → A は禁止）</td></tr>
+    <tr><td>イベントを出す（非同期でもよい）</td><td>知らせるだけで、結果を待たないとき</td><td>Matching が「マッチした」を出し、Messaging がトークルームを作る</td><td>受け取った側が失敗したときのやり直し。順番が入れ替わることがある</td></tr>
+    <tr><td>読むための写し</td><td>ほかのモジュールのデータを、自分の検索や一覧で JOIN したいとき</td><td>Members の検索が、Billing の「有料か」と Matching の「ブロック」で絞りたい → 検索用の表に写しておく</td><td>写しは少し遅れる（数秒）。どこまで遅れてよいかを決める</td></tr>
+  </table>
+
+  <h3>5-2. 「いいね → マッチ → トークルーム」をモジュールで分けると</h3>
+  <pre class="mermaid">
+sequenceDiagram
+  participant LC as Matching の LikeController
+  participant LS as Matching の LikeService
+  participant BA as Billing の Contracts
+  participant DB1 as Matching の表
+  participant EV as イベント
+  participant MS as Messaging の Listener
+  participant DB2 as Messaging の表
+  LC->>LS: like(me, target)
+  LS->>BA: canUseUnlimitedLikes(me)
+  BA-->>LS: false（無料の男性）
+  LS->>DB1: 今日の数・insert likes・逆向きを探す・insert user_matches
+  LS->>EV: Matched(me, target) をコミットのあとに出す
+  EV->>MS: Matched を受ける
+  MS->>DB2: insert talk_rooms・talk_room_members
+  MS->>MS: Firestore へ写す
+  </pre>
+  <p>今のレガシー版は、いいねの Controller がトークルームの表と Firestore まで直接書いている。モジュールにすると、<strong>Matching はトークルームのことを知らず、「マッチした」と知らせるだけ</strong>になる。メッセージの仕組みを替えても、Matching は直さずに済む。</p>
+<pre><code class="language-php">// modules/Matching/Contracts/Events/Matched.php
+// 中身は ID と時刻だけ（Model を渡さない。受け取る側が Matching の Model を知らずに済む）
+final readonly class Matched
+{
+    public function __construct(
+        public int $matchId,
+        public int $memberA,
+        public int $memberB,
+        public DateTimeImmutable $matchedAt,
+    ) {}
+}
+
+// modules/Messaging/Application/Listeners/OpenRoomWhenMatched.php
+final class OpenRoomWhenMatched implements ShouldQueue
+{
+    public function handle(Matched $event): void
+    {
+        $this-&gt;rooms-&gt;openFor($event-&gt;matchId, [$event-&gt;memberA, $event-&gt;memberB]);
+    }
+}</code></pre>
+
+  <h3>5-3. 表と JOIN</h3>
+  <table>
+    <tr><th>決まり</th><th>理由</th></tr>
+    <tr><td>表は1つのモジュールだけが書く</td><td>ほかのモジュールが勝手に書くと、持ち主の決まり（制約・業務の判断）を通らない</td></tr>
+    <tr><td>モジュールをまたぐ JOIN は、最初は読み取りだけ許す。育ったら写しに変える</td><td>いきなり JOIN を全部禁止すると、検索（会員 × 有料 × ブロック）が書けない。移る途中は「読むだけなら許す」を例外の一覧で管理する</td></tr>
+    <tr><td>モジュールをまたぐ外部キーは付けない（または付けても削除の連鎖をしない）</td><td>将来サービスに切り出すとき、DB が別になる</td></tr>
+    <tr><td>PostgreSQL のスキーマ（名前空間）をモジュールごとに分ける案もある</td><td><code>matching.likes</code>・<code>billing.purchases</code> のように、持ち主が名前で分かる。DB の権限で、ほかのモジュールからの書き込みを止められる</td></tr>
+  </table>
+
+  <h2>6. 境目を機械で守る</h2>
+<pre><code class="language-php">// tests/Arch/ModulesTest.php
+$modules = ['Identity', 'Members', 'Matching', 'Messaging', 'Billing'];
+
+foreach ($modules as $module) {
+    $others = array_diff($modules, [$module]);
+
+    arch("{$module} は、ほかのモジュールの公開する入口だけを使う")
+        -&gt;expect("Modules\\{$module}")
+        -&gt;not-&gt;toUse(array_merge(
+            array_map(fn ($m) =&gt; "Modules\\{$m}\\Application", $others),
+            array_map(fn ($m) =&gt; "Modules\\{$m}\\Infrastructure", $others),
+            array_map(fn ($m) =&gt; "Modules\\{$m}\\Domain", $others),
+        ));
+
+    arch("{$module} の中はレイヤード：業務と DB の層は HTTP を知らない")
+        -&gt;expect(["Modules\\{$module}\\Application", "Modules\\{$module}\\Infrastructure"])
+        -&gt;not-&gt;toUse(['Illuminate\Http', "Modules\\{$module}\\Presentation"]);
+}
+
+arch('共有カーネルはどのモジュールも使わない')
+    -&gt;expect('Modules\Shared')
+    -&gt;not-&gt;toUse(array_map(fn ($m) =&gt; "Modules\\{$m}", $modules));</code></pre>
+  <p>依存の輪（A → B → A）を見つけるには、PHP の依存を図にして検査する道具（Deptrac など）を足す案もある。</p>
+
+  <h2>7. 今のレイヤードから、どの順で移るか</h2>
+  <p>いきなりモジュールに作り直さない。<strong>今のうちに「層の中を機能ごとのフォルダで分ける」をしておくと、あとで同じ名前のフォルダを集めるだけで済む</strong>（レイヤードの詳細設計で、層の中を <code>Likes/</code>・<code>Members/</code> に分けたのは、この準備でもある）。</p>
+  <table>
+    <tr><th>段</th><th>すること</th><th>終わったと言える条件</th></tr>
+    <tr><td>0 今</td><td>レイヤード。層の中を機能ごとのフォルダで分ける</td><td>機能のフォルダの名前が、全部の層でそろっている</td></tr>
+    <tr><td>1 境目を決める</td><td>3章の表（モジュール・持つ表・公開するもの）を決め、表と列の持ち主を書く</td><td>全部の表に持ち主がいる</td></tr>
+    <tr><td>2 依存を見る</td><td>機能のフォルダどうしの依存を数える（だれがだれの Model を使っているか）。アーキテクチャのテストを「今の依存は例外」として足す</td><td>例外の一覧＝直す一覧ができた</td></tr>
+    <tr><td>3 公開する入口を作る</td><td>ほかの機能の Model を直接使っている所を、相手の <code>Contracts</code> を呼ぶ形に直す。1か所ずつ、例外の一覧を減らす</td><td>例外の一覧が空になる</td></tr>
+    <tr><td>4 イベントに変える</td><td>「Aが終わったらBもする」を、イベントに変える（いいね → トークルームなど）</td><td>モジュールをまたぐ書き込みがない</td></tr>
+    <tr><td>5 フォルダを移す</td><td>各層の同じ名前のフォルダを、<code>modules/&lt;名前&gt;/</code> の下に集める。中身は変えない（名前空間だけ）</td><td>API テストが全部通る（中身を変えていないので）</td></tr>
+    <tr><td>6 表を分ける（必要なら）</td><td>同居している列を表に分ける。スキーマを分ける</td><td>止めずに変えるマイグレーション（10）の手順で移せた</td></tr>
+  </table>
+  <p>どの段でも、<strong>API テストが安全装置</strong>になる。外から見える振る舞いだけを確かめているので、中のフォルダを動かしても落ちない（落ちたら本当に壊した）。</p>
+
+  <h2>8. Laravel から別のフレームワークや言語へ移るときに備える</h2>
+
+  <h3>8-1. 先に知っておくこと：実際にはまれで、費用が大きい</h3>
+  <ul>
+    <li>フレームワークを替えることは、実務では数年に1回もない。替える理由の多くは「採用（書ける人が集まらない）」「性能（特定の機能だけ）」「サポートの終わり」</li>
+    <li>全部を最初からフレームワークに依存しない形で書くと、ファイルも詰め替えのコードも倍近くになる。<strong>「全部を備える」より「境目だけを固くする」</strong>方が、費用に見合う</li>
+    <li>言語を替えるときは、ほとんどの場合、<strong>一気に書き換えず、API の入口で少しずつ新しい方へ流す</strong>（ストラングラーパターン）。この移し方ができるかが、備えの本体</li>
+  </ul>
+
+  <h3>8-2. 備えの3段</h3>
+  <table>
+    <tr><th>段</th><th>すること</th><th>費用</th><th>移るときに残るもの</th></tr>
+    <tr><td>段 1：境目を固くする（<strong>勧める</strong>）</td><td>
+      <ul>
+        <li>API の形を文書と<strong>言語に依存しないテスト</strong>で固める（HTTP を送って応答を見るだけのテスト。どの言語の実装にも同じテストを流せる）</li>
+        <li>DB の表の作りを、フレームワークの外でも読める形で残す（マイグレーションの結果の SQL・<code>docs/data-model.md</code>）</li>
+        <li>トークン（JWT）の形・ID（UUID）・時刻（ISO 8601・UTC）・エラーの形を、標準の書き方にそろえる</li>
+        <li>イベントの中身を、JSON にできる形（ID と値だけ）にする</li>
+      </ul></td><td>小</td><td>API・DB・データ・トークン・テストがそのまま使える。新しい言語でも、同じテストが通れば同じ振る舞い</td></tr>
+    <tr><td>段 2：業務の中心を切り離す（大事なモジュールだけ）</td><td>
+      <ul>
+        <li>Domain と Application を、Laravel の機能（ファサード・Eloquent・<code>now()</code>・<code>config()</code>）なしで書く</li>
+        <li>DB・時刻・設定・外のサービスは、差し替え口（ポート）を通す（ヘキサゴナル）</li>
+        <li>Laravel は、外側のアダプター（Controller・Eloquent の Repository・ServiceProvider）にだけ出てくる</li>
+      </ul></td><td>中〜大</td><td>業務の決まりが、そのまま別の言語に1対1で写せる（読んで訳すだけ）。テストも写せる</td></tr>
+    <tr><td>段 3：全部を切り離す</td><td>全モジュールを段 2 の形にする</td><td>大</td><td>ほぼ全部。ただし費用に見合うことはまれ</td></tr>
+  </table>
+
+  <h3>8-3. 段 2 のディレクトリ（大事なモジュールだけ。例：課金）</h3>
+<pre><code class="language-bash">modules/Billing/
+├── Contracts/                  # 公開する入口（ほかのモジュール向け）
+├── Core/                       # ★ フレームワークを知らない（ふつうの PHP だけ）
+│   ├── Domain/
+│   │   ├── Subscription.php    #   有料かどうか・期限の判定（Eloquent ではない、ふつうのクラス）
+│   │   ├── Money.php
+│   │   └── PurchaseRules.php   #   男性だけが買える・同じ期間を重ねない
+│   ├── Application/
+│   │   ├── PurchasePlan.php    #   ユースケース（1操作1クラス）
+│   │   └── Ports/              #   業務の側が決めた差し替え口
+│   │       ├── SubscriptionStore.php
+│   │       ├── PaymentProvider.php   # 08 で決済の会社をつなぐ口
+│   │       └── Clock.php
+│   └── Tests/                  #   DB なしで流れる。別の言語へ写すときの仕様になる
+└── Adapters/                   # ★ Laravel はここにだけ出てくる
+    ├── Http/                   #   Controller・FormRequest・Resource
+    ├── Persistence/            #   Eloquent の Model と、Ports の実装
+    │   ├── SubscriptionModel.php
+    │   └── EloquentSubscriptionStore.php
+    ├── Payment/                #   決済の会社の SDK を使う実装・テスト用の偽物
+    └── BillingServiceProvider.php</code></pre>
+<pre><code class="language-php">// modules/Billing/Core/Domain/Subscription.php
+// Eloquent を継承しない。DB の形を知らない。別の言語にもそのまま訳せる
+final class Subscription
+{
+    public function __construct(
+        public readonly MemberId $memberId,
+        private ?DateTimeImmutable $paidUntil,
+    ) {}
+
+    public function isActive(DateTimeImmutable $now): bool
+    {
+        return $this-&gt;paidUntil !== null &amp;&amp; $now &lt; $this-&gt;paidUntil;   // 今のレガシー版は is_paid だけを見ている（既知のリスク）
+    }
+}
+
+// modules/Billing/Core/Application/Ports/SubscriptionStore.php
+interface SubscriptionStore
+{
+    public function find(MemberId $id): Subscription;
+    public function save(Subscription $subscription): void;
+}
+
+// modules/Billing/Adapters/Persistence/EloquentSubscriptionStore.php
+// Laravel が出てくるのはここ。Eloquent の Model と、業務の Subscription を詰め替える
+final class EloquentSubscriptionStore implements SubscriptionStore
+{
+    public function find(MemberId $id): Subscription
+    {
+        $row = SubscriptionModel::query()-&gt;findOrFail($id-&gt;value);
+        return new Subscription($id, $row-&gt;paid_until?-&gt;toDateTimeImmutable());
+    }
+    // ...
+}</code></pre>
+
+  <h3>8-4. 別の言語に移すときの流れ（イメージ）</h3>
+  <pre class="mermaid">
+flowchart LR
+  U[画面とアプリ] --> P["入口（リバースプロキシ）"]
+  P -->|まだ移していない API| OLD["Laravel の本体"]
+  P -->|移した API（例：課金）| NEW["新しい言語の課金サービス"]
+  OLD --> DB[(PostgreSQL)]
+  NEW --> DB
+  T["言語に依存しない API テスト"] -.同じテストを両方に流す.-> OLD
+  T -.-> NEW
+  </pre>
+  <ol>
+    <li>移すモジュールを1つ選ぶ（境目がきれいで、得が大きいもの）</li>
+    <li>そのモジュールの API テスト（言語に依存しないもの）を、新しい実装に向けて流し、全部通るまで作る。Core があれば、訳すだけで済む</li>
+    <li>入口（リバースプロキシ）で、そのモジュールの API だけを新しい方へ流す。最初は一部の会員だけ（割合で切り替える）</li>
+    <li>問題がなければ全部を流し、Laravel の側のモジュールを消す</li>
+    <li>DB は最初は共有のまま。落ち着いたら、そのモジュールの表だけ別の DB に移す（11 の引っ越しの手順）</li>
+  </ol>
+  <p>この流れで必要なのは、段 1 の「境目を固くする」こと（API の形・言語に依存しないテスト・DB の作り・トークンの形）。段 2 は、移すモジュールの中身を訳しやすくする追加の備え。</p>
+
+  <h3>8-5. フレームワークを知らない書き方の決まり（段 2 にする場所だけ）</h3>
+  <table>
+    <tr><th>使わない</th><th>代わりに</th></tr>
+    <tr><td><code>now()</code>・<code>Carbon::now()</code></td><td><code>Clock</code> の口から受け取る（テストで時刻を固定でき、時間帯の扱いも1か所）</td></tr>
+    <tr><td>ファサード（<code>DB::</code>・<code>Cache::</code>・<code>Log::</code>）</td><td>コンストラクタで受け取る口</td></tr>
+    <tr><td>Eloquent の Model を業務の中で使う</td><td>ふつうのクラス（業務の型）。詰め替えはアダプターで</td></tr>
+    <tr><td><code>config()</code>・<code>env()</code></td><td>必要な値だけをコンストラクタで受け取る</td></tr>
+    <tr><td>Laravel のコレクション・ヘルパー（<code>collect()</code>・<code>Str::</code>）</td><td>PHP の配列と標準の関数（使うなら、アダプターの中だけ）</td></tr>
+    <tr><td>例外を HTTP の形で投げる（<code>abort(403)</code>）</td><td>業務の例外を投げ、アダプターで HTTP の形に変える</td></tr>
+  </table>
+  <p>これもアーキテクチャのテストで守れる：<code>arch()-&gt;expect('Modules\Billing\Core')-&gt;not-&gt;toUse('Illuminate')</code>。</p>
+
+  <h2>9. まとめ：今から何をしておくと、将来が楽になるか</h2>
+  <table>
+    <tr><th>今（レイヤード）でやっておくこと</th><th>効く将来</th><th>費用</th></tr>
+    <tr><td>層の中を、機能ごとのフォルダで分ける（名前を全層でそろえる）</td><td>モジュラーモノリスへ（7章の段 5 がフォルダを集めるだけになる）</td><td>ほぼなし</td></tr>
+    <tr><td>API テストを外から（HTTP だけで）書く</td><td>フォルダの移動・フレームワークの移行の安全装置</td><td>小（もう決まった）</td></tr>
+    <tr><td>業務の判定を Domain に1か所（<code>LikeQuota</code>・<code>Subscription</code>）</td><td>モジュールに分けるとき・別の言語に訳すとき</td><td>小</td></tr>
+    <tr><td>外のサービスは差し替え口の向こう</td><td>サービスの切り出し・決済の会社の差し替え・AI</td><td>小</td></tr>
+    <tr><td>表ごとに「持ち主の機能」を書いておく（<code>docs/data-model.md</code>）</td><td>モジュールの境目を決めるとき</td><td>小</td></tr>
+    <tr><td>時刻は1か所から取る（<code>Clock</code>）</td><td>テスト・時間帯の不具合（07 の JST の境目）・移植</td><td>小</td></tr>
+    <tr><td>ID・時刻・エラー・トークンの形を標準にそろえる</td><td>別の言語・別のサービスとのやり取り</td><td>小</td></tr>
+    <tr><td>（やらない）全部をフレームワークから切り離す</td><td>―</td><td>大。必要になったモジュールだけ段 2 に</td></tr>
+  </table>
+
+  <h2>10. 理解を確かめる問い</h2>
+  <details><summary>モジュラーモノリスにしても、中をレイヤードにするのはなぜ？</summary><p>モジュールは「業務で縦に切る」決まり、レイヤードは「受け持ちで横に切る」決まりで、狙いが違うから両立する。モジュールの中でも入口・業務・DB が混ざれば Fat Controller に戻る。今のレイヤードで覚えた層の決まりが、そのままモジュールの中で使える。</p></details>
+  <details><summary>いいねでマッチしたとき、トークルームを Matching が直接作らず、イベントにするのはなぜ？</summary><p>Matching がトークルームの表を直接書くと、Matching が Messaging の作りを知ることになり、メッセージの仕組み（Firestore など）を替えると Matching も直す必要が出る。「マッチした」と知らせるだけにすれば、Matching は受け取る側を知らない。代わりに、受け取る側が失敗したときのやり直し（キュー）と、少し遅れて作られることを受け入れる。</p></details>
+  <details><summary>検索で「有料の人だけ・ブロックした人を除く」をしたい。モジュールをまたぐ JOIN をしないなら、どうする？</summary><p>Members のモジュールに、検索用の写し（読むための表）を持ち、Billing の「購入した・期限が切れた」と Matching の「ブロックした」のイベントで更新する。数秒遅れることを受け入れる。移る途中は、読み取りだけの JOIN を例外として許し、例外の一覧で管理する。</p></details>
+  <details><summary>Laravel から別の言語に移るとき、一番の備えは何？</summary><p>境目を固くすること。特に、言語に依存しない API テスト（HTTP を送って応答を見るだけ）と、DB の作り・トークン・ID・時刻の形。これがあれば、新しい実装に同じテストを流して、同じ振る舞いかを確かめながら、入口で少しずつ流す先を替えられる。業務の中心をフレームワークから切り離すのは、移すモジュールの中身を訳しやすくする追加の備え。</p></details>
+  <details><summary>全部のモジュールをフレームワークに依存しない形（段 3）にしないのはなぜ？</summary><p>費用に見合わないから。ファイルと詰め替えのコードが倍近くになり、Laravel の便利さ（Eloquent・生成のコマンド）を外側でしか使えなくなる。フレームワークを替えることはまれで、替えるとしても少しずつ移すので、まず移す大事なモジュール（課金など）だけを段 2 にすれば足りる。</p></details>
+</main>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+  // page.js が選んだ表示（data-scheme）に合わせる。なければ端末の設定
+  const scheme = document.documentElement.dataset.scheme;
+  const dark = scheme ? scheme.startsWith("dark") : (document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches));
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/page.js"></script>
+</body>
+</html>

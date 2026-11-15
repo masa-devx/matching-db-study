@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>アーキテクチャの地図</title>
+<link rel="stylesheet" href="assets/page.css">
+</head>
+<body>
+<main>
+  <p class="meta"><a href="index.html">← 目次へ</a></p>
+  <h1>アーキテクチャの地図（レイヤード・オニオン・クリーン・DDD ほか）</h1>
+  <p class="meta">作成: 2026-11-15 ／ 状態: <span class="status">解説だけ（サイクル 01「どう作るか」の資料）</span></p>
+
+  <div class="card point">
+    <strong>このページでわかること</strong>
+    <ul>
+      <li>よく名前が出る設計（MVC・レイヤード（3層）・ヘキサゴナル・オニオン・クリーン・DDD・モジュラーモノリス・垂直スライス）が、それぞれ<strong>何を守るための形か</strong></li>
+      <li>メリット・デメリットと、どんなサービスやプロジェクトに向いているか</li>
+      <li>あとで変更（決済の差し替え・プランを増やす・DB を移す・会員が100倍）が来たとき、<strong>どの形だと何か所を直すことになるか</strong></li>
+      <li>このプロジェクト（会員の側は3層・管理画面はモジュール）に当てると、どこまで取り入れるのがよいか</li>
+    </ul>
+  </div>
+
+  <h2>1. 先に知っておく言葉</h2>
+  <table>
+    <tr><th>言葉</th><th>意味（1〜2文）</th></tr>
+    <tr><td>層（レイヤー）</td><td>受け持ちの違うコードを分けたかたまり。「HTTP の入口」「業務の判断」「DB の読み書き」など</td></tr>
+    <tr><td>依存</td><td>A が B を使う（B のクラス名を書いている）こと。B が変わると A も直す必要が出る</td></tr>
+    <tr><td>依存の向き</td><td>だれがだれを使うかの矢印。設計の多くは「この向きにしか矢印を引かない」という決まり</td></tr>
+    <tr><td>ドメイン（業務）</td><td>アプリが扱う世界の決まり。このアプリなら「お互いにいいねしたらマッチ」「男性だけが有料プランを買える」</td></tr>
+    <tr><td>ユースケース</td><td>利用者がする1つの操作。「いいねする」「プランを買う」</td></tr>
+    <tr><td>インターフェース（差し替え口）</td><td>「こういうメソッドを持つもの」という約束だけの型。中身（本物・テスト用の偽物）を差し替えられる</td></tr>
+    <tr><td>依存性逆転（DIP）</td><td>業務の側が差し替え口（インターフェース）を決め、DB や外のサービスの側がそれに合わせて作る形。矢印が「業務 → DB」から「DB → 業務の決めた口」に逆向きになる</td></tr>
+    <tr><td>ポートとアダプター</td><td>ポート＝業務の側が決めた差し替え口。アダプター＝その口に合わせて、DB・外の API・画面とつなぐ部品</td></tr>
+    <tr><td>モノリス</td><td>アプリ全体が1つのプログラムとして動く形。反対はマイクロサービス（機能ごとに別のプログラムに分ける）</td></tr>
+  </table>
+
+  <h2>2. まず全体の見取り図</h2>
+  <p>名前はたくさんあるが、狙いで分けると3つのグループになる。</p>
+  <table>
+    <tr><th>グループ</th><th>設計</th><th>何を守るか</th></tr>
+    <tr><td>横に切る（技術の受け持ちで分ける）</td><td>MVC・レイヤード（3層）</td><td>HTTP・業務・DB を混ぜない</td></tr>
+    <tr><td>内と外に分ける（業務を真ん中に置く）</td><td>ヘキサゴナル・オニオン・クリーン</td><td>業務の決まりを、DB・フレームワーク・外のサービスから守る（差し替えられる）</td></tr>
+    <tr><td>縦に切る（機能・業務のまとまりで分ける）</td><td>モジュラーモノリス・垂直スライス・DDD の戦略設計</td><td>1つの機能を変えるとき、触る場所を1か所に閉じる</td></tr>
+  </table>
+  <p>DDD（ドメイン駆動設計）だけは「フォルダの形」ではなく、<strong>業務をどう言葉とモデルにするかの考え方</strong>。上のどの形とも組み合わせられる（6章）。</p>
+
+  <h2>3. 横に切る設計</h2>
+
+  <h3>3-1. MVC（今のレガシー版）</h3>
+  <p>Model（データ）・View（画面）・Controller（入口）の3つに分ける。Laravel を入れたときの形。API だけなら View は JSON になる。</p>
+  <ul>
+    <li>メリット：覚えることが少ない。小さいうちは最速で作れる</li>
+    <li>デメリット：業務の判断の置き場がないので、Controller に全部が集まる（Fat Controller）。今のコードで JWT の読み方が30か所にコピーされたのはこのため</li>
+    <li>向いているもの：試作・社内の小さな道具・画面が数枚のアプリ</li>
+  </ul>
+
+  <h3>3-2. レイヤードアーキテクチャ（3層）</h3>
+  <p>プレゼンテーション層（入口）・ビジネスロジック層（業務）・データアクセス層（DB）の3つに分け、<strong>矢印は上から下へ一方向</strong>にする。</p>
+  <pre class="mermaid">
+flowchart TB
+  P["プレゼンテーション層 Controller・Request・Resource"] --> B["ビジネスロジック層 Service"]
+  B --> D["データアクセス層 Repository・Model"]
+  D --> DB[(PostgreSQL)]
+  </pre>
+<pre><code class="language-php">// プレゼンテーション層：受けて渡して返すだけ
+public function store(StoreLikeRequest $request, LikeService $likes): JsonResponse
+{
+    $match = $likes-&gt;like($request-&gt;user(), $request-&gt;targetPublicId());
+    return response()-&gt;json(new LikeResource($match), 201);
+}
+
+// ビジネスロジック層：このアプリの決まり
+public function like(User $me, string $targetId): ?UserMatch
+{
+    return DB::transaction(function () use ($me, $targetId) {
+        $target = $this-&gt;users-&gt;findActiveByPublicId($targetId);   // データアクセス層
+        if ($this-&gt;likes-&gt;exists($me, $target)) {
+            throw new AlreadyLiked();
+        }
+        $this-&gt;likes-&gt;create($me, $target);
+        return $this-&gt;likes-&gt;exists($target, $me) ? $this-&gt;matches-&gt;create($me, $target) : null;
+    });
+}</code></pre>
+  <ul>
+    <li>メリット：分かる人がとても多い（入ってきた人がすぐ読める）。どこに何を書くかの迷いが減る。Fat Controller を直す最初の一歩として段階的に移しやすい</li>
+    <li>デメリット：業務の層が、下のデータアクセス層（つまり DB の形）に依存する。DB を変えると業務の層まで波が来ることがある。Repository が Eloquent を包むだけの薄いファイルになりやすい。Service が太りやすい</li>
+    <li>向いているもの：中くらいまでの Web サービス・業務システム・API サーバー。チームに初めての人が多いとき</li>
+  </ul>
+
+  <h2>4. 内と外に分ける設計</h2>
+  <p>3つとも考え方はほぼ同じで、<strong>業務を真ん中に置き、DB・フレームワーク・外のサービスを外側に置く</strong>。外側から内側へだけ矢印を引く。違いは、層の切り方と呼び方。</p>
+
+  <h3>4-1. ヘキサゴナルアーキテクチャ（ポートとアダプター）</h3>
+  <pre class="mermaid">
+flowchart LR
+  HTTP["HTTP の入口 アダプター"] --> IN(["入口のポート いいねする"])
+  CLI["コマンド・キューの入口 アダプター"] --> IN
+  IN --> CORE["業務 いいねとマッチの決まり"]
+  CORE --> OUT1(["出口のポート いいねを保存する"])
+  CORE --> OUT2(["出口のポート 通知を送る"])
+  PG["PostgreSQL のアダプター"] -.実装する.-> OUT1
+  FS["Firestore のアダプター"] -.実装する.-> OUT1
+  MAIL["メールのアダプター"] -.実装する.-> OUT2
+  </pre>
+  <ul>
+    <li>考え方：業務の側が「何が要るか」を口（ポート）として決め、DB や外の API はその口に合わせた部品（アダプター）にする。入口も HTTP だけでなく、コマンドやキューから同じ業務を呼べる</li>
+    <li>メリット：外のものを差し替えやすい（決済の会社・メールの送り先・DB）。業務を、DB なしで速くテストできる</li>
+    <li>デメリット：口と部品の2つずつファイルが増える。差し替える予定のないものにまで口を作ると、読むのが遠回りになる</li>
+  </ul>
+
+  <h3>4-2. オニオンアーキテクチャ</h3>
+  <pre class="mermaid">
+flowchart TB
+  subgraph 外側["外側：画面・API・DB・外のサービス（Infrastructure）"]
+    subgraph アプリ["アプリケーションサービス（ユースケース）"]
+      subgraph ドメインサービス["ドメインサービス"]
+        M["ドメインモデル（中心）"]
+      end
+    end
+  end
+  </pre>
+  <ul>
+    <li>考え方：玉ねぎのように、中心にドメインモデル（業務のデータと決まり）、その外にドメインサービス、その外にユースケース、いちばん外に DB・画面。依存は外 → 内だけ。Repository の口（インターフェース）は内側に置き、実装は外側に置く</li>
+    <li>メリット：業務の中心が、どのライブラリにも依存しない</li>
+    <li>デメリット：ヘキサゴナルと同じ（ファイルと決まりが増える）。Eloquent のように「Model が DB を知っている」作りとは相性が悪く、Laravel では Model を2種類（業務の Model と DB の Model）持つかどうかで悩む</li>
+  </ul>
+
+  <h3>4-3. クリーンアーキテクチャ</h3>
+  <pre class="mermaid">
+flowchart LR
+  F["フレームワークとドライバ Laravel・PostgreSQL・Web"] --> A["インターフェースアダプター Controller・Presenter・Gateway"]
+  A --> U["ユースケース 1つの操作ごと"]
+  U --> E["エンティティ 業務の決まり"]
+  </pre>
+  <ul>
+    <li>考え方：同心円の4層（エンティティ → ユースケース → アダプター → フレームワーク）。ヘキサゴナルとオニオンをまとめ直したもので、<strong>依存は内側へだけ</strong>（依存性のルール）。ユースケースを1操作1クラス（例：<code>LikeUser</code>）にするのが特徴</li>
+    <li>メリット：フレームワークを替えても、業務とユースケースが残る。テストしやすさは最も高い</li>
+    <li>デメリット：ファイルの数と、層をまたぐたびのデータの詰め替え（入力の型・出力の型）が最も多い。小さなアプリでは「層を通すだけ」のコードが大半になる</li>
+  </ul>
+
+  <h3>4-4. 3つの違い（まとめ）</h3>
+  <table>
+    <tr><th></th><th>ヘキサゴナル</th><th>オニオン</th><th>クリーン</th></tr>
+    <tr><td>見方</td><td>内（業務）と外（つなぐ部品）の2つ</td><td>同心円の4層</td><td>同心円の4層</td></tr>
+    <tr><td>強調すること</td><td>口と部品で差し替える</td><td>ドメインモデルが中心</td><td>依存は内側へだけ・ユースケースが主役</td></tr>
+    <tr><td>Laravel での形の例</td><td><code>Domain/</code>・<code>Ports/</code>・<code>Adapters/</code></td><td><code>Domain/</code>・<code>Application/</code>・<code>Infrastructure/</code></td><td><code>Entities/</code>・<code>UseCases/</code>・<code>Adapters/</code>・<code>Frameworks/</code></td></tr>
+  </table>
+  <p>レイヤードとの決定的な違いは<strong>依存性逆転</strong>。レイヤードでは「業務 → DB」と矢印が下を向くが、この3つでは DB の側が業務の決めた口に合わせる（「DB → 業務の口」）。</p>
+
+  <h2>5. 縦に切る設計</h2>
+
+  <h3>5-1. モジュラーモノリス</h3>
+  <pre class="mermaid">
+flowchart LR
+  subgraph アプリ["1つのアプリ（モノリス）"]
+    M1["会員モジュール"]
+    M2["いいねとマッチモジュール"]
+    M3["メッセージモジュール"]
+    M4["有料プランモジュール"]
+  end
+  M2 -->|公開した関数だけを呼ぶ| M1
+  M3 -->|公開した関数だけを呼ぶ| M2
+  M4 -->|公開した関数だけを呼ぶ| M1
+  </pre>
+  <ul>
+    <li>考え方：1つのアプリのまま、機能（モジュール）ごとにフォルダを分け、モジュールどうしは決めた入口（公開した関数）だけでやり取りする。ほかのモジュールの表を直接読まない</li>
+    <li>メリット：1つの機能の変更が1つのフォルダに閉じる。いずれマイクロサービスに分けるとき、切り口がもうある。モジュールの中は、3層でもクリーンでも好きな形にできる</li>
+    <li>デメリット：モジュールの境目を最初に引き間違えると、あとで直すのが大変。境目を守る仕組み（アーキテクチャのテスト）がないと、すぐ崩れる</li>
+    <li>向いているもの：機能が増え続けるサービス・チームが複数に分かれ始めたプロダクト</li>
+  </ul>
+
+  <h3>5-2. 垂直スライス</h3>
+  <ul>
+    <li>考え方：「1つの操作（いいねする）」を、入口から DB まで1つのフォルダ（または1ファイル）にまとめる。層ではなく操作で切る</li>
+    <li>メリット：1つの操作を足す・消すのが、そのフォルダだけで済む。読む場所が1か所</li>
+    <li>デメリット：操作どうしで同じ処理が重なりやすい（重複を許す考え方）。共通の決まりをどこに置くかで迷う</li>
+    <li>向いているもの：画面や操作ごとの独立が強いもの。<strong>管理画面</strong>のように「一覧・詳細・停止」が並ぶもの</li>
+  </ul>
+
+  <h2>6. DDD（ドメイン駆動設計）</h2>
+  <p>フォルダの形ではなく、<strong>業務の専門家と同じ言葉で、業務をコードにする</strong>ための考え方。2つの段がある。</p>
+  <table>
+    <tr><th>段</th><th>道具</th><th>このアプリの例</th></tr>
+    <tr><td>戦略設計（大きな分け方）</td><td>ユビキタス言語（チームで同じ言葉を使う）・境界づけられたコンテキスト（言葉の意味が同じ範囲で区切る）</td><td>「会員」は、会員の側では「出会う相手」、管理画面では「停止できる人」、売上では「お金を払う人」。意味が違うので、別のまとまりにする</td></tr>
+    <tr><td>戦術設計（コードの部品）</td><td>エンティティ（ID で区別するもの）・値オブジェクト（値で区別するもの）・集約（一緒に整合性を守るまとまり）・ドメインサービス・リポジトリ・ドメインイベント</td><td>値オブジェクト：<code>Price</code>（金額と通貨）・<code>Age</code>。集約：「購入」と「有効期間」を一緒に守る。イベント：「マッチした」</td></tr>
+  </table>
+  <ul>
+    <li>メリット：業務が複雑でも、コードが業務の言葉で読める。仕様の変更が、業務の言葉の変更として1か所に効く</li>
+    <li>デメリット：学ぶことが多く、業務の専門家と話す時間が要る。業務が単純（データを入れて出すだけ）なら、手間に見合わない</li>
+    <li>向いているもの：業務の決まりが複雑で長く育てるもの（お金・予約・物流・保険・医療など）</li>
+    <li>組み合わせ：戦略設計はモジュラーモノリスの「境目」を決めるのに使える。戦術設計の部品（値オブジェクトなど）は、3層の Service の中でも使える</li>
+  </ul>
+
+  <h2>7. 一覧で比べる</h2>
+  <div class="code-block" style="overflow-x:auto">
+  <table>
+    <tr><th>設計</th><th>ファイルの多さ</th><th>学ぶ手間</th><th>テストしやすさ</th><th>差し替えやすさ</th><th>機能が増えたとき</th><th>向く規模</th></tr>
+    <tr><td>MVC</td><td>少ない</td><td>小</td><td>低（DB なしで試せない）</td><td>低</td><td>Controller が太る</td><td>小</td></tr>
+    <tr><td>レイヤード（3層）</td><td>中</td><td>小〜中</td><td>中（Service を試せる。DB の層はつながったまま）</td><td>中</td><td>Service が太りやすい</td><td>小〜中</td></tr>
+    <tr><td>ヘキサゴナル</td><td>多い</td><td>中</td><td>高</td><td>高</td><td>口が増える</td><td>中〜大</td></tr>
+    <tr><td>オニオン</td><td>多い</td><td>中〜大</td><td>高</td><td>高</td><td>層ごとにファイルが増える</td><td>中〜大</td></tr>
+    <tr><td>クリーン</td><td>最も多い</td><td>大</td><td>最も高い</td><td>高</td><td>ユースケースのクラスが増える</td><td>中〜大</td></tr>
+    <tr><td>モジュラーモノリス</td><td>中（中身による）</td><td>中</td><td>中〜高</td><td>中</td><td>モジュールを足すだけ</td><td>中〜大</td></tr>
+    <tr><td>垂直スライス</td><td>少〜中</td><td>小</td><td>中</td><td>低〜中</td><td>スライスを足すだけ（重複は増える）</td><td>小〜中</td></tr>
+    <tr><td>DDD（考え方）</td><td>部品による</td><td>大</td><td>高</td><td>―</td><td>境目と言葉で整理できる</td><td>業務が複雑なとき</td></tr>
+  </table>
+  </div>
+
+  <h2>8. 将来の変更が来たとき、何か所を直すか</h2>
+  <p>このアプリで起こりうる変更で比べる。「〇」は1か所で済む、「△」は数か所、「×」は広く直す。</p>
+  <div class="code-block" style="overflow-x:auto">
+  <table>
+    <tr><th>来る変更</th><th>MVC</th><th>3層</th><th>ヘキサゴナル・オニオン・クリーン</th><th>モジュラーモノリス</th><th>何が効くか</th></tr>
+    <tr><td>決済の会社を入れる・替える（08）</td><td>×（Controller に直書き）</td><td>△（Service が決済の SDK を直接使うと、Service まで直す）</td><td>〇（決済のアダプターを1つ足すだけ）</td><td>△〜〇（中身による）</td><td>外のサービスとの境目に口があるか</td></tr>
+    <tr><td>メッセージを Firestore に移す（05c）</td><td>×</td><td>△（Repository を直す。Model を上に返していたら Service と Resource も）</td><td>〇（保存のアダプターを差し替える）</td><td>△（メッセージのモジュールの中だけ）</td><td>DB の都合が上の層に漏れていないか</td></tr>
+    <tr><td>プランを一般とプラチナに分ける（07b）</td><td>×（判定が Controller の各所にコピー）</td><td>〇〜△（判定が Service に1つなら1か所）</td><td>〇（ドメインの決まりを直す）</td><td>〇（有料プランのモジュールの中）</td><td>業務の判定が1か所にあるか（設計の形より SSoT が効く）</td></tr>
+    <tr><td>管理画面に機能を足す</td><td>△</td><td>△（層ごとにファイルを足す）</td><td>△（層ごとにさらに多く足す）</td><td>〇（モジュールを1つ足す）</td><td>機能で縦に切れているか</td></tr>
+    <tr><td>同じ操作をスマホのアプリ・バッチからも呼ぶ</td><td>×（HTTP の中にある）</td><td>〇（Service を呼べばよい）</td><td>〇（入口のアダプターを足す）</td><td>〇</td><td>業務が HTTP から離れているか</td></tr>
+    <tr><td>会員が100倍で、メッセージだけ別のサーバーに分ける</td><td>×</td><td>×（層で横に切ったので、機能の切り口がない）</td><td>△</td><td>〇（モジュールの境目で切る）</td><td>機能の境目があるか</td></tr>
+    <tr><td>Laravel から別のフレームワークへ</td><td>×</td><td>×（Service が Eloquent を使う）</td><td>〇〜△（内側は残る）</td><td>×〜△</td><td>業務がフレームワークを知らないか。実際にはまれ</td></tr>
+  </table>
+  </div>
+  <p>表から分かること：<strong>どの形でも、1つの事実（判定・定数）を1か所に書くこと（SSoT）と、外との境目に口を作ることが、変更に一番効く</strong>。形の名前よりも、この2つを守れているかの方が大事。</p>
+
+  <h2>9. 形は育てていくもの</h2>
+  <pre class="mermaid">
+flowchart LR
+  A["MVC Fat Controller"] -->|業務を Service に出す| B["3層"]
+  B -->|外との境目だけ口を作る| C["3層と差し替え口"]
+  C -->|機能の境目を引く| D["モジュラーモノリス"]
+  D -->|負荷やチームの都合で切り出す| E["マイクロサービス"]
+  </pre>
+  <ul>
+    <li>はじめから最終の形にしない。<strong>困りごとが出たところで、次の形へ1段だけ進む</strong>（必要になってから足す）</li>
+    <li>移すときは、一気に書き換えず、触る機能から少しずつ新しい形にする（ストラングラーパターン：古いものを新しいもので少しずつ置き換える）。このプロジェクトの「触る API には先にテストを足す」は、この移し方の安全装置</li>
+    <li>どの段でも、決めた依存の向きをアーキテクチャのテスト（Pest の <code>arch()</code>）で機械で守る</li>
+  </ul>
+
+  <h2>10. このプロジェクトに当てると（リーダーの見立て）</h2>
+  <table>
+    <tr><th>場所</th><th>決まった形</th><th>取り入れるとよいもの</th><th>まだ入れないもの</th></tr>
+    <tr>
+      <td>会員の側（<code>backend/client</code>）</td>
+      <td>3層</td>
+      <td>
+        <ul>
+          <li>外との境目（決済・メール・Firestore・時刻）だけ、差し替え口を作る（ヘキサゴナルの考え方を一部）</li>
+          <li>値オブジェクト（金額・年齢）を、Service の中で使う（DDD の部品を一部）</li>
+          <li>Repository は Model をそのまま上に返さない決まり、または <code>with()</code> を Repository の中で決める決まり（N+1 を防ぐ）</li>
+        </ul>
+      </td>
+      <td>DB の Model と業務の Model の2つ持ち・全部の表へのインターフェース</td>
+    </tr>
+    <tr>
+      <td>管理画面（<code>backend/admin</code>）</td>
+      <td>モジュール</td>
+      <td>
+        <ul>
+          <li>画面の領域（会員・メッセージ・売上・プラン・監査ログ）ごとにモジュールを1つ</li>
+          <li>モジュールの中は薄く（垂直スライスに近い形）</li>
+          <li>監査ログを書く処理だけは、全モジュールが使う共通の入口にする</li>
+        </ul>
+      </td>
+      <td>モジュールの中の細かい層分け</td>
+    </tr>
+  </table>
+  <p>Repository の作り方・Service の単位・管理画面のモジュールの中身は、<code>docs/cycles/01-backend-foundation/03-how.md</code> で人と決める。</p>
+
+  <h2>11. 罠</h2>
+  <ul>
+    <li><strong>形だけ真似る</strong>：フォルダを3つに分けても、Service が Request を受け取ったり、Repository の中で業務の判断をしたりすれば、中身は Fat Controller と同じ</li>
+    <li><strong>全部に口を作る</strong>：差し替える予定のないものにインターフェースを作ると、読む人が実装を探して迷う</li>
+    <li><strong>Model が層を越えて漏れる</strong>：Eloquent の Model を Resource まで渡すと、Resource の中でリレーションを読み、N+1 になる</li>
+    <li><strong>Service が太る</strong>：機能ごとに1つの Service にすると、千行を超えることがある。操作が増えてきたら、操作ごとに分ける</li>
+    <li><strong>決めっぱなし</strong>：アーキテクチャのテストがないと、急いだときに1行の近道が入り、半年で崩れる</li>
+  </ul>
+
+  <h2>12. 理解を確かめる問い</h2>
+  <details><summary>レイヤードとクリーンの一番の違いは？</summary><p>依存の向き。レイヤードは「業務 → DB」と下を向き、業務の層が DB の層を知っている。クリーン（オニオン・ヘキサゴナルも）は依存性逆転で、業務の側が口を決め、DB の側がそれに合わせる。だから DB を替えても業務の層を直さずに済む。</p></details>
+  <details><summary>なぜこのアプリの会員の側は、クリーンではなく3層にしたのか？</summary><p>規模が中くらい（API 24本）で、入ってきた人がすぐ読めることを重く見たため。クリーンはテストしやすさと差し替えやすさで勝つが、ファイルと詰め替えのコードが多く、この大きさでは層を通すだけのコードが増える。差し替えが本当に要る外との境目（決済・メール・Firestore）だけ、口を作って補う。</p></details>
+  <details><summary>DDD は3層と一緒に使える？</summary><p>使える。DDD はフォルダの形ではなく考え方なので、戦略設計（言葉と境目）でモジュールの切り口を決め、戦術設計の部品（値オブジェクト・集約）を Service の中で使える。全部を入れる必要はない。</p></details>
+  <details><summary>会員が100倍になり、メッセージだけ別のサーバーに分けたい。どの形だと楽か？</summary><p>機能で縦に切っているモジュラーモノリス。モジュールの境目が、そのままサービスの境目になる。3層は層で横に切っているので、メッセージに関わるコードが3つの層に散らばり、切り出すときに集め直す必要がある。</p></details>
+  <details><summary>形を決めても崩れないようにするには？</summary><p>依存の向き（例：Service は <code>Illuminate\Http</code> を使わない、Repository は Service を使わない、管理画面のモジュールはほかのモジュールの中を直接使わない）を、Pest の <code>arch()</code> でテストにする。CI で落ちれば、急いでいても近道が入らない。</p></details>
+  <details><summary>どの形でも、変更に一番効くのは何か？</summary><p>1つの事実を1か所に書くこと（SSoT）と、外との境目に口を作ること。たとえば「有料かどうか」の判定が1か所にあれば、プランを増やすときに1か所を直せば済む。形の名前より、この2つを守れているかの方が大事。</p></details>
+</main>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+  const scheme = document.documentElement.dataset.scheme;
+  const dark = scheme ? scheme.startsWith("dark") : (document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches));
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/page.js"></script>
+</body>
+</html>

@@ -1,0 +1,1084 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>バックエンドの設計</title>
+<link rel="stylesheet" href="assets/page.css">
+</head>
+<body>
+<main>
+  <p class="meta"><a href="index.html">← 目次へ</a></p>
+  <h1>バックエンドの設計（会員の側と管理画面）</h1>
+  <p class="meta">作成: 2026-11-15 ／ 改訂: 2026-11-15（第3版：管理画面も同じ4層の骨組みにした） ／ 状態: <span class="status">参考（残しておく版）</span></p>
+
+  <div class="card warn">
+    <strong>このページは参考として残している版です</strong>
+    <p>決まりと書き方の正本は <code>agents/rules/architecture.md</code>、全体の地図は <code>docs/backend.md</code>。このページと違うところがあれば、そちらが正しい。2026-11-15 の第3版のまま、これ以上は直さない。</p>
+  </div>
+
+  <div class="card point">
+    <strong>このページでわかること</strong>
+    <ul>
+      <li>会員の側：<strong>DIP（依存性逆転）を使ったレイヤードアーキテクチャ</strong>（Http・Application・Domain・Infrastructure）のディレクトリと決まり</li>
+      <li>管理画面：<strong>会員の側と同じ4層の骨組み</strong>（読み取りは QueryService を直接・書き込みだけ UseCase と Domain）のディレクトリと決まり</li>
+      <li>リクエストがどの層をどの順で通るか（フローチャートと流れの図）</li>
+      <li>層ごとのサンプルコード（いいねする・会員の検索・会員の停止）と、テストの書き方</li>
+      <li>メリット・デメリット・今後の運用（移し方・機能の足し方・やり直しのきっかけ）</li>
+    </ul>
+  </div>
+
+  <h2>1. 決まったこと</h2>
+  <table>
+    <tr><th>項目</th><th>会員の側（<code>backend/client</code>）</th><th>管理画面（<code>backend/admin</code>）</th></tr>
+    <tr><td>形</td><td>DIP を使ったレイヤード（4層）</td><td>同じ4層の骨組み。読み取りは Controller から QueryService を直接、書き込みだけ UseCase と Domain</td></tr>
+    <tr><td>理由</td><td>中くらいの規模。いろいろな現場で使われていて、入った人がすぐ読める。依存性の少ない設計にしたい（ファイルが増えてもよい）</td><td>API が少なく（14本）、読み取りと集計が中心。形を会員の側と1つにして、読む・レビューする・AI が真似する手間を減らす</td></tr>
+    <tr><td>業務の決まりの置き場</td><td>Domain 層（Laravel を使わない）</td><td>Domain 層（運営の権限と監査：役割・停止・値段・監査ログ）</td></tr>
+    <tr><td>Laravel の機能</td><td>Http と Infrastructure だけで使う。Application と Domain では使わない（トランザクションと日時も interface 越し）</td><td>会員の側と同じ</td></tr>
+    <tr><td>読み取りの専用の道</td><td>QueryService（必要なときだけ）</td><td>QueryService（読み取りは全部ここ。画面ごと）</td></tr>
+    <tr><td>守り方</td><td colspan="2">アーキテクチャのテスト（Pest の <code>arch()</code>）と API テスト</td></tr>
+    <tr><td>方針</td><td colspan="2">今の段階に合う形にする。機能・会員・ファイルが増えて問題が出たら、そのときにやり直す（11章のきっかけ）</td></tr>
+  </table>
+
+  <h2>2. 先に知っておく言葉</h2>
+  <table>
+    <tr><th>言葉</th><th>意味（1〜2文）</th></tr>
+    <tr><td>依存性逆転（DIP）</td><td>業務の側（Domain）が「こういう保存や取り出しが要る」という約束（interface）を決め、DB の側（Infrastructure）がそれに合わせて作る形。業務が DB を知らずに済む</td></tr>
+    <tr><td>エンティティ</td><td>ID で区別する業務のもの（会員・いいね）。中身が変わっても同じもの</td></tr>
+    <tr><td>値オブジェクト</td><td>値そのもので区別する小さな型（会員の ID・金額）。作るときに正しい値かを確かめ、あとから変えない</td></tr>
+    <tr><td>集約</td><td>一緒に整合性を守るまとまり。保存と取り出しは集約ごとに Repository で行う</td></tr>
+    <tr><td>ドメインサービス</td><td>1つのエンティティに置くと不自然な業務の決まり（「2人がお互いにいいねしたらマッチ」）</td></tr>
+    <tr><td>UseCase</td><td>利用者の1つの操作の手順（いいねする）。1操作1クラス</td></tr>
+    <tr><td>DTO</td><td>層の間でデータを運ぶだけの型（入力・出力）。連想配列の代わりに使い、型で間違いを止める</td></tr>
+    <tr><td>Repository</td><td>集約を保存・取り出す。interface は Domain、実装（Eloquent を使う）は Infrastructure</td></tr>
+    <tr><td>QueryService</td><td>一覧・検索・集計のような読み取り専用の処理。画面に出す形の DTO を直接返し、エンティティへの詰め替えを省く</td></tr>
+    <tr><td>詰め替え（マッピング）</td><td>Eloquent の Model（DB の形）と Domain のエンティティ（業務の形）を、お互いに作り直すこと。Repository の実装の中で行う</td></tr>
+  </table>
+
+  <h2>3. 全体の見取り図</h2>
+  <p>2つの Laravel のアプリが、同じ PostgreSQL を使う。表の作り（マイグレーション）は会員の側にまとめてある。</p>
+  <pre class="mermaid">
+flowchart LR
+  C["会員の画面 frontend/client"] --> CA["会員の側の API backend/client レイヤード4層"]
+  A["管理画面 frontend/admin"] --> AA["管理画面の API backend/admin レイヤード4層"]
+  CA --> DB[(PostgreSQL matching_dev)]
+  AA --> DB
+  CA --> FS[(Firestore Emulator)]
+  M["マイグレーション backend/client だけ"] -.表を作る.-> DB
+  </pre>
+
+  <h2>4. 会員の側：ディレクトリ設計図</h2>
+<pre><code class="language-bash">backend/client/app/
+├── Http/                                   # ① UI 層：外との入出力（Laravel の標準の場所）
+│   ├── Controllers/
+│   │   ├── Matching/LikeController.php     #    受け取る → UseCase を呼ぶ → Resource で返す
+│   │   └── Members/SearchController.php
+│   ├── Requests/                           #    入力の形の確かめ（FormRequest）
+│   │   ├── Matching/StoreLikeRequest.php
+│   │   └── Members/SearchMembersRequest.php
+│   ├── Resources/                          #    出力の形（API Resource）
+│   │   ├── Matching/LikeResultResource.php
+│   │   └── Members/MemberSummaryResource.php
+│   └── Middleware/AuthenticateMember.php   #    トークンを読むのはここだけ（今は16か所にコピー）
+│
+├── Application/                            # ② アプリケーション層：操作の手順（Laravel を使わない）
+│   ├── UseCases/
+│   │   └── Matching/LikeMemberUseCase.php  #    1操作1クラス
+│   ├── Dtos/
+│   │   └── Matching/
+│   │       ├── LikeMemberInput.php         #    入力（Request に依存しない）
+│   │       └── LikeMemberOutput.php        #    出力（Model を外に出さない）
+│   └── Transaction/
+│       └── TransactionManagerInterface.php #    トランザクションの約束
+│
+├── Domain/                                 # ③ ドメイン層：業務の決まり（ふつうの PHP だけ）
+│   ├── Shared/
+│   │   └── ClockInterface.php              #    日時の約束
+│   ├── Members/
+│   │   └── Member/
+│   │       ├── Member.php                  #    エンティティ
+│   │       ├── MemberId.php                #    値オブジェクト
+│   │       ├── Gender.php                  #    enum
+│   │       ├── MemberRepositoryInterface.php
+│   │       └── MemberNotFoundException.php
+│   ├── Matching/
+│   │   ├── Like/
+│   │   │   ├── Like.php
+│   │   │   ├── LikeQuota.php               #    無料の男性は1日10回（今は3か所にコピー）
+│   │   │   ├── LikeRepositoryInterface.php
+│   │   │   └── PaidPlanRequiredException.php
+│   │   ├── UserMatch/
+│   │   │   ├── UserMatch.php
+│   │   │   └── UserMatchRepositoryInterface.php
+│   │   └── Services/MatchingService.php    #    ドメインサービス
+│   └── Messaging/
+│       └── TalkRoom/
+│           ├── TalkRoom.php
+│           ├── TalkRoomRepositoryInterface.php
+│           └── ChatSyncInterface.php       #    Firestore へ写す約束
+│
+├── Infrastructure/                         # ④ インフラ層：約束の実装（Eloquent・外のサービス）
+│   ├── Models/                             #    Eloquent の Model（今の app/Models を移す）
+│   │   ├── User.php・Profile.php・Like.php・UserMatch.php・TalkRoom.php …
+│   ├── Repositories/
+│   │   ├── Members/EloquentMemberRepository.php
+│   │   ├── Matching/EloquentLikeRepository.php
+│   │   ├── Matching/EloquentUserMatchRepository.php
+│   │   └── Messaging/EloquentTalkRoomRepository.php
+│   ├── QueryServices/                      #    必要なときだけ（検索・一覧）
+│   │   └── Members/SearchMembersQueryService.php
+│   ├── External/
+│   │   ├── Firestore/FirestoreChatSync.php
+│   │   └── Jwt/JwtTokenService.php
+│   ├── Transaction/LaravelTransactionManager.php
+│   └── Clock/SystemClock.php
+│
+└── Providers/
+    └── RepositoryServiceProvider.php       # interface と実装をつなぐ（つなぐのはここだけ）</code></pre>
+  <ul>
+    <li><strong>各層の中は、業務のまとまり（<code>Members</code>・<code>Matching</code>・<code>Messaging</code>）でフォルダを分け、名前を全層でそろえる</strong>。1つの機能を探すときは、各層の同じ名前のフォルダを見ればよい。将来モジュラーモノリスへ移るときは、同じ名前のフォルダを集めるだけで済む</li>
+    <li>Domain の中は、さらに集約（<code>Like</code>・<code>UserMatch</code>）でフォルダを分ける</li>
+    <li>名前の決まり：interface は <code>〜Interface</code>、Eloquent を使う実装は <code>Eloquent〜</code>、例外は <code>〜Exception</code>、UseCase は <code>〜UseCase</code></li>
+  </ul>
+
+  <h2>5. 会員の側：依存の向き</h2>
+  <pre class="mermaid">
+flowchart TB
+  H["① Http Controller・Request・Resource・Middleware"] --> A["② Application UseCase・DTO"]
+  A --> D["③ Domain エンティティ・値オブジェクト・interface"]
+  H --> D
+  I["④ Infrastructure Eloquent の Repository・QueryService・外のサービス"] -->|interface を実装する| D
+  I -->|TransactionManagerInterface を実装する| A
+  H -->|検索は QueryService を直接呼ぶ| I
+  P["Providers"] -.つなぐ.-> D
+  P -.つなぐ.-> I
+  </pre>
+  <table>
+    <tr><th>層</th><th>使ってよい相手</th><th>使ってはいけない相手</th><th>Laravel の機能</th></tr>
+    <tr><td>① Http</td><td>Application・Domain（例外・値オブジェクト）・Infrastructure の QueryService（読み取りだけ）</td><td>Infrastructure の Repository と Model</td><td>使ってよい</td></tr>
+    <tr><td>② Application</td><td>Domain</td><td>Http・Infrastructure</td><td>使わない（<code>DB::</code>・<code>now()</code>・<code>config()</code> も）</td></tr>
+    <tr><td>③ Domain</td><td>なし（PHP の標準だけ）</td><td>ほかの全部の層</td><td>使わない</td></tr>
+    <tr><td>④ Infrastructure</td><td>Domain・Application の interface と DTO</td><td>Http・Application の UseCase</td><td>使ってよい</td></tr>
+    <tr><td>Providers</td><td>全部</td><td>―</td><td>使ってよい</td></tr>
+  </table>
+  <p>矢印が Domain に集まっているのがポイント。<strong>Domain はだれにも依存しないので、DB・Firestore・Laravel が変わっても、業務の決まりは直さずに済む</strong>。</p>
+
+  <h2>6. 会員の側：リクエストの流れ</h2>
+
+  <h3>6-1. 書き込み（UseCase の道）と読み取り（QueryService の道）</h3>
+  <pre class="mermaid">
+flowchart TD
+  R[リクエスト] --> MW{AuthenticateMember トークンは正しい？}
+  MW -->|いいえ| E401[401]
+  MW -->|はい| FR{FormRequest 入力の形は正しい？}
+  FR -->|いいえ| E422[422]
+  FR -->|はい| K{書き込み？}
+  K -->|書き込み| UC[UseCase に Input を渡す]
+  UC --> TX[TransactionManager の中で]
+  TX --> DOM{Domain の決まりを満たす？}
+  DOM -->|いいえ| EX[Domain の例外 → 1か所で 403・404・409 に]
+  DOM -->|はい| REPO[Repository で保存]
+  REPO --> COMMIT[コミット]
+  COMMIT --> EXT[外への書き込み Firestore]
+  EXT --> OUT[Output を返す]
+  K -->|一覧・検索| QS[QueryService が DTO を返す]
+  OUT --> RES[Resource で JSON に]
+  QS --> RES
+  RES --> RESP[応答]
+  </pre>
+
+  <h3>6-2. 「いいねする」の流れと、流れる SQL</h3>
+  <pre class="mermaid">
+sequenceDiagram
+  participant C as 画面
+  participant MW as AuthenticateMember
+  participant LC as LikeController
+  participant UC as LikeMemberUseCase
+  participant TX as TransactionManager
+  participant D as Domain（LikeQuota・MatchingService）
+  participant R as Repository の実装
+  participant DB as PostgreSQL
+  participant FS as ChatSync（Firestore）
+  C->>MW: POST /api/me/likes
+  MW->>LC: 会員 ID を載せて渡す
+  LC->>UC: execute(LikeMemberInput)
+  UC->>R: 自分と相手を取り出す・今日の数を数える
+  R->>DB: select users と profiles・select count likes
+  UC->>D: LikeQuota で回数を確かめる
+  UC->>TX: run
+  TX->>DB: begin
+  UC->>R: save(Like)
+  R->>DB: insert likes
+  UC->>D: MatchingService でマッチするか
+  D->>R: 逆向きのいいねはある？
+  R->>DB: select likes
+  opt マッチした
+    UC->>R: save(UserMatch)・save(TalkRoom)
+    R->>DB: insert user_matches・talk_rooms・talk_room_members
+  end
+  TX->>DB: commit
+  opt マッチした
+    UC->>FS: openRoom（コミットのあと）
+  end
+  UC-->>LC: LikeMemberOutput
+  LC-->>C: 201 と LikeResultResource
+  </pre>
+
+  <h2>7. 会員の側：サンプルコード</h2>
+  <p>「いいねする」（今は <code>LikeController::store</code> の約80行）を層に分けた形。<strong>振る舞いは今のまま</strong>にし、測って分かっている問題（自分にいいねできる・二重で 500・日付の境目が UTC）は、別の改善のチケットで直す前提のコメントを残している。</p>
+
+  <h3>7-1. ① Http 層</h3>
+<pre><code class="language-php">// routes/api.php
+Route::middleware(AuthenticateMember::class)-&gt;group(function () {
+    Route::post('/me/likes', [LikeController::class, 'store']);
+    Route::get('/users', [SearchController::class, 'index']);
+});</code></pre>
+<pre><code class="language-php">// app/Http/Middleware/AuthenticateMember.php
+// トークンを読むのはここだけ。読めたら会員 ID をリクエストに載せる
+final class AuthenticateMember
+{
+    public function __construct(private JwtTokenService $tokens) {}
+
+    public function handle(Request $request, Closure $next): Response
+    {
+        $memberId = $this-&gt;tokens-&gt;memberIdFrom($request-&gt;bearerToken());   // 読めなければ null
+        if ($memberId === null) {
+            return response()-&gt;json(['message' =&gt; 'ログインしてください'], 401);
+        }
+        $request-&gt;attributes-&gt;set('member_id', $memberId);
+
+        return $next($request);
+    }
+}</code></pre>
+<pre><code class="language-php">// app/Http/Requests/Matching/StoreLikeRequest.php
+// 形だけを確かめる（UUID か）。「相手がいるか」は業務の話なので Domain で
+final class StoreLikeRequest extends FormRequest
+{
+    /** @return array&lt;string, list&lt;string&gt;&gt; */
+    public function rules(): array
+    {
+        return ['user_id' =&gt; ['required', 'uuid']];
+    }
+
+    public function toInput(): LikeMemberInput
+    {
+        return new LikeMemberInput(
+            memberId: new MemberId((int) $this-&gt;attributes-&gt;get('member_id')),
+            targetPublicId: $this-&gt;string('user_id')-&gt;toString(),
+        );
+    }
+}</code></pre>
+<pre><code class="language-php">// app/Http/Controllers/Matching/LikeController.php
+// 受け取る → UseCase を呼ぶ → 形にして返す。判断も SQL も書かない
+final class LikeController extends Controller
+{
+    public function store(StoreLikeRequest $request, LikeMemberUseCase $useCase): JsonResponse
+    {
+        $output = $useCase-&gt;execute($request-&gt;toInput());
+
+        return (new LikeResultResource($output))-&gt;response()-&gt;setStatusCode(201);
+    }
+}</code></pre>
+<pre><code class="language-php">// app/Http/Resources/Matching/LikeResultResource.php
+// 返してよい項目だけを並べる（今は Model を丸ごと返している）
+final class LikeResultResource extends JsonResource
+{
+    /** @return array&lt;string, mixed&gt; */
+    public function toArray(Request $request): array
+    {
+        /** @var LikeMemberOutput $output */
+        $output = $this-&gt;resource;
+
+        return [
+            'matched' =&gt; $output-&gt;matched,
+            'talk_room_id' =&gt; $output-&gt;talkRoomPublicId,
+        ];
+    }
+}</code></pre>
+
+  <h3>7-2. ② Application 層</h3>
+<pre><code class="language-php">// app/Application/Dtos/Matching/LikeMemberInput.php
+final readonly class LikeMemberInput
+{
+    public function __construct(
+        public MemberId $memberId,
+        public string $targetPublicId,
+    ) {}
+}
+
+// app/Application/Dtos/Matching/LikeMemberOutput.php
+final readonly class LikeMemberOutput
+{
+    public function __construct(
+        public bool $matched,
+        public ?string $talkRoomPublicId,
+    ) {}
+}</code></pre>
+<pre><code class="language-php">// app/Application/Transaction/TransactionManagerInterface.php
+interface TransactionManagerInterface
+{
+    /**
+     * 中の処理を1つのトランザクションで実行する。例外が出たら巻き戻して、その例外を投げ直す
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     */
+    public function run(callable $callback): mixed;
+}</code></pre>
+<pre><code class="language-php">// app/Application/UseCases/Matching/LikeMemberUseCase.php
+// 手順だけを書く。決まりは Domain、保存は Repository、外への書き込みはコミットのあと
+final class LikeMemberUseCase
+{
+    public function __construct(
+        private MemberRepositoryInterface $members,
+        private LikeRepositoryInterface $likes,
+        private UserMatchRepositoryInterface $matches,
+        private TalkRoomRepositoryInterface $talkRooms,
+        private MatchingService $matching,
+        private ChatSyncInterface $chatSync,
+        private TransactionManagerInterface $transaction,
+        private ClockInterface $clock,
+    ) {}
+
+    public function execute(LikeMemberInput $input): LikeMemberOutput
+    {
+        $me = $this-&gt;members-&gt;findById($input-&gt;memberId);
+        $target = $this-&gt;members-&gt;findByPublicId($input-&gt;targetPublicId);   // いなければ MemberNotFoundException
+        $now = $this-&gt;clock-&gt;now();
+
+        // 無料の男性は1日10回まで（日付の境目は今のまま UTC。既知のリスク：07 の 9-2）
+        LikeQuota::assertNotExceeded($me, $this-&gt;likes-&gt;countSentOn($me-&gt;id, $now));
+
+        $room = $this-&gt;transaction-&gt;run(function () use ($me, $target, $now): ?TalkRoom {
+            $this-&gt;likes-&gt;save(Like::create($me-&gt;id, $target-&gt;id, $now));
+
+            if (! $this-&gt;matching-&gt;isMutual($me-&gt;id, $target-&gt;id)) {
+                return null;
+            }
+            $match = UserMatch::create($me-&gt;id, $target-&gt;id, $now);
+            $this-&gt;matches-&gt;save($match);
+            $room = TalkRoom::openFor($match);
+            $this-&gt;talkRooms-&gt;save($room);
+
+            return $room;
+        });
+
+        if ($room !== null) {
+            $this-&gt;chatSync-&gt;openRoom($room);   // DB が確定してから外へ書く
+        }
+
+        return new LikeMemberOutput(matched: $room !== null, talkRoomPublicId: $room?-&gt;publicId);
+    }
+}</code></pre>
+
+  <h3>7-3. ③ Domain 層</h3>
+<pre><code class="language-php">// app/Domain/Members/Member/MemberId.php（値オブジェクト）
+final readonly class MemberId
+{
+    public function __construct(public int $value)
+    {
+        if ($value &lt;= 0) {
+            throw new InvalidArgumentException('会員の ID は 1 以上');
+        }
+    }
+
+    public function equals(self $other): bool
+    {
+        return $this-&gt;value === $other-&gt;value;
+    }
+}
+
+// app/Domain/Members/Member/Gender.php（enum）
+enum Gender: string
+{
+    case Male = 'male';
+    case Female = 'female';
+}
+
+// app/Domain/Members/Member/Member.php（エンティティ。いいねに要るものだけを持つ）
+final readonly class Member
+{
+    public function __construct(
+        public MemberId $id,
+        public string $publicId,
+        public Gender $gender,
+        public bool $isPaid,   // 今は is_paid だけを見る（期限を見ないのは既知のリスク：07 の 9-2）
+    ) {}
+}</code></pre>
+<pre><code class="language-php">// app/Domain/Matching/Like/Like.php（エンティティ）
+// 新しく作るときの create と、DB から作り直すときの reconstruct を分ける
+final class Like
+{
+    private function __construct(
+        public readonly ?int $id,
+        public readonly MemberId $from,
+        public readonly MemberId $to,
+        public readonly DateTimeImmutable $likedAt,
+    ) {}
+
+    public static function create(MemberId $from, MemberId $to, DateTimeImmutable $now): self
+    {
+        // 自分へのいいねを止める決まりは、改善のチケットでここに足す（今は止めていない）
+        return new self(null, $from, $to, $now);
+    }
+
+    public static function reconstruct(int $id, MemberId $from, MemberId $to, DateTimeImmutable $likedAt): self
+    {
+        return new self($id, $from, $to, $likedAt);   // DB の値は正しい前提で、確かめを省く
+    }
+}</code></pre>
+<pre><code class="language-php">// app/Domain/Matching/Like/LikeQuota.php
+// 決まりを1か所に。DB を知らない純粋な関数なので、単体テストで境目を確かめられる
+final class LikeQuota
+{
+    public const FREE_MALE_DAILY_LIMIT = 10;
+
+    public static function assertNotExceeded(Member $member, int $sentToday): void
+    {
+        if ($member-&gt;gender === Gender::Male &amp;&amp; ! $member-&gt;isPaid &amp;&amp; $sentToday &gt;= self::FREE_MALE_DAILY_LIMIT) {
+            throw new PaidPlanRequiredException();
+        }
+    }
+}</code></pre>
+<pre><code class="language-php">// app/Domain/Matching/Like/LikeRepositoryInterface.php
+// 業務の側が「何が要るか」を決める。SQL も Eloquent も出てこない
+interface LikeRepositoryInterface
+{
+    public function save(Like $like): void;
+
+    public function exists(MemberId $from, MemberId $to): bool;
+
+    public function countSentOn(MemberId $from, DateTimeImmutable $day): int;
+}
+
+// app/Domain/Matching/Services/MatchingService.php（ドメインサービス）
+final class MatchingService
+{
+    public function __construct(private LikeRepositoryInterface $likes) {}
+
+    /** 相手からもいいねされていれば、お互いにいいね（＝マッチ） */
+    public function isMutual(MemberId $me, MemberId $target): bool
+    {
+        return $this-&gt;likes-&gt;exists(from: $target, to: $me);
+    }
+}
+
+// app/Domain/Messaging/TalkRoom/ChatSyncInterface.php
+interface ChatSyncInterface
+{
+    public function openRoom(TalkRoom $room): void;
+}
+
+// app/Domain/Shared/ClockInterface.php
+interface ClockInterface
+{
+    public function now(): DateTimeImmutable;
+}</code></pre>
+
+  <h3>7-4. ④ Infrastructure 層</h3>
+<pre><code class="language-php">// app/Infrastructure/Repositories/Matching/EloquentLikeRepository.php
+// Eloquent が出てくるのは、ここから下だけ。詰め替えもここ
+final class EloquentLikeRepository implements LikeRepositoryInterface
+{
+    public function save(Like $like): void
+    {
+        LikeModel::query()-&gt;create([
+            'from_user_id' =&gt; $like-&gt;from-&gt;value,
+            'to_user_id' =&gt; $like-&gt;to-&gt;value,
+            'created_at' =&gt; $like-&gt;likedAt,
+        ]);
+    }
+
+    public function exists(MemberId $from, MemberId $to): bool
+    {
+        return LikeModel::query()
+            -&gt;where('from_user_id', $from-&gt;value)
+            -&gt;where('to_user_id', $to-&gt;value)
+            -&gt;exists();
+    }
+
+    public function countSentOn(MemberId $from, DateTimeImmutable $day): int
+    {
+        return LikeModel::query()
+            -&gt;where('from_user_id', $from-&gt;value)
+            -&gt;whereDate('created_at', $day-&gt;format('Y-m-d'))   // 列を包むのでインデックスが効かない（04 の 9-2）
+            -&gt;count();
+    }
+}
+
+// app/Infrastructure/Repositories/Members/EloquentMemberRepository.php（詰め替えの例）
+final class EloquentMemberRepository implements MemberRepositoryInterface
+{
+    public function findByPublicId(string $publicId): Member
+    {
+        $row = UserModel::query()-&gt;with('profile')-&gt;where('public_id', $publicId)-&gt;first()
+            ?? throw new MemberNotFoundException();
+
+        return new Member(
+            id: new MemberId($row-&gt;id),
+            publicId: $row-&gt;public_id,
+            gender: Gender::from($row-&gt;profile-&gt;gender),
+            isPaid: (bool) $row-&gt;is_paid,
+        );
+    }
+    // findById も同じ形
+}</code></pre>
+<pre><code class="language-php">// app/Infrastructure/Transaction/LaravelTransactionManager.php
+final class LaravelTransactionManager implements TransactionManagerInterface
+{
+    public function run(callable $callback): mixed
+    {
+        return DB::transaction($callback);   // Laravel のトランザクションが出てくるのはここだけ
+    }
+}
+
+// app/Infrastructure/Clock/SystemClock.php
+final class SystemClock implements ClockInterface
+{
+    public function now(): DateTimeImmutable
+    {
+        return new DateTimeImmutable('now', new DateTimeZone('UTC'));
+    }
+}
+
+// app/Providers/RepositoryServiceProvider.php
+final class RepositoryServiceProvider extends ServiceProvider
+{
+    /** @var array&lt;class-string, class-string&gt; */
+    public array $bindings = [
+        MemberRepositoryInterface::class =&gt; EloquentMemberRepository::class,
+        LikeRepositoryInterface::class =&gt; EloquentLikeRepository::class,
+        UserMatchRepositoryInterface::class =&gt; EloquentUserMatchRepository::class,
+        TalkRoomRepositoryInterface::class =&gt; EloquentTalkRoomRepository::class,
+        ChatSyncInterface::class =&gt; FirestoreChatSync::class,
+        TransactionManagerInterface::class =&gt; LaravelTransactionManager::class,
+        ClockInterface::class =&gt; SystemClock::class,
+    ];
+}</code></pre>
+
+  <h3>7-5. 読み取りの道（QueryService）</h3>
+  <p>一覧と検索は、エンティティに詰め替えると遅く、手間も大きい。<strong>QueryService が画面の形の DTO を直接返す</strong>。SQL は自由に書けるので、JOIN・<code>with()</code>・カーソルをここで決める（N+1 を防ぐ場所が1か所になる）。</p>
+<pre><code class="language-php">// app/Infrastructure/QueryServices/Members/SearchMembersQueryService.php
+final class SearchMembersQueryService
+{
+    /** @return list&lt;MemberSummary&gt; */
+    public function search(MemberId $me, SearchCriteria $criteria): array
+    {
+        return UserModel::query()
+            -&gt;join('profiles', 'profiles.user_id', '=', 'users.id')
+            -&gt;whereNull('users.deleted_at')
+            -&gt;where('profiles.gender', $criteria-&gt;gender-&gt;value)
+            -&gt;whereNotExists(fn ($q) =&gt; $q-&gt;from('blocks')-&gt;whereColumn('blocks.blocked_id', 'users.id')-&gt;where('blocks.blocker_id', $me-&gt;value))
+            -&gt;orderByDesc('users.last_login_at')
+            -&gt;limit($criteria-&gt;limit)
+            -&gt;get(['users.public_id', 'profiles.nickname', 'profiles.birthday'])
+            -&gt;map(fn ($row) =&gt; new MemberSummary($row-&gt;public_id, $row-&gt;nickname, $row-&gt;birthday))
+            -&gt;all();
+    }
+}
+
+// app/Http/Controllers/Members/SearchController.php（読み取りは UseCase を通さなくてよい）
+public function index(SearchMembersRequest $request, SearchMembersQueryService $query): AnonymousResourceCollection
+{
+    return MemberSummaryResource::collection($query-&gt;search($request-&gt;memberId(), $request-&gt;criteria()));
+}</code></pre>
+
+  <h3>7-6. エラーの流れ</h3>
+  <p>Domain は状態コードを知らない。<strong>Domain の例外を HTTP の形に変えるのは1か所</strong>（<code>bootstrap/app.php</code>）。</p>
+<pre><code class="language-php">// bootstrap/app.php
+-&gt;withExceptions(function (Exceptions $exceptions): void {
+    $exceptions-&gt;render(fn (PaidPlanRequiredException $e) =&gt; response()-&gt;json(['message' =&gt; '有料会員になると使えます'], 403));
+    $exceptions-&gt;render(fn (MemberNotFoundException $e) =&gt; response()-&gt;json(['message' =&gt; '会員が見つかりません'], 404));
+})</code></pre>
+  <table>
+    <tr><th>起きること</th><th>止める場所</th><th>応答</th></tr>
+    <tr><td>トークンがない・壊れている</td><td>Middleware</td><td>401</td></tr>
+    <tr><td>入力の形が違う</td><td>FormRequest</td><td>422</td></tr>
+    <tr><td>業務の決まりに反する</td><td>Domain が例外 → <code>bootstrap/app.php</code> で変える</td><td>403・404・409</td></tr>
+    <tr><td>DB・外のサービスが落ちた</td><td>どこでも握りつぶさない → ログとエラー通知</td><td>500</td></tr>
+  </table>
+
+  <h2>8. 会員の側：テスト</h2>
+  <table>
+    <tr><th>種類</th><th>置き場</th><th>何を守るか</th><th>DB</th></tr>
+    <tr><td>API テスト</td><td><code>tests/Feature/Api/Matching/StoreLikeTest.php</code></td><td>外から見える振る舞い（応答・DB）。層の中身を移しても落ちない</td><td>本物（<code>matching_test</code>）</td></tr>
+    <tr><td>Domain の単体テスト</td><td><code>tests/Unit/Domain/Matching/LikeQuotaTest.php</code></td><td>業務の決まりの境目</td><td>なし（速い）</td></tr>
+    <tr><td>UseCase のテスト</td><td><code>tests/Unit/Application/Matching/LikeMemberUseCaseTest.php</code></td><td>手順（マッチしたら外へ写す・しなければ写さない）</td><td>なし（interface を偽物に差し替える）</td></tr>
+    <tr><td>Repository のテスト</td><td><code>tests/Feature/Infrastructure/EloquentLikeRepositoryTest.php</code></td><td>詰め替えと SQL が正しいか</td><td>本物</td></tr>
+    <tr><td>アーキテクチャのテスト</td><td><code>tests/Arch/LayersTest.php</code></td><td>依存の向き（5章の表）</td><td>なし</td></tr>
+  </table>
+<pre><code class="language-php">// tests/Feature/Api/Matching/StoreLikeTest.php（API テスト：外から見る）
+it('トークンがないとき、401 が返り、likes の行は増えない', function () {
+    $target = Member::factory()-&gt;create();
+
+    $this-&gt;postJson('/api/me/likes', ['user_id' =&gt; $target-&gt;public_id])
+        -&gt;assertUnauthorized();
+
+    expect(Like::count())-&gt;toBe(0);
+});
+
+it('相手がもういいねしているとき、マッチしてトークルームが1つできる', function () {
+    [$me, $target] = Member::factory()-&gt;count(2)-&gt;create();
+    Like::factory()-&gt;from($target)-&gt;to($me)-&gt;create();
+
+    $this-&gt;actingAsMember($me)   // テストの土台で作る部品（チケット③）
+        -&gt;postJson('/api/me/likes', ['user_id' =&gt; $target-&gt;public_id])
+        -&gt;assertCreated()
+        -&gt;assertJson(['matched' =&gt; true]);
+
+    expect(TalkRoom::count())-&gt;toBe(1);
+});</code></pre>
+<pre><code class="language-php">// tests/Unit/Domain/Matching/LikeQuotaTest.php（単体テスト：境目の両側）
+it('無料の男性は、9回まで送れて、10回目で止まる', function (int $sentToday, bool $blocked) {
+    $member = new Member(new MemberId(1), 'uuid', Gender::Male, isPaid: false);
+
+    $act = fn () =&gt; LikeQuota::assertNotExceeded($member, $sentToday);
+
+    $blocked ? expect($act)-&gt;toThrow(PaidPlanRequiredException::class) : expect($act)-&gt;not-&gt;toThrow(Throwable::class);
+})-&gt;with([[9, false], [10, true]]);
+
+it('有料の男性と女性は、何回でも送れる', function (Member $member) {
+    expect(fn () =&gt; LikeQuota::assertNotExceeded($member, 100))-&gt;not-&gt;toThrow(Throwable::class);
+})-&gt;with([
+    '有料の男性' =&gt; fn () =&gt; new Member(new MemberId(1), 'uuid', Gender::Male, isPaid: true),
+    '女性' =&gt; fn () =&gt; new Member(new MemberId(2), 'uuid', Gender::Female, isPaid: false),
+]);</code></pre>
+<pre><code class="language-php">// tests/Arch/LayersTest.php（依存の向きを機械で守る）
+arch('Domain はほかの層とフレームワークを知らない')
+    -&gt;expect('App\Domain')
+    -&gt;not-&gt;toUse(['App\Http', 'App\Application', 'App\Infrastructure', 'Illuminate']);
+
+arch('Application は Laravel と Http・Infrastructure を知らない')
+    -&gt;expect('App\Application')
+    -&gt;not-&gt;toUse(['App\Http', 'App\Infrastructure', 'Illuminate']);
+
+arch('Http は Repository と Eloquent の Model を直接使わない')
+    -&gt;expect('App\Http')
+    -&gt;not-&gt;toUse(['App\Infrastructure\Repositories', 'App\Infrastructure\Models']);
+
+arch('Infrastructure は UseCase を呼ばない')
+    -&gt;expect('App\Infrastructure')
+    -&gt;not-&gt;toUse(['App\Application\UseCases', 'App\Http']);
+
+arch('interface の名前は Interface で終わる')
+    -&gt;expect('App\Domain')
+    -&gt;interfaces()
+    -&gt;toHaveSuffix('Interface');</code></pre>
+
+  <h2>9. 管理画面：ディレクトリ設計図と流れ</h2>
+  <p>会員の側と<strong>同じ4層の骨組み</strong>にする。違うのは使い方だけで、<strong>読み取り（API の9割）は Controller から QueryService を直接呼び、書き込み（停止・解除・値段の変更）だけ UseCase と Domain を通す</strong>。管理画面の Domain は「運営の権限と監査」。</p>
+<pre><code class="language-bash">backend/admin/app/
+├── Http/
+│   ├── Controllers/                         # 画面の領域ごと（frontend/admin の domains/ と同じ並び）
+│   │   ├── Dashboard/DashboardController.php
+│   │   ├── Members/
+│   │   │   ├── MemberController.php         #   一覧・詳細（QueryService を直接呼ぶ）
+│   │   │   └── SuspensionController.php     #   停止・解除（UseCase を呼ぶ）
+│   │   ├── Messages/・Sales/・Plans/・AuditLogs/
+│   ├── Requests/
+│   │   ├── Members/SuspendMemberRequest.php
+│   │   └── Plans/UpdatePlanPriceRequest.php
+│   ├── Resources/
+│   │   ├── Members/MemberListResource.php
+│   │   └── Members/MemberDetailResource.php #   パスワードのハッシュを返さない
+│   └── Middleware/AuthenticateAdmin.php     #   トークンを読むのはここだけ（今は14か所にコピー）
+│
+├── Application/
+│   ├── UseCases/                            # 書き込みだけ（今は3本）
+│   │   ├── Members/SuspendMemberUseCase.php
+│   │   ├── Members/UnsuspendMemberUseCase.php
+│   │   └── Plans/UpdatePlanPriceUseCase.php
+│   ├── Dtos/
+│   │   ├── Members/SuspendMemberInput.php
+│   │   └── Plans/UpdatePlanPriceInput.php
+│   └── Transaction/TransactionManagerInterface.php
+│
+├── Domain/                                  # 運営の権限と監査（Laravel を使わない）
+│   ├── Shared/ClockInterface.php
+│   ├── Admins/
+│   │   ├── Admin.php                        #   管理者（エンティティ）
+│   │   ├── AdminId.php
+│   │   ├── AdminRole.php                    #   enum：owner・viewer
+│   │   ├── Permission.php                   #   enum：役割ごとにできること
+│   │   ├── AdminRepositoryInterface.php
+│   │   └── PermissionDeniedException.php
+│   ├── Members/
+│   │   ├── MemberSuspension.php             #   停止の決まり（理由は必須・もう停止していたら止める）
+│   │   ├── MemberSuspensionRepositoryInterface.php
+│   │   └── AlreadySuspendedException.php
+│   ├── Plans/
+│   │   ├── PlanPrice.php                    #   値段の決まり（1円以上）
+│   │   └── PlanRepositoryInterface.php
+│   └── AuditLogs/
+│       ├── AuditLog.php
+│       ├── AuditAction.php                  #   enum：member.suspend など
+│       └── AuditLogRepositoryInterface.php
+│
+├── Infrastructure/
+│   ├── Models/                              #   Eloquent（同じ表を複数の画面が読む）
+│   ├── Repositories/                        #   書き込みに使うものだけ
+│   │   ├── Admins/EloquentAdminRepository.php
+│   │   ├── Members/EloquentMemberSuspensionRepository.php
+│   │   ├── Plans/EloquentPlanRepository.php
+│   │   └── AuditLogs/EloquentAuditLogRepository.php
+│   ├── QueryServices/                       #   読み取りは全部ここ（画面ごと）
+│   │   ├── Dashboard/DashboardQueryService.php
+│   │   ├── Members/MemberQueryService.php
+│   │   ├── Messages/MessageQueryService.php #   一覧の 302本の SQL（12 の 9-2）は、ここで直す
+│   │   ├── Sales/SalesQueryService.php
+│   │   ├── Plans/PlanQueryService.php
+│   │   └── AuditLogs/AuditLogQueryService.php
+│   ├── Transaction/LaravelTransactionManager.php
+│   └── Clock/SystemClock.php
+│
+└── Providers/RepositoryServiceProvider.php</code></pre>
+  <table>
+    <tr><th>API を足すとき</th><th>足すファイル</th></tr>
+    <tr><td>読み取り（一覧・詳細・集計）</td><td>Controller・Resource・QueryService の3つ（Request は絞り込みがあるとき）</td></tr>
+    <tr><td>書き込み</td><td>会員の側と同じ一式（Controller・Request・Resource・UseCase・Input・Domain・Repository の interface と実装・監査ログの種類）</td></tr>
+  </table>
+  <pre class="mermaid">
+flowchart TD
+  R[リクエスト] --> AU{AuthenticateAdmin 管理者のトークン？}
+  AU -->|いいえ| E401[401]
+  AU -->|はい| K{読む？ 書く？}
+  K -->|読む| QS[Controller が QueryService を直接呼ぶ]
+  QS --> RES[Resource]
+  K -->|書く| FR{FormRequest 入力の形は正しい？}
+  FR -->|だめ| E422[422]
+  FR -->|よい| UC[UseCase に Input を渡す]
+  UC --> PERM{Domain の Permission 役割は足りる？}
+  PERM -->|いいえ| E403[403]
+  PERM -->|はい| TX[TransactionManager の中で]
+  TX --> RULE{Domain の決まり 停止の理由・値段}
+  RULE -->|だめ| E409[409・422]
+  RULE -->|よい| SAVE[Repository で保存 ＋ 監査ログを保存]
+  SAVE --> RES
+  RES --> RESP[応答]
+  </pre>
+
+  <h3>9-1. 管理画面のサンプルコード</h3>
+<pre><code class="language-php">// app/Domain/Admins/AdminRole.php・Permission.php
+// 役割ごとにできることを1か所に（今は役割を見ていないので、見るだけの人も停止を解ける：12 の 9-2）
+enum Permission: string
+{
+    case SuspendMember = 'members.suspend';
+    case UnsuspendMember = 'members.unsuspend';
+    case UpdatePlanPrice = 'plans.update';
+    case ViewAuditLogs = 'audit_logs.view';
+}
+
+enum AdminRole: string
+{
+    case Owner = 'owner';
+    case Viewer = 'viewer';
+
+    public function allows(Permission $permission): bool
+    {
+        return match ($this) {
+            self::Owner =&gt; true,
+            self::Viewer =&gt; false,
+        };
+    }
+}
+
+// app/Domain/Admins/Admin.php（エンティティ）
+final readonly class Admin
+{
+    public function __construct(public AdminId $id, public AdminRole $role) {}
+
+    public function assertCan(Permission $permission): void
+    {
+        if (! $this-&gt;role-&gt;allows($permission)) {
+            throw new PermissionDeniedException($permission);
+        }
+    }
+}</code></pre>
+<pre><code class="language-php">// app/Domain/Members/MemberSuspension.php
+// 停止の決まり：理由は必須・もう停止している会員は止めない
+final class MemberSuspension
+{
+    private function __construct(
+        public readonly int $memberId,
+        public readonly ?DateTimeImmutable $suspendedAt,
+        public readonly ?string $reason,
+    ) {}
+
+    public static function reconstruct(int $memberId, ?DateTimeImmutable $suspendedAt, ?string $reason): self
+    {
+        return new self($memberId, $suspendedAt, $reason);
+    }
+
+    public function suspend(string $reason, DateTimeImmutable $now): self
+    {
+        if ($this-&gt;suspendedAt !== null) {
+            throw new AlreadySuspendedException();
+        }
+        if (trim($reason) === '') {
+            throw new InvalidArgumentException('停止の理由は必須');
+        }
+
+        return new self($this-&gt;memberId, $now, $reason);
+    }
+}
+
+// app/Domain/AuditLogs/AuditLog.php
+final readonly class AuditLog
+{
+    /** @param array&lt;string, scalar|null&gt; $detail */
+    public function __construct(
+        public AdminId $adminId,
+        public AuditAction $action,
+        public string $targetType,
+        public int $targetId,
+        public array $detail,
+        public DateTimeImmutable $at,
+    ) {}
+}</code></pre>
+<pre><code class="language-php">// app/Application/UseCases/Members/SuspendMemberUseCase.php
+// 役割の確かめ → 停止 → 監査ログを、1つのトランザクションで（今は監査ログに漏れがある：12 の 9-2）
+final class SuspendMemberUseCase
+{
+    public function __construct(
+        private AdminRepositoryInterface $admins,
+        private MemberSuspensionRepositoryInterface $suspensions,
+        private AuditLogRepositoryInterface $auditLogs,
+        private TransactionManagerInterface $transaction,
+        private ClockInterface $clock,
+    ) {}
+
+    public function execute(SuspendMemberInput $input): void
+    {
+        $admin = $this-&gt;admins-&gt;findById($input-&gt;adminId);
+        $admin-&gt;assertCan(Permission::SuspendMember);   // 見るだけの人なら PermissionDeniedException → 403
+        $now = $this-&gt;clock-&gt;now();
+
+        $this-&gt;transaction-&gt;run(function () use ($input, $admin, $now): void {
+            $current = $this-&gt;suspensions-&gt;findByPublicIdForUpdate($input-&gt;memberPublicId);   // 行をロックして読む
+            $suspended = $current-&gt;suspend($input-&gt;reason, $now);
+            $this-&gt;suspensions-&gt;save($suspended);
+
+            $this-&gt;auditLogs-&gt;save(new AuditLog(
+                adminId: $admin-&gt;id,
+                action: AuditAction::SuspendMember,
+                targetType: 'users',
+                targetId: $suspended-&gt;memberId,
+                detail: ['reason' =&gt; $input-&gt;reason],
+                at: $now,
+            ));
+        });
+    }
+}</code></pre>
+<pre><code class="language-php">// app/Infrastructure/Repositories/Members/EloquentMemberSuspensionRepository.php
+// 管理画面が書いてよいのは users の suspended_at と suspended_reason だけ（10章の表）
+final class EloquentMemberSuspensionRepository implements MemberSuspensionRepositoryInterface
+{
+    public function findByPublicIdForUpdate(string $publicId): MemberSuspension
+    {
+        $row = User::query()-&gt;where('public_id', $publicId)-&gt;lockForUpdate()-&gt;first()
+            ?? throw new MemberNotFoundException();
+
+        return MemberSuspension::reconstruct($row-&gt;id, $row-&gt;suspended_at?-&gt;toDateTimeImmutable(), $row-&gt;suspended_reason);
+    }
+
+    public function save(MemberSuspension $suspension): void
+    {
+        User::query()-&gt;whereKey($suspension-&gt;memberId)-&gt;update([
+            'suspended_at' =&gt; $suspension-&gt;suspendedAt,
+            'suspended_reason' =&gt; $suspension-&gt;reason,
+        ]);
+    }
+}</code></pre>
+<pre><code class="language-php">// app/Infrastructure/QueryServices/Members/MemberQueryService.php
+// 読み取りは Domain を通さない。with() と項目をここで決める（N+1 とハッシュの漏れを防ぐ場所が1か所）
+final class MemberQueryService
+{
+    /** @return LengthAwarePaginator&lt;int, User&gt; */
+    public function paginate(?string $keyword): LengthAwarePaginator
+    {
+        return User::query()
+            -&gt;select(['id', 'public_id', 'email', 'suspended_at', 'created_at'])
+            -&gt;with('profile:user_id,nickname,gender')
+            -&gt;when($keyword, fn ($q, $k) =&gt; $q-&gt;where('email', 'like', "{$k}%"))
+            -&gt;orderByDesc('id')
+            -&gt;paginate(50);
+    }
+}
+
+// app/Http/Controllers/Members/MemberController.php
+final class MemberController extends Controller
+{
+    public function index(MemberIndexRequest $request, MemberQueryService $query): AnonymousResourceCollection
+    {
+        return MemberListResource::collection($query-&gt;paginate($request-&gt;keyword()));
+    }
+}
+
+// app/Http/Controllers/Members/SuspensionController.php
+final class SuspensionController extends Controller
+{
+    public function store(SuspendMemberRequest $request, SuspendMemberUseCase $useCase): Response
+    {
+        $useCase-&gt;execute($request-&gt;toInput());
+
+        return response()-&gt;noContent();
+    }
+}</code></pre>
+<pre><code class="language-php">// tests/Unit/Domain/Admins/AdminRoleTest.php（役割の決まりを DB なしで確かめる）
+it('見るだけの人は、停止も解除もできない', function (Permission $permission) {
+    expect(AdminRole::Viewer-&gt;allows($permission))-&gt;toBeFalse();
+})-&gt;with([Permission::SuspendMember, Permission::UnsuspendMember]);
+
+// tests/Arch/LayersTest.php は、会員の側と同じものを使う（Domain・Application は Laravel を知らない など）
+arch('QueryService は書き込まない')
+    -&gt;expect('App\Infrastructure\QueryServices')
+    -&gt;not-&gt;toUse(['App\Domain\AuditLogs', 'App\Application']);</code></pre>
+
+  <h2>10. どのアプリが、どの表のどの列を書くか</h2>
+  <p>管理画面は会員の側のコードを読み込まないので、<strong>2つのアプリの約束は DB の上で決める</strong>。今のコード（2026-11-15）で書いている列を並べた。</p>
+  <div class="code-block" style="overflow-x:auto">
+  <table>
+    <tr><th>表</th><th>会員の側が書く</th><th>管理画面が書く</th><th>約束（相手の側で何が起きるか）</th></tr>
+    <tr><td><code>users</code></td><td>登録（<code>email</code>・<code>password</code> など）・ログインの日時・メールの確認・退会（<code>email</code> の書き換え・<code>deleted_at</code>）・購入（<code>is_paid</code>・<code>paid_until</code>）</td><td>停止（<code>suspended_at</code>・<code>suspended_reason</code>）</td><td>停止したら、会員の側はログインを断る（今は古いトークンが使えるのは既知のリスク）</td></tr>
+    <tr><td><code>profiles</code></td><td>全部</td><td>読むだけ</td><td>―</td></tr>
+    <tr><td><code>likes</code>・<code>user_matches</code>・<code>blocks</code></td><td>全部</td><td>読むだけ</td><td>―</td></tr>
+    <tr><td><code>talk_rooms</code>・<code>talk_room_members</code>・<code>messages</code></td><td>全部</td><td>読むだけ</td><td>―</td></tr>
+    <tr><td><code>plans</code></td><td>読むだけ</td><td><code>price</code></td><td>値段を変えても、過去の購入の金額は変わらない、が目標（今は購入に値段を写していないので、売上が変わる：12 の 9-2）</td></tr>
+    <tr><td><code>purchases</code></td><td>全部</td><td>読むだけ</td><td>―</td></tr>
+    <tr><td><code>admins</code></td><td>シーダーだけ</td><td><code>last_login_at</code></td><td>―</td></tr>
+    <tr><td><code>admin_audit_logs</code></td><td>なし</td><td>全部</td><td>―</td></tr>
+  </table>
+  </div>
+  <p>この表から外れる書き込みを足すときは、先にこの表を直してから書く。表の作り（マイグレーション）は、どちらのアプリのためでも <code>backend/client</code> に置く。</p>
+
+  <h2>11. メリットとデメリット</h2>
+  <h3>11-1. 会員の側（DIP を使ったレイヤード）</h3>
+  <table>
+    <tr><th>メリット</th><th>デメリット</th></tr>
+    <tr><td>
+      <ul>
+        <li>業務の決まりが Domain の1か所に集まる（回数の上限・マッチの決まりが、今のように3か所にコピーされない）</li>
+        <li>Domain と UseCase を DB なしでテストできる（速い・時刻を固定できる）</li>
+        <li>DB・Firestore・JWT・将来の決済や AI を、実装を替えるだけで差し替えられる</li>
+        <li>Eloquent の Model が外に漏れないので、N+1 と項目の漏れ（パスワードのハッシュ）が起きにくい</li>
+        <li>フォルダを見れば層と機能が分かる。AI も見本を真似しやすい</li>
+        <li>各層の中が機能ごとなので、将来モジュラーモノリスへ移りやすい</li>
+      </ul></td><td>
+      <ul>
+        <li>ファイルが増える（いいね1つで15〜20ファイル）</li>
+        <li>Eloquent の Model とエンティティの詰め替えが要る（Repository の実装が長くなる）</li>
+        <li>Eloquent の便利さ（リレーション・遅延読み込み）を、Infrastructure の中でしか使えない</li>
+        <li>interface から実装を探す一手間がある（エディタの「実装へ移動」を使う）</li>
+        <li>「どこまでを Domain に置くか」の判断に慣れが要る</li>
+        <li>層で横に切っているので、どの表をどの機能が持つかは、別に決めて守る必要がある</li>
+      </ul></td></tr>
+  </table>
+  <h3>11-2. 管理画面（同じ4層・読み取りは QueryService を直接）</h3>
+  <table>
+    <tr><th>メリット</th><th>デメリット</th></tr>
+    <tr><td>
+      <ul>
+        <li>会員の側と形が1つ。覚えるのも、AI が真似するのも、アーキテクチャのテストも1種類</li>
+        <li>役割・停止・監査の決まりが Domain の1か所にあり、DB なしで単体テストできる（12 の 9-2 の問題が起きた場所）</li>
+        <li>読み取りは QueryService を直接呼ぶので、詰め替えがなく、SQL を自由に書ける（集計と N+1 の直しに強い）</li>
+        <li>画面の領域のフォルダ名が frontend/admin とそろい、画面を足すときに迷わない</li>
+      </ul></td><td>
+      <ul>
+        <li>書き込みの API 1本で、会員の側と同じくらいファイルが増える</li>
+        <li>会員の側の Domain（会員）と、管理画面の Domain（停止・値段）が、同じ表を別々の形で持つ。決まりがずれる心配がある → 10章の表で約束する</li>
+        <li>読み取りが QueryService に集まるので、QueryService が太りやすい → 画面ごとに分ける</li>
+      </ul></td></tr>
+  </table>
+
+  <h2>12. 今後の運用</h2>
+
+  <h3>12-1. 今のコードからの移し方</h3>
+  <pre class="mermaid">
+flowchart LR
+  T[その API を触るチケットが来た] --> FT[先に API テストで今の振る舞いを固める]
+  FT --> MV[その API の処理を、新しい形の層へ移す]
+  MV --> RUN[固めたテストが全部通る]
+  RUN --> ARCH[アーキテクチャのテストの例外の一覧から、その API を消す]
+  ARCH --> FIX[必要なら、ここで改善 不具合の直し・性能]
+  FIX --> PR[PR とレビュー]
+  </pre>
+  <ul>
+    <li><strong>一気に移さない</strong>。触るチケットが来た API から1本ずつ移す（ストラングラーパターン）</li>
+    <li><strong>移すことと、振る舞いを変えることを、別のコミットにする</strong>。移すコミットでは API テストが1本も変わらない。変わったら、移すときに壊した</li>
+    <li>古いコントローラーは、移し終わるまで <code>app/Http/Controllers</code> の直下に残る。新しい形は <code>app/Http/Controllers/&lt;機能&gt;/</code> に置くので、フォルダで見分けられる</li>
+    <li>アーキテクチャのテストでは、移していない古いファイルを例外として並べる。この一覧が、そのまま移行の地図になる</li>
+  </ul>
+  <div class="code-block" style="overflow-x:auto">
+  <table>
+    <tr><th>今のファイル</th><th>Http</th><th>Application</th><th>Domain</th><th>Infrastructure</th></tr>
+    <tr><td><code>AuthController</code>・<code>EmailVerificationController</code></td><td><code>Auth/</code> の Controller・<code>AuthenticateMember</code></td><td><code>Auth/LoginUseCase</code>・<code>VerifyEmailUseCase</code></td><td><code>Members/Member</code>・<code>Auth/MailerInterface</code></td><td><code>External/Jwt</code>・<code>External/Mail</code></td></tr>
+    <tr><td><code>UserController</code>・<code>ProfileController</code></td><td><code>Members/</code></td><td><code>Members/RegisterMemberUseCase</code>・<code>WithdrawMemberUseCase</code>・<code>UpdateProfileUseCase</code></td><td><code>Members/Member</code>・<code>Members/Profile</code></td><td><code>Repositories/Members</code>・<code>QueryServices/Members/SearchMembersQueryService</code></td></tr>
+    <tr><td><code>LikeController</code>・<code>UserMatchController</code>・<code>BlockController</code></td><td><code>Matching/</code></td><td><code>Matching/LikeMemberUseCase</code>・<code>BlockMemberUseCase</code></td><td><code>Matching/Like</code>・<code>UserMatch</code>・<code>Block</code></td><td><code>Repositories/Matching</code></td></tr>
+    <tr><td><code>TalkRoomController</code>・<code>MessageController</code>・<code>FirebaseTokenController</code></td><td><code>Messaging/</code></td><td><code>Messaging/SendMessageUseCase</code></td><td><code>Messaging/TalkRoom</code>・<code>Message</code></td><td><code>Repositories/Messaging</code>・<code>External/Firestore</code></td></tr>
+    <tr><td><code>PlanController</code>・<code>PurchaseController</code></td><td><code>Billing/</code></td><td><code>Billing/PurchasePlanUseCase</code></td><td><code>Billing/Plan</code>・<code>Purchase</code>・<code>Money</code></td><td><code>Repositories/Billing</code></td></tr>
+  </table>
+  </div>
+
+  <h3>12-2. 新しい機能を足すときの手順</h3>
+  <pre class="mermaid">
+flowchart TD
+  S[新しい機能] --> Q1{業務の決まりがある？}
+  Q1 -->|ある| D1[Domain にエンティティ・値オブジェクト・決まり・Repository の interface]
+  Q1 -->|読むだけ| QS[Infrastructure の QueryService と DTO]
+  D1 --> U1[Application に UseCase と Input・Output]
+  U1 --> I1[Infrastructure に Repository の実装 Eloquent]
+  I1 --> P1[Providers でつなぐ]
+  P1 --> H1[Http に Controller・Request・Resource・ルート]
+  QS --> H1
+  H1 --> T1[テスト Domain の単体・UseCase・API・アーキテクチャ]
+  T1 --> DOC[docs/api と 10章の表を直す]
+  </pre>
+  <ul>
+    <li>各層に<strong>見本のファイル</strong>を決め、<code>docs/backend.md</code> から指す。最初の見本は「いいねする」（7章の形）。人も AI も、見本を真似して書く</li>
+    <li>迷ったら「これは業務の決まりか（Domain）、手順か（Application）、HTTP の形か（Http）、DB や外の都合か（Infrastructure）」と問う</li>
+  </ul>
+
+  <h3>12-3. レビューで見ること</h3>
+  <table>
+    <tr><th>見るところ</th><th>よくある崩れ</th></tr>
+    <tr><td>Domain に Laravel が入っていないか</td><td><code>now()</code>・<code>Carbon</code>・<code>collect()</code>・Eloquent の Model を Domain で使う</td></tr>
+    <tr><td>UseCase に業務の判断が入っていないか</td><td>「10回なら止める」を UseCase の if で書く（Domain に置く）</td></tr>
+    <tr><td>Controller が手順を持っていないか</td><td>Controller から Repository を2つ呼ぶ（UseCase を作る）</td></tr>
+    <tr><td>Repository が業務の判断をしていないか</td><td><code>countSentToday() &gt;= 10</code> を Repository で返す（数えるだけにする）</td></tr>
+    <tr><td>Resource が新しくリレーションを読んでいないか</td><td>一覧の Resource で <code>$this-&gt;profile</code> を読む（N+1）</td></tr>
+    <tr><td>外への書き込みがコミットのあとか</td><td>トランザクションの中で Firestore に書く</td></tr>
+  </table>
+
+  <h3>12-4. やり直しのきっかけ</h3>
+  <p>今の段階に合う形にした。<strong>次のことが起きたら、設計を見直す</strong>（振り返りで数字を見る）。見直したら <code>docs/decisions.md</code> に、きっかけ・前と後・理由を1行残す。</p>
+  <table>
+    <tr><th>きっかけ</th><th>見直す方向</th></tr>
+    <tr><td>1つの機能のフォルダで UseCase が20を超えた</td><td>その機能を、さらに小さなまとまりに分ける</td></tr>
+    <tr><td>1つの変更で、3つ以上の機能のフォルダを触ることが続く</td><td>機能の境目を引き直す。機能の間をイベントでつなぐ（モジュラーモノリスの入口）</td></tr>
+    <tr><td>チームが3つ以上になり、同じフォルダを取り合う</td><td>モジュラーモノリスへ（<code>explanations/modular-monolith.html</code>）</td></tr>
+    <tr><td>検索や一覧の p95 が 500ms を超えた</td><td>QueryService の SQL とインデックス → 読み取り専用の DB → 検索エンジン</td></tr>
+    <tr><td>詰め替えのコードが重荷になった（Domain がほぼ表の写し）</td><td>その機能だけ、Domain を薄くする（管理画面の形に寄せる）</td></tr>
+    <tr><td>会員の側と管理画面で、同じ業務の決まり（停止・値段）がずれて不具合が出た</td><td>共有の Domain のパッケージ（<code>packages/</code>）に切り出し、両方のアプリから読み込む</td></tr>
+  </table>
+
+  <h2>13. 理解を確かめる問い</h2>
+  <details><summary>LikeRepositoryInterface を Domain に置き、EloquentLikeRepository を Infrastructure に置くのはなぜ？</summary><p>依存の向きを Domain に向けるため。interface が Domain にあれば、Domain は「何が要るか」だけを知り、Eloquent や SQL を知らずに済む。Infrastructure が Domain の約束に合わせて作るので、DB の都合が変わっても Domain と UseCase は直さない。逆に interface を Infrastructure に置くと、Domain が Infrastructure を使うことになり、矢印が元に戻る。</p></details>
+  <details><summary>読み取り（検索）だけ、UseCase を通さず QueryService を直接呼んでよいのはなぜ？</summary><p>読み取りには業務の決まり（守るべき整合性）がほとんどなく、画面の形で速く返すことが大事だから。エンティティに詰め替えてから DTO に詰め直すと、遅く手間も大きい。そのかわり、「出してはいけない人（退会・ブロック）」の条件は QueryService の中に1か所で書き、API テストで守る。</p></details>
+  <details><summary>Firestore への書き込みを、TransactionManager の run の外（コミットのあと）にするのはなぜ？</summary><p>トランザクションの中で外へ書くと、そのあと DB が巻き戻ったときに、外にだけ「ないはずのトークルーム」が残るから。外への書き込みは DB の巻き戻しに含まれない。DB が確定してから外へ書き、外が失敗したら DB は戻さずにやり直す（将来はキューで）。</p></details>
+  <details><summary>管理画面の読み取りは Domain を通さないのに、書き込みだけ UseCase と Domain を通すのはなぜ？</summary><p>書き込みには、役割の確かめ・停止の決まり・監査ログという「必ず守ること」があるから。Controller ごとに書くと漏れる（今のレガシー版で、見るだけの人が停止を解けた・監査ログに漏れがあった）。UseCase で手順を固め、決まりを Domain（AdminRole・MemberSuspension）に置けば、DB なしで単体テストでき、書き込みの API を足しても漏れにくい。読み取りには守る決まりが少ないので、QueryService で速く返す。</p></details>
+  <details><summary>今のコードを新しい形に移すとき、移すコミットと直すコミットを分けるのはなぜ？</summary><p>移すコミットでは振る舞いが変わらないので、API テストが1本も変わらずに通るはず。テストが落ちたら、移すときに壊したと分かる。直すコミット（不具合の直し・性能）を混ぜると、テストが変わった理由が「移したから」か「直したから」か分からなくなる。</p></details>
+  <details><summary>このアプリの会員が10倍になったとき、この設計で最初に触るのはどこ？</summary><p>遅くなった読み取りの QueryService の SQL と EXPLAIN。足りなければ、QueryService の中で読む先を読み取り専用の DB に変える。それでも足りなければ、検索の interface を作って検索エンジンの実装を足す。どれも UseCase・Controller・Domain は直さずに済むのが、層に分けた効果。</p></details>
+</main>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+  // page.js が選んだ表示（data-scheme）に合わせる。なければ端末の設定
+  const scheme = document.documentElement.dataset.scheme;
+  const dark = scheme ? scheme.startsWith("dark") : (document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches));
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/page.js"></script>
+</body>
+</html>
