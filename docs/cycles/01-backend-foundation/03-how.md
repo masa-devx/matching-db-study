@@ -199,7 +199,7 @@ API のルートは、すべて `routes/api.php` から読み込む。`routes/we
 ### 名前の決まり（決まった分）
 
 - ツールの名前（Firebase など）を URL に入れない。替えたときに URL が変わらないようにする
-- 自分のものは `/me/...`、他人のものは `/users/{user_id}/...`。管理画面で会員のものを見るときは `/members/{member_id}/...`（例：`/members/{member_id}/likes`）。パスの引数の名前（`{user_id}` など）は仮で、あとで決める
+- `/me` を付けるかは、下の「`/me` を付けるか（2026-11-16 に決めた）」の基準で決める。他人のものは `/users/{user_id}/...`。管理画面で会員のものを見るときは `/members/{member_id}/...`（例：`/members/{member_id}/likes`）
 - 名前を何から付けるか（画面の言葉・業務の言葉・表の名前）は、まだ決めていない
 
 ### API 設計の土台（2026-11-16 に決めた）
@@ -218,9 +218,69 @@ API のルートは、すべて `routes/api.php` から読み込む。`routes/we
 
 参考にした公開の決まり：Google API Improvement Proposals・Microsoft REST API Guidelines・Zalando RESTful API Guidelines・RFC 9457・RFC 8594（`Sunset`）・RFC 9745（`Deprecation`）。
 
+### パスの引数と PATCH（2026-11-16 に決めた）
+
+- パスの引数の名前は `{<名詞>_id}`（`{user_id}`・`{room_id}`・`{match_id}`・`{member_id}`・`{plan_id}`）。JSON のキーと同じ名前にし、入れ子でも見分けられるようにする。中身は UUID（`Route::pattern` で縛る）
+- PATCH は RFC 7396（JSON Merge Patch）の決まりに合わせる：送らなかった項目は変えない・`null` を送った項目は消す。仕様書には、消してよい項目に `nullable` を書く
+- PUT は「その状態にする」操作（既読にする など）に使う。2回送っても同じ結果になる
+
+### CRUD ではない操作の書き方（2026-11-16 に決めた）
+
+上から順に当てはめ、最初に当てはまった型にする。
+
+| 順 | 基準 | 型 | 例 |
+| --- | --- | --- | --- |
+| 1 | 作る・消すと言える状態がある | 状態を名詞にする | `POST`・`DELETE /members/{member_id}/suspension` |
+| 2 | 名詞にすると不自然な、一度きりの動作 | 動詞をパスにする | `POST /auth/login` |
+| 3 | 理由・監査などの決まりがない、ただの項目 | 項目の更新にする | `PATCH /me`（ニックネームを変える） |
+| ― | 使わない | コロンの動詞（`/members/{member_id}:suspend`） | 見慣れない人が多く、Laravel で書けるかも試していない |
+
+### `/me` を付けるか（2026-11-16 に決めた）
+
+ログインした本人はトークンで分かるので、`/me` は「付けないと迷うもの」にだけ付ける。**迷うものには付ける**（人が決めた）。
+
+| 付ける | 付けない |
+| --- | --- |
+| 自分そのもの（`/me`） | 2人以上で持つもの（マッチ・トークルーム・メッセージ） |
+| 自分から相手への向きがあるもの（いいね・ブロック。あとで「受けた」側を足しうる） | 全員に同じもの（プラン） |
+| 迷うもの（自分の購入・自分のメールアドレスの確認・自分のためのトークン） | 相手のもの（`/users/{user_id}`）・ログインの前に使うもの（`/auth/...`） |
+
+| 今の URL | 新しい URL | `/me` | 理由 |
+| --- | --- | --- | --- |
+| `GET /api/health` | `GET /health` | ― | |
+| `POST /api/users` | `POST /users`（名前は仮） | 付けない | 登録の前で、まだ「自分」がいない |
+| `GET /api/email-verifications/{token}` | `GET /users/{user_id}/email-verification/{hash}` | 付けない | メールのリンクで開くので、ログインしていない |
+| `POST /api/email-verifications` | `POST /me/email-verification` | 付ける | 迷う（自分のメールアドレス） |
+| `POST /api/auth/login`・`/logout` | `POST /auth/login`・`/auth/logout` | 付けない | ログインの前後 |
+| ―（改善版で足す） | `POST /auth/refresh` | 付けない | |
+| `GET /api/me` | `GET /me` | 付ける | 自分そのもの |
+| `PUT /api/users/{publicId}` | `PATCH /me` | 付ける | 自分そのもの |
+| `DELETE /api/me` | `DELETE /me` | 付ける | 自分そのもの（退会） |
+| `GET /api/users` | `GET /users` | 付けない | 相手を探す |
+| `GET /api/users/{publicId}` | `GET /users/{user_id}` | 付けない | 相手のもの |
+| `POST /api/me/likes` | `POST /me/likes`（`PUT /me/likes/{user_id}` にするかは、移すチケットで決める） | 付ける | 向きがある（送った・受けた） |
+| `GET /api/me/likes` | `GET /me/likes` | 付ける | 向きがある |
+| `GET /api/me/matches` | `GET /matches` | 付けない | 2人で持つ。向きがない |
+| `GET /api/me/talk-rooms` | `GET /talk-rooms` | 付けない | 2人で持つ |
+| ―（改善版で足す） | `GET /talk-rooms/{room_id}` | 付けない | 2人で持つ |
+| `GET /api/me/talk-rooms/{publicId}/messages` | `GET /talk-rooms/{room_id}/messages` | 付けない | ルームの中のもの |
+| `POST /api/me/talk-rooms/{publicId}/messages` | `POST /talk-rooms/{room_id}/messages` | 付けない | ルームの中のもの |
+| ―（改善版で足す） | `PUT /talk-rooms/{room_id}/read` | 付けない | 既読を付けられるのは自分だけで、迷わない |
+| `POST /api/me/firebase-token` | `POST /me/realtime-token`（名前は仮） | 付ける | 迷う（自分のためのトークン） |
+| `POST /api/me/blocks` | `POST /me/blocks` | 付ける | 向きがある（した・された） |
+| `GET /api/me/blocks` | `GET /me/blocks` | 付ける | 向きがある |
+| `DELETE /api/me/blocks/{publicId}` | `DELETE /me/blocks/{user_id}` | 付ける | 向きがある |
+| `GET /api/plans` | `GET /plans` | 付けない | 全員に同じ |
+| `POST /api/me/purchases` | `POST /me/purchases` | 付ける | 迷う（お金の記録。あとで「贈る・贈られる」の向きが出うる） |
+| `GET /api/me/purchases` | `GET /me/purchases` | 付ける | 迷う |
+
+- 弱いところ：`/me` が付くものと付かないものが混ざるので、画面を書く人は上の基準を知っている必要がある。基準と表は #125 の `api-design.md` に入れる
+- `/me` を付けないもの（トークルームなど）は、URL から「だれのものか」が分からないので、参加者かの確かめ（決まり K）を必ずコードで書く
+- 管理画面は、管理者そのもの（`GET /me`）だけに付ける。ほかは運営から見た全体のもの（`/members` など）なので付けない
+
 ### 次に話すこと
 
-CRUD ではない操作（ログイン・停止・既読・購入）の書き方・パスの引数の名前・PUT と PATCH。そのあと、38本すべてを「今の URL → 新しい URL」の表にする。
+管理画面の14本を「今の URL → 新しい URL」の表にする（会員の側の24本は上の表）。
 
 ## 決めたこと・決めなかったこと・宿題
 
