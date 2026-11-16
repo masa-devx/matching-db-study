@@ -49,7 +49,7 @@
 
 ## ID の名前
 
-URL のパスの引数（`{<名詞>_id}`）と JSON のキーに使う名前。ここを正とする（`docs/cycles/01-backend-foundation/03-how.md` の「パスの引数と PATCH」）。中身はどれも UUID（その表の `public_id`）。新しいリソースを足すときは、先にここへ1行足す。
+URL のパスの引数（`{<名詞>_id}`）と JSON のキーに使う名前。ここを正とする（`docs/cycles/01-backend-foundation/03-how.md` の「パスの引数と PATCH」）。中身は UUID（その表の `public_id`。まだない表は、そのリソースを移すチケットで足す）。新しいリソースを足すときは、先にここへ1行足す。
 
 | もの | ID の名前 | 中身 | 注意 |
 | --- | --- | --- | --- |
@@ -58,5 +58,5 @@ URL のパスの引数（`{<名詞>_id}`）と JSON のキーに使う名前。�
 | トークルーム | `room_id` | `talk_rooms.public_id` | リソースの名前は `talk-rooms` だが、ID は短く `room_id`（今の画面と応答が使っている名前） |
 | マッチ | `match_id` | `user_matches` の ID（まだ `public_id` がない。足すのはマッチを移すチケット） | |
 | プラン | `plan_id` | `plans` の ID（まだ `public_id` がない。足すのはプランを移すチケット） | 今の URL は連番の id |
-| 監査ログ | `audit_log_id` | `admin_audit_logs` の ID | 1件を指す API は、まだない |
+| 監査ログ | `audit_log_id` | `admin_audit_logs` の ID（まだ `public_id` がない。1件を指す API を足すときに足す） | 1件を指す API は、まだない |
 
