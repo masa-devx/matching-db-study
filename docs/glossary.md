@@ -7,6 +7,7 @@
 - **API とコードは、業務の言葉で名前を付ける。** 表の名前には合わせない（表は変えにくいので、ずれたら下の表の「注意」に書く）
 - ツールの名前（Firebase など）は、API とコードの業務の名前に出さない。替えたときに名前が変わらないようにする
 - 画面の言葉が業務の言葉と違うときは、下の表の「画面」に書く（画面の言葉は、利用者に分かりやすいほうを選んでよい）
+- 管理画面のまとまりは `docs/backend.md` の 2-2 とそろえる（`Dashboard`・`Members`・`Messages`・`Sales`・`Plans`・`AuditLogs`・`Admins`）
 - 新しい言葉を使うときは、先にこの表に1行足す。API の書き方の決まり（URL・JSON のキー・ID）は `agents/rules/api-design.md`（#125 で作る）
 
 ## 会員の側
@@ -42,3 +43,20 @@
 | 停止 | 運営が会員の利用を止めること | ― | `suspension` | `Members`・`MemberSuspension` | `users.suspended_at` | |
 | 監査ログ | 管理者がだれの何を見た・変えたかの記録 | ― | `audit-logs` | `AuditLogs`・`AuditLog` | `admin_audit_logs` | |
 | 売上 | 購入の合計 | ― | `sales` | `Sales` | `purchases` | |
+| ダッシュボード | 会員・マッチ・メッセージ・売上の数とグラフ | ダッシュボード | `dashboard` | `Dashboard` | `users`・`user_matches`・`messages`・`purchases` | |
+| メッセージ（管理画面） | 運営から見た、すべてのメッセージ | メッセージ | `messages` | `Messages` | `messages` | 会員の側の `Messaging` とは別のまとまり |
+| プランの値段の変更 | 運営がプランの値段を変えること | 有料会員・売上 | `plans`・`plan_id` | `Plans`・`PlanPrice` | `plans.price` | 今の URL は連番の id（`PUT /api/plans/{id}`）。新しい URL では `plan_id`（UUID） |
+
+## ID の名前
+
+URL のパスの引数（`{<名詞>_id}`）と JSON のキーに使う名前。ここを正とする（`docs/cycles/01-backend-foundation/03-how.md` の「パスの引数と PATCH」）。中身はどれも UUID（その表の `public_id`）。新しいリソースを足すときは、先にここへ1行足す。
+
+| もの | ID の名前 | 中身 | 注意 |
+| --- | --- | --- | --- |
+| 会員（会員の側） | `user_id` | `users.public_id` | |
+| 会員（管理画面） | `member_id` | `users.public_id` | 同じ人。運営から見るときの呼び方 |
+| トークルーム | `room_id` | `talk_rooms.public_id` | リソースの名前は `talk-rooms` だが、ID は短く `room_id`（今の画面と応答が使っている名前） |
+| マッチ | `match_id` | `user_matches` の ID（まだ `public_id` がない。足すのはマッチを移すチケット） | |
+| プラン | `plan_id` | `plans` の ID（まだ `public_id` がない。足すのはプランを移すチケット） | 今の URL は連番の id |
+| 監査ログ | `audit_log_id` | `admin_audit_logs` の ID | 1件を指す API は、まだない |
+

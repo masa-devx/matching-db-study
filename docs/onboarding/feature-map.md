@@ -3,7 +3,9 @@
 機能ごとに、画面・API・コントローラー・表をつなぐ。読みながら埋める（推測で埋めない。コードとルートで確かめた行だけ書く）。
 
 - 読む表・書く表は、コードから読み取り、2026-11-16 に流れる SQL で確かめた（38本すべて）。書き込みの API も、トランザクションの中で本当に流してから取り消した（メールと Firestore は偽物に差し替えた）。確かめた結果と SQL の本数は、末尾の「SQL で確かめた結果」
-- 行の番号は `backend/client/app/Http/Controllers/` のファイルの行（2026-11-16 に `refactored-repo` で読んだ）
+- 行の番号は、会員の側は `backend/client/app/Http/Controllers/` のファイルの行（2026-11-16 に `refactored-repo` で読んだ）。移すとずれるので、テストの材料に使うときはメソッドの名前を正にする
+- **形の違う ID（`abc` など。UUID でない文字）は、どの API でも 500** になる。`public_id` は uuid の列なので、比べると PostgreSQL がエラー（22P02）を返す。下の表で「いない会員は 500」「いない相手でも 204」と書いたのは、形の正しい UUID のとき
+- 要件 ID と、返る状態コードの一覧は、ここには書かない。その API を移すチケットで、その API の分だけ書く（PR #132 のレビュー S14）
 
 ## 会員の側（`backend/client`・24本）
 
@@ -19,14 +21,14 @@
 | 自分の情報 | `HomePage`・`SearchPage`・`UserPage`・`TalkPage`・`PlansPage`・`PurchasePage` | `GET /api/me` | `AuthController::me`（L56） | `users` | ― | JWT を読む処理のもと（ほかの API に写された）。壊れた JWT では 500 になる。`users` の行をそのまま返す（`verification_token` も出る） |
 | ログアウト | `HomePage` | `POST /api/auth/logout` | `AuthController::logout`（L70） | ― | ― | サーバーは何もしない |
 | プロフィールを見る | `HomePage`・`UserPage`・`SearchPage`・`TalkPage`・`MessagesFsPage`・`TalkFsPage` | `GET /api/users/{publicId}` | `ProfileController::show`（L20） | `users`・`profiles` | ― | ログインを確かめない（だれでも見られる）。`users` の行をそのまま返す（メールアドレス・確認用の文字も出る）。UUID の形を確かめず、違う文字は 500 |
-| プロフィールを変える | `HomePage` | `PUT /api/users/{publicId}` | `ProfileController::update`（L28） | `users`（id を引く）・`profiles` | `profiles` | ログインも本人かも確かめない（だれでも他人のプロフィールを書き換えられる）。`$request->all()` をそのまま入れる。会員がいなければ null に `fill` して 500 |
+| プロフィールを変える | `HomePage` | `PUT /api/users/{publicId}` | `ProfileController::update`（L28） | `users`（id を引く）・`profiles` | `profiles` | ログインも本人かも確かめない（だれでも他人のプロフィールを書き換えられる）。`$request->all()` をそのまま入れ、`Profile` は `$guarded = []` なので、送った項目がすべて入る。そのため、プロフィールの持ち主（`user_id`）を付け替えられ、性別も変えられる（性別で分けている決まり（購入は男性だけ・無料の男性への制限）を自分で外せる）。会員がいなければ null に `fill` して 500 |
 | 相手を探す | `SearchPage` | `GET /api/users` | `UserController::index`（L46） | `users`・`profiles`・`likes`・`blocks` | ― | 自分の反対の性別・確認済み・退会していない・いいねしていない・ブロックしていない／されていない会員を、最終ログインの順に20人ずつ（OFFSET）。いいねとブロックの相手を PHP に持ってきて `not in` に並べる。プロフィールを1人ずつ読む（1＋N）。身長・生年月日は文字で比べる。身長の条件は男性の無料の会員には 403（`is_paid` だけを見る） |
-| いいねする（マッチ・ルームも作る） | `UserPage` | `POST /api/me/likes` | `LikeController::store`（L33） | `profiles`・`users`・`likes`・`talk_rooms`（作ったルームを読み直す） | `likes`・`user_matches`・`talk_rooms`・`talk_room_members`・Firestore（`rooms`・`users/{uid}/rooms`） | 男性の無料の会員は1日10回まで（数えてから入れる。ロックなし。日付は UTC）。いない会員の UUID は 500、自分にもいいねでき、2回目は UNIQUE の違反で 500。相手からのいいねがあれば、マッチ・ルーム・参加者2人・Firestore の3件を作る。トランザクションがなく、途中で失敗すると半端な行が残る（Firestore につながらないと 500 なのに、PostgreSQL の行は残る）。ブロックした相手にも送れる |
+| いいねする（マッチ・ルームも作る） | `UserPage` | `POST /api/me/likes` | `LikeController::store`（L33） | `profiles`・`users`・`likes`・`talk_rooms`（作ったルームを読み直す） | `likes`・`user_matches`・`talk_rooms`・`talk_room_members`・Firestore（`rooms`・`users/{uid}/rooms`） | 男性の無料の会員は1日10回まで（数えてから入れる。ロックなし。日付は UTC）。いない会員の UUID は 500、自分にもいいねでき、2回目は UNIQUE の違反で 500。相手からのいいねがあれば、マッチ・ルーム・参加者2人・Firestore の3件を作る。トランザクションがなく、途中で失敗すると半端な行が残る（Firestore につながらないと 500 なのに、PostgreSQL の行は残る）。ブロックした相手にも、ブロックされた相手にも送れる（`blocks` を読まない）。**自分にいいねすると、今入れた行が逆向きのいいねとして見つかり、自分とのマッチ・参加者が自分2人のルームができる**（Firestore では同じ受信箱に2回書くので、2回目で失敗して 500 になる見込み。Emulator では確かめていない） |
 | いいねした相手の一覧 | `LikesPage` | `GET /api/me/likes` | `LikeController::index`（L105） | `blocks`・`likes`・`profiles`・`users` | ― | ブロックした・された相手を除き、新しい順に全件（ページなし）。1件ごとにプロフィール・逆向きのいいね・`public_id` を読む（1＋3N）。「マッチ済み」は `user_matches` ではなく逆向きのいいねで決める（正が2つ）。退会した相手は除かない。生年月日をそのまま返す |
 | マッチした相手の一覧 | 呼んでいる画面は見つからない | `GET /api/me/matches` | `UserMatchController::index`（L26） | `blocks`・`user_matches`・`profiles`・`users` | ― | `user1_id`・`user2_id` を OR で探す（インデックスがなく表を全部読む）。全件（ページなし）。1件ごとにプロフィールと `public_id` を読む（1＋2N）。同じ組が2行あれば2回出る。ブロックは PHP で飛ばす。退会した相手は除かない |
 | トークの一覧 | `MessagesPage`・`TalkPage`・`components/TabBar` | `GET /api/me/talk-rooms` | `TalkRoomController::index`（L27） | `blocks`・`talk_room_members`・`talk_rooms`・`profiles`・`users`・`messages` | ― | 自分の参加者の行を全部読み、ルームごとに6本読む（1＋6N）。`talk_room_members.user_id` と `messages.talk_room_id` にインデックスがなく、表を全部読む。相手がいないルームでは 500。未読は時刻で比べる。並べるのは PHP。ページなし。ブロックは PHP で飛ばし、退会した相手は除かない。生年月日をそのまま返す |
-| トークの履歴 | `TalkPage` | `GET /api/me/talk-rooms/{publicId}/messages` | `MessageController::index`（L26） | `talk_rooms`・`messages` | `talk_room_members.last_read_at` | **参加者かを確かめない**（UUID を知っていれば、だれでも読める）。ないルームは 500。新しい50件ずつ（OFFSET）。`page=0` で 500。GET の中で既読を書く（画面は5秒ごとに呼ぶ）。`messages` の行をそのまま返す（中の連番の `id`・`sender_id` が出る） |
-| メッセージを送る | `TalkPage` | `POST /api/me/talk-rooms/{publicId}/messages` | `MessageController::store`（L55） | `profiles`・`users`・`talk_rooms` | `messages` | **参加者かを確かめない**（マッチしていない人も送れる）。男性の無料の会員は 403（`is_paid` だけを見る）。本文を確かめない（空は NOT NULL の違反で 500・長さの上限なし）。ブロックした相手のルームにも送れる |
+| トークの履歴 | `TalkPage` | `GET /api/me/talk-rooms/{publicId}/messages` | `MessageController::index`（L26） | `talk_rooms`・`messages` | `talk_room_members.last_read_at` | **参加者かを確かめない**（UUID を知っていれば、だれでも読める）。ないルームは 500。新しい50件ずつ（OFFSET）。`page` を確かめない（0・負の数・文字は、Laravel の `offset()` が0に丸めるので1ページ目になる。コードのコメントの「`page=0` で 500」は誤り）。GET の中で既読を書く（画面は5秒ごとに呼ぶ）。`messages` の行をそのまま返す（中の連番の `id`・`sender_id` が出る） |
+| メッセージを送る | `TalkPage` | `POST /api/me/talk-rooms/{publicId}/messages` | `MessageController::store`（L55） | `profiles`・`users`・`talk_rooms` | `messages` | **参加者かを確かめない**（マッチしていない人も送れる）。男性の無料の会員は 403（`is_paid` だけを見る）。本文を確かめない（空は NOT NULL の違反で 500・長さの上限なし）。ないルームは `$room->id` を読んで 500。ブロックした相手のルームにも送れる |
 | Firebase のトークン | `firebase.ts`（`MessagesFsPage`・`TalkFsPage` が使う） | `POST /api/me/firebase-token` | `FirebaseTokenController::store`（L21） | `users` | ― | 署名のない JWT（`alg: none`）を返す。Emulator だけで通り、本物の Firebase では通らない。メールアドレスを確認していない会員も使える |
 | ブロックする | `UserPage`・`TalkPage` | `POST /api/me/blocks` | `BlockController::store`（L24） | `users` | `blocks` | いない会員の UUID は 500。自分もブロックでき、2回目は UNIQUE の違反で 500。退会したかは見ない。`blocks` の行をそのまま返す（中の連番の `id` が出る） |
 | ブロックした相手の一覧 | `BlocksPage` | `GET /api/me/blocks` | `BlockController::index`（L43） | `blocks`・`profiles`・`users` | ― | 新しい順に全件（ページなし）。1件ごとにプロフィールと `public_id` を読む（1＋2N）。退会した相手もそのまま出る |
@@ -55,7 +57,7 @@
 | 月ごとの売上 | `domains/sales/SalesPage` | `GET /api/sales/monthly` | `SalesController::monthly`（L47） | `purchases`・`plans` | ― | 今のプランの値段で足す（値段を変えると、過去の月の売上も変わる）。全期間 |
 | プランの一覧 | `domains/sales/SalesPage` | `GET /api/plans` | `PlanController::index`（L19） | `plans` | ― | `plans` の行をそのまま返す |
 | 値段を変える | `domains/sales/SalesPage` | `PUT /api/plans/{id}` | `PlanController::update`（L31） | `admins`・`plans` | `plans.price`・`admin_audit_logs` | **お金**。owner だけ。値段を確かめない（0 や負の数も入る）。ないプランでも監査ログを書く。中の連番の id を URL に使う（ほかは `public_id`）。トランザクションがない |
-| 監査ログの一覧 | `domains/audit-logs/AuditLogsPage` | `GET /api/audit-logs` | `AuditLogController::index`（L19） | `admin_audit_logs`・`admins` | ― | **要件では owner だけだが、役割の確かめを写し忘れている**（見るだけの人も見られる）。50件ずつ・1件ごとに管理者の名前を読む（2＋N） |
+| 監査ログの一覧 | `domains/audit-logs/AuditLogsPage` | `GET /api/audit-logs` | `AuditLogController::index`（L19） | `admin_audit_logs`・`admins` | ― | **API の設計（`docs/api/12-admin.md`）では owner だけだが、役割の確かめを写し忘れている**（見るだけの人も見られる。要件 `docs/requirements/admin.md` には書いていない）。50件ずつ・1件ごとに管理者の名前を読む（2＋N） |
 
 ## SQL で確かめた結果（2026-11-16）
 
@@ -66,12 +68,12 @@
 
 | API | 状態 | SQL の本数 | 本数が増える理由 |
 | --- | --- | --- | --- |
-| `GET /api/users`（検索） | 200 | 25 | 20人を取り、1人ずつプロフィールを読む（1＋N） |
+| `GET /api/users`（検索） | 200 | 25 | 前に4本（自分のプロフィール・いいね・ブロック2本）＋会員の一覧1本＋1人ずつプロフィール（N=20）。4＋(1＋N) |
 | `POST /api/me/likes`（マッチしない・する） | 201 | 6・12 | マッチすると、マッチ・ルーム・参加者2人を足す |
-| `GET /api/me/likes` | 200 | 270 | 1件ごとに3本（1＋3N） |
-| `GET /api/me/matches` | 200 | 181 | 1件ごとに2本（1＋2N） |
-| `GET /api/me/talk-rooms` | 200 | 559 | ルームごとに6本（1＋6N） |
-| `GET /api/me/blocks` | 200 | 55 | 1件ごとに2本（1＋2N） |
+| `GET /api/me/likes` | 200 | 270 | 前に3本（ブロック2本・いいね）＋1件ごとに3本（N=89）。3＋3N |
+| `GET /api/me/matches` | 200 | 181 | 前に3本（ブロック2本・マッチ）＋1件ごとに2本（N=89。ブロックした相手のマッチは飛ばす）。3＋2N |
+| `GET /api/me/talk-rooms` | 200 | 559 | 前に3本＋ルームごとに2本（100）＋ブロックしていないルームごとに4本（89）。3＋2×100＋4×89 |
+| `GET /api/me/blocks` | 200 | 55 | 前に1本＋1件ごとに2本（N=27）。1＋2N |
 | `GET /api/me/purchases` | 200 | 12 | 1件ごとに1本（1＋N） |
 | 管理画面 `GET /api/dashboard` | 200 | 97 | 日ごとの数を、30日 × 3種類で1本ずつ |
 | 管理画面 `GET /api/members` | 200 | 102 | 1人ごとに2本（2＋2N） |
@@ -79,3 +81,6 @@
 | 管理画面 `GET /api/purchases` | 200 | 152 | 1件ごとに3本（2＋3N） |
 
 ほかの API は1〜9本。
+
+- 本数は、ログインの確かめ（JWT を読むだけで、SQL は流れない）を含む。購入の無料・有料のように、会員の条件で本数が変わる API がある（いいねは、無料の男性だと今日の数を数える1本が増える）
+- テストでは、開発用のデータの本数をそのまま守るのではなく、N=1 と N=3 で本数を比べて「N で増えないか」を確かめる（テスト用の DB には開発用のデータを入れないため）

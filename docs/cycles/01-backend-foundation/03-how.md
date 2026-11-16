@@ -116,7 +116,7 @@ app/
 
 今の URL（`/api/...`）は、いきなり変えたり消したりしない。直した API は新しい URL に作り、1本ずつ移す。
 
-**新しい URL には `/api` も `/v1` も付けない**（人が決めた）。例：`GET /me/rooms`。
+**新しい URL には `/api` も `/v1` も付けない**（人が決めた）。例：`GET /talk-rooms`。
 
 - `/api` を付けない理由：このサーバーは API しか返さないので、`/api` は何も区別していない
 - `/v1` を付けない理由：画面はウェブだけで、画面とサーバーを一緒に出し直せる。URL を分けて古い版を長く残す必要がない
@@ -124,15 +124,30 @@ app/
 
 | 順 | すること | 例（トークの一覧） |
 | --- | --- | --- |
-| 1 | 新しい URL を作る。今の URL はそのまま動かしておく | `GET /me/rooms` を作る。`GET /api/me/talk-rooms` も動いている |
-| 2 | 画面を新しい URL に切り替えて出す | `MessagesPage` が `/me/rooms` を呼ぶ |
+| 1 | 新しい URL を作る。今の URL はそのまま動かしておく | `GET /talk-rooms` を作る。`GET /api/me/talk-rooms` も動いている |
+| 2 | 画面を新しい URL に切り替えて出す | `MessagesPage` が `/talk-rooms` を呼ぶ |
 | 3 | 今の URL の応答に「もうすぐ消える」印（`Deprecation`・`Sunset` のヘッダー）を付ける | `Sunset` に消す日を書く |
-| 4 | 消す日まで、今の URL が呼ばれていないかをログで見る。呼ばれていなければ消す | 消す日は、画面を出してから2週間（1サイクル）を目安にする（仮。#125 で決める） |
+| 4 | 消す日まで、今の URL が呼ばれていないかをログで見る。呼ばれていなければ消す | 消す日は、画面を出してから2週間（1サイクル）を目安にする（仮。#125 で決める）。今の URL を固めたテストも一緒に消し、消すチケットに「新しい URL のどのテストが引き継いだか」を書く |
 
 - OpenAPI の仕様書に書くのは、新しい URL だけ。今の URL は、棚卸しの地図（`docs/onboarding/feature-map.md`）を記録の代わりにする
-- 今の URL の中身は直さない（凍結）。新しい機能も足さない
+- 今の URL の中身は直さない（凍結）。新しい機能も足さない。例外は2つ：消す前の印（`Deprecation`・`Sunset`。今の URL のグループのミドルウェアで付け、コントローラーは触らない）と、下の安全の穴
 - **例外：安全の穴は、今の URL のままでもすぐ直す**（他人のトークを読める・他人のプロフィールを書き換えられる など）。今の使い方を壊さないのは、正しい使い方だけ
 - 弱いところ：移している間は、同じ機能が2本ずつ動き、テストも2本になる。消し忘れると残り続ける
+
+**移したときに、振る舞いが同じことを守るテスト**（PR #132 のレビュー M3）
+
+- 新しい URL のテストは、今の URL を固めたテストを写して作る
+- 違ってよい点（`data` で包む・状態コード（形の違う ID は 404 など）・出さない項目）は、移すチケットの表に並べる。表にないものは、期待値を変えない
+- `architecture.md` の10章の「移すコミットではテストが変わらない」は、同じ URL のまま中を移すときに当てはまる。新しい URL に移すときは、上の写し方で守る
+- 今の URL を固めるテストは、今の振る舞いのまま固める（例：形の違う ID は 500 のまま）
+
+**安全の穴を直すときのテスト**（PR #132 のレビュー M4）
+
+1. 直すのは、ほかの変更と別のコミットにする
+2. 直す前に、「既知のリスク」として固めたテストを要件どおりの期待値に変え、落ちることを先に見せる
+3. 書き換えたテストの名前を、PR に並べる
+
+`agents/rules/testing.md` に写すのは #104（API テストの土台）で行う
 - 比べて採らなかった案：同じ URL のまま「足すだけ」で育てる（2本持たずに済むが、配列をそのまま返す・`verification_token` を返す、といった今の形を変えられない）
 
 ### バージョン（URL には出さない）
@@ -156,7 +171,7 @@ app/
 ```
 
 - 理由：包んでおけば、あとから総数や次のカーソルを、今ある項目を変えずに足せる。Laravel の API Resource も、標準で `data` で包む
-- エラーの形（Laravel の標準のままか、RFC 9457 か）は、まだ決めていない
+- 失敗の形は、下の「API 設計の土台」の B（RFC 9457）
 
 ### ルートは `api.php` で管理する
 
@@ -171,7 +186,10 @@ API のルートは、すべて `routes/api.php` から読み込む。`routes/we
 | URL の頭 | 付かない | 標準で `/api` が付く（`bootstrap/app.php` の `apiPrefix` で変えられる） |
 
 - API は毎回トークンで確かめるので、セッションと CSRF の確かめは要らない。`api.php` に置けば、余計なミドルウェアが付かない
-- 気をつけること：改善版はトークンを HttpOnly の Cookie に置く（D-014）。`api.php` には CSRF の確かめも Cookie の暗号化も付かないので、Cookie の `SameSite` と CORS で、ほかのサイトから送らせない。くわしくは認証を移すチケットで決める
+- 気をつけること：改善版はトークンを HttpOnly の Cookie に置く（D-014）。`api.php` には CSRF の確かめも Cookie の暗号化も付かない。Cookie にトークンを置くと、「毎回トークンで確かめるので CSRF は要らない」という前提が崩れる。CORS は応答を読ませない仕組みで、送ること自体は止めない。SameSite も、同じサイトの別のオリジンからの送信は止めない。認証を移すチケットで、次の3つを決める（PR #132 のレビュー S7）
+  - 書き込みは JSON の `Content-Type` か独自のヘッダーを必須にするか、CSRF のトークン（Sanctum の SPA の方式）を使うか
+  - Cookie の `SameSite`・`Secure`・`HttpOnly` の値
+  - CORS で許すオリジンは画面のオリジンだけ（`http://localhost:5173`・管理画面は `http://localhost:5174`）。すべてのオリジンを許す設定と `supports_credentials` を一緒にしない
 
 ### ルートのまとめ方
 
@@ -183,9 +201,9 @@ API のルートは、すべて `routes/api.php` から読み込む。`routes/we
 | 決めること | 決まり |
 | --- | --- |
 | URL の頭 | `bootstrap/app.php` の `apiPrefix` を空にし、今の URL のグループだけに `Route::prefix('api')` を付ける |
-| ルートの名前 | `<まとまり>.<リソース>.<操作>`（例：`matching.likes.store`）。今の URL は `legacy.` で始める |
+| ルートの名前 | `<まとまり>.<リソース>.<操作>`（例：`matching.likes.store`）。まとまりとリソースは小文字で、2語なら `-` でつなぐ（`audit-logs.index`）。今の URL は `legacy.` で始める |
 | OpenAPI | `tags` をまとまりの名前にそろえる（`paths` のファイルも、まとまりごとに分ける） |
-| ID の形 | `whereUuid()` で縛り、形の違う ID は 404 にする（今は 500） |
+| ID の形 | 下の「パスの引数と PATCH」のとおり、引数の名前ごとに `Route::pattern` で1か所で縛る。形の違う ID は 404（今は 500） |
 | ルートモデルバインディング | 使わない（Controller に Eloquent の Model が入り、`architecture.md` の「Http は Model を使わない」とぶつかる） |
 | 管理画面 | 別のアプリのまま、同じ分け方にする。将来ホストを分けるときは `Route::domain()` で書ける |
 
@@ -194,13 +212,13 @@ API のルートは、すべて `routes/api.php` から読み込む。`routes/we
 - エラーを JSON で返す条件（`bootstrap/app.php` の `shouldRenderJsonWhen`）が `api/*` だけなので、API のルートすべてを JSON にする
 - CORS の対象のパスが Laravel の標準で `api/*` だけなので、`config/cors.php` を出して新しい URL も対象にする（しないと、画面（:5173）から呼べない）
 
-根拠にした Laravel のページ：13.x の Routing（`withRouting` の `apiPrefix`・`then`・`using`、グループの `prefix`・`name`・`middleware`、`whereUuid`、Rate Limiting）・Middleware（`web` と `api` のグループ）。
+根拠にした Laravel のページ：13.x の Routing（`withRouting` の `apiPrefix`・`then`・`using`、グループの `prefix`・`name`・`middleware`、`Route::pattern`、Rate Limiting）・Middleware（`web` と `api` のグループ）。
 
 ### 名前の決まり（決まった分）
 
 - ツールの名前（Firebase など）を URL に入れない。替えたときに URL が変わらないようにする
 - `/me` を付けるかは、下の「`/me` を付けるか（2026-11-16 に決めた）」の基準で決める。他人のものは `/users/{user_id}/...`。管理画面で会員のものを見るときは `/members/{member_id}/...`（例：`/members/{member_id}/likes`）
-- 名前を何から付けるか（画面の言葉・業務の言葉・表の名前）は、まだ決めていない
+- 名前は業務の言葉で付け、表の名前に合わせない（`docs/glossary.md`）
 
 ### API 設計の土台（2026-11-16 に決めた）
 
@@ -214,13 +232,16 @@ API のルートは、すべて `routes/api.php` から読み込む。`routes/we
 | K | 他人のもの（参加者でないルームなど）には 403 ではなく 404 を返す | 403 だと「そのルームはある」と分かってしまう |
 | 用語集 | 名前は業務の言葉で付け、表の名前に合わせない。正本は `docs/glossary.md` | `talk-rooms` と `rooms`、`matches` と `user_matches` のように、名前の決め方がなかった |
 
+B の補足（PR #132 のレビュー S15）：500 の `detail` は決まった文言だけにし、SQL やスタックを出さない。ログイン・確認のメールの再送・登録で、メールアドレスが登録されているかを `code` や文言で見分けさせない。
+
 その API を移すチケットで決めるもの：C（「有料かどうか」ではなく「何ができるか」を返す）・E（一覧があるものには1件の API も作る）・F（いいね・ブロックを `PUT`／`DELETE /me/likes/{user_id}` にする）・G（購入に状態と `Idempotency-Key`）・H（マッチに `match_id`）・I（ついでの処理は「マッチした」などの出来事で起こす）・J（決済の通知など外から呼ばれる URL は別のグループ）・M（429 と `Retry-After` を仕様書に書く）。
 
 参考にした公開の決まり：Google API Improvement Proposals・Microsoft REST API Guidelines・Zalando RESTful API Guidelines・RFC 9457・RFC 8594（`Sunset`）・RFC 9745（`Deprecation`）。
 
 ### パスの引数と PATCH（2026-11-16 に決めた）
 
-- パスの引数の名前は `{<名詞>_id}`（`{user_id}`・`{room_id}`・`{match_id}`・`{member_id}`・`{plan_id}`）。JSON のキーと同じ名前にし、入れ子でも見分けられるようにする。中身は UUID（`Route::pattern` で縛る）
+- パスの引数の名前は `{<名詞>_id}`（`{user_id}`・`{room_id}`・`{match_id}`・`{member_id}`・`{plan_id}`）。JSON のキーと同じ名前にし、入れ子でも見分けられるようにする。中身は UUID で、引数の名前ごとに `Route::pattern` で縛る（ルートごとの `whereUuid()` は使わない。書き漏らさないように）
+- ID の名前は、用語集（`docs/glossary.md`）の「ID の名前」の列を正とする（PR #132 のレビュー S10 で決めた。トークルームは `room_id`）。新しいリソースを足すときは、先に用語集に ID の名前を書く
 - PATCH は RFC 7396（JSON Merge Patch）の決まりに合わせる：送らなかった項目は変えない・`null` を送った項目は消す。仕様書には、消してよい項目に `nullable` を書く
 - PUT は「その状態にする」操作（既読にする など）に使う。2回送っても同じ結果になる
 
@@ -244,12 +265,13 @@ API のルートは、すべて `routes/api.php` から読み込む。`routes/we
 | 自分そのもの（`/me`） | 2人以上で持つもの（マッチ・トークルーム・メッセージ） |
 | 自分から相手への向きがあるもの（いいね・ブロック。あとで「受けた」側を足しうる） | 全員に同じもの（プラン） |
 | 迷うもの（自分の購入・自分のメールアドレスの確認・自分のためのトークン） | 相手のもの（`/users/{user_id}`）・ログインの前に使うもの（`/auth/...`） |
+| | 2人で持つものの中の、自分の状態（既読）。親（トークルーム）の URL にそろえる |
 
 | 今の URL | 新しい URL | `/me` | 理由 |
 | --- | --- | --- | --- |
 | `GET /api/health` | `GET /health` | ― | |
 | `POST /api/users` | `POST /users`（名前は仮） | 付けない | 登録の前で、まだ「自分」がいない |
-| `GET /api/email-verifications/{token}` | `GET /users/{user_id}/email-verification/{hash}` | 付けない | メールのリンクで開くので、ログインしていない |
+| `GET /api/email-verifications/{token}` | `GET /users/{user_id}/email-verification/{hash}` | 付けない | メールのリンクで開くので、ログインしていない（下の注） |
 | `POST /api/email-verifications` | `POST /me/email-verification` | 付ける | 迷う（自分のメールアドレス） |
 | `POST /api/auth/login`・`/logout` | `POST /auth/login`・`/auth/logout` | 付けない | ログインの前後 |
 | ―（改善版で足す） | `POST /auth/refresh` | 付けない | |
@@ -265,7 +287,7 @@ API のルートは、すべて `routes/api.php` から読み込む。`routes/we
 | ―（改善版で足す） | `GET /talk-rooms/{room_id}` | 付けない | 2人で持つ |
 | `GET /api/me/talk-rooms/{publicId}/messages` | `GET /talk-rooms/{room_id}/messages` | 付けない | ルームの中のもの |
 | `POST /api/me/talk-rooms/{publicId}/messages` | `POST /talk-rooms/{room_id}/messages` | 付けない | ルームの中のもの |
-| ―（改善版で足す） | `PUT /talk-rooms/{room_id}/read` | 付けない | 既読を付けられるのは自分だけで、迷わない |
+| ―（改善版で足す） | `PUT /talk-rooms/{room_id}/read` | 付けない | 2人で持つものの中の、自分の状態。親の `/talk-rooms/{room_id}` にそろえる |
 | `POST /api/me/firebase-token` | `POST /me/realtime-token`（名前は仮） | 付ける | 迷う（自分のためのトークン） |
 | `POST /api/me/blocks` | `POST /me/blocks` | 付ける | 向きがある（した・された） |
 | `GET /api/me/blocks` | `GET /me/blocks` | 付ける | 向きがある |
@@ -274,6 +296,7 @@ API のルートは、すべて `routes/api.php` から読み込む。`routes/we
 | `POST /api/me/purchases` | `POST /me/purchases` | 付ける | 迷う（お金の記録。あとで「贈る・贈られる」の向きが出うる） |
 | `GET /api/me/purchases` | `GET /me/purchases` | 付ける | 迷う |
 
+- メールの確認の URL の注（PR #132 のレビュー S8）：`{hash}` はメールアドレスのハッシュだけなので、それだけでは、だれでも URL を作れる。`signed` のミドルウェアと、期限つきの URL（`temporarySignedRoute`）を必須にする。確認済みなら、2回目は何もしない。メールのリンクは GET でしか開けないので、「GET で状態を変えない」の例外にする（ほかの API ではまねしない）。`{hash}` は `{<名詞>_id}` の例外
 - 弱いところ：`/me` が付くものと付かないものが混ざるので、画面を書く人は上の基準を知っている必要がある。基準と表は #125 の `api-design.md` に入れる
 - `/me` を付けないもの（トークルームなど）は、URL から「だれのものか」が分からないので、参加者かの確かめ（決まり K）を必ずコードで書く
 - 管理画面は、管理者そのもの（`GET /me`）だけに付ける。ほかは運営から見た全体のもの（`/members` など）なので付けない
