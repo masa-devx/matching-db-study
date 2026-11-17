@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\DB;
  * 先に SearchMembersSeeder（会員 2万人）を流しておく。DatabaseSeeder からは呼ばない。
  *
  * - 試しの会員（search…@example.test）のプロフィールを書き換える。項目ごとに、7割ほどの会員が答えた形（残りは NULL＝未回答）
- * - 値は、会員の id から決める（流し直しても同じ値になる）。選択肢の名前は、画面（HomePage・SearchConditionsPage）と同じ文字
+ * - 値は、会員の id から決める（流し直しても同じ値になる。ただし SearchMembersSeeder を流し直すと id が変わるので、値も変わる）。選択肢の名前は、画面（HomePage・SearchConditionsPage）と同じ文字
  * - search00001 は、6項目とも答えた形にする（画面で確かめやすいように）
  */
 class ProfileDetailsSeeder extends Seeder
@@ -37,19 +37,21 @@ class ProfileDetailsSeeder extends Seeder
             return;
         }
 
+        // 6項目を、1本の update でまとめて書き換える（#159）。
+        // 1列ずつ6本に分けると、そのたびに行が丸ごと書き直され、表が7倍ほどに膨らむ（消えた行の跡が空きとして残る）。
+        // PostgreSQL の update は、行を上書きせず、新しい行を足して古い行を捨てるため
+        $sets = [];
         foreach (self::OPTIONS as $column => $options) {
             $array = "array['".implode("','", $options)."']";
             $count = count($options);
-            // 項目ごとに違う散らばり方にする（hashtext に列の名前を混ぜる）。10人に3人は未回答
-            DB::statement("
-                update profiles
-                set {$column} = case
-                    when abs(hashtext(user_id::text || '{$column}-answered')) % 10 < 3 then null
-                    else ({$array})[1 + abs(hashtext(user_id::text || '{$column}')) % {$count}]
-                end
-                where user_id in ({$ids})
-            ");
+            // 項目ごとに違う散らばり方にする（hashtext に列の名前を混ぜる）。10人に3人は未回答。
+            // hashtext はマイナスにもなるので、& で下の31ビットだけを使う（abs は、いちばん小さい数で止まることがある）
+            $sets[] = "{$column} = case
+                    when (hashtext(user_id::text || '{$column}-answered') & 2147483647) % 10 < 3 then null
+                    else ({$array})[1 + (hashtext(user_id::text || '{$column}') & 2147483647) % {$count}]
+                end";
         }
+        DB::statement('update profiles set '.implode(', ', $sets)." where user_id in ({$ids})");
 
         DB::table('profiles')
             ->where('user_id', DB::table('users')->where('email', 'search00001@example.test')->value('id'))
