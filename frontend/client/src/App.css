@@ -1216,6 +1216,94 @@
   min-height: 44px;
 }
 
+/* ---- M2：登録と、メールアドレスの確認（#193） ---- */
+.hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #6f6368;
+}
+
+.birthday {
+  margin: 0 0 16px;
+  padding: 0;
+  border: none;
+}
+
+.birthday legend {
+  margin-bottom: 4px;
+  padding: 0;
+}
+
+.birthday-row {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr;
+  gap: 8px;
+}
+
+.birthday-row .input {
+  margin-top: 0;
+}
+
+.verify-text {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #231c20;
+}
+
+.verify-email {
+  word-break: break-all;
+}
+
+.verify-list {
+  margin: 0 0 16px;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #231c20;
+}
+
+/* 未確認の会員への帯：枠のいちばん上に出す */
+.verify-banner {
+  display: flex;
+  flex-shrink: 0;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 16px;
+  padding-top: calc(8px + env(safe-area-inset-top));
+  font-size: 12px;
+  line-height: 1.5;
+  color: #231c20;
+  background: #fff3e0;
+  border-bottom: 1px solid #ece3e1;
+}
+
+.verify-banner p {
+  flex: 1;
+  margin: 0;
+}
+
+.verify-banner a {
+  margin-left: 4px;
+  color: #d12f5f;
+}
+
+.verify-banner .button {
+  flex-shrink: 0;
+  min-height: 44px;
+  white-space: nowrap;
+}
+
+.profile-todo {
+  padding: 16px;
+}
+
+.profile-todo .verify-text {
+  margin-bottom: 0;
+}
+
 /* ---- M6：メッセージの一覧（#190）。いいねのタブ（箱を並べる形）と違い、区切り線だけの平らな行にする ---- */
 .chat-tools {
   display: flex;

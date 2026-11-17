@@ -29,8 +29,9 @@ class VerifyMail extends Mailable
         return new Content(
             text: 'mail.verify',
             with: [
-                // url() は、今のリクエストのホスト（手元は http://127.0.0.1:8000）でリンクを作る
-                'url' => url('/api/email-verifications/'.$this->user->verification_token),
+                // M2（#193）：リンクを、画面の確認のページに向ける（前は API を直接開き、JSON の文字だけが出ていた）。
+                // 確認用の文字は、前と同じく平文のまま URL に入る
+                'url' => config('app.frontend_url').'/verify/'.$this->user->verification_token,
             ],
         );
     }

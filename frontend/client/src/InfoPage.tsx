@@ -118,7 +118,12 @@ export default function InfoPage() {
     <div>
       <div className="search-head">
         <h1 className="page-title">{page ? page.title : 'ページが見つかりません'}</h1>
-        <Link className="button button-small button-ghost" to="/settings" viewTransition>
+        {/* M2（#193）：登録の画面からも開く（利用規約・プライバシーポリシー）。ログインしていなければ、登録に戻る */}
+        <Link
+          className="button button-small button-ghost"
+          to={sessionStorage.getItem('token') ? '/settings' : '/register'}
+          viewTransition
+        >
           戻る
         </Link>
       </div>
