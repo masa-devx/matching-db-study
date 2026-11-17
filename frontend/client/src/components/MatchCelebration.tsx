@@ -8,10 +8,13 @@ type Person = { image?: string | null; nickname?: string | null }
 export default function MatchCelebration({
   me,
   partner,
+  roomId,
   onClose,
 }: {
   me: Person | null
   partner: Person
+  // M3（#187）：マッチしてできたトークルーム。あれば、「メッセージを送る」で、その相手のトークへ直接移る
+  roomId?: string | null
   onClose: () => void
 }) {
   return (
@@ -31,7 +34,7 @@ export default function MatchCelebration({
         マッチしました
       </p>
       <p className="match-text">{partner.nickname}さんも、あなたにいいねしていました</p>
-      <Link to="/messages" viewTransition className="button button-white">
+      <Link to={roomId ? `/messages/${roomId}` : '/messages'} viewTransition className="button button-white">
         <span className="button-label">メッセージを送る</span>
       </Link>
       <button type="button" className="match-later" onClick={onClose}>

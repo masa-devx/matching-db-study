@@ -1,5 +1,5 @@
 import { useEffect, useOptimistic, useState, useTransition } from 'react'
-import { useNavigate, useParams } from 'react-router'
+import { Link, useNavigate, useParams } from 'react-router'
 import ConfirmDialog from './components/ConfirmDialog'
 import Icon from './components/Icon'
 import MatchCelebration from './components/MatchCelebration'
@@ -19,6 +19,8 @@ export default function UserPage() {
   const [, startTransition] = useTransition()
   // マッチの演出に出す自分（写真とニックネーム）
   const [matchedWith, setMatchedWith] = useState<any>(null)
+  // M3（#187）：マッチしてできたトークルームの ID（いいねの応答か、プロフィールの応答から）
+  const [roomId, setRoomId] = useState<any>(null)
   // 06：ブロックの確かめのモーダルを開いているか
   const [confirming, setConfirming] = useState(false)
   // 07：誘導のモーダル（いいねの上限を超えたとき）
@@ -41,7 +43,11 @@ export default function UserPage() {
     // 読み込み中・失敗は考えない。すぐ別の人に移ると、前の人の応答があとから上書きする
     fetch(`${api}/api/users/${publicId}`, { headers })
       .then((r) => r.json())
-      .then(setUser)
+      .then((u) => {
+        setUser(u)
+        // M3（#187）：もうマッチしていれば、「メッセージを送る」を出す
+        setRoomId(u.room_id ?? null)
+      })
     // もういいねしたかは、開いたときには分からない（その API がない）。押すまで「いいね」のまま
   }, [publicId])
 
@@ -66,6 +72,7 @@ export default function UserPage() {
       const d = await r.json()
       setLiked(true)
       if (d.matched) {
+        setRoomId(d.room_id ?? null)
         // マッチの演出に出す自分の写真を、ここで読む（ホームと同じ2本を写す）
         const me = await fetch(`${api}/api/me`, { headers }).then((x) => x.json())
         const mine = await fetch(`${api}/api/users/${me.public_id}`, { headers }).then((x) => x.json())
@@ -74,6 +81,18 @@ export default function UserPage() {
         toast('いいねしました')
       }
     })
+
+  // M3（#187）：スキップする。届いたいいねの画面（LikesPage）に書いた送り方を、ここにもコピーした
+  const skip = () => {
+    fetch(`${api}/api/me/skips`, { method: 'POST', headers, body: JSON.stringify({ user_id: publicId }) }).then((r) => {
+      if (!r.ok) {
+        toast('スキップできませんでした', 'error')
+        return
+      }
+      toast('スキップしました')
+      navigate(-1)
+    })
+  }
 
   // 06：ブロックする。ステータスを見ない（2回目は 500 でも「ブロックしました」と出る）
   const block = () => {
@@ -128,7 +147,15 @@ export default function UserPage() {
           <p className="intro">{user.profile?.introduction || 'まだ書いていません'}</p>
         </div>
 
-        <div className="like-bar">
+        {/* M3（#187）：マッチした相手には、いいねの代わりに「メッセージを送る」を出す */}
+        {roomId && (
+          <div className="like-bar">
+            <Link to={`/messages/${roomId}`} viewTransition className="button">
+              メッセージを送る
+            </Link>
+          </div>
+        )}
+        <div className={roomId ? 'like-bar hidden-range' : 'like-bar'}>
           <button
             type="button"
             className={shownLiked ? 'like-button is-liked' : 'like-button'}
@@ -143,6 +170,12 @@ export default function UserPage() {
           </button>
         </div>
 
+        {/* M3（#187）：検索で見た相手を、スキップできる（次から、検索と届いたいいねに出さない。相手には伝わらない）。マッチした相手には出さない */}
+        {!roomId && (
+          <button type="button" className="skip-link" onClick={skip}>
+            スキップ（次から表示しない）
+          </button>
+        )}
         <button type="button" className="danger-link" onClick={() => setConfirming(true)}>
           ブロック
         </button>
@@ -161,7 +194,12 @@ export default function UserPage() {
       </ConfirmDialog>
 
       {matchedWith && (
-        <MatchCelebration me={matchedWith} partner={user.profile ?? {}} onClose={() => setMatchedWith(null)} />
+        <MatchCelebration
+          me={matchedWith}
+          partner={user.profile ?? {}}
+          roomId={roomId}
+          onClose={() => setMatchedWith(null)}
+        />
       )}
     </div>
   )
