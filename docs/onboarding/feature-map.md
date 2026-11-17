@@ -2,12 +2,12 @@
 
 機能ごとに、画面・API・コントローラー・表をつなぐ。読みながら埋める（推測で埋めない。コードとルートで確かめた行だけ書く）。
 
-- 読む表・書く表は、コードから読み取り、2026-11-16 に流れる SQL で確かめた（2026-11-16 にあった 38本すべて）。2026-11-17 に 04b（保存した検索条件）の4本と、M1（パスワードを変える）の1本、M3（届いたいいね・スキップ）の4本が増えて 47本になった。この4本は、curl で実際に呼んで確かめた（`docs/api/04b-saved-searches.md` の「レガシー版で起きること」）。書き込みの API も、トランザクションの中で本当に流してから取り消した（メールと Firestore は偽物に差し替えた）。確かめた結果と SQL の本数は、末尾の「SQL で確かめた結果」
+- 読む表・書く表は、コードから読み取り、2026-11-16 に流れる SQL で確かめた（2026-11-16 にあった 38本すべて）。2026-11-17 に 04b（保存した検索条件）の4本と、M1（パスワードを変える）の1本、M3（届いたいいね・スキップ）の4本が増えて 47本、M2（パスワードの再設定。#196）の2本が増えて 49本になった。この4本は、curl で実際に呼んで確かめた（`docs/api/04b-saved-searches.md` の「レガシー版で起きること」）。書き込みの API も、トランザクションの中で本当に流してから取り消した（メールと Firestore は偽物に差し替えた）。確かめた結果と SQL の本数は、末尾の「SQL で確かめた結果」
 - 行の番号は、会員の側は `backend/client/app/Http/Controllers/` のファイルの行（2026-11-16 に `refactored-repo` で読んだ）。移すとずれるので、テストの材料に使うときはメソッドの名前を正にする
 - **形の違う ID（`abc` など。UUID でない文字）は、どの API でも 500** になる。`public_id` は uuid の列なので、比べると PostgreSQL がエラー（22P02）を返す。下の表で「いない会員は 500」「いない相手でも 204」と書いたのは、形の正しい UUID のとき
 - 要件 ID と、返る状態コードの一覧は、ここには書かない。その API を移すチケットで、その API の分だけ書く（PR #132 のレビュー S14）
 
-## 会員の側（`backend/client`・33本）
+## 会員の側（`backend/client`・35本）
 
 全体：ルートにミドルウェアはない。ログインしているかは、各コントローラーの中で JWT を読んで確かめる。業務の処理はすべてコントローラーの中にある。
 
@@ -16,7 +16,7 @@
 | 動作の確かめ | ― | `GET /api/health` | `routes/api.php` のクロージャ | `migrations` | ― | DB の名前とマイグレーションの数を返す |
 | 登録 | `RegisterPage` | `POST /api/users` | `UserController::store`（L31） | ― | `users`・`profiles` | 会員とプロフィールを作り、確認のメールを送る。入力を確かめない。トランザクションがない（メールが失敗しても行は残る）。応答に `verification_token` が出る |
 | メールアドレスの確認 | `VerifyPage`（#193。メールのリンクが画面を開き、画面がこの API を呼ぶ。前は、リンクが API を直接開いていた） | `GET /api/email-verifications/{token}` | `EmailVerificationController::show`（L20） | `users` | `users.email_verified_at` | 確認用の文字にインデックスがなく、表を全部読む。文字を消さないので何度でも使え、期限もない |
-| 確認のメールの再送 | 呼んでいる画面は見つからない・`SettingsPage`（#181。もう一度送る） | `POST /api/email-verifications` | `EmailVerificationController::store`（L35） | `users` | ―（メールを送る） | 確認済みでも、何回でも送れる。404 で、そのメールアドレスが登録されているかが分かる |
+| 確認のメールの再送 | `SettingsPage`（#181）・`RegisterPage`・`VerifyBanner`（#193。送り方を3か所にコピーした） | `POST /api/email-verifications` | `EmailVerificationController::store`（L35） | `users` | ―（メールを送る） | 確認済みでも、何回でも送れる。404 で、そのメールアドレスが登録されているかが分かる |
 | ログイン | `LoginPage` | `POST /api/auth/login` | `AuthController::login`（L22） | `users`・`profiles`（nickname） | `users.last_login_at` | 30日の JWT を返す。鍵は `APP_KEY` の使い回し。メッセージの違いと返るまでの時間で、メールアドレスが登録されているかが分かる。止めた会員を断るのはログインだけ |
 | 自分の情報 | `VerifyBanner`（#193。未確認かを見るために、画面が変わるたびに呼ぶ）・`HomePage`・`SettingsPage`・`SearchConditionsPage`・`UserPage`・`TalkPage`・`PlansPage`・`PurchasePage` | `GET /api/me` | `AuthController::me`（L56） | `users` | ― | JWT を読む処理のもと（ほかの API にコピーされた）。壊れた JWT では 500 になる。`users` の行をそのまま返す（`verification_token` も出る） |
 | ログアウト | `SettingsPage`（#181 で、ホームから移した） | `POST /api/auth/logout` | `AuthController::logout`（L70） | ― | ― | サーバーは何もしない |
@@ -39,6 +39,8 @@
 | ブロックを解く | `BlocksPage` | `DELETE /api/me/blocks/{publicId}` | `BlockController::destroy`（L70） | `users` | `blocks` | 自分がした分だけを消す。消すものがなくても（いない相手・ブロックしていない相手）204 |
 | 退会 | `SettingsPage`（#181 で、ホームから移した） | `DELETE /api/me` | `UserController::destroy`（L121） | `users` | `users.email`・`users.deleted_at` | パスワードを確かめ、メールアドレスを書き換えて空ける（元のメールアドレスは残らない。元が長いと 255文字を超えて 500）。持っていた JWT は止めない（30日のあいだ使える） |
 | パスワードを変える | `SettingsPage` | `PUT /api/me/password` | `PasswordController::update`（L25） | `users` | `users.password` | M1（#181）。今のパスワードを確かめてから変える。新しいパスワードを確かめない（1文字でも通る。ないと 500）。変えても、前のトークンは使えるまま。試す回数の上限がない |
+| パスワードの再設定のメールを送る | `ForgotPasswordPage` | `POST /api/password-resets` | `PasswordResetController::store`（L27） | `users`・`password_reset_tokens` | `password_reset_tokens`（メールも送る） | M2（#196）。ログインしていない人が呼ぶ。再設定用の文字を、平文のまま保存する。404 で、そのメールアドレスが登録されているかが分かる。何回でも送れる |
+| 新しいパスワードを決める | `ResetPasswordPage` | `PUT /api/password-resets/{token}` | `PasswordResetController::update`（L47） | `password_reset_tokens`・`users` | `users.password` | M2（#196）。期限を見ない。使ったあとも消さないので、同じリンクで何度でも変えられる。新しいパスワードを確かめない。変えても、前のトークンは使えるまま |
 | プランの一覧 | `PlansPage`・`PurchasePage` | `GET /api/plans` | `PlanController::index`（L21） | `profiles`・`plans` | ― | 男性だけ（女性は 403）。性別はプロフィールの今の値で決める（編集で書き換えられる）。`plans` の行をそのまま返す |
 | 購入する | `PurchasePage` | `POST /api/me/purchases` | `PurchaseController::store`（L24） | `profiles`・`plans`・`users` | `purchases`・`users.is_paid`・`users.paid_until` | **お金**。決済はせず、押したらすぐ有料。男性だけ。ないプランは 500。トランザクションがない（購入の記録と有料の状態がずれうる）。記録はプランを指すだけで、買ったときの値段を残さない。期限が過ぎていても古い期限から足す。`addMonths()` で月末があふれる |
 | 購入の記録 | `PlansPage` | `GET /api/me/purchases` | `PurchaseController::index`（L55） | `profiles`・`purchases`・`plans` | ― | 男性だけ。全件（ページなし）。1件ごとにプランを読む（1＋N）。値段と期間は「今の」プランのもの（管理画面で値段を変えると、前の記録の値段も変わる） |
