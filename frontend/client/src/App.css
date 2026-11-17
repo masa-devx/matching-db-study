@@ -1356,6 +1356,37 @@
   text-decoration: underline;
 }
 
+/* ---- M7：通報（#202） ---- */
+.report-quote {
+  max-height: 96px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  overflow: auto;
+  font-size: 14px;
+  color: #6f6368;
+  white-space: pre-wrap;
+  background: #f4eeec;
+  border-left: 4px solid #e4dad7;
+  border-radius: 8px;
+}
+
+.msg-report {
+  margin-left: 8px;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  color: #6f6368;
+  text-decoration: underline;
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+
+.sheet .label,
+.sheet .check {
+  text-align: left;
+}
+
 /* ---- M2：登録と、メールアドレスの確認（#193） ---- */
 .hint {
   display: block;
