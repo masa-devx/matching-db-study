@@ -12,6 +12,7 @@ import MessagesPage from './MessagesPage'
 import PlansPage from './PlansPage'
 import PurchasePage from './PurchasePage'
 import RegisterPage from './RegisterPage'
+import SearchConditionsPage from './SearchConditionsPage'
 import SearchPage from './SearchPage'
 import TalkFsPage from './TalkFsPage'
 import TalkPage from './TalkPage'
@@ -37,8 +38,10 @@ export default function App() {
       {/* 05c Firestore 版（手元の Emulator）。05 の画面と並べて比べる */}
       <Route path="/messages-fs" element={<MessagesFsPage />} />
       <Route path="/messages-fs/:roomId" element={<TalkFsPage />} />
-      {/* 04 検索。条件は sessionStorage に置き、戻ってきても残す */}
+      {/* 04 検索。今の条件は URL のクエリ（04b）。なければ sessionStorage の最後の条件に戻す */}
       <Route path="/search" element={<SearchPage />} />
+      {/* #147 検索の条件の画面。条件の欄と、保存した検索条件（04b）は、ここにだけ出す */}
+      <Route path="/search/conditions" element={<SearchConditionsPage />} />
       <Route path="/blocks" element={<BlocksPage />} />
       <Route path="/plans" element={<PlansPage />} />
       <Route path="/plans/:planId" element={<PurchasePage />} />
