@@ -87,6 +87,10 @@ export default function LoginPage(props: any) {
             ログイン
           </Button>
         </form>
+        {/* M2（#196）：パスワードを忘れたとき */}
+        <p className="muted">
+          <Link to="/forgot-password">パスワードを忘れた方</Link>
+        </p>
         <p className="muted">
           はじめての方は <Link to="/register">登録</Link>
         </p>
