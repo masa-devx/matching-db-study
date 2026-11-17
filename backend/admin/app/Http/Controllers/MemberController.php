@@ -80,6 +80,18 @@ class MemberController extends Controller
             $purchases[] = ['plan' => $plan?->name, 'price' => $plan?->price, 'bought_at' => $p->created_at];
         }
 
+        // A1（#211）：停止の履歴。新しい順。1件ごとに、止めた管理者・解いた管理者の名前を読む（1＋2N 本）
+        $suspensions = [];
+        foreach (DB::table('suspensions')->where('user_id', $user->id)->orderBy('created_at', 'desc')->get() as $s) {
+            $suspensions[] = [
+                'reason' => $s->reason,
+                'suspended_at' => $s->created_at,
+                'suspended_by' => DB::table('admins')->where('id', $s->suspended_by)->value('name'),
+                'lifted_at' => $s->lifted_at,
+                'lifted_by' => $s->lifted_by ? DB::table('admins')->where('id', $s->lifted_by)->value('name') : null,
+            ];
+        }
+
         $detail = [
             'user_id' => $user->public_id,
             'email' => $user->email,
@@ -98,6 +110,7 @@ class MemberController extends Controller
             'blocks_made' => DB::table('blocks')->where('blocker_id', $user->id)->count(),
             'blocks_received' => DB::table('blocks')->where('blocked_id', $user->id)->count(),
             'purchases' => $purchases,
+            'suspensions' => $suspensions,
         ];
 
         // 監査ログ（ここでは書く）

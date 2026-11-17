@@ -197,6 +197,7 @@ erDiagram
 | `skips` | M3（#184） | スキップ（だれが・だれを・いつ） | 主キー `id` だけ。外部キーがないので、会員を消しても残る。`(skipper_id, skipped_id)` の UNIQUE がないので、同じ相手を2回スキップすると2行できる。インデックスがないので、`skipper_id` から探すと表を全部読む（3万件で 251 ページ）。自分で自分もスキップできる |
 | `report_cases` | M7（#201） | 通報の案件（通報された会員ごとに、通報をまとめる。対応の状態・何をしたか・メモ・対応した管理者） | 主キー `id` だけ。外部キーなし。「まだ済みでない案件は、会員に1つ」を止めるものがないので、同時に 10件の通報が来ると、案件が 9つできた。状態（`status`）・何をしたか（`action`）は文字の列で、CHECK がない。`public_id` に UNIQUE がない。インデックスがないので、会員の案件を探すと表を全部読む |
 | `reports` | M7（#201） | 通報（だれが・だれを・どのメッセージを・理由・自由な文・入っている案件） | 主キー `id` だけ。外部キーなし（いない会員・ないメッセージ・ない案件を指す行が入る）。理由（`reason`）に CHECK がない。自由な文の長さを見ない。自分を通報する行も入る。通報された会員を、`report_cases` とこの表の2か所に持つ。インデックスがないので、案件の通報を探すと表を全部読む |
+| `suspensions` | A1（#211） | 会員の利用を止めた・解いた履歴（だれを・だれが・理由・解いた日時・解いた管理者） | 主キー `id` だけ。外部キーなし。今の状態は `users.suspended_at` にも持つので、同じ日時と理由が2か所にある。「まだ解いていない停止は、会員に1つ」を止めるものがなく、止めている会員をもう一度止めると、解いていない行が増える。インデックスがないので、会員の履歴を探すと表を全部読む |
 | `admins` | 12 | 管理画面の管理者（会員とは別にログインする）と役割 | 主キー `id`・`email` の UNIQUE。`role` に CHECK はなく、何でも入る。読み書きするのは管理画面（`backend/admin`） |
 | `admin_audit_logs` | 12 | 監査ログ（だれが・いつ・何に・何をしたか） | 主キー `id`・`admin_id` の外部キーだけ。対象は `target_type` と `target_id`（文字）で指すので外部キーはない。書き換え・削除を DB で止めていない |
 
@@ -229,3 +230,4 @@ Laravel のひな形が作った表（この学習では扱わない）：`passw
 | `search_conditions` | 保存した検索条件（04b） | `user_id` → `users.id` の外部キー（`ON DELETE CASCADE`）・`(user_id, id)` のインデックス（自分の一覧を保存した順に読む）・`public_id` の UNIQUE・`name` は 1〜30文字の CHECK・`conditions` は「オブジェクトであること」の CHECK（`jsonb_typeof(conditions) = 'object'`）。中身の項目と範囲はアプリで確かめる（検索の API と同じ決まり）。1人5件の上限は、会員の行を押さえてから数える（制約では書けない）・日時は `timestamptz` |
 | `skips` | スキップ（M3） | `(skipper_id, skipped_id)` の UNIQUE（この並びのインデックスで「私がスキップした相手」を読む）・2つの列から `users.id` への外部キー（`ON DELETE CASCADE`）・`skipper_id <> skipped_id` の CHECK・日時は `timestamptz`。「私をスキップした人」を読む場面はないので、逆の並びのインデックスは作らない（ブロックは、された側からも読むので両方要る）。届いたいいねのために、`likes` に `(to_user_id, created_at)` のインデックスを足す |
 | `report_cases`・`reports` | 通報（M7） | 部分 UNIQUE インデックス `unique (reported_id) where status <> 'closed'`（まだ済みでない案件は、会員に1つ。2つ目の insert は失敗するので、ある方を読み直す）・状態と理由と「何をしたか」の CHECK・「済みなら、何をしたかがある」の CHECK・外部キーは `restrict`（証拠が消えない）・`reports (report_case_id, created_at)` と `report_cases (status, last_reported_at desc)` のインデックス・通報された会員は案件にだけ持つ。DDL の案は [api/m7-reports.md](api/m7-reports.md) |
+| `suspensions` | 停止の履歴（A1） | 部分 UNIQUE インデックス `unique (user_id) where lifted_at is null`（まだ解いていない停止は、会員に1つ）・3つの列の外部キー（`restrict`）・`(user_id, created_at desc)` のインデックス・理由は 1〜1000文字の CHECK。履歴を正にして、`users.suspended_at` は、残すなら同じトランザクションで書く |
