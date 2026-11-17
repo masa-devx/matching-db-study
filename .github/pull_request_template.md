@@ -40,6 +40,7 @@ Closes #
 
 <!-- 実際に確かめたものだけにチェックを付ける -->
 - [ ] 受け入れの条件を、テストか curl か画面で確かめた
+- [ ] 変えた API には、変える前から API テストがあった（足したテストの名前：　）
 - [ ] 手元でテスト・Pint・Larastan（画面なら lint・build）が通る
 - [ ] 要件（`docs/requirements/`）・`docs/api/`・`docs/data-model.md` を直した
 - [ ] ログに秘密の値が出ていない
