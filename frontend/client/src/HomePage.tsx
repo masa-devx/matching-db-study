@@ -2,24 +2,19 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import Avatar from './components/Avatar'
 import Button from './components/Button'
-import ConfirmDialog from './components/ConfirmDialog'
+import Icon from './components/Icon'
 import { SkeletonProfile } from './components/Skeleton'
 import { useToast } from './components/Toast'
 
-// レガシー版（03b）。ホーム（/home）＝自分のプロフィールを見て直す。全部この部品に書く
-export default function HomePage(props: any) {
+// レガシー版（03b）。ホーム（/home）＝自分のプロフィールを見て直す。全部この部品に書く。
+// M1（#181）：有料会員・ブロックした相手・ログアウト・退会は、設定（SettingsPage）に移した。右上の歯車から行く
+export default function HomePage() {
   const [me, setMe] = useState<any>(null)
   const [form, setForm] = useState<any>({})
   const [editing, setEditing] = useState(false)
-  // 03c：保存の結果はトーストで出す（FR-UI-024）。ログアウトは確認のモーダルを通す（FR-UI-023）
+  // 03c：保存の結果はトーストで出す（FR-UI-024）
   const toast = useToast()
   const [saving, setSaving] = useState(false)
-  const [confirmLogout, setConfirmLogout] = useState(false)
-  const [withdrawBusy, setWithdrawBusy] = useState(false)
-  // 06：退会のモーダル（開いているか・入れたパスワード・失敗の文）
-  const [withdrawing, setWithdrawing] = useState(false)
-  const [password, setPassword] = useState('')
-  const [withdrawError, setWithdrawError] = useState('')
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -45,41 +40,6 @@ export default function HomePage(props: any) {
         setForm(u.profile ?? {})
       })
   }, [])
-
-  const logout = () => {
-    // 送り先とトークンの読み出しを、ここにも書く
-    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/auth/logout`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
-    })
-    // 応答を待たずに消す。サーバーは何もしないので、消す前に写したトークンは30日使える
-    sessionStorage.removeItem('token')
-    props.setToken(null)
-    navigate('/login')
-  }
-
-  // 06：退会する。422 のときだけ、モーダルの中に出す（ほかの失敗は考えない）
-  const withdraw = async () => {
-    setWithdrawBusy(true)
-    const res = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        Authorization: `Bearer ${sessionStorage.getItem('token')}`,
-      },
-      body: JSON.stringify({ password }),
-    })
-    setWithdrawBusy(false)
-    if (res.status === 422) {
-      setWithdrawError('パスワードがちがいます')
-      return
-    }
-    // ログアウトと同じく、画面のトークンを消すだけ（サーバーはトークンを止めないので、写したものは使える）
-    sessionStorage.removeItem('token')
-    props.setToken(null)
-    navigate('/login')
-  }
 
   const save = async (e: any) => {
     e.preventDefault()
@@ -124,6 +84,10 @@ export default function HomePage(props: any) {
 
   return (
     <div className="profile">
+      {/* M1：設定への入口。押せる場所は 44px（FR-UI-058） */}
+      <Link to="/settings" viewTransition className="gear" aria-label="設定">
+        <Icon name="settings" />
+      </Link>
       <div className="me-head">
         <span className="me-avatar">
           <Avatar image={me.profile?.image} name={me.profile?.nickname} size={120} />
@@ -259,56 +223,6 @@ export default function HomePage(props: any) {
           </form>
         )}
       </div>
-      {/* 07：有料会員の入口は、男性にだけ出す。状態は is_paid だけを見る（期限が過ぎていても「有料会員」） */}
-      {me.profile?.gender === 'male' && (
-        <Link to="/plans" viewTransition className="button button-ghost logout">
-          {me.is_paid ? `有料会員（${new Date(me.paid_until).toLocaleDateString('ja-JP')} まで）` : '有料会員になる'}
-        </Link>
-      )}
-      <Link to="/blocks" viewTransition className="button button-ghost logout">
-        ブロックした相手
-      </Link>
-      <Button variant="ghost" className="logout" onClick={() => setConfirmLogout(true)}>
-        ログアウト
-      </Button>
-      <button
-        className="danger-link"
-        onClick={() => {
-          setPassword('')
-          setWithdrawError('')
-          setWithdrawing(true)
-        }}
-      >
-        退会する
-      </button>
-
-      {/* 03c：ログアウトの前に確かめる（FR-UI-023） */}
-      <ConfirmDialog
-        open={confirmLogout}
-        title="ログアウトしますか？"
-        confirmLabel="ログアウトする"
-        danger
-        onConfirm={logout}
-        onClose={() => setConfirmLogout(false)}
-      />
-
-      {/* 06：退会の確かめ（部品の確認のモーダルに、パスワードの入力を入れる） */}
-      <ConfirmDialog
-        open={withdrawing}
-        title="退会しますか？"
-        confirmLabel="退会する"
-        danger
-        busy={withdrawBusy}
-        onConfirm={withdraw}
-        onClose={() => setWithdrawing(false)}
-      >
-        <p>同じメールアドレスで、あとから登録し直せます。今のマッチやメッセージは引き継げません。</p>
-        <label className="label">
-          パスワード
-          <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-        </label>
-        {withdrawError && <p className="modal-error">{withdrawError}</p>}
-      </ConfirmDialog>
     </div>
   )
 }
