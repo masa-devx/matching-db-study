@@ -6,6 +6,7 @@ use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MemberController;
+use App\Http\Controllers\MemberNoteController;
 use App\Http\Controllers\MessageController;
 use App\Http\Controllers\NoticeController;
 use App\Http\Controllers\PlanController;
@@ -48,3 +49,6 @@ Route::put('/report-cases/{publicId}', [ReportCaseController::class, 'update']);
 // A7 会員にお知らせを送る・強制退会にする（#213）
 Route::post('/members/{publicId}/notices', [NoticeController::class, 'store']);
 Route::post('/members/{publicId}/ban', [NoticeController::class, 'ban']);
+
+// A1 会員の、対応のメモ（#216）
+Route::post('/members/{publicId}/notes', [MemberNoteController::class, 'store']);

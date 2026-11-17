@@ -1,6 +1,7 @@
 import { Badge, Card, Group, Loader, Pagination, SegmentedControl, Stack, Table, Text, Title } from '@mantine/core'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
+import { toDate } from '../../date'
 
 // A7 通報の案件の一覧（FR-REPORT-010。#203）。通報は、通報された会員ごとの「案件」にまとまる。状態で絞る。20件ずつ
 export default function ReportCasesPage() {
@@ -83,7 +84,7 @@ export default function ReportCasesPage() {
                   </Table.Td>
                   <Table.Td ta="right">{c.report_count}</Table.Td>
                   <Table.Td ta="right">{c.reporter_count}</Table.Td>
-                  <Table.Td>{c.last_reported_at ? new Date(c.last_reported_at).toLocaleString('ja-JP') : '―'}</Table.Td>
+                  <Table.Td>{c.last_reported_at ? toDate(c.last_reported_at).toLocaleString('ja-JP') : '―'}</Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>

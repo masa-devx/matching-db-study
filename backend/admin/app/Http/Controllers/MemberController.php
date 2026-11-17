@@ -44,15 +44,69 @@ class MemberController extends Controller
             $query->whereNotNull('suspended_at');
         } elseif ($status === 'withdrawn') {
             $query->whereNotNull('deleted_at');
+        } elseif ($status === 'banned') {
+            $query->whereNotNull('banned_at');
+        }
+
+        // A1（#218）：絞り込みを増やした。条件を1つ足すたびに、ここに if を1つ書き足した。
+        // プロフィールの条件（性別・年齢・都道府県）は、条件ごとに、profiles を読む副問い合わせを1つずつ足す
+        // （3つ選ぶと、profiles を3回読む。profiles.user_id にインデックスはない）
+        if ($request->filled('gender')) {
+            $query->whereIn('id', DB::table('profiles')->where('gender', $request->input('gender'))->select('user_id'));
+        }
+        if ($request->filled('prefecture')) {
+            $query->whereIn('id', DB::table('profiles')->where('prefecture', $request->input('prefecture'))->select('user_id'));
+        }
+        if ($request->filled('age_min') || $request->filled('age_max')) {
+            // 誕生日の列は文字（varchar）。先頭の4文字（年）を数に直し、今年から引いて年齢にする
+            // （一覧の列と同じ、年の引き算。誕生日の前だと1歳多い）。日付の形でない文字（「abc」など）が
+            // 入った行があるので、形を確かめてから数に直す（確かめないと、その1行のせいで、全体が 500 になる）。
+            // 列を計算してから比べるので、誕生日にインデックスがあっても使えない。
+            // 値は数に直してから SQL の文に入れる（数でない文字は 0 になる。範囲は確かめない）
+            $min = (int) $request->input('age_min', 0);
+            $max = (int) $request->input('age_max', 200);
+            $query->whereIn('id', DB::table('profiles')
+                ->whereRaw("extract(year from now()) - (case when birthday ~ '^[0-9]{4}-' then cast(substr(birthday, 1, 4) as integer) end) between {$min} and {$max}")
+                ->select('user_id'));
+        }
+        // 登録日：日時の列を、文字に直してから比べる（これも、インデックスが使えない形。日付は UTC で切る）
+        if ($request->filled('registered_from')) {
+            $query->whereRaw("to_char(created_at, 'YYYY-MM-DD') >= ?", [$request->input('registered_from')]);
+        }
+        if ($request->filled('registered_to')) {
+            $query->whereRaw("to_char(created_at, 'YYYY-MM-DD') <= ?", [$request->input('registered_to')]);
+        }
+        // 最終ログイン：7d・30d は、その日数の中にログインした会員。none は、30日より前か、一度もログインしていない会員
+        if ($request->input('last_login') === '7d') {
+            $query->where('last_login_at', '>=', now()->subDays(7));
+        } elseif ($request->input('last_login') === '30d') {
+            $query->where('last_login_at', '>=', now()->subDays(30));
+        } elseif ($request->input('last_login') === 'none') {
+            $query->where(function (Builder $w) {
+                $w->whereNull('last_login_at')->orWhere('last_login_at', '<', now()->subDays(30));
+            });
+        }
+        if ($request->boolean('unverified')) {
+            $query->whereNull('email_verified_at');
+        }
+        if ($request->filled('id')) {
+            // UUID の形でない文字が来ると、DB が型の誤りを返して 500
+            $query->where('public_id', $request->input('id'));
         }
 
         $total = (clone $query)->count();
-        $rows = $query->orderBy('created_at', 'desc')->offset(($page - 1) * 50)->limit(50)->get();
+        // 並び：最終ログインの新しい順も選べる（一度もログインしていない会員が、いちばん上に来る。NULL が先になるため）
+        $sort = $request->input('sort') === 'last_login' ? 'last_login_at' : 'created_at';
+        $rows = $query->orderBy($sort, 'desc')->offset(($page - 1) * 50)->limit(50)->get();
 
         $data = [];
         foreach ($rows as $user) {
-            // 1人ごとに2本（N+1）
+            // 1人ごとに3本（N+1）。#218 で、性別と年齢のために、profiles をもう1回読むようにした
             $user->nickname = DB::table('profiles')->where('user_id', $user->id)->value('nickname');
+            $profile = DB::table('profiles')->where('user_id', $user->id)->first();
+            $user->gender = $profile?->gender;
+            // 年齢の計算を、ここにも書く（年の引き算なので、誕生日の前だと1歳多い）
+            $user->age = $profile?->birthday ? (int) date('Y') - (int) substr((string) $profile->birthday, 0, 4) : null;
             $user->purchases = DB::table('purchases')->where('user_id', $user->id)->count();
             $data[] = $user;   // users の行をそのまま（password も入る）
         }
@@ -106,6 +160,17 @@ class MemberController extends Controller
             ];
         }
 
+        // A1（#216）：対応のメモ。新しい順。1件ごとに、書いた管理者の名前を読む（1＋N 本）。全部を一度に返す
+        $notes = [];
+        foreach (DB::table('member_notes')->where('user_id', $user->id)->orderBy('created_at', 'desc')->get() as $note) {
+            $notes[] = [
+                'id' => $note->id,
+                'body' => $note->body,
+                'admin' => DB::table('admins')->where('id', $note->admin_id)->value('name'),
+                'created_at' => $note->created_at,
+            ];
+        }
+
         $detail = [
             'user_id' => $user->public_id,
             'email' => $user->email,
@@ -128,6 +193,7 @@ class MemberController extends Controller
             'banned_at' => $user->banned_at,
             'banned_reason' => $user->banned_reason,
             'notices' => $notices,
+            'notes' => $notes,
         ];
 
         // 監査ログ（ここでは書く）

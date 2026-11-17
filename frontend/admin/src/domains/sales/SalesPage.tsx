@@ -3,6 +3,7 @@ import { Button, Card, Group, Loader, Modal, NumberInput, Pagination, Stack, Tab
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { useNotice } from '../../Notice'
+import { toDate } from '../../date'
 
 // 12 有料会員・売上（FR-ADMIN-008・009）。月ごとの売上のグラフと表・プランの値段（owner だけ変えられる）・購入の一覧
 export default function SalesPage() {
@@ -173,7 +174,7 @@ export default function SalesPage() {
               <Table.Tbody>
                 {purchases.data.map((p: any, i: number) => (
                   <Table.Tr key={`${p.user_id}-${p.bought_at}-${i}`}>
-                    <Table.Td>{new Date(p.bought_at).toLocaleString('ja-JP')}</Table.Td>
+                    <Table.Td>{toDate(p.bought_at).toLocaleString('ja-JP')}</Table.Td>
                     <Table.Td>
                       <Link to={`/members/${p.user_id}`}>{p.nickname ?? '―'}</Link>
                     </Table.Td>

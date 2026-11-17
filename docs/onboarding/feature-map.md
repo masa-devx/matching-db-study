@@ -2,7 +2,7 @@
 
 機能ごとに、画面・API・コントローラー・表をつなぐ。読みながら埋める（推測で埋めない。コードとルートで確かめた行だけ書く）。
 
-- 読む表・書く表は、コードから読み取り、2026-11-16 に流れる SQL で確かめた（2026-11-16 にあった 38本すべて）。2026-11-17 に 04b（保存した検索条件）の4本と、M1（パスワードを変える）の1本、M3（届いたいいね・スキップ）の4本が増えて 47本、M2（パスワードの再設定。#196）の2本が増えて 49本、M7・A7（通報。#202・#203）の4本が増えて 53本、A7（お知らせ・強制退会。#213）の4本が増えて 57本になった。この4本は、curl で実際に呼んで確かめた（`docs/api/04b-saved-searches.md` の「レガシー版で起きること」）。書き込みの API も、トランザクションの中で本当に流してから取り消した（メールと Firestore は偽物に差し替えた）。確かめた結果と SQL の本数は、末尾の「SQL で確かめた結果」
+- 読む表・書く表は、コードから読み取り、2026-11-16 に流れる SQL で確かめた（2026-11-16 にあった 38本すべて）。2026-11-17 に 04b（保存した検索条件）の4本と、M1（パスワードを変える）の1本、M3（届いたいいね・スキップ）の4本が増えて 47本、M2（パスワードの再設定。#196）の2本が増えて 49本、M7・A7（通報。#202・#203）の4本が増えて 53本、A7（お知らせ・強制退会。#213）の4本が増えて 57本、A1（対応のメモ。#216）の1本が増えて 58本になった。この4本は、curl で実際に呼んで確かめた（`docs/api/04b-saved-searches.md` の「レガシー版で起きること」）。書き込みの API も、トランザクションの中で本当に流してから取り消した（メールと Firestore は偽物に差し替えた）。確かめた結果と SQL の本数は、末尾の「SQL で確かめた結果」
 - 行の番号は、会員の側は `backend/client/app/Http/Controllers/` のファイルの行（2026-11-16 に `refactored-repo` で読んだ）。移すとずれるので、テストの材料に使うときはメソッドの名前を正にする
 - **形の違う ID（`abc` など。UUID でない文字）は、どの API でも 500** になる。`public_id` は uuid の列なので、比べると PostgreSQL がエラー（22P02）を返す。下の表で「いない会員は 500」「いない相手でも 204」と書いたのは、形の正しい UUID のとき
 - 要件 ID と、返る状態コードの一覧は、ここには書かない。その API を移すチケットで、その API の分だけ書く（PR #132 のレビュー S14）
@@ -52,7 +52,7 @@
 | 保存した検索条件を直す | `SearchConditionsPage` | `PUT /api/me/search-conditions/{publicId}` | `SearchConditionController::update`（L81） | `search_conditions` | `search_conditions` | 04b。**安全の穴**（#156）：持ち主を確かめない（他人の条件を直せる）。送られた項目を全部入れるので、`user_id` を送ると他人の条件を自分のものにできる。有料かどうかの確かめがない（無料の男性が身長を足せる）。ない ID は 500。#162 から、画面は名前だけ・条件だけの2通りで呼ぶ |
 | 保存した検索条件を消す | `SearchConditionsPage` | `DELETE /api/me/search-conditions/{publicId}` | `SearchConditionController::destroy`（L99） | ― | `search_conditions` | 04b。**安全の穴**（#156）：持ち主を確かめない（他人の条件を消せる）。ない ID でも 204 |
 
-## 管理画面（`backend/admin`・19本）
+## 管理画面（`backend/admin`・20本）
 
 全体：会員の側と同じく、ルートにミドルウェアはなく、各コントローラーの中で管理者の JWT を読む。表は `DB::table()` で直接読む（Model を使わない・会員の側のコードを読み込まない）。画面は `frontend/admin/src/`。行の番号は `backend/admin/app/Http/Controllers/` のファイルの行。
 
@@ -62,8 +62,8 @@
 | ログイン | `LoginPage` | `POST /api/auth/login` | `AuthController::login`（L21） | `admins` | `admins.last_login_at` | 8時間の JWT に役割を入れる（役割を変えても期限まで前の役割のまま）。止める仕組みはない。何回でも試せる |
 | 自分 | 呼んでいる画面は見つからない | `GET /api/me` | `AuthController::me`（L40） | `admins` | ― | JWT を読む処理のもと（ほかの API にコピーされた）。壊れた JWT・会員の JWT は 500 |
 | ダッシュボード | `domains/dashboard/DashboardPage` | `GET /api/dashboard` | `DashboardController::index`（L20） | `users`・`user_matches`・`messages`・`purchases`・`plans` | ― | 開くたびに全部を数える。日ごとの数は 30日 × 3種類を1本ずつ（数のカード6本・日ごと90本・月ごと1本で、97本）。`whereDate` で索引が使えない。日付は UTC。有料会員は `is_paid` だけで数える（期限が過ぎた人も入る）。売上は今のプランの値段で足す |
-| 会員の一覧 | `domains/members/MembersPage` | `GET /api/members` | `MemberController::index`（L20） | `users`・`profiles`・`purchases` | ― | メールアドレスかニックネームの部分一致（前にも `%` が付き、索引が使えない）。50人ずつ（OFFSET）・毎回の件数・1人ごとに2本（2＋2N）。**`users` の行をそのまま返す（パスワードのハッシュ・確認用の文字も出る）** |
-| 会員の詳細 | `domains/members/MemberDetailPage` | `GET /api/members/{publicId}` | `MemberController::show`（L63） | `users`・`purchases`・`plans`・`profiles`・`likes`・`user_matches`・`blocks` | `admin_audit_logs` | 見たことを監査ログに書く（`member.view`）。購入の値段は今のプランのもの（1件ごとに1本） |
+| 会員の一覧 | `domains/members/MembersPage` | `GET /api/members` | `MemberController::index`（L20） | `users`・`profiles`・`purchases` | ― | メールアドレスかニックネームの部分一致（前にも `%` が付き、索引が使えない）。50人ずつ（OFFSET）・毎回の件数・1人ごとに3本（2＋3N。#218 で、性別と年齢のために1本増えた）。#218 で、絞り込み（性別・年齢・都道府県・登録日・最終ログイン・未確認・強制退会・ID）と並びを足した：プロフィールの条件ごとに `profiles` の副問い合わせ・列を計算してから比べる・値を確かめない（測った結果と改善版の案は `docs/api/12-admin.md` の「#218」）。**`users` の行をそのまま返す（パスワードのハッシュ・確認用の文字も出る）** |
+| 会員の詳細 | `domains/members/MemberDetailPage` | `GET /api/members/{publicId}` | `MemberController::show`（L117） | `users`・`purchases`・`plans`・`profiles`・`likes`・`user_matches`・`blocks` | `admin_audit_logs` | 見たことを監査ログに書く（`member.view`）。購入の値段は今のプランのもの（1件ごとに1本） |
 | 停止する | `domains/members/MemberDetailPage` | `POST /api/members/{publicId}/suspension` | `SuspensionController::store`（L20） | `admins`・`users` | `users.suspended_at`・`suspended_reason`・`admin_audit_logs` | owner だけ。理由を確かめない。トランザクションがない（停止と監査ログがずれうる）。断るのは会員の側のログインだけ（持っている JWT は使える） |
 | 停止を解く | `domains/members/MemberDetailPage` | `DELETE /api/members/{publicId}/suspension` | `SuspensionController::destroy`（L57） | ― | `users.suspended_at`・`suspended_reason` | **役割の確かめと監査ログをコピーし忘れている**（止めるほうのコードをコピーして作った）（見るだけの人でも解け、記録も残らない）。いない会員でも 204 |
 | メッセージの一覧 | `domains/messages/MessagesPage` | `GET /api/messages` | `MessageController::index`（L19） | `messages`・`users`・`profiles`・`talk_rooms`・`talk_room_members` | ― | 10万件を並べ替えて OFFSET で50件・毎回の件数・1件ごとに6本（2＋6N）。本文の部分一致。**本文を見られるのに、監査ログを書き忘れている**。中の連番の `id` を返す |
@@ -77,6 +77,7 @@
 | 通報の案件の状態を変える | `domains/reports/ReportCaseDetailPage` | `PUT /api/report-cases/{publicId}` | `ReportCaseController::update`（L125） | `admins`・`report_cases` | `report_cases`・`admin_audit_logs` | A7（#203）。`owner` だけ。送られた値を確かめない（何をしたかなしで済みにできる・済みを「まだ」に戻せる・決まっていない状態が入る） |
 | 会員にお知らせを送る | `domains/members/MemberDetailPage`・`domains/reports/ReportCaseDetailPage`（「注意した」で済みにするとき） | `POST /api/members/{publicId}/notices` | `NoticeController::store`（L24） | `admins`・`users`・`report_cases` | `notices`・`admin_audit_logs` | A7（#213）。`owner` だけ。種類・題・本文を確かめない（題なしは 500）。案件を済みにする API とは別に呼ぶので、片方だけ成功することがある |
 | 会員を強制退会にする | `domains/members/MemberDetailPage` | `POST /api/members/{publicId}/ban` | `NoticeController::ban`（L72） | `admins`・`users` | `users`（`banned_at`・`banned_reason`・`deleted_at`）・`admin_audit_logs` | A7（#213）。`owner` だけ。前に配ったトークンは止めない。もう強制退会の会員にも、もう一度できる（上書き）。戻す操作はない |
+| 会員の対応のメモを足す | `domains/members/MemberDetailPage` | `POST /api/members/{publicId}/notes` | `MemberNoteController::store`（L21） | `users` | `member_notes` | A1（#216）。**役割を確かめない**（`viewer` も、API を直接呼べば書ける）。本文を確かめない（なしは 500・10万文字も入る）。監査ログに残さない |
 
 ## SQL で確かめた結果（2026-11-16）
 
