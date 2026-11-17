@@ -70,7 +70,9 @@ export default function LikesPage() {
     // マッチの演出に出す自分の写真を、ここで読む（相手のプロフィールの画面と同じ2本を、ここにも書いた）
     const me = await fetch(`${api}/api/me`, { headers }).then((x) => x.json())
     const mine = await fetch(`${api}/api/users/${me.public_id}`, { headers }).then((x) => x.json())
-    setMatched({ me: mine.profile ?? {}, partner: like })
+    // M3（#187）：応答のトークルームの ID を、演出の「メッセージを送る」に渡す
+    const d = await r.json()
+    setMatched({ me: mine.profile ?? {}, partner: like, roomId: d.room_id })
     setLikes((before) => (before ?? []).filter((x) => x.user_id !== like.user_id))
   }
 
@@ -180,7 +182,12 @@ export default function LikesPage() {
       )}
 
       <UpsellDialog open={upsell} onClose={() => setUpsell(false)} />
-      {matched && <MatchCelebration me={matched.me} partner={matched.partner} onClose={() => setMatched(null)} />}
+      {matched && <MatchCelebration
+          me={matched.me}
+          partner={matched.partner}
+          roomId={matched.roomId}
+          onClose={() => setMatched(null)}
+        />}
     </div>
   )
 }

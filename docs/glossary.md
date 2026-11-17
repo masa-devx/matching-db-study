@@ -31,6 +31,7 @@
 | 届いたいいね | 相手から自分に送られたいいねのうち、まだ返事（マッチする・スキップ）をしていないもの（M3。#184） | 下のタブの「いいね」。タブに人数のバッジ | `received-likes` | `Matching`・`Like` | `likes`（`to_user_id` が自分） | 無料でも有料でも見られる。送ったいいねの一覧は、設定の「送ったいいね」 |
 | マッチする | 届いたいいねに、いいねを送り返すこと。マッチになる（M3） | 「マッチする」 | `POST /me/likes`（いいねを送るのと同じ） | `Matching`・`Like` | `likes`・`user_matches` | 無料の男性の1日10回の数に入れない |
 | スキップ | 届いたいいねや検索で、「この人は見送る」と決めること。相手には伝えない（M3。「お見送り」から、この名前に決めた） | 「スキップ」「スキップした相手」「元に戻す」 | `skips`・`user_id` | `Matching`・`Skip` | `skips` | スキップした相手は、届いたいいねにも検索にも出ない。ブロックと違い、相手からは自分が見える |
+| 新しいマッチ | マッチしたばかりで、まだ一度も開いていなくて、まだ1通もないトークルームの相手（M3。#187） | メッセージのタブの上の「新しいマッチ」。タブのバッジにも数える | `last_read_at`（トークの一覧の応答） | `Messaging`・`TalkRoom` | `talk_room_members.last_read_at` が NULL で、`messages` に行がない | 今は、画面が判断している（改善版では API が返す） |
 | マッチ | お互いにいいねした状態 | ― | `matches`・`match_id` | `Matching`・`UserMatch` | `user_matches` | `match` は PHP の予約語なので、クラスは `UserMatch` |
 | ブロック | 相手を自分から見えなくし、相手からも見えなくすること | ― | `blocks` | `Matching`・`Block` | `blocks` | |
 | 退会 | 会員をやめること | 退会 | `DELETE /me` | `Members`・`Withdrawal` | `users.deleted_at` | |

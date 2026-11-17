@@ -24,7 +24,15 @@ export default function TabBar() {
     })
       .then((r) => r.json())
       .then((rooms) =>
-        setUnread(Array.isArray(rooms) ? rooms.reduce((n: number, r: any) => n + (r.unread_count ?? 0), 0) : 0),
+        // M3（#187）：新しいマッチ（まだ開いていなくて、まだ1通もないルーム）も、1件ずつ数える
+        setUnread(
+          Array.isArray(rooms)
+            ? rooms.reduce(
+                (n: number, r: any) => n + (r.unread_count ?? 0) + (!r.last_message && !r.last_read_at ? 1 : 0),
+                0,
+              )
+            : 0,
+        ),
       )
     // M3：届いたいいねの一覧を全部読んで、件数だけを使う（数だけを返す API はない。画面が変わるたびに読む）
     fetch(`${api}/api/me/received-likes`, {
