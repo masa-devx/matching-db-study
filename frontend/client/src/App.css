@@ -1142,6 +1142,46 @@
   display: none;
 }
 
+/* ---- 04b：保存した検索条件 ---- */
+.saved-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.saved-item {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.saved-chip {
+  min-height: 44px;
+  font: inherit;
+  font-size: 14px;
+  color: #231c20;
+  cursor: pointer;
+}
+
+.saved-action {
+  min-height: 44px;
+  padding: 0 8px;
+  font: inherit;
+  font-size: 13px;
+  color: #6b5f63;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.saved-danger {
+  color: #c62828;
+}
+
 /* ---- 動き（transform と opacity だけを動かす。NFR-UI-006） ---- */
 @keyframes spin {
   to {
