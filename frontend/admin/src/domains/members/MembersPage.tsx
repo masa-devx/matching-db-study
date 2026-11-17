@@ -12,22 +12,33 @@ import {
   Title,
 } from '@mantine/core'
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router'
+import { useNavigate, useSearchParams } from 'react-router'
 
 // 12 会員の一覧（FR-ADMIN-004）。メールアドレス・ニックネームで探し、状態で絞る。50人ずつ（API は offset）
 export default function MembersPage() {
-  const [q, setQ] = useState('')
-  const [query, setQuery] = useState('')
-  const [status, setStatus] = useState('all')
-  const [page, setPage] = useState(1)
+  // A1（#208）：探した語・状態・ページは、URL のクエリに持つ（詳細から「戻る」で、同じ所に戻る。前は、最初に戻っていた）
+  const [params, setParams] = useSearchParams()
+  const query = params.get('q') ?? ''
+  const status = params.get('status') ?? 'all'
+  const page = Number(params.get('page') ?? '1')
+  const [q, setQ] = useState(query)
+  const change = (next: Record<string, string>) => {
+    const merged: Record<string, string> = { q: query, status, page: String(page), ...next }
+    // 既定の値（語なし・すべて・1ページ目）は、URL に出さない
+    if (!merged.q) delete merged.q
+    if (merged.status === 'all') delete merged.status
+    if (merged.page === '1') delete merged.page
+    setParams(merged)
+  }
+  const setPage = (n: number) => change({ page: String(n) })
   const [data, setData] = useState<any>(null)
   const navigate = useNavigate()
   const api = import.meta.env.VITE_ADMIN_API_URL ?? 'http://127.0.0.1:8100'
 
   useEffect(() => {
     setData(null)
-    const params = new URLSearchParams({ q: query, status, page: String(page) })
-    fetch(`${api}/api/members?${params}`, {
+    const sent = new URLSearchParams({ q: query, status, page: String(page) })
+    fetch(`${api}/api/members?${sent}`, {
       headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('adminToken')}` },
     })
       .then((r) => r.json())
@@ -42,8 +53,7 @@ export default function MembersPage() {
           <form
             onSubmit={(e) => {
               e.preventDefault()
-              setPage(1)
-              setQuery(q)
+              change({ q, page: '1' })
             }}
           >
             <TextInput
@@ -55,10 +65,7 @@ export default function MembersPage() {
           </form>
           <SegmentedControl
             value={status}
-            onChange={(v) => {
-              setPage(1)
-              setStatus(v)
-            }}
+            onChange={(v) => change({ status: v, page: '1' })}
             data={[
               { value: 'all', label: 'すべて' },
               { value: 'paid', label: '有料' },

@@ -17,6 +17,7 @@ import {
 } from '@mantine/core'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
+import { useNotice } from '../../Notice'
 
 // 理由の名前（会員の側の通報のモーダルにある一覧を、ここにもコピーした）
 const REASONS: Record<string, string> = {
@@ -39,6 +40,7 @@ export default function ReportCaseDetailPage() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const navigate = useNavigate()
+  const [notice, notify] = useNotice()
   const api = import.meta.env.VITE_ADMIN_API_URL ?? 'http://127.0.0.1:8100'
   const role = JSON.parse(sessionStorage.getItem('admin') ?? '{}').role
   const headers = {
@@ -57,12 +59,17 @@ export default function ReportCaseDetailPage() {
     load()
   }, [publicId])
 
-  // 状態を変える。結果（成功・失敗）は見ない（会員を止める操作と同じ書き方）
+  // 状態を変える。A6（#208）で、結果を知らせるようにした
   const change = async (body: any) => {
     setBusy(true)
-    await fetch(`${api}/api/report-cases/${publicId}`, { method: 'PUT', headers, body: JSON.stringify(body) })
+    const r = await fetch(`${api}/api/report-cases/${publicId}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(body),
+    })
     setBusy(false)
     setOpened(false)
+    notify(r.ok ? (body.status === 'closed' ? '済みにしました' : '対応中にしました') : '変えられませんでした', r.ok)
     load()
   }
 
@@ -209,6 +216,7 @@ export default function ReportCaseDetailPage() {
           </Button>
         </Stack>
       </Modal>
+      {notice}
     </Stack>
   )
 }

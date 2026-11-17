@@ -1,9 +1,11 @@
 import {
   Alert,
+  Anchor,
   Badge,
   Button,
   Card,
   Group,
+  Image,
   Loader,
   Modal,
   SimpleGrid,
@@ -14,7 +16,8 @@ import {
   Title,
 } from '@mantine/core'
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router'
+import { Link, useNavigate, useParams } from 'react-router'
+import { useNotice } from '../../Notice'
 
 // 12 会員の詳細と、利用を止める・解く（FR-ADMIN-005・006）。止める・解くのボタンは owner にだけ出す（画面で隠すだけ）
 export default function MemberDetailPage() {
@@ -24,6 +27,9 @@ export default function MemberDetailPage() {
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const navigate = useNavigate()
+  const [notice, notify] = useNotice()
+  // A1（#208）：写真は、会員の側の API にある（管理画面の API は、パスだけを返す）
+  const clientApi = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
   const api = import.meta.env.VITE_ADMIN_API_URL ?? 'http://127.0.0.1:8100'
   const role = JSON.parse(sessionStorage.getItem('admin') ?? '{}').role
   const headers = {
@@ -44,20 +50,23 @@ export default function MemberDetailPage() {
 
   const suspend = async () => {
     setBusy(true)
-    await fetch(`${api}/api/members/${publicId}/suspension`, {
+    const r = await fetch(`${api}/api/members/${publicId}/suspension`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ reason }),
     })
     setBusy(false)
     setOpened(false)
+    // A6（#208）：結果を知らせる（前は、何も出なかった）
+    notify(r.ok ? '利用を止めました' : '止められませんでした', r.ok)
     load()
   }
 
   const unsuspend = async () => {
     setBusy(true)
-    await fetch(`${api}/api/members/${publicId}/suspension`, { method: 'DELETE', headers })
+    const r = await fetch(`${api}/api/members/${publicId}/suspension`, { method: 'DELETE', headers })
     setBusy(false)
+    notify(r.ok ? '停止を解きました' : '解けませんでした', r.ok)
     load()
   }
 
@@ -77,8 +86,9 @@ export default function MemberDetailPage() {
     <Stack>
       <Group justify="space-between">
         <Group>
-          <Button variant="subtle" onClick={() => navigate('/members')}>
-            ← 会員の一覧
+          {/* A1（#208）：来た画面（絞り込んだ一覧・メッセージ・通報）に戻る。直接開いたときは、会員の一覧へ */}
+          <Button variant="subtle" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/members'))}>
+            ← 戻る
           </Button>
           <Title order={2}>{m.profile?.nickname ?? '―'}</Title>
           {m.is_paid && <Badge color="grape">有料</Badge>}
@@ -111,6 +121,16 @@ export default function MemberDetailPage() {
               <Table.Td>{m.email}</Table.Td>
             </Table.Tr>
             <Table.Tr>
+              <Table.Th>メールアドレスの確認</Table.Th>
+              <Table.Td>
+                {m.email_verified_at ? (
+                  `${new Date(m.email_verified_at).toLocaleString('ja-JP')} に確認`
+                ) : (
+                  <Badge color="yellow">まだ確認していない（検索に出ない）</Badge>
+                )}
+              </Table.Td>
+            </Table.Tr>
+            <Table.Tr>
               <Table.Th>登録日・最終ログイン</Table.Th>
               <Table.Td>
                 {new Date(m.created_at).toLocaleDateString('ja-JP')}・
@@ -127,8 +147,55 @@ export default function MemberDetailPage() {
               <Table.Th>有料の期限</Table.Th>
               <Table.Td>{m.paid_until ? new Date(m.paid_until).toLocaleDateString('ja-JP') : '―'}</Table.Td>
             </Table.Tr>
+            {/* A1（#208）：検索に使う6項目（API は返していたが、出していなかった）。項目の名前を、会員の側からコピーした */}
+            <Table.Tr>
+              <Table.Th>体型・お仕事・年収</Table.Th>
+              <Table.Td>
+                {m.profile?.body_type ?? '―'}・{m.profile?.job ?? '―'}・{m.profile?.income ?? '―'}
+              </Table.Td>
+            </Table.Tr>
+            <Table.Tr>
+              <Table.Th>タバコ・お酒・結婚歴</Table.Th>
+              <Table.Td>
+                {m.profile?.smoking ?? '―'}・{m.profile?.drinking ?? '―'}・{m.profile?.marital_status ?? '―'}
+              </Table.Td>
+            </Table.Tr>
+            <Table.Tr>
+              <Table.Th>メッセージ</Table.Th>
+              <Table.Td>
+                <Anchor component={Link} to={`/messages?sender=${m.user_id}`}>
+                  この会員が送ったメッセージを見る
+                </Anchor>
+              </Table.Td>
+            </Table.Tr>
           </Table.Tbody>
         </Table>
+      </Card>
+
+      {/* A1（#208）：写真と自己紹介（通報や問い合わせのときに、中身を確かめるため） */}
+      <Card withBorder radius="md">
+        <Group align="flex-start" wrap="nowrap">
+          {m.profile?.image ? (
+            <Image
+              src={`${clientApi}${m.profile.image}`}
+              alt="プロフィールの写真"
+              w={120}
+              h={160}
+              radius="md"
+              fit="cover"
+            />
+          ) : (
+            <Text c="dimmed" w={120}>
+              写真なし
+            </Text>
+          )}
+          <Stack gap={4}>
+            <Title order={4}>自己紹介</Title>
+            <Text style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+              {m.profile?.introduction || 'まだ書いていません'}
+            </Text>
+          </Stack>
+        </Group>
       </Card>
 
       <SimpleGrid cols={{ base: 2, md: 3, xl: 6 }}>
@@ -174,6 +241,7 @@ export default function MemberDetailPage() {
           </Button>
         </Stack>
       </Modal>
+      {notice}
     </Stack>
   )
 }
