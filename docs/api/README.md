@@ -71,3 +71,4 @@ API の正本。作る前に設計を書き、確かめてもらってから実�
 | [12](12-admin.md) | `GET /api/plans`・`PUT /api/plans/{id}`・`GET /api/audit-logs` | 値段の変更・監査ログ | 実装済み（レガシー版） |
 | [12](12-admin.md) | `POST /api/auth/login`（会員の側。12 の変更） | 止めた会員をログインで断る | 実装済み（レガシー版） |
 | [M7](m7-reports.md) | `POST /api/me/reports`（会員の側）・`GET /api/report-cases`・`GET /api/report-cases/{publicId}`・`PUT /api/report-cases/{publicId}`（管理画面） | 通報する・案件の一覧・案件の中身・状態を変える（M7・A7） | 実装済み（レガシー版） |
+| [M7](m7-reports.md) | `POST /api/members/{publicId}/notices`・`POST /api/members/{publicId}/ban`（管理画面）・`GET /api/me/notices`・`POST /api/me/notices/{publicId}/read`（会員の側） | 運営からのお知らせ・強制退会（A7。#213） | 実装済み（レガシー版） |

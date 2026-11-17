@@ -36,7 +36,8 @@ export default function LoginPage(props: any) {
     } else {
       // API の言葉をそのまま出す（「メールアドレスが違います」で、登録されているかが分かる）
       setError(data.message)
-      setSuspended(res.status === 403)
+      // A7（#213）：強制退会（同じ 403）のときは、停止の案内を出さない。API の言葉で見分ける
+      setSuspended(res.status === 403 && String(data.message).includes('停止'))
     }
   }
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router'
 import './App.css'
 import BlocksPage from './BlocksPage'
+import NoticeBanner from './components/NoticeBanner'
 import TabBar from './components/TabBar'
 import VerifyBanner from './components/VerifyBanner'
 import { ToastProvider } from './components/Toast'
@@ -12,6 +13,7 @@ import LikesPage from './LikesPage'
 import LoginPage from './LoginPage'
 import MessagesFsPage from './MessagesFsPage'
 import MessagesPage from './MessagesPage'
+import NoticesPage from './NoticesPage'
 import PlansPage from './PlansPage'
 import PurchasePage from './PurchasePage'
 import RegisterPage from './RegisterPage'
@@ -35,6 +37,7 @@ const TITLES: [string, string][] = [
   ['/home', 'ホーム'],
   ['/users/', 'プロフィール'],
   ['/settings', '設定'],
+  ['/notices', '運営からのお知らせ'],
   ['/info/', '案内'],
   ['/blocks', 'ブロックした相手'],
   ['/plans', '有料会員'],
@@ -87,6 +90,8 @@ export default function App() {
       {/* M1 設定（#181）。ホームの歯車から来る。案内の画面（ヘルプ・規約など）は /info/<名前> */}
       <Route path="/settings" element={<SettingsPage setToken={setToken} />} />
       <Route path="/info/:slug" element={<InfoPage />} />
+      {/* A7（#213）：運営からのお知らせ。ホームのベルと、未読の帯から来る */}
+      <Route path="/notices" element={<NoticesPage />} />
       <Route path="/blocks" element={<BlocksPage />} />
       <Route path="/plans" element={<PlansPage />} />
       <Route path="/plans/:planId" element={<PurchasePage />} />
@@ -124,6 +129,8 @@ export default function App() {
         <div className="frame">
           {/* M2（#193）：メールアドレスを確認していない会員への帯。どの画面でも、いちばん上に出る */}
           <VerifyBanner />
+          {/* A7（#213）：運営からのお知らせに、未読があるときの帯 */}
+          <NoticeBanner />
           <main className="frame-main">{routes}</main>
           <TabBar />
         </div>

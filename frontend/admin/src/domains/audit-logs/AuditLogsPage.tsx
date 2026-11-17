@@ -8,6 +8,8 @@ const ACTIONS: Record<string, string> = {
   'member.suspend': '会員の利用を止めた',
   'plan.price': 'プランの値段を変えた',
   'report_case.update': '通報の案件の状態を変えた',
+  'member.notice': '会員にお知らせを送った',
+  'member.ban': '会員を強制退会にした',
 }
 
 // A4（#208）：中身（JSON）の項目と値の、画面に出す名前。ここにない項目・値は、そのまま出す
@@ -15,6 +17,8 @@ const KEYS: Record<string, string> = {
   reason: '理由',
   status: '状態',
   action: '何をしたか',
+  kind: '種類',
+  title: '題',
   before: '前の値段',
   after: '新しい値段',
 }
@@ -25,6 +29,9 @@ const VALUES: Record<string, string> = {
   none: '問題なし',
   warned: '注意した',
   suspended: '利用を止めた',
+  banned: '強制退会にした',
+  warning: '注意',
+  info: 'お知らせ',
 }
 
 // 中身は JSON の文字で届く。項目と値に分ける。JSON でなければ、そのまま出す

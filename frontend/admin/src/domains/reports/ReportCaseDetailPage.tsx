@@ -28,7 +28,12 @@ const REASONS: Record<string, string> = {
   impersonation: 'なりすまし・年齢や独身でない疑い',
   other: 'その他',
 }
-const ACTIONS: Record<string, string> = { none: '問題なし', warned: '注意した', suspended: '利用を止めた' }
+const ACTIONS: Record<string, string> = {
+  none: '問題なし',
+  warned: '注意した',
+  suspended: '利用を止めた',
+  banned: '強制退会にした',
+}
 
 // A7 通報の案件の中身と、対応（FR-REPORT-011〜014・016。#203）。状態を変えるボタンは owner にだけ出す（画面で隠すだけ）
 export default function ReportCaseDetailPage() {
@@ -37,6 +42,8 @@ export default function ReportCaseDetailPage() {
   const [opened, setOpened] = useState(false)
   const [action, setAction] = useState<string | null>(null)
   const [note, setNote] = useState('')
+  // A7（#213）：「注意した」で済みにするときに、会員に送る注意の文（空なら、送らない）
+  const [warning, setWarning] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const navigate = useNavigate()
@@ -80,6 +87,14 @@ export default function ReportCaseDetailPage() {
       return
     }
     setError('')
+    // A7（#213）：注意の文があれば、先に、お知らせとして送る。送れたかは見ない（送れなくても、案件は済みになる）
+    if (action === 'warned' && warning.trim()) {
+      fetch(`${api}/api/members/${c.member.id}/notices`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ kind: 'warning', title: '運営からの注意', body: warning, report_case_id: c.id }),
+      })
+    }
     change({ status: 'closed', action, note })
   }
 
@@ -148,7 +163,7 @@ export default function ReportCaseDetailPage() {
         </Table>
         {role === 'owner' && c.status !== 'closed' && (
           <Text size="sm" c="dimmed" mt="sm">
-            利用を止めるときは、会員の詳細で止めてから、この案件を「利用を止めた」で済みにします（済みにしただけでは、止まりません）。
+            利用を止める・強制退会にするときは、会員の詳細で操作してから、この案件を済みにします（済みにしただけでは、止まりません）。「注意した」のときは、注意の文を一緒に送れます。
           </Text>
         )}
       </Card>
@@ -207,7 +222,16 @@ export default function ReportCaseDetailPage() {
             onChange={setAction}
             error={error}
           />
-          <Textarea label="メモ" value={note} onChange={(e) => setNote(e.currentTarget.value)} />
+          {action === 'warned' && (
+            <Textarea
+              label="会員に送る注意の文（書くと、お知らせとして届く。書かなければ、記録だけ）"
+              minRows={3}
+              autosize
+              value={warning}
+              onChange={(e) => setWarning(e.currentTarget.value)}
+            />
+          )}
+          <Textarea label="メモ（運営の中だけ）" value={note} onChange={(e) => setNote(e.currentTarget.value)} />
           <Text size="sm" c="dimmed">
             済みにしたあとに新しい通報が来ると、新しい案件になります。
           </Text>
