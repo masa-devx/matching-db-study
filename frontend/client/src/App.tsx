@@ -5,6 +5,7 @@ import BlocksPage from './BlocksPage'
 import TabBar from './components/TabBar'
 import { ToastProvider } from './components/Toast'
 import HomePage from './HomePage'
+import InfoPage from './InfoPage'
 import LikesPage from './LikesPage'
 import LoginPage from './LoginPage'
 import MessagesFsPage from './MessagesFsPage'
@@ -14,6 +15,7 @@ import PurchasePage from './PurchasePage'
 import RegisterPage from './RegisterPage'
 import SearchConditionsPage from './SearchConditionsPage'
 import SearchPage from './SearchPage'
+import SettingsPage from './SettingsPage'
 import TalkFsPage from './TalkFsPage'
 import TalkPage from './TalkPage'
 import UserPage from './UserPage'
@@ -28,7 +30,7 @@ export default function App() {
       <Route path="/" element={<Navigate to={token ? '/home' : '/login'} />} />
       <Route path="/login" element={<LoginPage setToken={setToken} />} />
       <Route path="/register" element={<RegisterPage />} />
-      <Route path="/home" element={<HomePage setToken={setToken} />} />
+      <Route path="/home" element={<HomePage />} />
       <Route path="/users/:publicId" element={<UserPage />} />
       <Route path="/likes" element={<LikesPage />} />
       {/* マッチした相手は、メッセージのタブで見る（マッチだけの画面は作らない）。05 から、トークの一覧 */}
@@ -42,6 +44,9 @@ export default function App() {
       <Route path="/search" element={<SearchPage />} />
       {/* #147 検索の条件の画面。条件の欄と、保存した検索条件（04b）は、ここにだけ出す */}
       <Route path="/search/conditions" element={<SearchConditionsPage />} />
+      {/* M1 設定（#181）。ホームの歯車から来る。案内の画面（ヘルプ・規約など）は /info/<名前> */}
+      <Route path="/settings" element={<SettingsPage setToken={setToken} />} />
+      <Route path="/info/:slug" element={<InfoPage />} />
       <Route path="/blocks" element={<BlocksPage />} />
       <Route path="/plans" element={<PlansPage />} />
       <Route path="/plans/:planId" element={<PurchasePage />} />
