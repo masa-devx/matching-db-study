@@ -17,6 +17,11 @@ const fromQuery = (q: URLSearchParams) => {
   if (q.get('height_min')) c.height_min = q.get('height_min')
   if (q.get('height_max')) c.height_max = q.get('height_max')
   if (q.getAll('prefecture').length > 0) c.prefecture = q.getAll('prefecture')
+  // #150：有料の4つ
+  if (q.get('last_login')) c.last_login = q.get('last_login')
+  if (q.get('new_member')) c.new_member = q.get('new_member')
+  if (q.get('keyword')) c.keyword = q.get('keyword')
+  if (q.get('sort')) c.sort = q.get('sort')
   return c
 }
 
@@ -28,6 +33,11 @@ const toQuery = (c: any) => {
   if (c?.height_min) q.append('height_min', c.height_min)
   if (c?.height_max) q.append('height_max', c.height_max)
   for (const pref of c?.prefecture ?? []) q.append('prefecture', pref)
+  // #150：有料の4つ
+  if (c?.last_login) q.append('last_login', c.last_login)
+  if (c?.new_member) q.append('new_member', c.new_member)
+  if (c?.keyword) q.append('keyword', c.keyword)
+  if (c?.sort) q.append('sort', c.sort)
   return q
 }
 
@@ -53,13 +63,18 @@ export default function SearchPage() {
     if (c.height_min) params.append('height_min', c.height_min)
     if (c.height_max) params.append('height_max', c.height_max)
     for (const pref of c.prefecture ?? []) params.append('prefecture[]', pref)
+    // #150：有料の4つ（URL のクエリに直す処理と、同じ並びをもう一度書いた）
+    if (c.last_login) params.append('last_login', c.last_login)
+    if (c.new_member) params.append('new_member', c.new_member)
+    if (c.keyword) params.append('keyword', c.keyword)
+    if (c.sort) params.append('sort', c.sort)
     params.append('page', String(p))
     // 読み込み中・失敗・401 は考えない
     fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/users?${params}`, {
       headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
     })
       .then((r) => {
-        // 07：身長の条件を残したまま無料になったときなど、API が 403 を返したら、モーダルを出して空にする
+        // 07・#150：有料の条件を残したまま無料になったときなど、API が 403 を返したら、モーダルを出して空にする
         if (r.status === 403) {
           setUpsell(true)
           return []
@@ -127,6 +142,13 @@ export default function SearchPage() {
               ? `${conditions.height_min ?? ''}〜${conditions.height_max ?? ''}cm`
               : '',
             (conditions.prefecture ?? []).join('・'),
+            // #150：有料の4つ。言葉の対応を、条件の画面のプルダウンとは別に、ここにも書いた
+            conditions.last_login === '24h' ? '24時間以内にログイン' : '',
+            conditions.last_login === '3d' ? '3日以内にログイン' : '',
+            conditions.last_login === '7d' ? '1週間以内にログイン' : '',
+            conditions.new_member ? '登録して1週間以内' : '',
+            conditions.keyword ? `「${conditions.keyword}」` : '',
+            conditions.sort === 'new' ? '登録が新しい順' : '',
           ]
             .filter((x) => x)
             .join(' ／ ')}
