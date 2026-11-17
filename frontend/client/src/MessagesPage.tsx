@@ -27,6 +27,11 @@ export default function MessagesPage() {
   // 03c：読み込み中は、行と同じ形のスケルトン（FR-UI-025）
   if (!rooms) return <SkeletonRows />
 
+  // M3（#187）：新しいマッチ＝まだ一度も開いていなくて（last_read_at が null）、まだ1通もないルーム。
+  // 上に写真を横に並べて見せ、下の一覧からは外す（やり取り中の相手と混ざると、最初の一通を送りそびれる）
+  const fresh = rooms.filter((r) => !r.last_message && !r.last_read_at)
+  const talking = rooms.filter((r) => r.last_message || r.last_read_at)
+
   return (
     <div>
       <h1 className="page-title">メッセージ</h1>
@@ -38,8 +43,27 @@ export default function MessagesPage() {
       {rooms.length === 0 && (
         <EmptyState icon="chat" text="まだマッチした相手はいません" actionLabel="検索で相手を探す" to="/search" />
       )}
+      {fresh.length > 0 && (
+        <section className="new-matches" aria-labelledby="new-matches-title">
+          <h2 className="section-title" id="new-matches-title">
+            新しいマッチ <span className="new-count">{fresh.length}</span>
+          </h2>
+          <p className="likes-lead">マッチしたばかりの相手です。最初のメッセージを送ってみましょう。</p>
+          <ul className="new-list">
+            {fresh.map((r) => (
+              <li key={r.room_id}>
+                <Link to={`/messages/${r.room_id}`} viewTransition className="new-item">
+                  <Avatar image={r.image} name={r.nickname} size={64} />
+                  <span className="new-name">{r.nickname ?? '退会した会員'}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {fresh.length > 0 && talking.length > 0 && <h2 className="section-title">やり取り</h2>}
       <ul className="list">
-        {rooms.map((r) => (
+        {talking.map((r) => (
           <li key={r.room_id}>
             <Link to={`/messages/${r.room_id}`} viewTransition className="row">
               <Avatar image={r.image} name={r.nickname} />

@@ -42,8 +42,9 @@ export default function SentLikesPage() {
       <ul className="list">
         {likes.map((like) => (
           // 同じ相手は1回しか送れないので、相手の id を key にする
-          <li key={like.user_id}>
-            <Link to={`/users/${like.user_id}`} viewTransition className="row">
+          // M3（#187）：行の中に、プロフィールへのリンクと、トークへのリンクを横に並べる（リンクの中にリンクは置けない）
+          <li key={like.user_id} className="sent-row">
+            <Link to={`/users/${like.user_id}`} viewTransition className="row sent-main">
               <Avatar image={like.image} name={like.nickname} />
               <div className="row-body">
                 <div className="row-name">
@@ -58,6 +59,16 @@ export default function SentLikesPage() {
               </div>
               {like.matched && <span className="badge">マッチ済み</span>}
             </Link>
+            {like.matched && like.room_id && (
+              <Link
+                to={`/messages/${like.room_id}`}
+                viewTransition
+                className="button button-small button-ghost sent-talk"
+                aria-label={`${like.nickname ?? '退会した会員'}さんにメッセージを送る`}
+              >
+                メッセージ
+              </Link>
+            )}
           </li>
         ))}
       </ul>

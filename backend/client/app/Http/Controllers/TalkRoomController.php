@@ -72,6 +72,8 @@ class TalkRoomController extends Controller
                 'image' => $profile?->image,
                 'last_message' => $last ? ['body' => $last->body, 'created_at' => $last->created_at] : null,
                 'unread_count' => $unread,
+                // M3（#187）：自分が最後に開いた日時。null なら、まだ一度も開いていない（画面が「新しいマッチ」を見分けるのに使う）
+                'last_read_at' => $member->last_read_at,
                 'created_at' => $room->created_at,
             ];
         }
