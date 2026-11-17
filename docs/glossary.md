@@ -7,12 +7,13 @@
 - **API とコードは、業務の言葉で名前を付ける。** 表の名前には合わせない（表は変えにくいので、ずれたら下の表の「注意」に書く）
 - ツールの名前（Firebase など）は、API とコードの業務の名前に出さない。替えたときに名前が変わらないようにする
 - 画面の言葉が業務の言葉と違うときは、下の表の「画面」に書く（画面の言葉は、利用者に分かりやすいほうを選んでよい）
-- 管理画面のまとまりは `docs/backend.md` の 2-2 とそろえる（`Dashboard`・`Members`・`Messages`・`Sales`・`Plans`・`AuditLogs`・`Admins`）
+- 管理画面の業務のまとまり（Dashboard・Members のような、業務ごとの分け方）は `docs/backend.md` の 2-2 とそろえる（`Dashboard`・`Members`・`Messages`・`Sales`・`Plans`・`AuditLogs`・`Admins`）
+- ルール・議事録などの文で使う言葉（今の動きを確かめるテスト・分かっている不具合 など）は、`agents/rules/writing.md` を正とする
 - 新しい言葉を使うときは、先にこの表に1行足す。API の書き方の決まり（URL・JSON のキー・ID）は `agents/rules/api-design.md`（#125 で作る）
 
 ## 会員の側
 
-| 言葉 | 意味 | 画面 | API（URL・JSON） | コード（まとまり・クラス） | 表・列 | 注意 |
+| 言葉 | 意味 | 画面 | API（URL・JSON） | コード（業務のまとまり・クラス） | 表・列 | 注意 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 会員 | 登録した人 | ― | 自分は `/me`、相手は `/users/{user_id}`。JSON は `user_id` | `Members`・`Member` | `users` | 会員の側の API は `users`、管理画面は `members`（下の「管理画面」） |
 | プロフィール | 会員の公開する情報（ニックネーム・性別・生年月日・都道府県・身長・自己紹介・プロフィール画像） | 自己紹介 など | `profile` | `Profile` | `profiles` | |
@@ -36,7 +37,7 @@
 
 ## 管理画面
 
-| 言葉 | 意味 | 画面 | API（URL・JSON） | コード（まとまり・クラス） | 表・列 | 注意 |
+| 言葉 | 意味 | 画面 | API（URL・JSON） | コード（業務のまとまり・クラス） | 表・列 | 注意 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 管理者 | 管理画面を使う運営の人 | ― | `/me`（管理画面の API） | `Admins`・`Admin` | `admins` | |
 | 会員 | 運営から見た会員 | ― | `members`・`member_id` | `Members` | `users` | 会員の側の API の `users` と同じ人。運営から見るときは `members` と呼ぶ |

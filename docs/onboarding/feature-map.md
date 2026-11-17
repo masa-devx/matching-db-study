@@ -18,7 +18,7 @@
 | メールアドレスの確認 | なし（メールのリンクが API を直接開く） | `GET /api/email-verifications/{token}` | `EmailVerificationController::show`（L20） | `users` | `users.email_verified_at` | 確認用の文字にインデックスがなく、表を全部読む。文字を消さないので何度でも使え、期限もない |
 | 確認のメールの再送 | 呼んでいる画面は見つからない | `POST /api/email-verifications` | `EmailVerificationController::store`（L35） | `users` | ―（メールを送る） | 確認済みでも、何回でも送れる。404 で、そのメールアドレスが登録されているかが分かる |
 | ログイン | `LoginPage` | `POST /api/auth/login` | `AuthController::login`（L22） | `users`・`profiles`（nickname） | `users.last_login_at` | 30日の JWT を返す。鍵は `APP_KEY` の使い回し。メッセージの違いと返るまでの時間で、メールアドレスが登録されているかが分かる。止めた会員を断るのはログインだけ |
-| 自分の情報 | `HomePage`・`SearchPage`・`UserPage`・`TalkPage`・`PlansPage`・`PurchasePage` | `GET /api/me` | `AuthController::me`（L56） | `users` | ― | JWT を読む処理のもと（ほかの API に写された）。壊れた JWT では 500 になる。`users` の行をそのまま返す（`verification_token` も出る） |
+| 自分の情報 | `HomePage`・`SearchPage`・`UserPage`・`TalkPage`・`PlansPage`・`PurchasePage` | `GET /api/me` | `AuthController::me`（L56） | `users` | ― | JWT を読む処理のもと（ほかの API にコピーされた）。壊れた JWT では 500 になる。`users` の行をそのまま返す（`verification_token` も出る） |
 | ログアウト | `HomePage` | `POST /api/auth/logout` | `AuthController::logout`（L70） | ― | ― | サーバーは何もしない |
 | プロフィールを見る | `HomePage`・`UserPage`・`SearchPage`・`TalkPage`・`MessagesFsPage`・`TalkFsPage` | `GET /api/users/{publicId}` | `ProfileController::show`（L20） | `users`・`profiles` | ― | ログインを確かめない（だれでも見られる）。`users` の行をそのまま返す（メールアドレス・確認用の文字も出る）。UUID の形を確かめず、違う文字は 500 |
 | プロフィールを変える | `HomePage` | `PUT /api/users/{publicId}` | `ProfileController::update`（L28） | `users`（id を引く）・`profiles` | `profiles` | ログインも本人かも確かめない（だれでも他人のプロフィールを書き換えられる）。`$request->all()` をそのまま入れ、`Profile` は `$guarded = []` なので、送った項目がすべて入る。そのため、プロフィールの持ち主（`user_id`）を付け替えられ、性別も変えられる（性別で分けている決まり（購入は男性だけ・無料の男性への制限）を自分で外せる）。会員がいなければ null に `fill` して 500 |
@@ -46,18 +46,18 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | 動作の確かめ | ― | `GET /api/health` | `routes/api.php` のクロージャ | `migrations` | ― | アプリの名前（`admin`）・DB の名前・マイグレーションの数を返す |
 | ログイン | `LoginPage` | `POST /api/auth/login` | `AuthController::login`（L21） | `admins` | `admins.last_login_at` | 8時間の JWT に役割を入れる（役割を変えても期限まで前の役割のまま）。止める仕組みはない。何回でも試せる |
-| 自分 | 呼んでいる画面は見つからない | `GET /api/me` | `AuthController::me`（L40） | `admins` | ― | JWT を読む処理のもと（ほかに写された）。壊れた JWT・会員の JWT は 500 |
+| 自分 | 呼んでいる画面は見つからない | `GET /api/me` | `AuthController::me`（L40） | `admins` | ― | JWT を読む処理のもと（ほかの API にコピーされた）。壊れた JWT・会員の JWT は 500 |
 | ダッシュボード | `domains/dashboard/DashboardPage` | `GET /api/dashboard` | `DashboardController::index`（L20） | `users`・`user_matches`・`messages`・`purchases`・`plans` | ― | 開くたびに全部を数える。日ごとの数は 30日 × 3種類を1本ずつ（数のカード6本・日ごと90本・月ごと1本で、97本）。`whereDate` で索引が使えない。日付は UTC。有料会員は `is_paid` だけで数える（期限が過ぎた人も入る）。売上は今のプランの値段で足す |
 | 会員の一覧 | `domains/members/MembersPage` | `GET /api/members` | `MemberController::index`（L20） | `users`・`profiles`・`purchases` | ― | メールアドレスかニックネームの部分一致（前にも `%` が付き、索引が使えない）。50人ずつ（OFFSET）・毎回の件数・1人ごとに2本（2＋2N）。**`users` の行をそのまま返す（パスワードのハッシュ・確認用の文字も出る）** |
 | 会員の詳細 | `domains/members/MemberDetailPage` | `GET /api/members/{publicId}` | `MemberController::show`（L63） | `users`・`purchases`・`plans`・`profiles`・`likes`・`user_matches`・`blocks` | `admin_audit_logs` | 見たことを監査ログに書く（`member.view`）。購入の値段は今のプランのもの（1件ごとに1本） |
 | 停止する | `domains/members/MemberDetailPage` | `POST /api/members/{publicId}/suspension` | `SuspensionController::store`（L20） | `admins`・`users` | `users.suspended_at`・`suspended_reason`・`admin_audit_logs` | owner だけ。理由を確かめない。トランザクションがない（停止と監査ログがずれうる）。断るのは会員の側のログインだけ（持っている JWT は使える） |
-| 停止を解く | `domains/members/MemberDetailPage` | `DELETE /api/members/{publicId}/suspension` | `SuspensionController::destroy`（L57） | ― | `users.suspended_at`・`suspended_reason` | **役割の確かめと監査ログを写し忘れている**（見るだけの人でも解け、記録も残らない）。いない会員でも 204 |
+| 停止を解く | `domains/members/MemberDetailPage` | `DELETE /api/members/{publicId}/suspension` | `SuspensionController::destroy`（L57） | ― | `users.suspended_at`・`suspended_reason` | **役割の確かめと監査ログを書き忘れている**（見るだけの人でも解け、記録も残らない）。いない会員でも 204 |
 | メッセージの一覧 | `domains/messages/MessagesPage` | `GET /api/messages` | `MessageController::index`（L19） | `messages`・`users`・`profiles`・`talk_rooms`・`talk_room_members` | ― | 10万件を並べ替えて OFFSET で50件・毎回の件数・1件ごとに6本（2＋6N）。本文の部分一致。**本文を見られるのに、監査ログを書き忘れている**。中の連番の `id` を返す |
 | 購入の一覧 | `domains/sales/SalesPage` | `GET /api/purchases` | `SalesController::purchases`（L19） | `purchases`・`plans`・`users`・`profiles` | ― | 50件ずつ・1件ごとに3本（2＋3N）。値段は今のプランのもの |
 | 月ごとの売上 | `domains/sales/SalesPage` | `GET /api/sales/monthly` | `SalesController::monthly`（L47） | `purchases`・`plans` | ― | 今のプランの値段で足す（値段を変えると、過去の月の売上も変わる）。全期間 |
 | プランの一覧 | `domains/sales/SalesPage` | `GET /api/plans` | `PlanController::index`（L19） | `plans` | ― | `plans` の行をそのまま返す |
 | 値段を変える | `domains/sales/SalesPage` | `PUT /api/plans/{id}` | `PlanController::update`（L31） | `admins`・`plans` | `plans.price`・`admin_audit_logs` | **お金**。owner だけ。値段を確かめない（0 や負の数も入る）。ないプランでも監査ログを書く。中の連番の id を URL に使う（ほかは `public_id`）。トランザクションがない |
-| 監査ログの一覧 | `domains/audit-logs/AuditLogsPage` | `GET /api/audit-logs` | `AuditLogController::index`（L19） | `admin_audit_logs`・`admins` | ― | **API の設計（`docs/api/12-admin.md`）では owner だけだが、役割の確かめを写し忘れている**（見るだけの人も見られる。要件 `docs/requirements/admin.md` には書いていない）。50件ずつ・1件ごとに管理者の名前を読む（2＋N） |
+| 監査ログの一覧 | `domains/audit-logs/AuditLogsPage` | `GET /api/audit-logs` | `AuditLogController::index`（L19） | `admin_audit_logs`・`admins` | ― | **API の設計（`docs/api/12-admin.md`）では owner だけだが、役割の確かめを書き忘れている**（見るだけの人も見られる。要件 `docs/requirements/admin.md` には書いていない）。50件ずつ・1件ごとに管理者の名前を読む（2＋N） |
 
 ## SQL で確かめた結果（2026-11-16）
 
@@ -83,4 +83,4 @@
 ほかの API は1〜9本。
 
 - 本数は、ログインの確かめ（JWT を読むだけで、SQL は流れない）を含む。購入の無料・有料のように、会員の条件で本数が変わる API がある（いいねは、無料の男性だと今日の数を数える1本が増える）
-- テストでは、開発用のデータの本数をそのまま守るのではなく、N=1 と N=3 で本数を比べて「N で増えないか」を確かめる（テスト用の DB には開発用のデータを入れないため）
+- テストでは、開発用のデータの本数をそのまま期待値にするのではなく、N=1 と N=3 で本数を比べて「N で増えないか」を確かめる（テスト用の DB には開発用のデータを入れないため）

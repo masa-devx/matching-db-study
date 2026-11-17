@@ -25,7 +25,7 @@ description: 実装の前に、次の一歩（機能・テーマ）の解説を�
 
 ## 3. 解説のページを作る
 
-- [explanations/_template.html](../../../explanations/_template.html) を写して `explanations/<番号>-<英小文字の kebab-case>.html` を作る（例：`02-likes.html`）。同じ名前があれば上書きせず、確認を取る
+- [explanations/_template.html](../../../explanations/_template.html) をコピーして `explanations/<番号>-<英小文字の kebab-case>.html` を作る（例：`02-likes.html`）。同じ名前があれば上書きせず、確認を取る
 - 【】をすべて埋める。埋められないものは「未定」と書いて理由を添える
 - 書き方
   - 文は短く、日本語で。専門用語は「2. 先に知っておく言葉」で1〜2文で説明してから使う
@@ -37,7 +37,7 @@ description: 実装の前に、次の一歩（機能・テーマ）の解説を�
     3. ページの印（`<!-- compare: sql/….json -->`〜`<!-- /compare -->`）の間を、`python3 -I explanations/tools/compare-block.py explanations/sql/<…>.json explanations/<…>.html` で作る。JSON を直したら同じコマンドで作り直す
     4. 下の表に、操作ごとの本数と、SQL が変わる理由を書く。設計（`docs/api/`）の「流れる SQL の目安」と本数が合わなければ、ページに「要確認」と書いて、チャットで伝える
   - コードのかたまりは `<pre><code class="language-php">` のように言語を付ける（色が付く。SQL は `language-sql`、シェルは `language-bash`）
-  - 「6. 確かめ方」は、①レガシー版で問題を見る方法（クエリの数・EXPLAIN（`EXPLAIN (ANALYZE, BUFFERS)`）・同時に送る）②直す前に足す、振る舞いを固定するテストの名前 ③改善したあとに比べる数字
+  - 「6. 確かめ方」は、①レガシー版で問題を見る方法（クエリの数・EXPLAIN（`EXPLAIN (ANALYZE, BUFFERS)`）・同時に送る）②直す前に足す、今の動きを確かめるテストの名前 ③改善したあとに比べる数字
   - 00・05b は、レガシー版と改善版に分けなくてよい（5・6 章は1つの形で書く）
   - 「8. 6つの問い」は、答えも書く（開くと見える形）。答えは、この一歩で選んだ設計に合わせる。問い 6 は「Eloquent で流れる SQL → 問題 → 直し方」と、Rails（ActiveRecord）・Prisma での書き方を短い表で並べる
 - 図（「3. 図で見る」）は Mermaid で、1〜3枚
@@ -54,7 +54,7 @@ description: 実装の前に、次の一歩（機能・テーマ）の解説を�
 
 ユーザーは解説を claude.ai の Artifact で読む（手元のサーバーは使わない）。
 
-1. 載せる形に写す：`python3 -I explanations/tools/to-artifact.py explanations/<番号>-<名前>.html <会話の作業用フォルダ>/artifacts/<番号>-<名前>.html`（元のファイルは変えない）
+1. 載せる形に変える：`python3 -I explanations/tools/to-artifact.py explanations/<番号>-<名前>.html <会話の作業用フォルダ>/artifacts/<番号>-<名前>.html`（元のファイルは変えない）
 2. `agents/notes.local.md` の「Artifact のリンク」の表を見る
    - そのページの行があれば、その URL を `url` に渡して載せる（同じリンクのまま更新する。初めてその Artifact を触る会話なら、先に `action: "read"` で読む）
    - なければ新しく載せ（`icon` は `book`）、表に1行足す（番号・ページ・URL）

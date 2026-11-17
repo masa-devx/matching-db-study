@@ -20,7 +20,7 @@
 
 ## 2. 業務のまとまり
 
-各層の中は、このまとまりのフォルダで分け、名前を全部の層でそろえる。
+業務のまとまりは、Auth・Members のような、業務ごとの分け方。各層の中は、このまとまりのフォルダで分け、名前を全部の層でそろえる。
 
 ### 2-1. 会員の側
 
@@ -75,7 +75,7 @@
 
 Domain の行き先は 2-2 の表。
 
-移す順は、触るチケットが来た順。移し方の決まりは [architecture.md](../agents/rules/architecture.md) の10章。移す前に、その API が「API テストで守っている」状態（成功1本と、`docs/api/` に書いた失敗ごとに1本）にする。
+移す順は、触るチケットが来た順。移し方の決まりは [architecture.md](../agents/rules/architecture.md) の10章。移す前に、その API が「API テストがある」状態（成功1本と、`docs/api/` に書いた失敗ごとに1本）にする。
 
 Model を `app/Infrastructure/Models/` へ移すときは、同じチケットで AGENTS.md の「エディタの補完のファイルを作る」のコマンドに、Model のフォルダの指定（`--dir`）を足す。
 
@@ -91,7 +91,7 @@ Model を `app/Infrastructure/Models/` へ移すときは、同じチケット�
 | `profiles` | 全部 | 読むだけ | ― |
 | `likes`・`user_matches`・`blocks` | 全部 | 読むだけ | ― |
 | `talk_rooms`・`talk_room_members`・`messages` | 全部 | 読むだけ | ― |
-| `plans` | 読むだけ | `price` | 値段を変えても、過去の購入の金額は変わらない（目標。今は購入に値段を写していない） |
+| `plans` | 読むだけ | `price` | 値段を変えても、過去の購入の金額は変わらない（目標。今は購入の行に値段をコピーしていない） |
 | `purchases` | 全部 | 読むだけ | ― |
 | `admins` | シーダーだけ | `last_login_at` | ― |
 | `admin_audit_logs` | なし | 全部 | ― |
@@ -115,7 +115,7 @@ Model を `app/Infrastructure/Models/` へ移すときは、同じチケット�
 | 1つの変更で、3つ以上のまとまりを触ることが続く | まとまりの境目を引き直す。まとまりの間をイベントでつなぐ |
 | チームが3つ以上になり、同じフォルダを取り合う | モジュラーモノリスへ（[modular-monolith.html](../explanations/modular-monolith.html)） |
 | 検索や一覧の p95 が 500ms を超えた | QueryService の SQL とインデックス → 読み取り専用の DB → 検索エンジン |
-| 詰め替えが重荷になった（Domain がほぼ表の写し） | そのまとまりだけ、読み取りの道に寄せる |
+| 詰め替えが重荷になった（Domain がほぼ表と同じ形） | そのまとまりだけ、読み取りの道に寄せる |
 | 2つのアプリで、同じ業務の決まり（停止・値段）がずれて不具合が出た | 共有の Domain のパッケージ（`packages/`）に切り出す |
 
 ## 7. 参考にした資料
@@ -134,7 +134,7 @@ Model を `app/Infrastructure/Models/` へ移すときは、同じチケット�
 | 資料 | 何に使ったか | 読んだか |
 | --- | --- | --- |
 | [DIP を用いたレイヤードアーキテクチャの記事（StyleEdge の技術ブログ・2023-11-17）](https://techblog.styleedge.co.jp/entry/2023/11/17/074959) | 4層の名前と置き場（`Application`・`Domains`・`Http`・`Infrastructure`）・Eloquent を Infrastructure だけで使う・エンティティの生成用と再構成用のファクトリメソッド・QueryService は必要なときだけ。会員の側の形のもとにした | 読んだ（2026-11-15） |
-| [Pest の Architecture Testing](https://pestphp.com/docs/arch-testing) | `arch()` で依存の向きを守る書き方 | 読んでいない（書き方は AI の知識。使う前に確かめる） |
+| [Pest の Architecture Testing](https://pestphp.com/docs/arch-testing) | `arch()` で依存の向きを確かめる書き方 | 読んでいない（書き方は AI の知識。使う前に確かめる） |
 | [The Clean Architecture（Robert C. Martin）](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html) | 依存は内側へだけ、という考え方 | 読んでいない（考え方の出どころとして） |
 | [Hexagonal Architecture（Alistair Cockburn）](https://alistair.cockburn.us/hexagonal-architecture/) | ポートとアダプター（外との境目に差し替え口を作る） | 読んでいない（考え方の出どころとして） |
 | [The Onion Architecture（Jeffrey Palermo）](https://jeffreypalermo.com/2008/07/the-onion-architecture-part-1/) | ドメインを中心に置く同心円の層 | 読んでいない（考え方の出どころとして） |

@@ -6,17 +6,17 @@ paths:
   - "frontend/*/vitest.config.*"
 ---
 
-# 単体/E2Eの切り分けと骨抜き禁止
+# 単体/E2Eの切り分けと、テストを弱めて通すことの禁止
 
 ## 種別と実行コマンド
 
 実行コマンドは AGENTS.md の「主要コマンド」と同じものを書く。
 
-| 種別 | ツール | 置き場所 | 実行 | 何を守るか |
+| 種別 | ツール | 置き場所 | 実行 | 何を確かめるか |
 | --- | --- | --- | --- | --- |
 | 単体 | Pest・Vitest（画面） | `backend/client/tests/Unit/`・`backend/admin/tests/Unit/`（`app/` の構造を再現）・`frontend/client/src/**/*.test.tsx` | `docker compose run --rm app ./vendor/bin/pest tests/Unit`（画面は 03b で決める） | ロジックの境界値・異常系 |
 | 結合（API テスト） | Pest（テスト用の PostgreSQL に対して実行） | `backend/client/tests/Feature/`・`backend/admin/tests/Feature/` | `docker compose run --rm app ./vendor/bin/pest tests/Feature`（管理画面は `admin-app`） | DB や API をまたぐ制御・API の振る舞い |
-| アーキテクチャ | Pest の `arch()`（`pestphp/pest-plugin-arch`） | `backend/client/tests/Arch/`（正本）・`backend/admin/tests/Arch/`（写し） | `docker compose run --rm app ./vendor/bin/pest tests/Arch`（管理画面は `admin-app`） | 層の依存の向きと名前（`architecture.md` の8章） |
+| アーキテクチャ | Pest の `arch()`（`pestphp/pest-plugin-arch`） | `backend/client/tests/Arch/`（正本）・`backend/admin/tests/Arch/`（コピー） | `docker compose run --rm app ./vendor/bin/pest tests/Arch`（管理画面は `admin-app`） | 層の依存の向きと名前（`architecture.md` の8章） |
 
 - 管理画面（`backend/admin`）は、**今は PHPUnit と SQLite のメモリ DB**（`phpunit.xml`）で動く。上の表の Pest と PostgreSQL（`matching_admin_test`）は、切り替えるチケットのあとから
 | E2E | 03b（React を足す）で決める | 03b で決める | 03b で決める | 主要フロー・認可・状態遷移 |
@@ -56,14 +56,14 @@ E2Eは、固定のシードデータを入れたデータベースに対して�
 - 読み取り専用のテストは既存シードを使う。変更を伴うテストは専用データをfixturesで作り、
   後始末する（共有シードを書き換えると並列実行で他のテストが壊れる）
 
-## 骨抜き禁止
+## テストを弱めて通さない
 
-テストが何も守っていないのに、通って見える書き方を避ける。
+テストが何も確かめていないのに、通って見える書き方を避ける。
 
 記入例（TypeScript・Vitest）。技術が決まったら、その言語とツールの例に書き換える:
 
 ```typescript
-// ❌ 何も守っていない
+// ❌ 何も確かめていない
 expect(result).toBeDefined();
 // ❌ 常時成功モック（本物が壊れても通る）
 vi.mock("./calcTax", () => ({ calcTax: () => 1000 }));
@@ -82,7 +82,7 @@ await expect(createInvoice(input)).rejects.toThrow(InvoiceValidationError);
 ```
 
 - 修正を戻すとテストが落ちることを確かめる。修正の前後どちらでも通るテストは、
-  ないより悪い（守っているように見えるため）
+  ないより悪い（確かめているように見えるため）
 - 新しいケースは既存テストの横に足す。既存テストの入力を新しいケースに書き換えない。
   既存テストの削除・スキップには理由を書く
 
@@ -93,10 +93,10 @@ await expect(createInvoice(input)).rejects.toThrow(InvoiceValidationError);
 - 一部だけ実行する指定・飛ばす指定（記入例: `.only` / `.skip`）を残したままコミットしない
 - 新規テストは先にRed（失敗）を確認してから実装する
 - 期待結果はプランの「新規テストケース」と要件を出典にする。実装コードを正解にしない
-- **例外：今の振る舞いを固めるテスト**（移す前に足す API テスト）は、最初から通り、期待値は今の振る舞いになる。骨抜きと見分けるため、次の順で書く
+- **例外：今の動きを確かめるテスト**（移す前に足す API テスト）は、最初から通り、期待値は今の振る舞いになる。テストを弱めて通したものと見分けるため、次の順で書く
   1. 期待値を要件（`docs/requirements/`）と `docs/api/` から書き、テストの名前に要件 ID を書いて流す
-  2. 落ちたら、それが要件と今の振る舞いの違い。そこだけ期待値を今の振る舞いに直し、テストに「既知のリスク：…」とコメントを書く（直すのは改善のチケット）
-  3. 固めるテストごとに、そのテストが守る行（条件・状態コード）を手で1回壊し、落ちるのを見る。壊した行と落ちたテストの名前を PR に並べる
+  2. 落ちたら、それが要件と今の振る舞いの違い。そこだけ期待値を今の振る舞いに直し、テストに「分かっている不具合：…」とコメントを書く（直すのは改善のチケット）
+  3. 今の動きを確かめるテストごとに、そのテストが確かめているコードの行（条件・状態コード）を手で1回壊し、落ちるのを見る。壊した行と落ちたテストの名前を PR に並べる
 - UseCase の単体テストの偽物（Repository・外のサービス）は、いつも成功を返すだけの作りにしない。メモリの上で本当に保存・検索する実装にする。偽物のトランザクションは「中にいる」印を持ち、偽物の外への書き込みは、トランザクションの中で呼ばれたら失敗する
 - プランで決めた期待結果を、実装を通すために書き換えない。変える必要があれば停止して報告する
 

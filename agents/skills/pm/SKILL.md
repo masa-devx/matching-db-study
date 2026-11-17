@@ -22,7 +22,7 @@ description: 改訂版（refactored-repo）で、PM とビジネス側の役に�
 1. Status が Inbox のチケットを並べ、1つずつ種類・Priority を案として出す（Size はリーダーの役で案を出す）
 2. 人と相談して決め、ボードの項目を直す（`ticket` スキルの「ボードの項目を付ける」）。閉じるものは理由をコメントに書く
 3. `docs/roadmap.md` を見て、今回のサイクルのエピックと、入れるチケット（5〜8枚）の案を出す
-4. 決まったら `docs/cycles/_template/` を写して `docs/cycles/<番号>-<名前>/` を作り、`docs/cycles/README.md` に1行足す
+4. 決まったら `docs/cycles/_template/` をコピーして `docs/cycles/<番号>-<名前>/` を作り、`docs/cycles/README.md` に1行足す
 
 ### 1 なぜ作るか
 
