@@ -6,6 +6,59 @@ import Icon from './components/Icon'
 import { SkeletonProfile } from './components/Skeleton'
 import { useToast } from './components/Toast'
 
+// M4（#198）：プルダウンに出す都道府県と身長（検索の条件の画面にある一覧と同じものを、ここにも書いた）
+const PREFECTURES = [
+  '北海道',
+  '青森県',
+  '岩手県',
+  '宮城県',
+  '秋田県',
+  '山形県',
+  '福島県',
+  '茨城県',
+  '栃木県',
+  '群馬県',
+  '埼玉県',
+  '千葉県',
+  '東京都',
+  '神奈川県',
+  '新潟県',
+  '富山県',
+  '石川県',
+  '福井県',
+  '山梨県',
+  '長野県',
+  '岐阜県',
+  '静岡県',
+  '愛知県',
+  '三重県',
+  '滋賀県',
+  '京都府',
+  '大阪府',
+  '兵庫県',
+  '奈良県',
+  '和歌山県',
+  '鳥取県',
+  '島根県',
+  '岡山県',
+  '広島県',
+  '山口県',
+  '徳島県',
+  '香川県',
+  '愛媛県',
+  '高知県',
+  '福岡県',
+  '佐賀県',
+  '長崎県',
+  '熊本県',
+  '大分県',
+  '宮崎県',
+  '鹿児島県',
+  '沖縄県',
+]
+const HEIGHTS: number[] = []
+for (let cm = 130; cm <= 210; cm++) HEIGHTS.push(cm)
+
 // レガシー版（03b）。ホーム（/home）＝自分のプロフィールを見て直す。全部この部品に書く。
 // M1（#181）：有料会員・ブロックした相手・ログアウト・退会は、設定（SettingsPage）に移した。右上の歯車から行く
 export default function HomePage() {
@@ -43,6 +96,11 @@ export default function HomePage() {
 
   const save = async (e: any) => {
     e.preventDefault()
+    // M4：自己紹介が 500文字を超えていたら、送らない
+    if ((form.introduction ?? '').length > 500) {
+      toast('自己紹介は、500文字までにしてください', 'error')
+      return
+    }
     setSaving(true)
     // 入力を確かめない。API も確かめないので、何でも入る
     const res = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/users/${me.public_id}`, {
@@ -171,25 +229,52 @@ export default function HomePage() {
                 onChange={(e) => setForm({ ...form, nickname: e.target.value })}
               />
             </label>
+            {/* M4（#198）：都道府県と身長は、プルダウンで選ぶ。前は自由に打つ欄で、「東京」と打つと、検索の「東京都」に出なかった。
+                都道府県の一覧を、検索の条件の画面（SearchConditionsPage）から、ここにもコピーした */}
             <label className="label">
               都道府県
-              <input
+              <select
                 className="input"
                 value={form.prefecture ?? ''}
                 onChange={(e) => setForm({ ...form, prefecture: e.target.value })}
-              />
+              >
+                <option value="">選ばない</option>
+                {/* 前に自由に打った値（選択肢にない値）は、そのまま1つの選択肢として出す（黙って消さない） */}
+                {form.prefecture && !PREFECTURES.includes(form.prefecture) && (
+                  <option value={form.prefecture}>{form.prefecture}（前に入れた値）</option>
+                )}
+                {PREFECTURES.map((pref) => (
+                  <option key={pref} value={pref}>
+                    {pref}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="label">
-              身長（cm）
-              <input
+              身長
+              <select
                 className="input"
                 value={form.height ?? ''}
                 onChange={(e) => setForm({ ...form, height: e.target.value })}
-              />
+              >
+                <option value="">選ばない</option>
+                {form.height && !HEIGHTS.map(String).includes(String(form.height)) && (
+                  <option value={form.height}>{form.height}（前に入れた値）</option>
+                )}
+                {HEIGHTS.map((cm) => (
+                  <option key={cm} value={cm}>
+                    {cm}cm
+                  </option>
+                ))}
+              </select>
             </label>
             {/* #153：検索に使う6項目。選択肢の一覧を、条件の画面（SearchConditionsPage）からコピーした */}
             {[
-              { key: 'body_type', label: '体型', options: ['スリム', 'やや細め', '普通', '筋肉質', 'ややぽっちゃり', 'ぽっちゃり'] },
+              {
+                key: 'body_type',
+                label: '体型',
+                options: ['スリム', 'やや細め', '普通', '筋肉質', 'ややぽっちゃり', 'ぽっちゃり'],
+              },
               {
                 key: 'job',
                 label: 'お仕事',
@@ -240,11 +325,23 @@ export default function HomePage() {
                 value={form.introduction ?? ''}
                 onChange={(e) => setForm({ ...form, introduction: e.target.value })}
               />
+              {/* M4：文字の数（500文字まで。FR-009。止めるのは画面だけで、API は止めない） */}
+              <span className={(form.introduction ?? '').length > 500 ? 'hint is-over' : 'hint'}>
+                {(form.introduction ?? '').length}／500文字
+              </span>
             </label>
             <Button type="submit" loading={saving}>
               保存する
             </Button>
-            <Button variant="ghost" className="button-space" onClick={() => setEditing(false)}>
+            <Button
+              variant="ghost"
+              className="button-space"
+              onClick={() => {
+                // M4：やめたら、打ちかけの中身を捨てて、保存してある値に戻す（前は、もう一度開くと、打ちかけが残っていた）
+                setForm(me.profile ?? {})
+                setEditing(false)
+              }}
+            >
               やめる
             </Button>
           </form>

@@ -1,10 +1,11 @@
-import { useState } from 'react'
-import { Navigate, Route, Routes } from 'react-router'
+import { useEffect, useState } from 'react'
+import { Link, Navigate, Route, Routes, useLocation } from 'react-router'
 import './App.css'
 import BlocksPage from './BlocksPage'
 import TabBar from './components/TabBar'
 import VerifyBanner from './components/VerifyBanner'
 import { ToastProvider } from './components/Toast'
+import ForgotPasswordPage from './ForgotPasswordPage'
 import HomePage from './HomePage'
 import InfoPage from './InfoPage'
 import LikesPage from './LikesPage'
@@ -14,6 +15,7 @@ import MessagesPage from './MessagesPage'
 import PlansPage from './PlansPage'
 import PurchasePage from './PurchasePage'
 import RegisterPage from './RegisterPage'
+import ResetPasswordPage from './ResetPasswordPage'
 import SearchConditionsPage from './SearchConditionsPage'
 import SearchPage from './SearchPage'
 import SentLikesPage from './SentLikesPage'
@@ -23,10 +25,37 @@ import TalkPage from './TalkPage'
 import UserPage from './UserPage'
 import VerifyPage from './VerifyPage'
 
+// M9（#198）：ブラウザのタブに出す題。URL の頭と、題の組を、上から順に当てる（画面を足したら、ここにも足す）
+const TITLES: [string, string][] = [
+  ['/search/conditions', '検索の条件'],
+  ['/search', '検索'],
+  ['/likes/sent', '送ったいいね'],
+  ['/likes', 'いいね'],
+  ['/messages', 'メッセージ'],
+  ['/home', 'ホーム'],
+  ['/users/', 'プロフィール'],
+  ['/settings', '設定'],
+  ['/info/', '案内'],
+  ['/blocks', 'ブロックした相手'],
+  ['/plans', '有料会員'],
+  ['/login', 'ログイン'],
+  ['/register', '登録'],
+  ['/verify/', 'メールアドレスの確認'],
+  ['/forgot-password', 'パスワードの再設定'],
+  ['/reset-password/', '新しいパスワード'],
+]
+
 // レガシー版（03b）。画面の切り替えと、ログインしたあとの枠（四角の枠と、その下のタブ）を、ここに全部書く。
 // ログインしているかは、sessionStorage の token があるかだけで決める（期限切れでも「ログイン中」に見える）
 export default function App() {
   const [token, setToken] = useState<string | null>(sessionStorage.getItem('token'))
+  const location = useLocation()
+
+  // M9：画面ごとに、タブの題を変える（前は、どの画面も同じ題で、タブを並べると見分けられなかった）
+  useEffect(() => {
+    const found = TITLES.find(([path]) => location.pathname.startsWith(path))
+    document.title = found ? `${found[1]}｜matching` : 'matching'
+  }, [location.pathname])
 
   const routes = (
     <Routes>
@@ -36,6 +65,9 @@ export default function App() {
       <Route path="/register" element={token ? <Navigate to="/home" /> : <RegisterPage />} />
       {/* M2：確認のメールのリンクが開く画面。ログインしていなくても開ける */}
       <Route path="/verify/:token" element={<VerifyPage />} />
+      {/* M2（#196）：パスワードを忘れたとき。メールアドレスを入れる画面と、メールのリンクが開く画面 */}
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
       <Route path="/home" element={<HomePage />} />
       <Route path="/users/:publicId" element={<UserPage />} />
       {/* M3（#184）：いいねのタブは、届いたいいね。送ったいいねは、設定から開く */}
@@ -58,7 +90,18 @@ export default function App() {
       <Route path="/blocks" element={<BlocksPage />} />
       <Route path="/plans" element={<PlansPage />} />
       <Route path="/plans/:planId" element={<PurchasePage />} />
-      <Route path="*" element={<p>ページが見つかりません</p>} />
+      {/* M9（#198）：ない URL。戻る先を出す（前は、文だけで、どこにも行けなかった） */}
+      <Route
+        path="*"
+        element={
+          <div className="empty">
+            <p className="empty-text">ページが見つかりません</p>
+            <Link className="button" to={token ? '/home' : '/login'}>
+              {token ? 'ホームへ' : 'ログインへ'}
+            </Link>
+          </div>
+        }
+      />
     </Routes>
   )
 

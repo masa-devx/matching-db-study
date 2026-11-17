@@ -60,6 +60,17 @@ const PREFECTURES = [
   '沖縄県',
 ]
 
+// M5（#198）：地方と、上の一覧の何番目から何番目までか（一覧の並びを変えたら、ここの番号も直す）
+const REGIONS = [
+  { name: '北海道・東北', from: 0, to: 7 },
+  { name: '関東', from: 7, to: 14 },
+  { name: '中部', from: 14, to: 23 },
+  { name: '近畿', from: 23, to: 30 },
+  { name: '中国', from: 30, to: 35 },
+  { name: '四国', from: 35, to: 39 },
+  { name: '九州・沖縄', from: 39, to: 47 },
+]
+
 // 年齢のプルダウンに出す数（18〜99）。範囲は、要件（FR-SEARCH-009）からここに書き写した
 const AGES: number[] = []
 for (let age = 18; age <= 99; age++) AGES.push(age)
@@ -71,7 +82,11 @@ for (let cm = 130; cm <= 210; cm++) HEIGHTS.push(cm)
 // #153：プロフィールの項目の選択肢（年収は、#162 で幅のプルダウンにしたので、上の INCOME_BANDS）。名前の文字を、そのまま API に送る。
 // 同じ一覧を、ホーム（HomePage）と試しのデータ（ProfileDetailsSeeder）にも書いた
 const DETAILS = [
-  { key: 'body_type', label: '体型', options: ['スリム', 'やや細め', '普通', '筋肉質', 'ややぽっちゃり', 'ぽっちゃり'] },
+  {
+    key: 'body_type',
+    label: '体型',
+    options: ['スリム', 'やや細め', '普通', '筋肉質', 'ややぽっちゃり', 'ぽっちゃり'],
+  },
   {
     key: 'job',
     label: 'お仕事',
@@ -449,7 +464,8 @@ export default function SearchConditionsPage() {
         )}
         {savedLoaded && saved.length > 0 && (
           <p className="cond-note">
-            押すと、その条件で探します。{managing && '「条件を直す」で、中身を欄に入れて直せます。'}（{saved.length}／5件）
+            押すと、その条件で探します。{managing && '「条件を直す」で、中身を欄に入れて直せます。'}（{saved.length}
+            ／5件）
           </p>
         )}
         <div className="saved-list">
@@ -578,19 +594,41 @@ export default function SearchConditionsPage() {
             <summary aria-describedby="cond-prefecture">
               {asList(form.prefecture).length > 0 ? asList(form.prefecture).join('・') : '全国（押して選ぶ）'}
             </summary>
-            <div className="pref-list" role="group" aria-labelledby="cond-prefecture">
-              {PREFECTURES.map((pref) => (
-                <button
-                  type="button"
-                  key={pref}
-                  className={asList(form.prefecture).includes(pref) ? 'chip chip-on' : 'chip'}
-                  aria-pressed={asList(form.prefecture).includes(pref)}
-                  onClick={() => toggle('prefecture', pref)}
-                >
-                  {pref}
-                </button>
-              ))}
-            </div>
+            {/* M5（#198）：地方ごとに分け、地方の名前を押すと、その地方をまとめて選ぶ・外す（前は、47個を1つずつ押していた） */}
+            {REGIONS.map((region) => {
+              const prefs = PREFECTURES.slice(region.from, region.to)
+              const all = prefs.every((pref) => asList(form.prefecture).includes(pref))
+              return (
+                <div key={region.name} className="pref-region">
+                  <button
+                    type="button"
+                    className={all ? 'pref-region-name is-on' : 'pref-region-name'}
+                    aria-pressed={all}
+                    aria-label={`${region.name}を、まとめて${all ? '外す' : '選ぶ'}`}
+                    onClick={() => {
+                      const others = asList(form.prefecture).filter((x: string) => !prefs.includes(x))
+                      setForm({ ...form, prefecture: all ? others : [...others, ...prefs] })
+                    }}
+                  >
+                    {region.name}
+                    <span className="pref-region-all">{all ? 'まとめて外す' : 'まとめて選ぶ'}</span>
+                  </button>
+                  <div className="pref-list" role="group" aria-label={region.name}>
+                    {prefs.map((pref) => (
+                      <button
+                        type="button"
+                        key={pref}
+                        className={asList(form.prefecture).includes(pref) ? 'chip chip-on' : 'chip'}
+                        aria-pressed={asList(form.prefecture).includes(pref)}
+                        onClick={() => toggle('prefecture', pref)}
+                      >
+                        {pref}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
           </details>
         </section>
 
@@ -609,7 +647,10 @@ export default function SearchConditionsPage() {
                 // 下が上より大きくなったら、上を外す（当てはまる区分がなくなり、選んだものが消えて見えるため）
                 const max = incomeRange(asList(form.income)).max
                 const bands = incomeBands(e.target.value, max)
-                setForm({ ...form, income: bands.length > 0 || !e.target.value ? bands : incomeBands(e.target.value, '') })
+                setForm({
+                  ...form,
+                  income: bands.length > 0 || !e.target.value ? bands : incomeBands(e.target.value, ''),
+                })
               }}
             >
               <option value="">下限なし</option>
@@ -627,7 +668,10 @@ export default function SearchConditionsPage() {
               onChange={(e) => {
                 const min = incomeRange(asList(form.income)).min
                 const bands = incomeBands(min, e.target.value)
-                setForm({ ...form, income: bands.length > 0 || !e.target.value ? bands : incomeBands('', e.target.value) })
+                setForm({
+                  ...form,
+                  income: bands.length > 0 || !e.target.value ? bands : incomeBands('', e.target.value),
+                })
               }}
             >
               <option value="">上限なし</option>
@@ -663,9 +707,7 @@ export default function SearchConditionsPage() {
         {/* #150：有料の4つ。男性の無料の会員には「有料」の印を出し、押すとモーダル。欄は出さない */}
         <section className="card cond-card">
           <div className="cond-head">
-            <h2 className="section-title">
-              こだわり条件 {locked === true && <span className="paid-mark">有料</span>}
-            </h2>
+            <h2 className="section-title">こだわり条件 {locked === true && <span className="paid-mark">有料</span>}</h2>
           </div>
           {/* #162：有料かどうかを読み終わるまでは、高さだけを取っておく */}
           {locked === null && <div className="cond-placeholder" aria-hidden="true" />}
