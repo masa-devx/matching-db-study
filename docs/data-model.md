@@ -174,7 +174,7 @@ erDiagram
 | 表 | 一歩 | 中身 | 制約 |
 | --- | --- | --- | --- |
 | `users` | 00（ひな形）・01・01b・#46・04・06・07 | アカウント（ログインのための情報）・最終ログイン・退会した日時（06。論理削除）・有料会員か（07） | 主キー `id`・`email` の UNIQUE（`users_email_unique`。大文字と小文字は区別する）・`public_id` の UNIQUE（`NOT NULL`・既定は `uuidv7()`。D-022）。`last_login_at` は NULL 可でインデックスなし（desc で並べると、ログインしていない会員が先頭に出る。検索は表を全部読む）。`deleted_at` は NULL 可でインデックスなし。退会してもメールアドレスの UNIQUE はそのまま（退会の API が書き換えて空ける）。`is_paid` は既定 false・`paid_until` は NULL 可（07。どちらもインデックスなし）。`suspended_at`・`suspended_reason` は NULL 可（12。管理画面が書く） |
-| `profiles` | 01 | その会員についての情報 | 主キー `id` だけ。`user_id` に外部キーも UNIQUE もないので、1人に2つのプロフィール・ない会員を指すプロフィールができる |
+| `profiles` | 01・#153 | その会員についての情報 | 主キー `id` だけ。`user_id` に外部キーも UNIQUE もないので、1人に2つのプロフィール・ない会員を指すプロフィールができる。#153 で、検索に使う6項目（`body_type`・`job`・`income`・`smoking`・`drinking`・`marital_status`）を、文字の列で足した（NULL は未回答。選択肢にない文字も入る。インデックスなし） |
 | `likes` | 02 | いいね（だれから・だれへ・いつ）。会員と会員をつなぐ中間テーブル | 主キー `id`・`(from_user_id, to_user_id)` の UNIQUE（`likes_from_user_id_to_user_id_unique`）だけ。外部キーがないので、ない会員を指せ、会員を消しても残る。自分から自分も入る。`to_user_id` から探すと表を全部読む |
 | `user_matches` | 03 | マッチ（お互いにいいねした2人の組と、いつ）。Model は `UserMatch`（`match` は PHP の予約語） | 主キー `id` だけ。同じ組が2行入り、(A, B) と (B, A) も両方入る。自分とのマッチ・ない会員を指すマッチも入り、会員を消しても残る。自分のマッチを探す `user1_id = ? or user2_id = ?` は表を全部読む |
 | `talk_rooms` | 05 | トークルーム（やり取りの場所）。マッチしたときに、いいねの API の中で作る（トランザクションなし） | 主キー `id`・`public_id` の UNIQUE（既定は `uuidv7()`）・`match_id` の UNIQUE と外部キー（`ON DELETE CASCADE`）。03 で2行になった組には、ルームも2つできる |
@@ -183,7 +183,7 @@ erDiagram
 | `blocks` | 06 | ブロック（だれが・だれを・いつ）。マッチ・メッセージは消さずに、読むときに除く | 主キー `id`・`(blocker_id, blocked_id)` の UNIQUE・2つの列の外部キー（`ON DELETE CASCADE`）。自分で自分をブロックする行も入る。UNIQUE は `blocker_id` が先なので、私をブロックした人（`blocked_id = ?`）を探すと表を全部読む |
 | `plans` | 07 | 有料のプラン（期間と今の値段）。1か月 3,980円・3か月 9,800円・6か月 16,800円の3行をマイグレーションで入れる | 主キー `id` だけ。同じ期間が2行入る・値段が0や負の数でも入る |
 | `purchases` | 07 | 購入の記録（だれが・どのプランを・いつ） | 主キー `id`・`user_id`（`ON DELETE CASCADE`）と `plan_id` の外部キーだけ。値段と期間を持たないので、プランの値段を変えると前の記録の値段も変わる。`user_id` から探すと表を全部読む |
-| `search_conditions` | 04b | 保存した検索条件（だれの・名前・条件の中身） | 主キー `id`・`public_id` の UNIQUE だけ。`user_id` に外部キーがないので、会員を消しても残り、ない会員を指せる。インデックスもないので、`user_id` から探すと表を全部読む（6万件で 1549 ページ）。`conditions`（`jsonb`）の中身・名前の長さ・1人5件の上限は、DB では確かめない |
+| `search_conditions` | 04b | 保存した検索条件（だれの・名前・条件の中身） | 主キー `id`・`public_id` の UNIQUE だけ。`user_id` に外部キーがないので、会員を消しても残り、ない会員を指せる。インデックスもないので、`user_id` から探すと表を全部読む（6万件で 1549 ページ。表を作り直した直後の数字で、シーダーを流し直すと膨らむ）。`conditions`（`jsonb`）の中身・名前の長さ・1人5件の上限は、DB では確かめない |
 | `admins` | 12 | 管理画面の管理者（会員とは別にログインする）と役割 | 主キー `id`・`email` の UNIQUE。`role` に CHECK はなく、何でも入る。読み書きするのは管理画面（`backend/admin`） |
 | `admin_audit_logs` | 12 | 監査ログ（だれが・いつ・何に・何をしたか） | 主キー `id`・`admin_id` の外部キーだけ。対象は `target_type` と `target_id`（文字）で指すので外部キーはない。書き換え・削除を DB で止めていない |
 
@@ -209,7 +209,7 @@ Laravel のひな形が作った表（この学習では扱わない）：`passw
 | `genders` | 性別のマスタ（男性・女性・その他・回答しない） | 主キー `code`（`smallint`） |
 | `prefectures` | 都道府県のマスタ（JIS の都道府県コード 1〜47） | 主キー `code`（`smallint`） |
 | `users` | アカウント（メールアドレス・パスワード・確認した時刻）と最終ログイン | メールアドレスは小文字にそろえて UNIQUE・`last_login_at` は NOT NULL（登録した時刻を最初の値にする）・`public_id`（UUID v7。URL で会員を指す ID）の UNIQUE。04 の検索のために `(last_login_at, public_id)` のインデックス |
-| `profiles` | その会員についての情報（性別・生年月日・ニックネーム・都道府県・身長・自己紹介・画像） | `user_id` が主キー兼外部キー（1対1）・`gender_code` → `genders.code`・`prefecture_code` → `prefectures.code` の外部キー・`birthdate` は `date`・ニックネームの長さの CHECK。身長は型だけ（範囲はアプリ。D-013）。#153 の6項目は、マスタの表（`body_types`・`jobs`・`incomes`・`smoking_habits`・`drinking_habits`・`marital_statuses`。主キーは `smallint` の `code`、並び順の `sort_order`）と、`profiles` の `*_code`（NULL 可＝未回答・外部キー）にする。年収はコードの大小で「以上」を比べられる。検索のインデックスは、測ってから決める（解説の 04b の「検索の項目」） |
+| `profiles` | その会員についての情報（性別・生年月日・ニックネーム・都道府県・身長・自己紹介・画像） | `user_id` が主キー兼外部キー（1対1）・`gender_code` → `genders.code`・`prefecture_code` → `prefectures.code` の外部キー・`birthdate` は `date`・ニックネームの長さの CHECK。身長は型だけ（範囲はアプリ。D-013）。#153 の6項目は、マスタの表（`body_types`・`jobs`・`incomes`・`smoking_habits`・`drinking_habits`・`marital_statuses`。主キーは `smallint` の `code`、並び順の `sort_order`。`code` は並びを意味せず、大小の比べと並べ替えは `sort_order` で行う。あとで間の区分を足しても、`code` を振り直さずに済む）と、`profiles` の `*_code`（NULL 可＝未回答・外部キー）にする。年収を「以上」で絞るかどうかは、まだ決めていない（要件 FR-SEARCH-017 は「区分をいくつか選ぶ」。人が決める）。「以上」にするなら、`sort_order` で比べる。検索のインデックスは、測ってから決める（解説の 04b の「検索の項目」） |
 | `likes` | いいね（02） | `(from_user_id, to_user_id)` の UNIQUE・2つの列から `users.id` への外部キー（`ON DELETE CASCADE`）・`from_user_id <> to_user_id` の CHECK・`to_user_id` のインデックス |
 | `user_matches` | マッチ（03）。1組を1行で持ち、`user1_id` に小さい ID を入れる | `(user1_id, user2_id)` の UNIQUE・`user1_id < user2_id` の CHECK（`user_matches_user1`）・`user2_id` のインデックス・2つの列から `users.id` への外部キー（`ON DELETE CASCADE`） |
 | `refresh_tokens` | 取り替え用のトークン（01b） | `token_hash` の UNIQUE（SHA-256）・`user_id` → `users.id` の外部キー・家族の番号・期限・使った時刻・止めた時刻 |
