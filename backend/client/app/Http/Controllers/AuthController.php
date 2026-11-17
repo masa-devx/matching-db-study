@@ -37,6 +37,11 @@ class AuthController extends Controller
             return response()->json(['message' => '利用を停止しています'], 403);
         }
 
+        // A7（#213）：強制退会にした会員は、ログインさせない（ここにだけ書いた。前に配った JWT は、ほかの API でそのまま使える）
+        if ($user->banned_at !== null) {
+            return response()->json(['message' => '強制退会になっています'], 403);
+        }
+
         // 04：最終ログインを残す（検索の並び）。save() は updated_at も書き換える。時刻はアプリのサーバーの時計
         $user->last_login_at = now();
         $user->save();

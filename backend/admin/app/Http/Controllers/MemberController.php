@@ -80,6 +80,32 @@ class MemberController extends Controller
             $purchases[] = ['plan' => $plan?->name, 'price' => $plan?->price, 'bought_at' => $p->created_at];
         }
 
+        // A1（#211）：停止の履歴。新しい順。1件ごとに、止めた管理者・解いた管理者の名前を読む（1＋2N 本）
+        $suspensions = [];
+        foreach (DB::table('suspensions')->where('user_id', $user->id)->orderBy('created_at', 'desc')->get() as $s) {
+            $suspensions[] = [
+                'reason' => $s->reason,
+                'suspended_at' => $s->created_at,
+                'suspended_by' => DB::table('admins')->where('id', $s->suspended_by)->value('name'),
+                'lifted_at' => $s->lifted_at,
+                'lifted_by' => $s->lifted_by ? DB::table('admins')->where('id', $s->lifted_by)->value('name') : null,
+            ];
+        }
+
+        // A7（#213）：この会員に送ったお知らせ。新しい順。1件ごとに、送った管理者の名前を読む（1＋N 本）
+        $notices = [];
+        foreach (DB::table('notices')->where('user_id', $user->id)->orderBy('created_at', 'desc')->get() as $n) {
+            $notices[] = [
+                'id' => $n->public_id,
+                'kind' => $n->kind,
+                'title' => $n->title,
+                'body' => $n->body,
+                'sent_by' => DB::table('admins')->where('id', $n->sent_by)->value('name'),
+                'read_at' => $n->read_at,
+                'created_at' => $n->created_at,
+            ];
+        }
+
         $detail = [
             'user_id' => $user->public_id,
             'email' => $user->email,
@@ -98,6 +124,10 @@ class MemberController extends Controller
             'blocks_made' => DB::table('blocks')->where('blocker_id', $user->id)->count(),
             'blocks_received' => DB::table('blocks')->where('blocked_id', $user->id)->count(),
             'purchases' => $purchases,
+            'suspensions' => $suspensions,
+            'banned_at' => $user->banned_at,
+            'banned_reason' => $user->banned_reason,
+            'notices' => $notices,
         ];
 
         // 監査ログ（ここでは書く）

@@ -146,6 +146,10 @@ export default function HomePage() {
       <Link to="/settings" viewTransition className="gear" aria-label="設定">
         <Icon name="settings" />
       </Link>
+      {/* A7（#213）：運営からのお知らせ。未読があれば、帯（NoticeBanner）で知らせる。ここは、いつでも開ける入口 */}
+      <Link to="/notices" viewTransition className="gear gear-second" aria-label="運営からのお知らせ">
+        <Icon name="bell" />
+      </Link>
       <div className="me-head">
         <span className="me-avatar">
           <Avatar image={me.profile?.image} name={me.profile?.nickname} size={120} />

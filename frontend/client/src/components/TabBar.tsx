@@ -13,7 +13,7 @@ const TABS = [
 
 // M9（#198）：ホームの歯車から開く画面。このどれかにいるときは、「ホーム」のタブを選ばれた色にする
 // （前は、どのタブも選ばれていない見た目になり、今どこにいるかが分からなかった）。画面を足したら、ここにも足す
-const UNDER_HOME = ['/settings', '/info', '/blocks', '/plans', '/likes/sent']
+const UNDER_HOME = ['/settings', '/info', '/blocks', '/plans', '/likes/sent', '/notices']
 
 export default function TabBar() {
   const [unread, setUnread] = useState(0)
