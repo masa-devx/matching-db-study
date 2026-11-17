@@ -22,6 +22,8 @@
 
 #153 で、`profiles` に検索に使う6項目を足す（体型・お仕事・年収・タバコ・お酒・結婚歴）。今のプロフィールと同じく、選択肢の名前（日本語の文字）をそのまま入れる。CHECK もマスタの表もないので、選択肢にない文字も入り、選択肢の名前を変えると前の行と合わなくなる。年収も文字なので、「500万円以上」のような大小の比べができない。インデックスは足さない。
 
+M3（#184）で、スキップの表 `skips`（だれが・だれを・いつ）を足す。届いたいいねや検索で「この人は見送る」と決めた記録で、相手には伝えない。設計を考えずに「とりあえず使える」形で、2つの列は数の列だけ（外部キーなし）・`(skipper_id, skipped_id)` の UNIQUE もインデックスもない。同じ相手を2回スキップすると2行でき、「私がスキップした相手」を探すと表を全部読む。ブロックの表（`blocks`。外部キーと UNIQUE がある）と比べると、制約がない分だけ弱い。
+
 12 で、管理画面の表を足す（#89）。管理者 `admins`（会員とは別にログインする。役割は `owner`・`viewer`）と、監査ログ `admin_audit_logs`（だれが・いつ・何に・何をしたか）。会員の利用を止めた日時と理由（`users.suspended_at`・`suspended_reason`）。表は会員の側と共通の DB に置き、表の作りは `backend/client` にまとめる。管理画面（`backend/admin`）は読み書きするだけ。主キー・UNIQUE・外部キーだけで、インデックスは足さない。監査ログの書き換え・削除を止める仕組みはない。
 
 ### ER 図
@@ -43,6 +45,7 @@ erDiagram
   USERS ||--o{ PURCHASES : "user_id（外部キー・インデックスなし）"
   PLANS ||--o{ PURCHASES : "plan_id（外部キー）"
   USERS ||--o{ SEARCH_CONDITIONS : "user_id（外部キーなし・インデックスなし）"
+  USERS ||--o{ SKIPS : "skipper_id・skipped_id（外部キーなし・UNIQUE なし・インデックスなし）"
   ADMINS ||--o{ ADMIN_AUDIT_LOGS : "admin_id（外部キー・インデックスなし）"
   USERS {
     bigint id PK "中で使う。つながりと JWT の sub"
@@ -132,6 +135,13 @@ erDiagram
     timestamp created_at "買った日時。時間帯なし"
     timestamp updated_at "時間帯なし"
   }
+  SKIPS {
+    bigint id PK
+    bigint skipper_id "スキップした会員。外部キーなし"
+    bigint skipped_id "スキップされた会員。外部キーなし"
+    timestamp created_at "スキップした日時。時間帯なし"
+    timestamp updated_at "時間帯なし"
+  }
   SEARCH_CONDITIONS {
     bigint id PK
     uuid public_id UK "URL と応答に出す ID。既定は uuidv7()"
@@ -184,6 +194,7 @@ erDiagram
 | `plans` | 07 | 有料のプラン（期間と今の値段）。1か月 3,980円・3か月 9,800円・6か月 16,800円の3行をマイグレーションで入れる | 主キー `id` だけ。同じ期間が2行入る・値段が0や負の数でも入る |
 | `purchases` | 07 | 購入の記録（だれが・どのプランを・いつ） | 主キー `id`・`user_id`（`ON DELETE CASCADE`）と `plan_id` の外部キーだけ。値段と期間を持たないので、プランの値段を変えると前の記録の値段も変わる。`user_id` から探すと表を全部読む |
 | `search_conditions` | 04b | 保存した検索条件（だれの・名前・条件の中身） | 主キー `id`・`public_id` の UNIQUE だけ。`user_id` に外部キーがないので、会員を消しても残り、ない会員を指せる。インデックスもないので、`user_id` から探すと表を全部読む（6万件で 1549 ページ。表を作り直した直後の数字で、シーダーを流し直すと膨らむ）。`conditions`（`jsonb`）の中身・名前の長さ・1人5件の上限は、DB では確かめない |
+| `skips` | M3（#184） | スキップ（だれが・だれを・いつ） | 主キー `id` だけ。外部キーがないので、会員を消しても残る。`(skipper_id, skipped_id)` の UNIQUE がないので、同じ相手を2回スキップすると2行できる。インデックスがないので、`skipper_id` から探すと表を全部読む（3万件で 251 ページ）。自分で自分もスキップできる |
 | `admins` | 12 | 管理画面の管理者（会員とは別にログインする）と役割 | 主キー `id`・`email` の UNIQUE。`role` に CHECK はなく、何でも入る。読み書きするのは管理画面（`backend/admin`） |
 | `admin_audit_logs` | 12 | 監査ログ（だれが・いつ・何に・何をしたか） | 主キー `id`・`admin_id` の外部キーだけ。対象は `target_type` と `target_id`（文字）で指すので外部キーはない。書き換え・削除を DB で止めていない |
 
@@ -214,3 +225,4 @@ Laravel のひな形が作った表（この学習では扱わない）：`passw
 | `user_matches` | マッチ（03）。1組を1行で持ち、`user1_id` に小さい ID を入れる | `(user1_id, user2_id)` の UNIQUE・`user1_id < user2_id` の CHECK（`user_matches_user1`）・`user2_id` のインデックス・2つの列から `users.id` への外部キー（`ON DELETE CASCADE`） |
 | `refresh_tokens` | 取り替え用のトークン（01b） | `token_hash` の UNIQUE（SHA-256）・`user_id` → `users.id` の外部キー・家族の番号・期限・使った時刻・止めた時刻 |
 | `search_conditions` | 保存した検索条件（04b） | `user_id` → `users.id` の外部キー（`ON DELETE CASCADE`）・`(user_id, id)` のインデックス（自分の一覧を保存した順に読む）・`public_id` の UNIQUE・`name` は 1〜30文字の CHECK・`conditions` は「オブジェクトであること」の CHECK（`jsonb_typeof(conditions) = 'object'`）。中身の項目と範囲はアプリで確かめる（検索の API と同じ決まり）。1人5件の上限は、会員の行を押さえてから数える（制約では書けない）・日時は `timestamptz` |
+| `skips` | スキップ（M3） | `(skipper_id, skipped_id)` の UNIQUE（この並びのインデックスで「私がスキップした相手」を読む）・2つの列から `users.id` への外部キー（`ON DELETE CASCADE`）・`skipper_id <> skipped_id` の CHECK・日時は `timestamptz`。「私をスキップした人」を読む場面はないので、逆の並びのインデックスは作らない（ブロックは、された側からも読むので両方要る）。届いたいいねのために、`likes` に `(to_user_id, created_at)` のインデックスを足す |

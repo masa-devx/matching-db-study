@@ -469,6 +469,55 @@ foreach ($likes as $like) {
     <li><code>profiles.user_id</code> にインデックスも UNIQUE もない。02 の一覧の N+1 を <code>with()</code> で直しても、<code>where user_id in (...)</code> は表を全部読む（01 の改善と一緒に直す）</li>
     <li>一覧には件数の上限がない（04 でページ送り）</li>
   </ul>
+  <h3>9-2b. 届いたいいねと、スキップ（M3。#184。2026-11-17）</h3>
+  <p>「いいね」のタブを、相手から届いたいいねの一覧にしました。1人ずつ「マッチする」（いいねを送り返す）か「スキップ」（見送る。相手には伝わらない）を選びます。スキップした相手は、届いたいいねにも検索にも出ません。設計と測った結果は <code>docs/api/02-likes.md</code> の「#184 で足すこと」にあります。</p>
+  <p><strong>スキップを、どこに覚えるか</strong></p>
+  <table>
+    <tr><th>案</th><th>形</th><th>良いところ</th><th>弱いところ</th></tr>
+    <tr><td>A</td><td>いいねの表（<code>likes</code>）に「見送った日時」の列を足す</td><td>表が増えない</td><td>いいねの行は送った人のものなのに、もらった人の返事を書き込むことになる。いいねをもらっていない相手（検索で見た相手）は、見送れない</td></tr>
+    <tr><td>B（選んだ）</td><td>新しい表 <code>skips</code>（だれが・だれを・いつ）</td><td>届いたいいねにも検索にも、同じ表を使える。ブロックの表とほぼ同じ形</td><td>表が1つ増える。一覧と検索で、この表を見て除く処理が要る</td></tr>
+  </table>
+  <p><strong>表の作り</strong>（レガシー版は実物、改善版は直す段階で作る予定の形）</p>
+  <pre><code class="language-sql">-- レガシー版：とりあえず使える形
+create table skips (
+  id         bigserial primary key,
+  skipper_id bigint not null,    -- 外部キーなし
+  skipped_id bigint not null,    -- UNIQUE なし（同じ相手を2回スキップすると、2行できる）
+  created_at timestamp(0),
+  updated_at timestamp(0)
+);                               -- インデックスなし（skipper_id で探すと、表を全部読む）</code></pre>
+  <pre><code class="language-sql">-- 改善版
+create table skips (
+  id         bigint generated always as identity primary key,
+  skipper_id bigint not null references users (id) on delete cascade,
+  skipped_id bigint not null references users (id) on delete cascade,
+  created_at timestamptz not null,
+  unique (skipper_id, skipped_id),            -- 同じ相手は1行だけ。このインデックスで「私がスキップした相手」を読む
+  check (skipper_id &lt;&gt; skipped_id)            -- 自分はスキップできない
+);
+-- 届いたいいねを、新しい順に読むためのインデックス（今は to_user_id にインデックスがない）
+create index likes_to_user_id_created_at_index on likes (to_user_id, created_at);</code></pre>
+  <p>ブロックの表（<code>blocks</code>）は、「した側」と「された側」の両方から読むので、逆の並びのインデックスも要ります。スキップは「した側」からしか読まない（された側には伝えない）ので、UNIQUE のインデックス1つで足ります。似た形の表でも、読み方が違うと、要るインデックスが変わります。</p>
+  <p><strong>流れる SQL</strong>（届いたいいね20件の会員）</p>
+  <table>
+    <tr><th></th><th>レガシー版</th><th>改善版（予定の形）</th></tr>
+    <tr><td>本数</td><td>46本（除く相手の ID を読む4本・いいね1本・1件ごとにプロフィールと <code>public_id</code> の2本）</td><td>1本＋ガード1本</td></tr>
+    <tr><td>除く相手</td><td>ID を PHP に持ってきて <code>not in (…)</code> に並べる（いいね・ブロック・スキップが増えるほど、SQL が長くなる）</td><td><code>not exists (select 1 from skips …)</code> を、1本の中に書く</td></tr>
+    <tr><td>読む行</td><td><code>likes</code> を全部読む（21件を返すのに 21,906行を捨てる）。<code>skips</code> も全部読む（30,000行を捨てる）</td><td>インデックスで、自分あての行だけを新しい順に読む</td></tr>
+  </table>
+  <pre><code class="language-sql">-- 改善版（予定の形。まだ Laravel に作らせていない）
+select u.public_id, p.nickname, p.birthdate, l.created_at
+from likes l
+join users u on u.id = l.from_user_id and u.deleted_at is null and u.suspended_at is null
+join profiles p on p.user_id = u.id
+where l.to_user_id = 20050
+  and not exists (select 1 from likes b  where b.from_user_id = 20050 and b.to_user_id = l.from_user_id)   -- もう送り返した
+  and not exists (select 1 from skips s  where s.skipper_id = 20050 and s.skipped_id = l.from_user_id)     -- スキップした
+  and not exists (select 1 from blocks k where (k.blocker_id = 20050 and k.blocked_id = l.from_user_id)
+                                            or (k.blocker_id = l.from_user_id and k.blocked_id = 20050))   -- ブロック
+order by l.created_at desc, l.id desc
+limit 21;</code></pre>
+
   <h3>9-3. 足したテスト</h3>
   <p>【まだ実装していない】</p>
   <h3>9-4. 改善版と、前と後の数字</h3>
