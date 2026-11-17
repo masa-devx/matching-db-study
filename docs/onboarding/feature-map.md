@@ -39,8 +39,8 @@
 | 購入の記録 | `PlansPage` | `GET /api/me/purchases` | `PurchaseController::index`（L55） | `profiles`・`purchases`・`plans` | ― | 男性だけ。全件（ページなし）。1件ごとにプランを読む（1＋N）。値段と期間は「今の」プランのもの（管理画面で値段を変えると、前の記録の値段も変わる） |
 | 保存した検索条件の一覧 | `SearchConditionsPage` | `GET /api/me/search-conditions` | `SearchConditionController::index`（L27） | `search_conditions` | ― | 04b。自分の分を保存した順に。`user_id` にインデックスがなく、表を全部読む。行をそのまま返す（中の `id`・`user_id` も出る）。「使えるか」は返さず、画面が有料かどうかをもう一度判断する |
 | 検索条件を保存する | `SearchConditionsPage` | `POST /api/me/search-conditions` | `SearchConditionController::store`（L43） | `search_conditions`・（有料の条件があれば）`profiles`・`users` | `search_conditions` | 04b。1人5件まで。**数えてから入れるだけ**（ロックもトランザクションもない。同時に10本送ると 11件になった）。条件も名前も確かめない（年齢 17・配列・文字だけも入る。名前なしは 500）。有料かどうかの確かめは検索からコピー（`is_paid` だけ。期限切れの会員が有料の条件を保存できる。#150 で、有料の条件は身長から4つに変わった） |
-| 保存した検索条件を直す | `SearchConditionsPage` | `PUT /api/me/search-conditions/{publicId}` | `SearchConditionController::update`（L81） | `search_conditions` | `search_conditions` | 04b。**安全の穴**：持ち主を確かめない（他人の条件を直せる）。送られた項目を全部入れるので、`user_id` を送ると他人の条件を自分のものにできる。有料かどうかの確かめがない（無料の男性が身長を足せる）。ない ID は 500 |
-| 保存した検索条件を消す | `SearchConditionsPage` | `DELETE /api/me/search-conditions/{publicId}` | `SearchConditionController::destroy`（L99） | ― | `search_conditions` | 04b。**安全の穴**：持ち主を確かめない（他人の条件を消せる）。ない ID でも 204 |
+| 保存した検索条件を直す | `SearchConditionsPage` | `PUT /api/me/search-conditions/{publicId}` | `SearchConditionController::update`（L81） | `search_conditions` | `search_conditions` | 04b。**安全の穴**（#156）：持ち主を確かめない（他人の条件を直せる）。送られた項目を全部入れるので、`user_id` を送ると他人の条件を自分のものにできる。有料かどうかの確かめがない（無料の男性が身長を足せる）。ない ID は 500 |
+| 保存した検索条件を消す | `SearchConditionsPage` | `DELETE /api/me/search-conditions/{publicId}` | `SearchConditionController::destroy`（L99） | ― | `search_conditions` | 04b。**安全の穴**（#156）：持ち主を確かめない（他人の条件を消せる）。ない ID でも 204 |
 
 ## 管理画面（`backend/admin`・14本）
 
