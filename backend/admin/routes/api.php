@@ -7,6 +7,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MemberController;
 use App\Http\Controllers\MessageController;
+use App\Http\Controllers\NoticeController;
 use App\Http\Controllers\PlanController;
 use App\Http\Controllers\ReportCaseController;
 use App\Http\Controllers\SalesController;
@@ -43,3 +44,7 @@ Route::get('/audit-logs', [AuditLogController::class, 'index']);
 Route::get('/report-cases', [ReportCaseController::class, 'index']);
 Route::get('/report-cases/{publicId}', [ReportCaseController::class, 'show']);
 Route::put('/report-cases/{publicId}', [ReportCaseController::class, 'update']);
+
+// A7 会員にお知らせを送る・強制退会にする（#213）
+Route::post('/members/{publicId}/notices', [NoticeController::class, 'store']);
+Route::post('/members/{publicId}/ban', [NoticeController::class, 'ban']);

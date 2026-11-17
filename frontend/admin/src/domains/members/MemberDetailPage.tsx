@@ -8,11 +8,13 @@ import {
   Image,
   Loader,
   Modal,
+  Select,
   SimpleGrid,
   Stack,
   Table,
   Text,
   Textarea,
+  TextInput,
   Title,
 } from '@mantine/core'
 import { useEffect, useState } from 'react'
@@ -26,6 +28,11 @@ export default function MemberDetailPage() {
   const [opened, setOpened] = useState(false)
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
+  // A7（#213）：お知らせを送るモーダルと、強制退会のモーダル
+  const [noticeOpened, setNoticeOpened] = useState(false)
+  const [notice0, setNotice0] = useState({ kind: 'warning', title: '', body: '' })
+  const [banOpened, setBanOpened] = useState(false)
+  const [banReason, setBanReason] = useState('')
   const navigate = useNavigate()
   const [notice, notify] = useNotice()
   // A1（#208）：写真は、会員の側の API にある（管理画面の API は、パスだけを返す）
@@ -70,6 +77,39 @@ export default function MemberDetailPage() {
     load()
   }
 
+  // A7（#213）：お知らせを送る。題と本文があるかは、画面だけで確かめる
+  const sendNotice = async () => {
+    if (!notice0.title.trim() || !notice0.body.trim()) {
+      notify('題と本文を入れてください', false)
+      return
+    }
+    setBusy(true)
+    const r = await fetch(`${api}/api/members/${publicId}/notices`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(notice0),
+    })
+    setBusy(false)
+    setNoticeOpened(false)
+    notify(r.ok ? 'お知らせを送りました' : '送れませんでした', r.ok)
+    if (r.ok) setNotice0({ kind: 'warning', title: '', body: '' })
+    load()
+  }
+
+  // A7：強制退会にする。戻す操作はない
+  const ban = async () => {
+    setBusy(true)
+    const r = await fetch(`${api}/api/members/${publicId}/ban`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ reason: banReason }),
+    })
+    setBusy(false)
+    setBanOpened(false)
+    notify(r.ok ? '強制退会にしました' : '強制退会にできませんでした', r.ok)
+    load()
+  }
+
   if (!m) return <Loader />
   if (!m.user_id) return <Alert color="red">{m.message ?? '会員が見つかりません'}</Alert>
 
@@ -93,19 +133,37 @@ export default function MemberDetailPage() {
           <Title order={2}>{m.profile?.nickname ?? '―'}</Title>
           {m.is_paid && <Badge color="grape">有料</Badge>}
           {m.suspended_at && <Badge color="red">停止中</Badge>}
-          {m.deleted_at && <Badge color="gray">退会</Badge>}
+          {m.banned_at ? <Badge color="dark">強制退会</Badge> : m.deleted_at && <Badge color="gray">退会</Badge>}
         </Group>
-        {role === 'owner' &&
-          (m.suspended_at ? (
-            <Button color="gray" loading={busy} onClick={unsuspend}>
-              停止を解く
+        {role === 'owner' && (
+          <Group>
+            {/* A7（#213）：お知らせ（注意など）を送る・強制退会にする */}
+            <Button variant="default" onClick={() => setNoticeOpened(true)}>
+              お知らせを送る
             </Button>
-          ) : (
-            <Button color="red" onClick={() => setOpened(true)}>
-              利用を止める
-            </Button>
-          ))}
+            {m.suspended_at ? (
+              <Button color="gray" loading={busy} onClick={unsuspend}>
+                停止を解く
+              </Button>
+            ) : (
+              <Button color="red" variant="light" onClick={() => setOpened(true)}>
+                利用を止める
+              </Button>
+            )}
+            {!m.banned_at && (
+              <Button color="red" onClick={() => setBanOpened(true)}>
+                強制退会にする
+              </Button>
+            )}
+          </Group>
+        )}
       </Group>
+
+      {m.banned_at && (
+        <Alert color="dark" title="強制退会にしています">
+          {new Date(m.banned_at).toLocaleString('ja-JP')}・理由：{m.banned_reason ?? '―'}
+        </Alert>
+      )}
 
       {m.suspended_at && (
         <Alert color="red" title="利用を停止しています">
@@ -232,12 +290,144 @@ export default function MemberDetailPage() {
         )}
       </Card>
 
+      {/* A7（#213）：この会員に送ったお知らせと、読んだかどうか */}
+      <Card withBorder radius="md">
+        <Title order={4} mb="sm">
+          送ったお知らせ
+        </Title>
+        {(m.notices ?? []).length === 0 ? (
+          <Text c="dimmed">ありません</Text>
+        ) : (
+          <Table>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th w={170}>送った日時</Table.Th>
+                <Table.Th w={90}>種類</Table.Th>
+                <Table.Th>題・本文</Table.Th>
+                <Table.Th w={120}>送った管理者</Table.Th>
+                <Table.Th w={170}>読んだ日時</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {m.notices.map((n: any) => (
+                <Table.Tr key={n.id}>
+                  <Table.Td>{new Date(n.created_at).toLocaleString('ja-JP')}</Table.Td>
+                  <Table.Td>
+                    <Badge color={n.kind === 'warning' ? 'red' : 'blue'}>
+                      {n.kind === 'warning' ? '注意' : 'お知らせ'}
+                    </Badge>
+                  </Table.Td>
+                  <Table.Td>
+                    <Text fw={600}>{n.title}</Text>
+                    <Text size="sm" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                      {n.body}
+                    </Text>
+                  </Table.Td>
+                  <Table.Td>{n.sent_by ?? '―'}</Table.Td>
+                  <Table.Td>
+                    {n.read_at ? (
+                      new Date(n.read_at).toLocaleString('ja-JP')
+                    ) : (
+                      <Badge color="yellow">まだ読んでいない</Badge>
+                    )}
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        )}
+      </Card>
+
+      {/* A1（#211）：停止の履歴（前は、解くと、理由と日時が消えていた） */}
+      <Card withBorder radius="md">
+        <Title order={4} mb="sm">
+          停止の履歴
+        </Title>
+        {(m.suspensions ?? []).length === 0 ? (
+          <Text c="dimmed">ありません</Text>
+        ) : (
+          <Table>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>止めた日時</Table.Th>
+                <Table.Th>止めた管理者</Table.Th>
+                <Table.Th>理由</Table.Th>
+                <Table.Th>解いた日時</Table.Th>
+                <Table.Th>解いた管理者</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {m.suspensions.map((s: any) => (
+                <Table.Tr key={s.suspended_at}>
+                  <Table.Td>{new Date(s.suspended_at).toLocaleString('ja-JP')}</Table.Td>
+                  <Table.Td>{s.suspended_by ?? '―'}</Table.Td>
+                  <Table.Td style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{s.reason || '―'}</Table.Td>
+                  <Table.Td>
+                    {s.lifted_at ? (
+                      new Date(s.lifted_at).toLocaleString('ja-JP')
+                    ) : (
+                      <Badge color="red">止めている</Badge>
+                    )}
+                  </Table.Td>
+                  <Table.Td>{s.lifted_by ?? '―'}</Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        )}
+      </Card>
+
       <Modal opened={opened} onClose={() => setOpened(false)} title="利用を止めますか？">
         <Stack>
           <Text size="sm">止めると、この会員はログインできなくなります。</Text>
           <Textarea label="理由" value={reason} onChange={(e) => setReason(e.currentTarget.value)} />
           <Button color="red" loading={busy} onClick={suspend}>
             止める
+          </Button>
+        </Stack>
+      </Modal>
+      <Modal opened={noticeOpened} onClose={() => setNoticeOpened(false)} title="この会員に、お知らせを送りますか？">
+        <Stack>
+          <Select
+            label="種類"
+            data={[
+              { value: 'warning', label: '注意' },
+              { value: 'info', label: 'お知らせ' },
+            ]}
+            value={notice0.kind}
+            onChange={(v) => setNotice0({ ...notice0, kind: v ?? 'warning' })}
+            allowDeselect={false}
+          />
+          <TextInput
+            label="題"
+            value={notice0.title}
+            onChange={(e) => setNotice0({ ...notice0, title: e.currentTarget.value })}
+          />
+          <Textarea
+            label="本文"
+            minRows={4}
+            autosize
+            value={notice0.body}
+            onChange={(e) => setNotice0({ ...notice0, body: e.currentTarget.value })}
+          />
+          <Text size="sm" c="dimmed">
+            会員の画面に、帯で知らせます。送ったあとは、直せません。
+          </Text>
+          <Button loading={busy} onClick={sendNotice}>
+            送る
+          </Button>
+        </Stack>
+      </Modal>
+
+      <Modal opened={banOpened} onClose={() => setBanOpened(false)} title="強制退会にしますか？">
+        <Stack>
+          <Text size="sm">
+            この会員はログインできなくなり、ほかの会員から見えなくなります。同じメールアドレスでは、登録し直せません。
+            <b>元に戻す操作はありません。</b>
+          </Text>
+          <Textarea label="理由" value={banReason} onChange={(e) => setBanReason(e.currentTarget.value)} />
+          <Button color="red" loading={busy} onClick={ban}>
+            強制退会にする
           </Button>
         </Stack>
       </Modal>

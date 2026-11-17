@@ -1387,6 +1387,84 @@
   text-align: left;
 }
 
+/* ---- A7：運営からのお知らせ（#213） ---- */
+.gear-second {
+  right: 52px;
+}
+
+.notice-banner {
+  padding-top: 8px;
+  background: #eef4ff;
+}
+
+.notice-banner.is-warning {
+  background: #fdecec;
+}
+
+.notice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.notice {
+  padding: 16px;
+  background: #ffffff;
+  border: 1px solid #ece3e1;
+  border-radius: 16px;
+}
+
+.notice.is-warning {
+  border-color: #e9b4b4;
+  border-left: 4px solid #c23a3a;
+}
+
+.notice-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  color: #6f6368;
+}
+
+.notice-kind {
+  padding: 2px 8px;
+  font-weight: 600;
+  background: #f4eeec;
+  border-radius: 999px;
+}
+
+.notice.is-warning .notice-kind {
+  color: #ffffff;
+  background: #c23a3a;
+}
+
+.notice-new {
+  font-weight: 600;
+  color: #d12f5f;
+}
+
+.notice-date {
+  margin-left: auto;
+}
+
+.notice-title {
+  margin: 8px 0 4px;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.notice-body {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* ---- M2：登録と、メールアドレスの確認（#193） ---- */
 .hint {
   display: block;

@@ -8,6 +8,7 @@ use App\Http\Controllers\EmailVerificationController;
 use App\Http\Controllers\FirebaseTokenController;
 use App\Http\Controllers\LikeController;
 use App\Http\Controllers\MessageController;
+use App\Http\Controllers\NoticeController;
 use App\Http\Controllers\PasswordController;
 use App\Http\Controllers\PasswordResetController;
 use App\Http\Controllers\PlanController;
@@ -95,3 +96,7 @@ Route::put('/password-resets/{token}', [PasswordResetController::class, 'update'
 
 // M7 通報する（#202。docs/api/m7-reports.md）。見る・対応するのは、管理画面の側（backend/admin）
 Route::post('/me/reports', [ReportController::class, 'store']);
+
+// A7 運営からのお知らせ（#213。docs/api/m7-reports.md）。送るのは、管理画面の側
+Route::get('/me/notices', [NoticeController::class, 'index']);
+Route::post('/me/notices/{publicId}/read', [NoticeController::class, 'read']);
