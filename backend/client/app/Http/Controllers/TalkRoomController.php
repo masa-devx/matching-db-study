@@ -70,10 +70,16 @@ class TalkRoomController extends Controller
                 'nickname' => $profile?->nickname,
                 'birthday' => $profile?->birthday,   // 年齢ではなく生年月日をそのまま返す
                 'image' => $profile?->image,
-                'last_message' => $last ? ['body' => $last->body, 'created_at' => $last->created_at] : null,
+                // M6（#190）：最後の1件が自分のものか（mine）を足した。画面が「あなた：」を付けるのに使う
+                'last_message' => $last
+                    ? ['body' => $last->body, 'created_at' => $last->created_at, 'mine' => $last->sender_id === $me]
+                    : null,
                 'unread_count' => $unread,
                 // M3（#187）：自分が最後に開いた日時。null なら、まだ一度も開いていない（画面が「新しいマッチ」を見分けるのに使う）
                 'last_read_at' => $member->last_read_at,
+                // M6（#190）：相手が最後に開いた日時。画面が「既読」を出すのに使う（既読は有料の機能）。
+                // 無料の男性にも、そのまま返す（出さないのは画面だけ。API を直接呼べば、無料でも既読が分かる）
+                'partner_last_read_at' => $partner->last_read_at,
                 'created_at' => $room->created_at,
             ];
         }

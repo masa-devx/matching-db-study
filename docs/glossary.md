@@ -32,6 +32,7 @@
 | マッチする | 届いたいいねに、いいねを送り返すこと。マッチになる（M3） | 「マッチする」 | `POST /me/likes`（いいねを送るのと同じ） | `Matching`・`Like` | `likes`・`user_matches` | 無料の男性の1日10回の数に入れない |
 | スキップ | 届いたいいねや検索で、「この人は見送る」と決めること。相手には伝えない（M3。「お見送り」から、この名前に決めた） | 「スキップ」「スキップした相手」「元に戻す」 | `skips`・`user_id` | `Matching`・`Skip` | `skips` | スキップした相手は、届いたいいねにも検索にも出ない。ブロックと違い、相手からは自分が見える |
 | 新しいマッチ | マッチしたばかりで、まだ一度も開いていなくて、まだ1通もないトークルームの相手（M3。#187） | メッセージのタブの上の「新しいマッチ」。タブのバッジにも数える | `last_read_at`（トークの一覧の応答） | `Messaging`・`TalkRoom` | `talk_room_members.last_read_at` が NULL で、`messages` に行がない | 今は、画面が判断している（改善版では API が返す） |
+| 既読 | 相手がトーク画面を開いて、自分のメッセージを読んだこと。有料の機能（男性の無料の会員には分からない。M6。#190） | 自分の吹き出しの下の「既読」 | `partner_last_read_at`（トークの一覧の応答） | `Messaging`・`TalkRoom` | 相手の `talk_room_members.last_read_at` | 今は、画面が判断している。API は、無料の会員にも日時を返してしまう（改善版で直す） |
 | マッチ | お互いにいいねした状態 | ― | `matches`・`match_id` | `Matching`・`UserMatch` | `user_matches` | `match` は PHP の予約語なので、クラスは `UserMatch` |
 | ブロック | 相手を自分から見えなくし、相手からも見えなくすること | ― | `blocks` | `Matching`・`Block` | `blocks` | |
 | 退会 | 会員をやめること | 退会 | `DELETE /me` | `Members`・`Withdrawal` | `users.deleted_at` | |
