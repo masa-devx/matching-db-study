@@ -1216,6 +1216,324 @@
   min-height: 44px;
 }
 
+/* ---- M6：メッセージの一覧（#190）。いいねのタブ（箱を並べる形）と違い、区切り線だけの平らな行にする ---- */
+.chat-tools {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.chat-search {
+  flex: 1;
+  margin-top: 0;
+  border-radius: 999px;
+}
+
+.chat-filter {
+  flex-shrink: 0;
+  min-height: 44px;
+  font: inherit;
+  font-size: 14px;
+  color: #231c20;
+  cursor: pointer;
+}
+
+.chat-list {
+  margin: 0 -16px;
+  padding: 0;
+  list-style: none;
+}
+
+.chat-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-height: 80px;
+  padding: 12px 16px;
+  color: #231c20;
+  text-decoration: none;
+  border-bottom: 1px solid #ece3e1;
+}
+
+.chat-row:active {
+  background: #f4eeec;
+}
+
+.chat-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.chat-top,
+.chat-bottom {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.chat-name {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-time {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #6f6368;
+}
+
+.chat-preview {
+  overflow: hidden;
+  font-size: 14px;
+  color: #6f6368;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 未読のある行：名前と最新の1件を濃くし、時刻に色を付ける */
+.chat-row.is-unread .chat-name {
+  font-weight: 800;
+}
+
+.chat-row.is-unread .chat-preview {
+  font-weight: 600;
+  color: #231c20;
+}
+
+.chat-row.is-unread .chat-time {
+  font-weight: 600;
+  color: #d12f5f;
+}
+
+.chat-unread {
+  flex-shrink: 0;
+  min-width: 20px;
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 20px;
+  color: #ffffff;
+  text-align: center;
+  background: #d12f5f;
+  border-radius: 999px;
+}
+
+.chat-fs-link {
+  display: block;
+  min-height: 44px;
+  margin-top: 24px;
+  padding: 12px;
+  font-size: 12px;
+  color: #6f6368;
+  text-align: center;
+}
+
+/* ---- M6：トーク画面（#190） ---- */
+.talk-partner {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  min-height: 44px;
+  color: #231c20;
+  text-decoration: none;
+}
+
+.talk-partner-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.talk-partner-sub {
+  font-size: 12px;
+  color: #6f6368;
+}
+
+.talk-start {
+  margin: 8px 0 16px;
+  font-size: 12px;
+  color: #6f6368;
+  text-align: center;
+}
+
+.talk-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 日付の区切り：真ん中に小さい丸い札 */
+.talk-day {
+  display: flex;
+  justify-content: center;
+  margin: 8px 0;
+}
+
+.talk-day span {
+  padding: 4px 12px;
+  font-size: 12px;
+  color: #6f6368;
+  background: #f4eeec;
+  border-radius: 999px;
+}
+
+.msg {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  max-width: 82%;
+  animation: rise 250ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* 相手の写真は、時刻ではなく、吹き出しの下の端にそろえる（時刻の行の高さの分だけ上げる） */
+.msg-theirs > :first-child {
+  margin-bottom: 20px;
+}
+
+.msg-mine {
+  flex-direction: row-reverse;
+  align-self: flex-end;
+}
+
+.msg-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.msg-mine .msg-col {
+  align-items: flex-end;
+}
+
+/* 相手の吹き出しは白。自分の吹き出しは色つき（背景と見分けが付くよう、影を付ける） */
+.msg-theirs .bubble-body {
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(35, 28, 32, 0.06);
+}
+
+.msg-mine .bubble-body {
+  color: #ffffff;
+  background: linear-gradient(135deg, #d63a5f 0%, #dc4e3c 100%);
+  border-radius: 20px 20px 6px 20px;
+}
+
+.msg.is-pending {
+  opacity: 0.5;
+}
+
+.msg-meta {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  color: #6f6368;
+}
+
+.msg-read {
+  font-weight: 600;
+  color: #d12f5f;
+}
+
+.talk-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  margin: 32px 0;
+  text-align: center;
+}
+
+.talk-empty-title {
+  margin: 8px 0 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.talk-empty-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #6f6368;
+}
+
+/* 新しいメッセージの知らせ：入力欄の上に浮かせる */
+.talk-new {
+  position: sticky;
+  bottom: 72px;
+  z-index: 1;
+  display: block;
+  min-height: 44px;
+  margin: 0 auto;
+  padding: 0 16px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: #d12f5f;
+  background: #ffffff;
+  border: 1px solid #ece3e1;
+  border-radius: 999px;
+  box-shadow: 0 12px 40px rgba(35, 28, 32, 0.18);
+  cursor: pointer;
+}
+
+.talk-form {
+  align-items: flex-end;
+}
+
+.talk-input {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.talk-form textarea.input {
+  line-height: 1.5;
+  resize: none;
+  border-radius: 20px;
+}
+
+.talk-count {
+  position: absolute;
+  right: 12px;
+  bottom: -18px;
+  font-size: 12px;
+  color: #6f6368;
+}
+
+.talk-count.is-over {
+  font-weight: 600;
+  color: #c23a3a;
+}
+
+/* 無料の男性：入力欄の代わりに、有料会員への案内 */
+.talk-locked {
+  position: sticky;
+  bottom: -16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0 -16px -16px;
+  padding: 12px 16px 16px;
+  background: #ffffff;
+  border-top: 1px solid #ece3e1;
+}
+
+.talk-locked p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #231c20;
+}
+
 /* ---- M3：マッチからトークへ・新しいマッチ・スキップ（#187） ---- */
 .skip-link {
   min-height: 44px;
