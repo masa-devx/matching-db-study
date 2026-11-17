@@ -1,6 +1,7 @@
 import { Anchor, Badge, Card, Group, Loader, Pagination, Stack, Table, Text, Title } from '@mantine/core'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
+import { toDate } from '../../date'
 
 // 12 監査ログ（FR-ADMIN-011）。サイドバーには owner にだけ出す（API は役割を確かめ忘れている）
 const ACTIONS: Record<string, string> = {
@@ -98,7 +99,7 @@ export default function AuditLogsPage() {
               <Table.Tbody>
                 {data.data.map((log: any) => (
                   <Table.Tr key={log.id}>
-                    <Table.Td>{new Date(log.created_at).toLocaleString('ja-JP')}</Table.Td>
+                    <Table.Td>{toDate(log.created_at).toLocaleString('ja-JP')}</Table.Td>
                     <Table.Td>{log.admin}</Table.Td>
                     <Table.Td>
                       <Badge variant="light">{ACTIONS[log.action] ?? log.action}</Badge>

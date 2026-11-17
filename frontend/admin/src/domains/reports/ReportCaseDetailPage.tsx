@@ -18,6 +18,7 @@ import {
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { useNotice } from '../../Notice'
+import { toDate } from '../../date'
 
 // 理由の名前（会員の側の通報のモーダルにある一覧を、ここにもコピーした）
 const REASONS: Record<string, string> = {
@@ -129,7 +130,7 @@ export default function ReportCaseDetailPage() {
 
       {c.status === 'closed' && (
         <Alert color="gray" title={`済み：${ACTIONS[c.action] ?? c.action ?? '―'}`}>
-          {c.closed_at ? new Date(c.closed_at).toLocaleString('ja-JP') : '―'}・{c.handled_by ?? '―'}
+          {c.closed_at ? toDate(c.closed_at).toLocaleString('ja-JP') : '―'}・{c.handled_by ?? '―'}
           {c.note && <Text mt="xs">{c.note}</Text>}
         </Alert>
       )}
@@ -184,7 +185,7 @@ export default function ReportCaseDetailPage() {
           <Table.Tbody>
             {c.reports.map((r: any) => (
               <Table.Tr key={r.id}>
-                <Table.Td>{new Date(r.created_at).toLocaleString('ja-JP')}</Table.Td>
+                <Table.Td>{toDate(r.created_at).toLocaleString('ja-JP')}</Table.Td>
                 <Table.Td>
                   <Anchor component={Link} to={`/members/${r.reporter.id}`}>
                     {r.reporter.nickname ?? '―'}
@@ -197,7 +198,7 @@ export default function ReportCaseDetailPage() {
                     <Blockquote
                       p="xs"
                       mt={r.detail ? 'xs' : 0}
-                      cite={`${new Date(r.message.created_at).toLocaleString('ja-JP')} のメッセージ`}
+                      cite={`${toDate(r.message.created_at).toLocaleString('ja-JP')} のメッセージ`}
                     >
                       <Text size="sm" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                         {r.message.body}
