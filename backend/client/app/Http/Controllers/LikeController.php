@@ -39,10 +39,15 @@ class LikeController extends Controller
         }
         $payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));
 
+        // M3（#184）：相手からもういいねが届いているとき（送り返す＝マッチする）は、1日10回の数に入れない。
+        // 先に、相手の id と、相手から自分へのいいねがあるかを読む（下で同じ2本を、もう一度読む）
+        $targetId = User::where('public_id', $request->input('user_id'))->value('id');
+        $received = Like::where('from_user_id', $targetId)->where('to_user_id', $payload->sub)->exists();
+
         // 07：男性の無料の会員は使えない（is_paid だけを見る。paid_until は見ない。送る・いいね・検索に写した）
         $myProfile = Profile::where('user_id', $payload->sub)->first();
         $myUser = User::find($payload->sub);
-        if ($myProfile?->gender === 'male' && ! $myUser->is_paid) {
+        if (! $received && $myProfile?->gender === 'male' && ! $myUser->is_paid) {
             // 無料の男性は1日10回まで。今日はアプリの時計（UTC）の日付。数えてから入れる（ロックなし）
             $today = Like::where('from_user_id', $payload->sub)->whereDate('created_at', now()->toDateString())->count();
             if ($today >= 10) {

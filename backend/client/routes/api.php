@@ -12,7 +12,9 @@ use App\Http\Controllers\PasswordController;
 use App\Http\Controllers\PlanController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PurchaseController;
+use App\Http\Controllers\ReceivedLikeController;
 use App\Http\Controllers\SearchConditionController;
+use App\Http\Controllers\SkipController;
 use App\Http\Controllers\TalkRoomController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserMatchController;
@@ -78,3 +80,9 @@ Route::delete('/me/search-conditions/{publicId}', [SearchConditionController::cl
 
 // M1 設定画面（#181）。パスワードを変える（docs/api/01b-auth.md）
 Route::put('/me/password', [PasswordController::class, 'update']);
+
+// M3 届いたいいねと、スキップ（#184。docs/api/02-likes.md）。送り返すのは、今ある POST /me/likes
+Route::get('/me/received-likes', [ReceivedLikeController::class, 'index']);
+Route::post('/me/skips', [SkipController::class, 'store']);
+Route::get('/me/skips', [SkipController::class, 'index']);
+Route::delete('/me/skips/{publicId}', [SkipController::class, 'destroy']);

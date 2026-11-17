@@ -15,6 +15,7 @@ import PurchasePage from './PurchasePage'
 import RegisterPage from './RegisterPage'
 import SearchConditionsPage from './SearchConditionsPage'
 import SearchPage from './SearchPage'
+import SentLikesPage from './SentLikesPage'
 import SettingsPage from './SettingsPage'
 import TalkFsPage from './TalkFsPage'
 import TalkPage from './TalkPage'
@@ -32,7 +33,9 @@ export default function App() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/home" element={<HomePage />} />
       <Route path="/users/:publicId" element={<UserPage />} />
+      {/* M3（#184）：いいねのタブは、届いたいいね。送ったいいねは、設定から開く */}
       <Route path="/likes" element={<LikesPage />} />
+      <Route path="/likes/sent" element={<SentLikesPage />} />
       {/* マッチした相手は、メッセージのタブで見る（マッチだけの画面は作らない）。05 から、トークの一覧 */}
       <Route path="/messages" element={<MessagesPage />} />
       {/* 05 トーク画面。ルームは public_id（UUID）で指す */}
