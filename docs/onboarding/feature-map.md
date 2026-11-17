@@ -2,12 +2,12 @@
 
 機能ごとに、画面・API・コントローラー・表をつなぐ。読みながら埋める（推測で埋めない。コードとルートで確かめた行だけ書く）。
 
-- 読む表・書く表は、コードから読み取り、2026-11-16 に流れる SQL で確かめた（38本すべて）。書き込みの API も、トランザクションの中で本当に流してから取り消した（メールと Firestore は偽物に差し替えた）。確かめた結果と SQL の本数は、末尾の「SQL で確かめた結果」
+- 読む表・書く表は、コードから読み取り、2026-11-16 に流れる SQL で確かめた（2026-11-16 にあった 38本すべて）。2026-11-17 に 04b（保存した検索条件）の4本が増えて 42本になった。この4本は、curl で実際に呼んで確かめた（`docs/api/04b-saved-searches.md` の「レガシー版で起きること」）。書き込みの API も、トランザクションの中で本当に流してから取り消した（メールと Firestore は偽物に差し替えた）。確かめた結果と SQL の本数は、末尾の「SQL で確かめた結果」
 - 行の番号は、会員の側は `backend/client/app/Http/Controllers/` のファイルの行（2026-11-16 に `refactored-repo` で読んだ）。移すとずれるので、テストの材料に使うときはメソッドの名前を正にする
 - **形の違う ID（`abc` など。UUID でない文字）は、どの API でも 500** になる。`public_id` は uuid の列なので、比べると PostgreSQL がエラー（22P02）を返す。下の表で「いない会員は 500」「いない相手でも 204」と書いたのは、形の正しい UUID のとき
 - 要件 ID と、返る状態コードの一覧は、ここには書かない。その API を移すチケットで、その API の分だけ書く（PR #132 のレビュー S14）
 
-## 会員の側（`backend/client`・24本）
+## 会員の側（`backend/client`・28本）
 
 全体：ルートにミドルウェアはない。ログインしているかは、各コントローラーの中で JWT を読んで確かめる。業務の処理はすべてコントローラーの中にある。
 
@@ -37,6 +37,10 @@
 | プランの一覧 | `PlansPage`・`PurchasePage` | `GET /api/plans` | `PlanController::index`（L21） | `profiles`・`plans` | ― | 男性だけ（女性は 403）。性別はプロフィールの今の値で決める（編集で書き換えられる）。`plans` の行をそのまま返す |
 | 購入する | `PurchasePage` | `POST /api/me/purchases` | `PurchaseController::store`（L24） | `profiles`・`plans`・`users` | `purchases`・`users.is_paid`・`users.paid_until` | **お金**。決済はせず、押したらすぐ有料。男性だけ。ないプランは 500。トランザクションがない（購入の記録と有料の状態がずれうる）。記録はプランを指すだけで、買ったときの値段を残さない。期限が過ぎていても古い期限から足す。`addMonths()` で月末があふれる |
 | 購入の記録 | `PlansPage` | `GET /api/me/purchases` | `PurchaseController::index`（L55） | `profiles`・`purchases`・`plans` | ― | 男性だけ。全件（ページなし）。1件ごとにプランを読む（1＋N）。値段と期間は「今の」プランのもの（管理画面で値段を変えると、前の記録の値段も変わる） |
+| 保存した検索条件の一覧 | `SearchPage` | `GET /api/me/search-conditions` | `SearchConditionController::index`（L27） | `search_conditions` | ― | 04b。自分の分を保存した順に。`user_id` にインデックスがなく、表を全部読む。行をそのまま返す（中の `id`・`user_id` も出る）。「使えるか」は返さず、画面が有料かどうかをもう一度判断する |
+| 検索条件を保存する | `SearchPage` | `POST /api/me/search-conditions` | `SearchConditionController::store`（L43） | `search_conditions`・（身長があれば）`profiles`・`users` | `search_conditions` | 04b。1人5件まで。**数えてから入れるだけ**（ロックもトランザクションもない。同時に10本送ると 11件になった）。条件も名前も確かめない（年齢 17・配列・文字だけも入る。名前なしは 500）。有料かどうかの確かめは検索からコピー（`is_paid` だけ。期限切れの会員が身長を保存できる） |
+| 保存した検索条件を直す | `SearchPage` | `PUT /api/me/search-conditions/{publicId}` | `SearchConditionController::update`（L81） | `search_conditions` | `search_conditions` | 04b。**安全の穴**：持ち主を確かめない（他人の条件を直せる）。送られた項目を全部入れるので、`user_id` を送ると他人の条件を自分のものにできる。有料かどうかの確かめがない（無料の男性が身長を足せる）。ない ID は 500 |
+| 保存した検索条件を消す | `SearchPage` | `DELETE /api/me/search-conditions/{publicId}` | `SearchConditionController::destroy`（L99） | ― | `search_conditions` | 04b。**安全の穴**：持ち主を確かめない（他人の条件を消せる）。ない ID でも 204 |
 
 ## 管理画面（`backend/admin`・14本）
 

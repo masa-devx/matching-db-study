@@ -23,6 +23,7 @@
 | ログイン・ログアウト | API を使える状態になる・やめる | ― | `/auth/login`・`/auth/logout` | `Auth`・`Session` | `users.last_login_at` | |
 | トークンの取り替え | 短い期限のトークンを、取り替え用のトークンで新しくすること（D-014） | ― | `/auth/refresh` | `Auth` | ― | 改善版だけ |
 | 検索 | 条件に合う相手を探すこと | タブは「検索」、ページの見出しは「さがす」 | `GET /users` | `Members`・`MemberSearch` | `users`・`profiles` | |
+| 保存した検索条件 | 会員が、検索の条件に名前を付けて取っておいたもの。1人5件まで（04b） | 検索のタブの上に、名前のボタンで並ぶ。「この条件を保存」 | `search-conditions`・`search_condition_id` | `Members`・`SearchCondition` | `search_conditions` | 条件の中身は `conditions`（`jsonb`）。項目は検索の API のクエリと同じ |
 | いいね | 相手に好意を送ること。1人の相手に1回 | いいね | `likes` | `Matching`・`Like` | `likes` | |
 | マッチ | お互いにいいねした状態 | ― | `matches`・`match_id` | `Matching`・`UserMatch` | `user_matches` | `match` は PHP の予約語なので、クラスは `UserMatch` |
 | ブロック | 相手を自分から見えなくし、相手からも見えなくすること | ― | `blocks` | `Matching`・`Block` | `blocks` | |
@@ -60,4 +61,5 @@ URL のパスの引数（`{<名詞>_id}`）と JSON のキーに使う名前。�
 | マッチ | `match_id` | `user_matches` の ID（まだ `public_id` がない。足すのはマッチを移すチケット） | |
 | プラン | `plan_id` | `plans` の ID（まだ `public_id` がない。足すのはプランを移すチケット） | 今の URL は連番の id |
 | 監査ログ | `audit_log_id` | `admin_audit_logs` の ID（まだ `public_id` がない。1件を指す API を足すときに足す） | 1件を指す API は、まだない |
+| 保存した検索条件 | `search_condition_id` | `search_conditions.public_id` | 今の URL のルートでは `{publicId}` |
 
