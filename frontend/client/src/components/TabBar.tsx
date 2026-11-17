@@ -13,6 +13,8 @@ const TABS = [
 
 export default function TabBar() {
   const [unread, setUnread] = useState(0)
+  // M3（#184）：届いたいいねのうち、まだ返事をしていない人数（いいねのタブのバッジ）
+  const [received, setReceived] = useState(0)
   const location = useLocation()
 
   useEffect(() => {
@@ -24,6 +26,12 @@ export default function TabBar() {
       .then((rooms) =>
         setUnread(Array.isArray(rooms) ? rooms.reduce((n: number, r: any) => n + (r.unread_count ?? 0), 0) : 0),
       )
+    // M3：届いたいいねの一覧を全部読んで、件数だけを使う（数だけを返す API はない。画面が変わるたびに読む）
+    fetch(`${api}/api/me/received-likes`, {
+      headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+    })
+      .then((r) => r.json())
+      .then((likes) => setReceived(Array.isArray(likes) ? likes.length : 0))
   }, [location.pathname])
 
   return (
@@ -32,6 +40,11 @@ export default function TabBar() {
         <NavLink key={t.to} to={t.to} viewTransition className="tab">
           <span className="tab-icon">
             <Icon name={t.icon} />
+            {t.to === '/likes' && received > 0 && (
+              <span key={received} className="tab-badge">
+                {received > 99 ? '99+' : received}
+              </span>
+            )}
             {t.to === '/messages' && unread > 0 && (
               <span key={unread} className="tab-badge">
                 {unread > 99 ? '99+' : unread}

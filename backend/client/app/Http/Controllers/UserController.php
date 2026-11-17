@@ -8,6 +8,7 @@ use App\Mail\VerifyMail;
 use App\Models\Block;
 use App\Models\Like;
 use App\Models\Profile;
+use App\Models\Skip;
 use App\Models\User;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
@@ -75,12 +76,16 @@ class UserController extends Controller
         $blockedMe = Block::where('blocked_id', $payload->sub)->pluck('blocker_id');   // 索引がなく、表を全部読む
         $blockIds = $blocked->merge($blockedMe);
 
+        // M3（#184）：スキップした相手も、同じ形で PHP に持ってきて除く（索引がなく、表を全部読む）
+        $skipIds = Skip::where('skipper_id', $payload->sub)->pluck('skipped_id');
+
         $page = (int) $request->input('page', 1);
 
         $query = User::whereNotNull('email_verified_at')
             ->where('id', '!=', $payload->sub)
             ->whereNotIn('id', $likedIds)
             ->whereNotIn('id', $blockIds)
+            ->whereNotIn('id', $skipIds)
             // 06：退会した会員を除くのは、ここ（検索）だけ
             ->whereNull('deleted_at')
             // 条件は profiles にあるので exists（相関サブクエリ）で絞る。送られた条件だけを足し、値は確かめない
