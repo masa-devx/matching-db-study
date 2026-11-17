@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router'
 import Avatar from './components/Avatar'
 import Button from './components/Button'
 import ConfirmDialog from './components/ConfirmDialog'
+import ReportDialog from './components/ReportDialog'
 import Icon from './components/Icon'
 import { SkeletonTalk } from './components/Skeleton'
 import { useToast } from './components/Toast'
@@ -21,6 +22,8 @@ export default function TalkPage() {
   const [body, setBody] = useState('')
   // 06：ブロックの確かめのモーダルを開いているか
   const [confirming, setConfirming] = useState(false)
+  // M7（#202）：通報のモーダル。null は閉じている。message があれば、そのメッセージを指す
+  const [reporting, setReporting] = useState<{ message: any } | null>(null)
   // 07：自分の性別（/api/me には出ないので、プロフィールをもう1回読む）と、誘導のモーダル
   const [myGender, setMyGender] = useState('')
   const [upsell, setUpsell] = useState(false)
@@ -230,6 +233,12 @@ export default function TalkPage() {
         <button type="button" className="danger-link talk-block" onClick={() => setConfirming(true)}>
           ブロック
         </button>
+        {/* M7（#202）：相手を通報する。メッセージを指すときは、吹き出しの下の「通報」から */}
+        {partner?.user_id && (
+          <button type="button" className="danger-link talk-block" onClick={() => setReporting({ message: null })}>
+            通報
+          </button>
+        )}
       </div>
 
       {done && messages.length > 0 && <p className="talk-start">これより前のメッセージはありません</p>}
@@ -274,6 +283,17 @@ export default function TalkPage() {
                       {sending
                         ? '送信中…'
                         : new Date(m.created_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
+                      {/* M7（#202）：相手のメッセージを指して、通報する */}
+                      {!mine && partner?.user_id && (
+                        <button
+                          type="button"
+                          className="msg-report"
+                          aria-label="このメッセージを通報する"
+                          onClick={() => setReporting({ message: m })}
+                        >
+                          通報
+                        </button>
+                      )}
                     </span>
                   </div>
                 </div>
@@ -336,6 +356,15 @@ export default function TalkPage() {
         <p>お互いに、検索・いいね・メッセージに出なくなります。あとで解除できます。</p>
       </ConfirmDialog>
       <UpsellDialog open={upsell} onClose={() => setUpsell(false)} />
+      <ReportDialog
+        open={reporting !== null}
+        userId={partner?.user_id ?? ''}
+        nickname={partner?.nickname ?? ''}
+        message={reporting?.message ? { id: reporting.message.id, body: reporting.message.body } : null}
+        onClose={() => setReporting(null)}
+        // ブロックもしたら、ブロックのときと同じく、トークの一覧に戻る
+        onDone={(blocked) => blocked && navigate('/messages', { viewTransition: true })}
+      />
     </div>
   )
 }

@@ -14,6 +14,7 @@ use App\Http\Controllers\PlanController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\ReceivedLikeController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SearchConditionController;
 use App\Http\Controllers\SkipController;
 use App\Http\Controllers\TalkRoomController;
@@ -91,3 +92,6 @@ Route::delete('/me/skips/{publicId}', [SkipController::class, 'destroy']);
 // M2 パスワードを忘れたときの再設定（#196。docs/api/01b-auth.md）。ログインしていない人が使う
 Route::post('/password-resets', [PasswordResetController::class, 'store']);
 Route::put('/password-resets/{token}', [PasswordResetController::class, 'update']);
+
+// M7 通報する（#202。docs/api/m7-reports.md）。見る・対応するのは、管理画面の側（backend/admin）
+Route::post('/me/reports', [ReportController::class, 'store']);
