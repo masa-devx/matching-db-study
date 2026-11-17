@@ -4,6 +4,7 @@ import DashboardPage from './domains/dashboard/DashboardPage'
 import MemberDetailPage from './domains/members/MemberDetailPage'
 import MembersPage from './domains/members/MembersPage'
 import MessagesPage from './domains/messages/MessagesPage'
+import TalkRoomPage from './domains/messages/TalkRoomPage'
 import ReportCaseDetailPage from './domains/reports/ReportCaseDetailPage'
 import ReportCasesPage from './domains/reports/ReportCasesPage'
 import SalesPage from './domains/sales/SalesPage'
@@ -33,7 +34,15 @@ export const DOMAINS: Domain[] = [
     element: <MembersPage />,
     children: [{ path: '/members/:publicId', element: <MemberDetailPage /> }],
   },
-  { path: '/messages', label: 'メッセージ', icon: 'chat', roles: ['owner', 'viewer'], element: <MessagesPage /> },
+  {
+    path: '/messages',
+    label: 'メッセージ',
+    icon: 'chat',
+    roles: ['owner', 'viewer'],
+    element: <MessagesPage />,
+    // A2（#221）：トークルームのやり取りを、続けて読む画面
+    children: [{ path: '/messages/rooms/:publicId', element: <TalkRoomPage /> }],
+  },
   // A7（#203）：通報。見るのは owner も viewer も。状態を変えるボタンは、画面の中で owner にだけ出す
   {
     path: '/reports',

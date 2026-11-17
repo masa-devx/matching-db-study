@@ -26,8 +26,28 @@ class AuditLogController extends Controller
         JWT::decode($token, new Key((string) config('app.key'), 'HS256'));
 
         $page = (int) $request->input('page', 1);
-        $total = DB::table('admin_audit_logs')->count();
-        $rows = DB::table('admin_audit_logs')->orderBy('id', 'desc')->offset(($page - 1) * 50)->limit(50)->get();
+        // A4（#221）：絞り込みを足した。どの列にもインデックスはない（主キーだけ）
+        $query = DB::table('admin_audit_logs');
+        if ($request->filled('admin')) {
+            // 管理者の名前の部分一致
+            $query->whereIn('admin_id', DB::table('admins')->where('name', 'like', '%'.$request->input('admin').'%')->select('id'));
+        }
+        if ($request->filled('action')) {
+            $query->where('action', $request->input('action'));
+        }
+        if ($request->filled('target')) {
+            // 対象の ID（会員や案件の public_id）の完全一致
+            $query->where('target_id', $request->input('target'));
+        }
+        // 期間：日付の文字をそのまま渡す（UTC の 0時で切る。日本の日付とは 9時間ずれる。日付でない文字は 500）
+        if ($request->filled('from')) {
+            $query->where('created_at', '>=', $request->input('from'));
+        }
+        if ($request->filled('to')) {
+            $query->where('created_at', '<', $request->input('to'));   // 「まで」の日は入らない
+        }
+        $total = (clone $query)->count();
+        $rows = $query->orderBy('id', 'desc')->offset(($page - 1) * 50)->limit(50)->get();
 
         $data = [];
         foreach ($rows as $log) {
