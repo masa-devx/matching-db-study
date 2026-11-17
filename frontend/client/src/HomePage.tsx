@@ -141,12 +141,12 @@ export default function HomePage(props: any) {
               {me.profile?.prefecture && <span className="chip">{me.profile.prefecture}</span>}
               {me.profile?.height && <span className="chip">{me.profile.height}cm</span>}
               {/* #153：検索に使う6項目。答えたものだけ出す（相手のプロフィールと同じ並びを、ここにも書いた） */}
-              {me.profile?.body_type && <span className="chip">{me.profile.body_type}</span>}
-              {me.profile?.job && <span className="chip">{me.profile.job}</span>}
-              {me.profile?.income && <span className="chip">年収 {me.profile.income}</span>}
+              {me.profile?.body_type && <span className="chip">体型：{me.profile.body_type}</span>}
+              {me.profile?.job && <span className="chip">お仕事：{me.profile.job}</span>}
+              {me.profile?.income && <span className="chip">年収：{me.profile.income}</span>}
               {me.profile?.smoking && <span className="chip">タバコ：{me.profile.smoking}</span>}
               {me.profile?.drinking && <span className="chip">お酒：{me.profile.drinking}</span>}
-              {me.profile?.marital_status && <span className="chip">{me.profile.marital_status}</span>}
+              {me.profile?.marital_status && <span className="chip">結婚歴：{me.profile.marital_status}</span>}
             </div>
             <div className="card">
               <h2 className="section-title">自己紹介</h2>
