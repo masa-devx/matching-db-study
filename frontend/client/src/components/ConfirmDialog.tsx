@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef } from 'react'
+import { type ReactNode, useEffect, useId, useRef } from 'react'
 import Button from './Button'
 
 // 03c：確認のモーダル（FR-UI-023。docs/design.md の「確認モーダル」）。<dialog> を showModal() で開くので、
@@ -29,6 +29,9 @@ export default function ConfirmDialog({
 }: Props) {
   const ref = useRef<HTMLDialogElement>(null)
   const opener = useRef<HTMLElement | null>(null)
+  // #162：見出しの id を、モーダルごとに別にする。1つの画面にモーダルが4つあると、同じ id が4つになり、
+  // 読み上げがどのモーダルでも同じ見出しを読んでいた
+  const titleId = useId()
 
   useEffect(() => {
     const dialog = ref.current
@@ -44,7 +47,7 @@ export default function ConfirmDialog({
     <dialog
       ref={ref}
       className="sheet"
-      aria-labelledby="sheet-title"
+      aria-labelledby={titleId}
       onClose={() => {
         opener.current?.focus()
         if (open) onClose()
@@ -55,7 +58,7 @@ export default function ConfirmDialog({
       }}
     >
       <div className="sheet-body">
-        <h2 id="sheet-title" className="modal-title">
+        <h2 id={titleId} className="modal-title">
           {title}
         </h2>
         {children}

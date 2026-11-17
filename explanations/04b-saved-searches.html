@@ -170,7 +170,9 @@ alter table profiles
 create table incomes (
   code       smallint primary key,          -- 1〜5。並びは意味しない（番号を振り直さずに済むように）
   name       varchar(20) not null unique,   -- '500〜700万円'。画面に出す名前
-  sort_order smallint not null             -- 並びと、大小の比べは、こちらで行う
+  sort_order smallint not null,            -- 並びは、こちらで決める
+  min_man_yen integer not null,            -- 区分の下（万円）。年収の幅と比べる
+  max_man_yen integer                      -- 区分の上（万円）。いちばん上の区分は NULL（上限なし）
 );
 -- body_types・jobs・smoking_habits・drinking_habits・marital_statuses も同じ形
 
@@ -185,7 +187,7 @@ alter table profiles
     <tr><th>項目</th><th>レガシー版（文字）</th><th>改善版（コードとマスタ）</th></tr>
     <tr><td>選択肢にない値</td><td>入る（「1億円」も保存される）</td><td>外部キーが断る</td></tr>
     <tr><td>選択肢の名前を変える</td><td>前に保存した行と合わなくなる（全部の行を書き換える）</td><td>マスタの1行を直すだけ</td></tr>
-    <tr><td>年収「500万円以上」</td><td>比べられない。当てはまる区分を全部選んでもらう</td><td><code>sort_order</code> の大小で比べられる（「以上」にするか「区分をいくつか選ぶ」ままにするかは、まだ決めていない）</td></tr>
+    <tr><td>年収「500万円 〜 1000万円」</td><td>文字なので比べられない。画面が、幅を区分の名前の並びに直してから送る（幅の決まりが画面にある）</td><td>マスタの表に区分の下と上の金額を持たせ、API が幅と比べる</td></tr>
     <tr><td>選択肢の一覧の置き場</td><td>ホーム・条件の画面・試しのデータの3か所に同じ一覧</td><td>マスタの表の1か所。画面は API から読む</td></tr>
     <tr><td>1行の大きさ</td><td>文字（「ややぽっちゃり」は 21バイト＋長さの1バイト）</td><td><code>smallint</code>（2バイト）。表が少し小さくなる（効き目は、表の膨らみ（消えた行の跡）に比べると小さい）</td></tr>
     <tr><td>項目を足すとき</td><td>列を足し、画面の一覧を3か所直す</td><td>マスタの表と列を足す（どちらもマイグレーションは要る）</td></tr>
@@ -219,7 +221,8 @@ where u.email_verified_at is not null
   and u.id &lt;&gt; 26444
   and p.gender_code = 2
   and p.body_type_code in (3)
-  and p.income_code in (3, 4)                    -- 500〜700万円か 700〜1000万円（FR-SEARCH-017）
+  and p.income_code in (select code from incomes   -- 500万円〜1000万円の幅に入る区分（FR-SEARCH-017）
+                        where min_man_yen &gt;= 500 and max_man_yen &lt;= 1000)
   and p.smoking_code in (1)
   and not exists (select 1 from likes l where l.from_user_id = 26444 and l.to_user_id = u.id)
   and (u.last_login_at, u.public_id) &lt; ('2026-11-17 09:00:00+00', '0193…')   -- 続き（カーソル）
@@ -559,6 +562,7 @@ where "user_id" = 1
   <p>続けて、検索の無料と有料の分け方を入れ替えました（#150）。身長を無料にし、有料の機能を4つ（最終ログイン・登録して間もない会員・フリーワード・登録が新しい順）足しました。表は変えていません。有料かどうかの確かめは、検索（<code>UserController::index</code>）と保存（<code>SearchConditionController::store</code>）と画面（<code>SearchConditionsPage.tsx</code>）の3か所にコピーしてあるので、3か所を直しました。測った結果は <code>docs/api/04-search.md</code> の終わりにあります（<code>keyword=%</code> で全員に当たる・フリーワードと新しい会員は表を全部読む・期限切れの会員が使える）。</p>
   <p>さらに、検索の無料の項目を6つ足し、条件の画面を作り直しました（#153）。<code>profiles</code> に6つの列（文字）を足し、検索の条件に <code>whereIn</code> を6つ並べました。条件の画面は、まとまりごとのカード・下に固定したボタン・開いて選ぶ都道府県・身長のプルダウンに変えました。選択肢の一覧は、ホーム・条件の画面・試しのデータの3か所にコピーしてあります。表・SQL・インデックスの、レガシー版と改善版の比べは、4章の「検索の項目を足すときの、表・SQL・インデックス」にあります。</p>
   <p>最後に、今日足した分を5つの角度（要件・DB・セキュリティ・異常系・画面）でレビューし、指摘を直しました（#159）。画面の不具合は4つ：ブラウザの「戻る」で条件なしの結果に戻れない・形の違う保存した検索条件を押すと画面が真っ白になる・プルダウンに見えていない値が送られる・有料かどうかを読み終わる前に押すと確かめを通り抜ける。どれも、直す前にブラウザで再現させてから直しました。試しのデータの入れ方（6本の <code>update</code>）で表が7倍に膨らみ、測った数字が狂っていたことも、このレビューで分かりました。</p>
+  <p>レビューで人が決めた4つも入れました（#162）。無料の会員の手元に有料の条件が残ったら「有料の条件を外す」ボタンを見せる（黙って外さない）・年収は幅で選ぶ・最終ログインの条件に、登録したばかりで一度もログインしていない会員も出す・保存した検索条件の中身を画面で直せる。年収の幅は、レガシー版では画面が「当てはまる区分の名前の並び」に直してから送っています（文字のままでは大小を比べられないため）。幅の決まりが画面にある形で、改善版では API とマスタの表に移します。</p>
   <p>設計と違う所は1つです。直す（<code>PUT</code>）に、有料かどうかの確かめをコピーしませんでした。レガシー版でよく起きる「コピーし忘れ」を、そのまま測るためです。</p>
   <h3>9-2. 測った問題と数字</h3>
   <p>開発用の DB（保存した検索条件 59,805件）で、curl とブラウザで測りました。くわしい表は <code>docs/api/04b-saved-searches.md</code> の「レガシー版で起きること」にあります。</p>

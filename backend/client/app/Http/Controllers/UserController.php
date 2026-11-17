@@ -136,12 +136,23 @@ class UserController extends Controller
             });
 
         // #150：最終ログイン。24h・3d・7d のどれか（ほかの値は、何も絞らずに通る）
+        $since = null;
         if ($request->input('last_login') === '24h') {
-            $query->where('last_login_at', '>=', now()->subDay());
+            $since = now()->subDay();
         } elseif ($request->input('last_login') === '3d') {
-            $query->where('last_login_at', '>=', now()->subDays(3));
+            $since = now()->subDays(3);
         } elseif ($request->input('last_login') === '7d') {
-            $query->where('last_login_at', '>=', now()->subDays(7));
+            $since = now()->subDays(7);
+        }
+        if ($since) {
+            // #162：登録したばかりで、まだ一度もログインしていない会員（last_login_at が NULL）も出す。
+            // 登録した日時を、最終ログインの代わりに見る。or が入るので、last_login_at の索引があっても使いにくい
+            $query->where(function (Builder $w) use ($since) {
+                $w->where('last_login_at', '>=', $since)
+                    ->orWhere(function (Builder $n) use ($since) {
+                        $n->whereNull('last_login_at')->where('created_at', '>=', $since);
+                    });
+            });
         }
         // #150：登録して1週間以内の会員だけ。created_at に索引はない
         if ($request->filled('new_member')) {

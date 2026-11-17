@@ -12,7 +12,7 @@
 | --- | --- | --- | --- |
 | `GET /api/me/search-conditions` | 自分の保存した検索条件の一覧 | 作る（`SearchConditionController::index`） | 作る |
 | `POST /api/me/search-conditions` | 名前と条件を保存する | 作る（`store`） | 作る |
-| `PUT /api/me/search-conditions/{public_id}` | 名前と条件を直す | 作る（`update`） | 作る（改訂版の新しい URL では `PATCH`） |
+| `PUT /api/me/search-conditions/{public_id}` | 名前と条件を直す（#162 から、画面は名前だけ（`{"name": …}`）と、条件だけ（`{"conditions": …}`）の2通りで呼ぶ） | 作る（`update`） | 作る（改訂版の新しい URL では `PATCH`） |
 | `DELETE /api/me/search-conditions/{public_id}` | 消す | 作る（`destroy`） | 作る |
 | `GET /api/users`（04） | 保存した条件で検索する | 変えない（画面がクエリにして送る。有料の条件（#150 から、こだわり条件の4つ）の確かめは `is_paid` だけ） | 条件の決まり（`SearchConditions`）と有料の判断を、保存と同じものにする |
 

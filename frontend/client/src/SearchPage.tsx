@@ -66,6 +66,8 @@ export default function SearchPage() {
   const [done, setDone] = useState(false)
   // 07：検索の API が 403 を返したときの、誘導のモーダル
   const [upsell, setUpsell] = useState(false)
+  // #162：有料の条件のせいで探せなかったか（「条件に合う相手がいません」と出すと、0人だと読めてしまう）
+  const [paidBlocked, setPaidBlocked] = useState(false)
   const navigate = useNavigate()
   // #159：どうやってこの画面に来たか（POP は、ブラウザの「戻る」「進む」と再読み込み）
   const navigationType = useNavigationType()
@@ -98,8 +100,10 @@ export default function SearchPage() {
         // 07・#150：有料の条件を残したまま無料になったときなど、API が 403 を返したら、モーダルを出して空にする
         if (r.status === 403) {
           setUpsell(true)
+          setPaidBlocked(true)
           return []
         }
+        setPaidBlocked(false)
         return r.json()
       })
       .then((rows) => {
@@ -167,18 +171,20 @@ export default function SearchPage() {
       {searchParams.toString() !== '' && (
         <p className="search-summary">
           {[
-            conditions.age_min || conditions.age_max ? `${conditions.age_min ?? ''}〜${conditions.age_max ?? ''}歳` : '',
+            // #162：片方だけのときは「20歳〜」「〜30歳」。項目の名前を付ける（「普通・その他・吸う」だけでは、何の項目か分からない）
+            conditions.age_min || conditions.age_max
+              ? `${conditions.age_min ? `${conditions.age_min}歳` : ''}〜${conditions.age_max ? `${conditions.age_max}歳` : ''}`
+              : '',
             conditions.height_min || conditions.height_max
-              ? `${conditions.height_min ?? ''}〜${conditions.height_max ?? ''}cm`
+              ? `${conditions.height_min ? `${conditions.height_min}cm` : ''}〜${conditions.height_max ? `${conditions.height_max}cm` : ''}`
               : '',
             asList(conditions.prefecture).join('・'),
-            // #153：プロフィールの6項目
-            asList(conditions.body_type).join('・'),
-            asList(conditions.job).join('・'),
-            asList(conditions.income).join('・'),
-            asList(conditions.smoking).join('・'),
-            asList(conditions.drinking).join('・'),
-            asList(conditions.marital_status).join('・'),
+            asList(conditions.body_type).length > 0 ? `体型：${asList(conditions.body_type).join('・')}` : '',
+            asList(conditions.job).length > 0 ? `お仕事：${asList(conditions.job).join('・')}` : '',
+            asList(conditions.income).length > 0 ? `年収：${asList(conditions.income).join('・')}` : '',
+            asList(conditions.smoking).length > 0 ? `タバコ：${asList(conditions.smoking).join('・')}` : '',
+            asList(conditions.drinking).length > 0 ? `お酒：${asList(conditions.drinking).join('・')}` : '',
+            asList(conditions.marital_status).length > 0 ? `結婚歴：${asList(conditions.marital_status).join('・')}` : '',
             // #150：有料の4つ。言葉の対応を、条件の画面のプルダウンとは別に、ここにも書いた
             conditions.last_login === '24h' ? '24時間以内にログイン' : '',
             conditions.last_login === '3d' ? '3日以内にログイン' : '',
@@ -192,7 +198,26 @@ export default function SearchPage() {
         </p>
       )}
 
-      {!loading && users.length === 0 && (
+      {/* #162：有料の条件のせいで探せなかったとき（B1）。0人のときの文とは分ける。外すのは、会員が自分で押したときだけ */}
+      {!loading && paidBlocked && (
+        <div className="empty">
+          <p className="empty-text">この条件には、有料会員だけが使える条件が入っています</p>
+          <Button
+            small
+            onClick={() => {
+              const next: any = { ...conditions }
+              delete next.last_login
+              delete next.new_member
+              delete next.keyword
+              delete next.sort
+              setSearchParams(toQuery(next), { replace: true })
+            }}
+          >
+            有料の条件を外して探す
+          </Button>
+        </div>
+      )}
+      {!loading && users.length === 0 && !paidBlocked && (
         <div className="empty">
           <p className="empty-text">条件に合う相手がいません</p>
           <Button small onClick={() => navigate(`/search/conditions?${searchParams}`)}>
