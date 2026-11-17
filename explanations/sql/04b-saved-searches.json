@@ -1,0 +1,112 @@
+{
+ "operations": [
+  {
+   "title": "保存する（<code>POST /api/me/search-conditions</code>）。会員 1 が「東京・20代」を保存する",
+   "columns": [
+    {
+     "kind": "legacy",
+     "title": "レガシー版",
+     "count": "2本",
+     "code": "$count = SearchCondition::where('user_id', $me)->count();\nif ($count >= 5) {\n    return response()->json(['message' => '5件までです'], 422);\n}\n// 送られた条件を、確かめずにそのまま入れる\nSearchCondition::create([\n    'user_id' => $me,\n    'name' => $request->input('name'),\n    'conditions' => $request->input('conditions'),\n]);",
+     "sql": "-- ① 今の件数を数える（ロックなし）\nselect count(*) as \"aggregate\"\nfrom \"search_conditions\"\nwhere \"user_id\" = 1;\n\n-- ② 入れる（①と②のあいだに、ほかの保存が入れる）\ninsert into \"search_conditions\"\n  (\"user_id\", \"name\", \"conditions\", \"updated_at\", \"created_at\")\nvalues (1, '東京・20代',\n  '{\"age_min\":20,\"age_max\":29,\"prefecture\":[\"東京都\"]}',\n  '2026-11-17 09:46:12', '2026-11-17 09:46:12')\nreturning \"id\";",
+     "notes": [
+      "表がまだないので <code>DB::pretend()</code> で作らせた（以下も同じ）",
+      "同時に2回送ると、どちらも①で「4件」と数え、6件目が入る（FR-SAVED-005）",
+      "<code>conditions</code> の中身を確かめないので、年齢 17・身長 300・知らない項目も入る（FR-SAVED-007）"
+     ]
+    },
+    {
+     "kind": "improved",
+     "title": "改善版",
+     "count": "3本＋begin・commit",
+     "code": "$conditions = SearchConditions::fromArray($request->validated('conditions'));  // 検索と同じ検証\nDB::transaction(function () use ($me, $name, $conditions) {\n    // 会員の行を押さえてから数える（同じ会員の保存を1つずつにする）\n    DB::table('users')->where('id', $me->id)->lockForUpdate()->value('id');\n    if (SearchCondition::where('user_id', $me->id)->count() >= 5) {\n        throw new SavedSearchLimitExceeded;   // 422\n    }\n    SearchCondition::create([\n        'user_id' => $me->id, 'name' => $name, 'conditions' => $conditions->toArray(),\n    ]);\n});",
+     "sql": "begin;\n\n-- ① 会員の行を押さえる（同じ会員の2つ目は、ここで待つ）\nselect \"id\" from \"users\"\nwhere \"id\" = 1 limit 1\nfor update;\n\n-- ② 押さえたまま数える\nselect count(*) as \"aggregate\"\nfrom \"search_conditions\"\nwhere \"user_id\" = 1;\n\n-- ③ 入れる\ninsert into \"search_conditions\"\n  (\"user_id\", \"name\", \"conditions\", \"updated_at\", \"created_at\")\nvalues (1, '東京・20代',\n  '{\"age_min\":20,\"age_max\":29,\"prefecture\":[\"東京都\"]}',\n  '2026-11-17 09:46:12', '2026-11-17 09:46:12')\nreturning \"id\";\n\ncommit;",
+     "notes": [
+      "ロックの1本が増える。待つのは同じ会員の保存だけ",
+      "条件は、検索の API と同じ検証を通ったものだけが入る（NFR-SAVED-002）"
+     ]
+    }
+   ]
+  },
+  {
+   "title": "一覧を見る（<code>GET /api/me/search-conditions</code>）",
+   "columns": [
+    {
+     "kind": "legacy",
+     "title": "レガシー版",
+     "count": "1本",
+     "code": "$rows = SearchCondition::where('user_id', $me)->orderBy('id')->get();\n\nreturn response()->json($rows);   // 行をそのまま返す（中の id・user_id も出る）",
+     "sql": "select * from \"search_conditions\"\nwhere \"user_id\" = 1\norder by \"id\" asc;",
+     "notes": [
+      "「今の自分が使えるか」を返さない。画面が、有料かどうかの判断をもう一度コピーして決める"
+     ]
+    },
+    {
+     "kind": "improved",
+     "title": "改善版",
+     "count": "1本",
+     "code": "$rows = SearchCondition::where('user_id', $me->id)->orderBy('id')->get();\n\nreturn $rows->map(fn ($row) => [\n    'id' => $row->public_id,\n    'name' => $row->name,\n    // 今の決まりに合わない項目は捨てる（FR-SAVED-015）\n    'conditions' => SearchConditions::fromStored($row->conditions)->toArray(),\n    'usable' => $features->canUse($me, SearchConditions::fromStored($row->conditions)),\n]);",
+     "sql": "select * from \"search_conditions\"\nwhere \"user_id\" = 1\norder by \"id\" asc;",
+     "notes": [
+      "SQL は同じ。違うのは、読んだあとの扱い（古い項目を捨てる・使えるかを付ける）",
+      "5件までなので、ページ送りは要らない"
+     ]
+    }
+   ]
+  },
+  {
+   "title": "直す（<code>PUT /api/me/search-conditions/{id}</code>）",
+   "columns": [
+    {
+     "kind": "legacy",
+     "title": "レガシー版",
+     "count": "2本",
+     "code": "// 持ち主を確かめない\n$row = SearchCondition::where('public_id', $publicId)->first();\n$row->update($request->all());   // user_id も書き換えられる",
+     "sql": "-- ① ID だけで探す（だれのものでも見つかる）\nselect * from \"search_conditions\"\nwhere \"public_id\" = '0193aaaa-…-000000000001'\nlimit 1;\n\n-- ② 書き換える\nupdate \"search_conditions\"\nset \"name\" = '東京・30代',\n    \"conditions\" = '{\"age_min\":30,\"age_max\":39}',\n    \"updated_at\" = '2026-11-17 09:46:12'\nwhere \"id\" = 3;",
+     "notes": [
+      "他人の条件を書き換えられる（FR-SAVED-006）",
+      "ない ID なら <code>first()</code> が null を返し、500 になる",
+      "<code>$request->all()</code> をそのまま渡すので、<code>user_id</code> を送ると持ち主を変えられる"
+     ]
+    },
+    {
+     "kind": "improved",
+     "title": "改善版",
+     "count": "1本",
+     "code": "$updated = SearchCondition::where('user_id', $me->id)   // 自分のものだけ\n    ->where('public_id', $publicId)\n    ->update(['name' => $name, 'conditions' => $conditions->toArray()]);\nif ($updated === 0) {\n    throw new SavedSearchNotFound;   // 404（他人のものも、ないものも同じ）\n}",
+     "sql": "update \"search_conditions\"\nset \"name\" = '東京・30代',\n    \"conditions\" = '{\"age_min\":30,\"age_max\":39}',\n    \"updated_at\" = '2026-11-17 09:46:12'\nwhere \"user_id\" = 1\n  and \"public_id\" = '0193aaaa-…-000000000001';",
+     "notes": [
+      "<code>where</code> に持ち主を入れる。変わった行が 0 なら 404",
+      "読んでから書く2本が、1本になる"
+     ]
+    }
+   ]
+  },
+  {
+   "title": "消す（<code>DELETE /api/me/search-conditions/{id}</code>）",
+   "columns": [
+    {
+     "kind": "legacy",
+     "title": "レガシー版",
+     "count": "1本",
+     "code": "SearchCondition::where('public_id', $publicId)->delete();\n\nreturn response()->noContent();   // 消えなくても 204",
+     "sql": "delete from \"search_conditions\"\nwhere \"public_id\" = '0193aaaa-…-000000000001';",
+     "notes": [
+      "他人の条件を消せる（FR-SAVED-006）",
+      "ない ID でも 204 を返す（FR-SAVED-004 は 404）"
+     ]
+    },
+    {
+     "kind": "improved",
+     "title": "改善版",
+     "count": "1本",
+     "code": "$deleted = SearchCondition::where('user_id', $me->id)\n    ->where('public_id', $publicId)\n    ->delete();\nif ($deleted === 0) {\n    throw new SavedSearchNotFound;   // 404\n}",
+     "sql": "delete from \"search_conditions\"\nwhere \"user_id\" = 1\n  and \"public_id\" = '0193aaaa-…-000000000001';",
+     "notes": [
+      "消えた行が 0 なら 404"
+     ]
+    }
+   ]
+  }
+ ]
+}
