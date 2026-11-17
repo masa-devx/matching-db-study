@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router'
+import { useLocation, useNavigate, useParams } from 'react-router'
 import Button from './components/Button'
 import Icon from './components/Icon'
 import { SkeletonProfile } from './components/Skeleton'
@@ -13,6 +13,8 @@ export default function PurchasePage() {
   const [sending, setSending] = useState(false)
   const toast = useToast()
   const navigate = useNavigate()
+  // M8（#198）：どの画面から来たか。買ったあと、そこに戻す（なければ、プランの一覧）
+  const from = useLocation().state?.from
   const api = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
   const headers = { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` }
 
@@ -45,7 +47,8 @@ export default function PurchasePage() {
     }).then(() => {
       // ステータスを見ない
       toast('有料会員になりました')
-      navigate('/plans', { viewTransition: true })
+      // M8：トークや検索から来た人は、その画面に戻す（買った目的を、すぐ果たせるように）
+      navigate(from ?? '/plans', { viewTransition: true })
     })
   }
 
@@ -72,6 +75,14 @@ export default function PurchasePage() {
       <div className="card">
         <h2 className="section-title">{plan.name}</h2>
         <p>{plan.price.toLocaleString()}円</p>
+        <p>期間：{plan.months}か月</p>
+        {/* M8：今の期限と、そこから延びることを、はっきり書く（2重に払うことにならないかが、分からなかった） */}
+        {me.is_paid && me.paid_until && (
+          <p>
+            今の期限：{new Date(me.paid_until).toLocaleDateString('ja-JP')}（今の期限に、{plan.months}
+            か月を足します。残りの期間は、なくなりません）
+          </p>
+        )}
         <p>購入すると、{until.toLocaleDateString('ja-JP')} まで有料会員になります。</p>
         <p className="muted-text">これは学習用です。お金は払いません。</p>
       </div>

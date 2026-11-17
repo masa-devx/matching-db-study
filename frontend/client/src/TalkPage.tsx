@@ -260,7 +260,11 @@ export default function TalkPage() {
                     <span>{dayLabel(m.created_at)}</span>
                   </div>
                 )}
-                <div className={['msg', mine ? 'msg-mine' : 'msg-theirs', sending && 'is-pending'].filter(Boolean).join(' ')}>
+                <div
+                  className={['msg', mine ? 'msg-mine' : 'msg-theirs', sending && 'is-pending']
+                    .filter(Boolean)
+                    .join(' ')}
+                >
                   {/* M6：相手の吹き出しには、小さい写真を付ける */}
                   {!mine && partner && <Avatar image={partner.image} name={partner.nickname} size={28} />}
                   <div className="msg-col">
@@ -293,7 +297,8 @@ export default function TalkPage() {
             <span className="paid-mark">有料</span>{' '}
             メッセージを送る・既読が分かる、は有料会員の機能です。届いたメッセージは読めます。
           </p>
-          <Link to="/plans" viewTransition className="button">
+          {/* M8（#198）：買ったあと、このトークに戻れるよう、来た画面を渡す */}
+          <Link to="/plans" state={{ from: `/messages/${roomId}` }} viewTransition className="button">
             有料会員になる
           </Link>
         </div>
