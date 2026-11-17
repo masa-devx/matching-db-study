@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router'
 import './App.css'
 import BlocksPage from './BlocksPage'
 import TabBar from './components/TabBar'
+import VerifyBanner from './components/VerifyBanner'
 import { ToastProvider } from './components/Toast'
 import HomePage from './HomePage'
 import InfoPage from './InfoPage'
@@ -20,6 +21,7 @@ import SettingsPage from './SettingsPage'
 import TalkFsPage from './TalkFsPage'
 import TalkPage from './TalkPage'
 import UserPage from './UserPage'
+import VerifyPage from './VerifyPage'
 
 // レガシー版（03b）。画面の切り替えと、ログインしたあとの枠（四角の枠と、その下のタブ）を、ここに全部書く。
 // ログインしているかは、sessionStorage の token があるかだけで決める（期限切れでも「ログイン中」に見える）
@@ -29,8 +31,11 @@ export default function App() {
   const routes = (
     <Routes>
       <Route path="/" element={<Navigate to={token ? '/home' : '/login'} />} />
-      <Route path="/login" element={<LoginPage setToken={setToken} />} />
-      <Route path="/register" element={<RegisterPage />} />
+      {/* M2（#193）：ログインしたまま開いたら、ホームへ移す（前は、タブの付いた枠の中に、ログインの画面が出ていた） */}
+      <Route path="/login" element={token ? <Navigate to="/home" /> : <LoginPage setToken={setToken} />} />
+      <Route path="/register" element={token ? <Navigate to="/home" /> : <RegisterPage />} />
+      {/* M2：確認のメールのリンクが開く画面。ログインしていなくても開ける */}
+      <Route path="/verify/:token" element={<VerifyPage />} />
       <Route path="/home" element={<HomePage />} />
       <Route path="/users/:publicId" element={<UserPage />} />
       {/* M3（#184）：いいねのタブは、届いたいいね。送ったいいねは、設定から開く */}
@@ -74,6 +79,8 @@ export default function App() {
     <ToastProvider>
       <div className="shell">
         <div className="frame">
+          {/* M2（#193）：メールアドレスを確認していない会員への帯。どの画面でも、いちばん上に出る */}
+          <VerifyBanner />
           <main className="frame-main">{routes}</main>
           <TabBar />
         </div>

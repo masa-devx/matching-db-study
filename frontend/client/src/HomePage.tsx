@@ -99,6 +99,33 @@ export default function HomePage() {
       </div>
 
       <div className="profile-body">
+        {/* M2（#193）：まだ書いていない項目があれば、書くようにうながす（登録の直後は、ほとんどが空） */}
+        {!editing &&
+          [
+            !me.profile?.image && '写真',
+            !me.profile?.prefecture && '都道府県',
+            !me.profile?.height && '身長',
+            !me.profile?.introduction && '自己紹介',
+            !me.profile?.body_type && '体型',
+            !me.profile?.job && 'お仕事',
+          ].filter((x) => x).length > 0 && (
+            <div className="card profile-todo">
+              <h2 className="section-title">プロフィールを書きましょう</h2>
+              <p className="verify-text">
+                書いてある項目が多いほど、検索で見つけてもらいやすくなります。まだ書いていない項目：
+                {[
+                  !me.profile?.image && '写真',
+                  !me.profile?.prefecture && '都道府県',
+                  !me.profile?.height && '身長',
+                  !me.profile?.introduction && '自己紹介',
+                  !me.profile?.body_type && '体型',
+                  !me.profile?.job && 'お仕事',
+                ]
+                  .filter((x) => x)
+                  .join('・')}
+              </p>
+            </div>
+          )}
         {!editing ? (
           <>
             <div className="chips">

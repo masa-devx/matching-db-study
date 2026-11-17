@@ -56,6 +56,9 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
+    // M2（#193）：会員の側の画面の URL。確認のメールのリンクを、API ではなく画面（/verify/<確認用の文字>）に向けるのに使う
+    'frontend_url' => env('FRONTEND_URL', 'http://localhost:5173'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone
