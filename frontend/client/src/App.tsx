@@ -5,6 +5,7 @@ import BlocksPage from './BlocksPage'
 import TabBar from './components/TabBar'
 import VerifyBanner from './components/VerifyBanner'
 import { ToastProvider } from './components/Toast'
+import ForgotPasswordPage from './ForgotPasswordPage'
 import HomePage from './HomePage'
 import InfoPage from './InfoPage'
 import LikesPage from './LikesPage'
@@ -14,6 +15,7 @@ import MessagesPage from './MessagesPage'
 import PlansPage from './PlansPage'
 import PurchasePage from './PurchasePage'
 import RegisterPage from './RegisterPage'
+import ResetPasswordPage from './ResetPasswordPage'
 import SearchConditionsPage from './SearchConditionsPage'
 import SearchPage from './SearchPage'
 import SentLikesPage from './SentLikesPage'
@@ -36,6 +38,9 @@ export default function App() {
       <Route path="/register" element={token ? <Navigate to="/home" /> : <RegisterPage />} />
       {/* M2：確認のメールのリンクが開く画面。ログインしていなくても開ける */}
       <Route path="/verify/:token" element={<VerifyPage />} />
+      {/* M2（#196）：パスワードを忘れたとき。メールアドレスを入れる画面と、メールのリンクが開く画面 */}
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
       <Route path="/home" element={<HomePage />} />
       <Route path="/users/:publicId" element={<UserPage />} />
       {/* M3（#184）：いいねのタブは、届いたいいね。送ったいいねは、設定から開く */}
