@@ -70,6 +70,8 @@ class LikeController extends Controller
             ->where('to_user_id', $payload->sub)
             ->first();
         $matched = false;
+        // M3（#187）：マッチしたときに、トークルームの ID を返す（画面が、その相手のトークへ直接移れるように）
+        $roomId = null;
         if ($reverse) {
             // user1_id に送り返した人、user2_id に先に送っていた人（向きがそろわない。組の UNIQUE もない）
             $match = UserMatch::create([
@@ -102,9 +104,10 @@ class LikeController extends Controller
                 'lastReadAt' => ['nullValue' => null],
             ]])->throw();
             $matched = true;
+            $roomId = $room->public_id;
         }
 
-        return response()->json(array_merge($like->toArray(), ['matched' => $matched]), 201);
+        return response()->json(array_merge($like->toArray(), ['matched' => $matched, 'room_id' => $roomId]), 201);
     }
 
     public function index(Request $request): JsonResponse
@@ -134,6 +137,14 @@ class LikeController extends Controller
                 ->exists();
             // #46：画面がユーザー詳細へのリンクに使うので、相手の public_id を返す。1件ごとにもう1本
             $publicId = User::where('id', $like->to_user_id)->value('public_id');
+            // M3（#187）：マッチ済みなら、トークルームの ID も返す（一覧から、トークへ直接移れるように）。
+            // 自分のルームを全部読み、その中から相手のいるルームを探す。マッチ済みの1件ごとに3本増える
+            $roomId = null;
+            if ($matched) {
+                $myRooms = TalkRoomMember::where('user_id', $payload->sub)->pluck('talk_room_id');
+                $shared = TalkRoomMember::whereIn('talk_room_id', $myRooms)->where('user_id', $like->to_user_id)->value('talk_room_id');
+                $roomId = TalkRoom::where('id', $shared)->value('public_id');
+            }
             $result[] = [
                 'user_id' => $publicId,
                 'nickname' => $profile?->nickname,
@@ -141,6 +152,7 @@ class LikeController extends Controller
                 'image' => $profile?->image,
                 'liked_at' => $like->created_at,
                 'matched' => $matched,
+                'room_id' => $roomId,
             ];
         }
 

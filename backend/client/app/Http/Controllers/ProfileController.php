@@ -5,7 +5,11 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Models\Profile;
+use App\Models\TalkRoom;
+use App\Models\TalkRoomMember;
 use App\Models\User;
+use Firebase\JWT\JWT;
+use Firebase\JWT\Key;
 use Illuminate\Http\Request;
 
 /**
@@ -17,10 +21,23 @@ use Illuminate\Http\Request;
  */
 class ProfileController extends Controller
 {
-    public function show(string $publicId): User
+    public function show(Request $request, string $publicId): User
     {
         $user = User::where('public_id', $publicId)->firstOrFail();
         $user->load('profile');   // ここで2本目の SQL が流れ、応答に profile が入る
+
+        // M3（#187）：見ている人とこの会員がマッチしていれば、トークルームの ID を足す（画面が「メッセージを送る」を出せるように）。
+        // この API は、もともとトークンを見ない（ログインしていなくても読める）。トークンがあるときだけ、JWT を読んで探す。
+        // 送ったいいねの一覧（LikeController::index）に書いた探し方を、ここにもコピーした（3本増える）
+        $roomId = null;
+        $token = $request->bearerToken();
+        if ($token) {
+            $payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));
+            $myRooms = TalkRoomMember::where('user_id', $payload->sub)->pluck('talk_room_id');
+            $shared = TalkRoomMember::whereIn('talk_room_id', $myRooms)->where('user_id', $user->id)->value('talk_room_id');
+            $roomId = TalkRoom::where('id', $shared)->value('public_id');
+        }
+        $user->setAttribute('room_id', $roomId);
 
         return $user;
     }
