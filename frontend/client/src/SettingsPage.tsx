@@ -200,6 +200,18 @@ export default function SettingsPage(props: any) {
         </>
       )}
 
+      {/* M3（#184）：送ったいいねの一覧は、いいねのタブから、ここに移した */}
+      <h2 className="settings-title">いいね</h2>
+      <div className="settings-list">
+        <Link to="/likes/sent" viewTransition className="settings-row">
+          <span className="settings-main">
+            送ったいいね
+            <span className="settings-sub">自分がいいねした相手を見る</span>
+          </span>
+          {chevron}
+        </Link>
+      </div>
+
       <h2 className="settings-title">検索</h2>
       <div className="settings-list">
         <Link to="/search/conditions" viewTransition className="settings-row">

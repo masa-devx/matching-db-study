@@ -1166,6 +1166,56 @@
   accent-color: #d12f5f;
 }
 
+/* ---- M3：届いたいいね（#184） ---- */
+.likes-lead {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #6f6368;
+}
+
+.likes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0 0 24px;
+  padding: 0;
+  list-style: none;
+}
+
+.likes-card {
+  padding: 12px 16px 16px;
+}
+
+.likes-person {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-height: 64px;
+  color: #231c20;
+  text-decoration: none;
+}
+
+/* スキップ（小さめ）と、マッチする（大きめ）を横に並べ、間を空ける */
+.likes-actions {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.likes-skipped summary {
+  min-height: 44px;
+  padding: 12px 4px;
+  font-size: 14px;
+  color: #6f6368;
+  cursor: pointer;
+}
+
+.likes-skipped .row .button-small {
+  min-height: 44px;
+}
+
 /* ---- M1：設定（#181） ---- */
 .profile {
   position: relative;
