@@ -8,6 +8,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MemberController;
 use App\Http\Controllers\MessageController;
 use App\Http\Controllers\PlanController;
+use App\Http\Controllers\ReportCaseController;
 use App\Http\Controllers\SalesController;
 use App\Http\Controllers\SuspensionController;
 use Illuminate\Support\Facades\DB;
@@ -37,3 +38,8 @@ Route::get('/sales/monthly', [SalesController::class, 'monthly']);
 Route::get('/plans', [PlanController::class, 'index']);
 Route::put('/plans/{id}', [PlanController::class, 'update']);
 Route::get('/audit-logs', [AuditLogController::class, 'index']);
+
+// A7 通報（#203。docs/api/m7-reports.md）。通報するのは、会員の側（backend/client）
+Route::get('/report-cases', [ReportCaseController::class, 'index']);
+Route::get('/report-cases/{publicId}', [ReportCaseController::class, 'show']);
+Route::put('/report-cases/{publicId}', [ReportCaseController::class, 'update']);
