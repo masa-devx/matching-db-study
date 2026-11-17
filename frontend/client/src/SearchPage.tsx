@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useNavigationType, useSearchParams } from 'react-router'
 import Button from './components/Button'
 import { SkeletonCards } from './components/Skeleton'
+import { useToast } from './components/Toast'
 import UpsellDialog from './components/UpsellDialog'
 
 // レガシー版（04）。検索のタブ（/search）＝条件で相手を探して、2列のカードで見る。
@@ -69,6 +70,51 @@ export default function SearchPage() {
   // #162：有料の条件のせいで探せなかったか（「条件に合う相手がいません」と出すと、0人だと読めてしまう）
   const [paidBlocked, setPaidBlocked] = useState(false)
   const navigate = useNavigate()
+  const toast = useToast()
+
+  // M5（#198）：カードから、いいねとスキップ。相手のプロフィール（UserPage）に書いた送り方を、ここにもコピーした。
+  // 送ったら、その人を一覧から外す（次に検索しても、いいねした相手・スキップした相手は出ない）
+  const act = async (u: any, kind: 'likes' | 'skips') => {
+    const r = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me/${kind}`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${sessionStorage.getItem('token')}`,
+      },
+      body: JSON.stringify({ user_id: u.public_id }),
+    })
+    // 無料の男性が、いいねの1日10回を超えたときは 403。誘導のモーダルを出す
+    if (kind === 'likes' && r.status === 403) {
+      setUpsell(true)
+      return
+    }
+    if (!r.ok) {
+      toast(kind === 'likes' ? 'いいねできませんでした' : 'スキップできませんでした', 'error')
+      return
+    }
+    setUsers((now) => now.filter((x) => x.public_id !== u.public_id))
+    if (kind === 'skips') {
+      toast('スキップしました')
+      return
+    }
+    const d = await r.json()
+    // マッチの演出は、相手のプロフィールの画面にしかないので、ここでは文だけ
+    toast(d.matched ? 'マッチしました。メッセージのタブから話せます' : 'いいねしました')
+  }
+
+  // M5：最終ログインの目安。検索の条件（24時間・3日・1週間）と同じ区切りを、ここにも書いた。
+  // 一度もログインしていない会員は、登録した日時で見る（API と同じ）
+  const lastSeen = (u: any) => {
+    const at = u.last_login_at ?? u.created_at
+    if (!at) return ''
+    const hours = (Date.now() - new Date(at).getTime()) / 3600000
+    if (hours <= 24) return '24時間以内'
+    if (hours <= 72) return '3日以内'
+    if (hours <= 168) return '1週間以内'
+    return ''
+  }
+
   // #159：どうやってこの画面に来たか（POP は、ブラウザの「戻る」「進む」と再読み込み）
   const navigationType = useNavigationType()
 
@@ -184,7 +230,9 @@ export default function SearchPage() {
             asList(conditions.income).length > 0 ? `年収：${asList(conditions.income).join('・')}` : '',
             asList(conditions.smoking).length > 0 ? `タバコ：${asList(conditions.smoking).join('・')}` : '',
             asList(conditions.drinking).length > 0 ? `お酒：${asList(conditions.drinking).join('・')}` : '',
-            asList(conditions.marital_status).length > 0 ? `結婚歴：${asList(conditions.marital_status).join('・')}` : '',
+            asList(conditions.marital_status).length > 0
+              ? `結婚歴：${asList(conditions.marital_status).join('・')}`
+              : '',
             // #150：有料の4つ。言葉の対応を、条件の画面のプルダウンとは別に、ここにも書いた
             conditions.last_login === '24h' ? '24時間以内にログイン' : '',
             conditions.last_login === '3d' ? '3日以内にログイン' : '',
@@ -250,7 +298,31 @@ export default function SearchPage() {
                 </div>
                 <div className="user-card-sub">{u.profile?.prefecture}</div>
               </div>
+              {/* M5（#198）：登録して1週間以内の印と、最終ログインの目安 */}
+              {u.created_at && Date.now() - new Date(u.created_at).getTime() <= 7 * 86400000 && (
+                <span className="user-card-new">NEW</span>
+              )}
+              {lastSeen(u) && <span className="user-card-seen">{lastSeen(u)}</span>}
             </Link>
+            {/* M5：カードから、いいねとスキップ（前は、1人ずつプロフィールを開かないと、できなかった） */}
+            <div className="user-card-actions">
+              <button
+                type="button"
+                className="card-action"
+                aria-label={`${u.profile?.nickname ?? 'この相手'}をスキップする`}
+                onClick={() => act(u, 'skips')}
+              >
+                スキップ
+              </button>
+              <button
+                type="button"
+                className="card-action card-action-like"
+                aria-label={`${u.profile?.nickname ?? 'この相手'}にいいねする`}
+                onClick={() => act(u, 'likes')}
+              >
+                いいね
+              </button>
+            </div>
           </li>
         ))}
       </ul>

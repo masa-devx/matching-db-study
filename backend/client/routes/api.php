@@ -9,6 +9,7 @@ use App\Http\Controllers\FirebaseTokenController;
 use App\Http\Controllers\LikeController;
 use App\Http\Controllers\MessageController;
 use App\Http\Controllers\PasswordController;
+use App\Http\Controllers\PasswordResetController;
 use App\Http\Controllers\PlanController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PurchaseController;
@@ -86,3 +87,7 @@ Route::get('/me/received-likes', [ReceivedLikeController::class, 'index']);
 Route::post('/me/skips', [SkipController::class, 'store']);
 Route::get('/me/skips', [SkipController::class, 'index']);
 Route::delete('/me/skips/{publicId}', [SkipController::class, 'destroy']);
+
+// M2 パスワードを忘れたときの再設定（#196。docs/api/01b-auth.md）。ログインしていない人が使う
+Route::post('/password-resets', [PasswordResetController::class, 'store']);
+Route::put('/password-resets/{token}', [PasswordResetController::class, 'update']);

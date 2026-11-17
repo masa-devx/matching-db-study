@@ -116,6 +116,15 @@ export default function UserPage() {
     <div className="profile">
       {/* 03c：検索のカードの写真と同じ名前を付け、写真がそのまま大きくなってつながる（FR-UI-029） */}
       <div className="photo" style={{ viewTransitionName: `photo-${publicId}` }}>
+        {/* M9（#198）：戻るボタン。前は、ブラウザの「戻る」しかなかった。リンクを直接開いたとき（前の画面がない）は、検索へ */}
+        <button
+          type="button"
+          className="icon-button photo-back"
+          aria-label="前の画面へ戻る"
+          onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/search'))}
+        >
+          <Icon name="back" />
+        </button>
         {image ? (
           <img className="photo-img" src={image} alt="" />
         ) : (
