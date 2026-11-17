@@ -72,6 +72,11 @@ const fromQuery = (q: URLSearchParams) => {
   if (q.get('height_min')) c.height_min = q.get('height_min')
   if (q.get('height_max')) c.height_max = q.get('height_max')
   if (q.getAll('prefecture').length > 0) c.prefecture = q.getAll('prefecture')
+  // #150：有料の4つ
+  if (q.get('last_login')) c.last_login = q.get('last_login')
+  if (q.get('new_member')) c.new_member = q.get('new_member')
+  if (q.get('keyword')) c.keyword = q.get('keyword')
+  if (q.get('sort')) c.sort = q.get('sort')
   return c
 }
 
@@ -83,6 +88,11 @@ const toQuery = (c: any) => {
   if (c?.height_min) q.append('height_min', c.height_min)
   if (c?.height_max) q.append('height_max', c.height_max)
   for (const pref of c?.prefecture ?? []) q.append('prefecture', pref)
+  // #150：有料の4つ
+  if (c?.last_login) q.append('last_login', c.last_login)
+  if (c?.new_member) q.append('new_member', c.new_member)
+  if (c?.keyword) q.append('keyword', c.keyword)
+  if (c?.sort) q.append('sort', c.sort)
   return q
 }
 
@@ -97,8 +107,9 @@ export default function SearchConditionsPage() {
   const [name, setName] = useState('')
   const [renaming, setRenaming] = useState<any>(null)
   const [deleting, setDeleting] = useState<any>(null)
-  // 07：自分が男性の無料の会員か（身長の条件を使えない）と、誘導のモーダル
-  const [locked, setLocked] = useState(false)
+  // 07・#150：自分が男性の無料の会員か（有料の4つの条件を使えない）と、誘導のモーダル
+  // 読み終わるまでは null（印も欄も出さない。先に欄を出すと、無料の会員に有料の欄が一瞬見える）
+  const [locked, setLocked] = useState<any>(null)
   const [upsell, setUpsell] = useState(false)
   const toast = useToast()
   const navigate = useNavigate()
@@ -149,7 +160,10 @@ export default function SearchConditionsPage() {
   }
 
   // 04b：保存した検索条件を使えるか。有料かどうかの判断を、ここにもコピーした（is_paid だけを見る）
-  const lockedCondition = (c: any) => locked && (c.conditions?.height_min || c.conditions?.height_max)
+  // #150：有料の条件が、身長から4つ（最終ログイン・登録して間もない会員・フリーワード・登録が新しい順）に変わった
+  const lockedCondition = (c: any) =>
+    locked &&
+    (c.conditions?.last_login || c.conditions?.new_member || c.conditions?.keyword || c.conditions?.sort === 'new')
 
   // 04b：保存した検索条件を押したら、その条件で探す（FR-UI-044）。使えない条件はモーダルを出す（FR-UI-048）
   const useSaved = (c: any) => {
@@ -323,13 +337,8 @@ export default function SearchConditionsPage() {
             </select>
           </label>
         </div>
-        {/* 07：男性の無料の会員には、身長の条件に「有料」の印を出し、押すとモーダル */}
-        {locked && (
-          <button type="button" className="paid-lock" onClick={() => setUpsell(true)}>
-            身長で探す <span className="paid-mark">有料</span>
-          </button>
-        )}
-        <div className={locked ? 'search-range hidden-range' : 'search-range'}>
+        {/* #150：身長は無料になった */}
+        <div className="search-range">
           <label className="label">
             身長（下）
             <input
@@ -362,6 +371,57 @@ export default function SearchConditionsPage() {
             </button>
           ))}
         </div>
+        {/* #150：有料の4つ。男性の無料の会員には「有料」の印を出し、押すとモーダル。欄は出さない */}
+        <p className="label">こだわり条件</p>
+        {locked === true && (
+          <button type="button" className="paid-lock" onClick={() => setUpsell(true)}>
+            最終ログイン・新しい会員・フリーワード・並び替え <span className="paid-mark">有料</span>
+          </button>
+        )}
+        {locked === false && (
+          <div className="paid-fields">
+            <label className="label">
+              最終ログイン
+              <select
+                className="input"
+                value={form.last_login ?? ''}
+                onChange={(e) => setForm({ ...form, last_login: e.target.value })}
+              >
+                <option value="">指定しない</option>
+                <option value="24h">24時間以内</option>
+                <option value="3d">3日以内</option>
+                <option value="7d">1週間以内</option>
+              </select>
+            </label>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={!!form.new_member}
+                onChange={(e) => setForm({ ...form, new_member: e.target.checked ? '1' : '' })}
+              />
+              登録して1週間以内の会員だけ
+            </label>
+            <label className="label">
+              フリーワード（自己紹介・ニックネーム）
+              <input
+                className="input"
+                value={form.keyword ?? ''}
+                onChange={(e) => setForm({ ...form, keyword: e.target.value })}
+              />
+            </label>
+            <label className="label">
+              並び替え
+              <select
+                className="input"
+                value={form.sort ?? ''}
+                onChange={(e) => setForm({ ...form, sort: e.target.value })}
+              >
+                <option value="">ログインが新しい順</option>
+                <option value="new">登録が新しい順</option>
+              </select>
+            </label>
+          </div>
+        )}
         <Button type="submit">この条件で探す</Button>
         {/* 04b：今の欄の条件に、名前を付けて保存する（FR-UI-045） */}
         <Button type="button" variant="ghost" onClick={startSaving}>

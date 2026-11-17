@@ -19,7 +19,8 @@ use Illuminate\Http\Response;
  * だれが使うかは、AuthController::me() の JWT の処理を、メソッドごとにコピーして決める（これで 17〜20か所目）。
  * - 上限（5件）は、数えてから入れるだけ（ロックもトランザクションもない。同時に送ると超える）
  * - 条件の中身も名前も確かめない（jsonb に何でも入る）
- * - 有料かどうかの確かめは、検索（UserController::index）からコピーした（is_paid だけを見る）。直すほうにはコピーしていない
+ * - 有料かどうかの確かめは、検索（UserController::index）からコピーした（is_paid だけを見る）。直すほうにはコピーしていない。
+ *   #150 で、有料の条件が身長から4つ（最終ログイン・登録して間もない会員・フリーワード・登録が新しい順）に変わり、検索と保存の2か所を直した
  * - 直す・消すは、持ち主を確かめない（ID を知っていれば、他人の条件を変えられる）
  */
 class SearchConditionController extends Controller
@@ -52,8 +53,9 @@ class SearchConditionController extends Controller
         // 送られた条件を、確かめずにそのまま使う（配列でも文字でも通る）
         $conditions = $request->input('conditions');
 
-        // 07 の検索からコピーした：身長の条件は、男性の無料の会員は使えない（is_paid だけを見る。paid_until は見ない）
-        if (is_array($conditions) && (! empty($conditions['height_min']) || ! empty($conditions['height_max']))) {
+        // 検索（UserController::index）からコピーした：有料の機能（最終ログイン・登録して間もない会員・フリーワード・登録が新しい順）は、
+        // 男性の無料の会員は使えない（is_paid だけを見る。paid_until は見ない）。#150 で、身長からこの4つに入れ替えた
+        if (is_array($conditions) && (! empty($conditions['last_login']) || ! empty($conditions['new_member']) || ! empty($conditions['keyword']) || ($conditions['sort'] ?? null) === 'new')) {
             $myProfile = Profile::where('user_id', $payload->sub)->first();
             $myUser = User::find($payload->sub);
             if ($myProfile?->gender === 'male' && ! $myUser->is_paid) {
