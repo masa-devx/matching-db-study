@@ -20,7 +20,7 @@
 
 > 2026-11-17（#150）：有料の条件は、身長から4つ（`last_login`・`new_member`・`keyword`・`sort=new`）に入れ替えた。保存するときの確かめ（`SearchConditionController::store`）も、この4つを見る。下の表と「レガシー版で起きること」の「身長」は、入れ替える前に測った記録として残す。同じ問題は、この4つでそのまま起きる（期限切れの会員が保存できる・直すときは確かめない）。
 
-条件の中身（`conditions`）は、検索の API のクエリと同じ項目を持つ JSON のオブジェクト：`gender`・`age_min`・`age_max`・`prefecture`（都道府県の名前の配列）・`height_min`・`height_max`・`last_login`・`new_member`・`keyword`・`sort`。どれもなくてよい。
+条件の中身（`conditions`）は、検索の API のクエリと同じ項目を持つ JSON のオブジェクト：`gender`・`age_min`・`age_max`・`prefecture`（都道府県の名前の配列）・`height_min`・`height_max`・`body_type`・`job`・`income`・`smoking`・`drinking`・`marital_status`（#153。どれも名前の配列）・`last_login`・`new_member`・`keyword`・`sort`。どれもなくてよい。項目が6つ増えたが、`conditions` は `jsonb` なので、表は変えていない（NFR-SAVED-003）。
 
 ## `GET /api/me/search-conditions`（一覧）
 
