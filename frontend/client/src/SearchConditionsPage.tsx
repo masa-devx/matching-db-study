@@ -1,0 +1,412 @@
+import { useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router'
+import Button from './components/Button'
+import ConfirmDialog from './components/ConfirmDialog'
+import { useToast } from './components/Toast'
+import UpsellDialog from './components/UpsellDialog'
+
+// レガシー版（#147）。検索の条件の画面（/search/conditions）。
+// 検索の画面（SearchPage）の「絞り込み」から来る。条件を選ぶ欄と、保存した検索条件（04b）は、この画面にだけ出す。
+// 選んだ条件は、URL のクエリにして検索の画面に渡す。取る・送る・見せるを、全部この部品に書く。
+
+// 都道府県の名前を、ここに書き写す（API もホームの入力も、名前の文字で持つ）
+const PREFECTURES = [
+  '北海道',
+  '青森県',
+  '岩手県',
+  '宮城県',
+  '秋田県',
+  '山形県',
+  '福島県',
+  '茨城県',
+  '栃木県',
+  '群馬県',
+  '埼玉県',
+  '千葉県',
+  '東京都',
+  '神奈川県',
+  '新潟県',
+  '富山県',
+  '石川県',
+  '福井県',
+  '山梨県',
+  '長野県',
+  '岐阜県',
+  '静岡県',
+  '愛知県',
+  '三重県',
+  '滋賀県',
+  '京都府',
+  '大阪府',
+  '兵庫県',
+  '奈良県',
+  '和歌山県',
+  '鳥取県',
+  '島根県',
+  '岡山県',
+  '広島県',
+  '山口県',
+  '徳島県',
+  '香川県',
+  '愛媛県',
+  '高知県',
+  '福岡県',
+  '佐賀県',
+  '長崎県',
+  '熊本県',
+  '大分県',
+  '宮崎県',
+  '鹿児島県',
+  '沖縄県',
+]
+
+// 年齢のプルダウンに出す数（18〜99）。範囲は、要件（FR-SEARCH-009）からここに書き写した
+const AGES: number[] = []
+for (let age = 18; age <= 99; age++) AGES.push(age)
+
+// SearchPage からコピーした（URL のクエリを、条件の形に直す）
+const fromQuery = (q: URLSearchParams) => {
+  const c: any = {}
+  if (q.get('age_min')) c.age_min = q.get('age_min')
+  if (q.get('age_max')) c.age_max = q.get('age_max')
+  if (q.get('height_min')) c.height_min = q.get('height_min')
+  if (q.get('height_max')) c.height_max = q.get('height_max')
+  if (q.getAll('prefecture').length > 0) c.prefecture = q.getAll('prefecture')
+  return c
+}
+
+// SearchPage からコピーした（条件を URL のクエリに直す）
+const toQuery = (c: any) => {
+  const q = new URLSearchParams()
+  if (c?.age_min) q.append('age_min', c.age_min)
+  if (c?.age_max) q.append('age_max', c.age_max)
+  if (c?.height_min) q.append('height_min', c.height_min)
+  if (c?.height_max) q.append('height_max', c.height_max)
+  for (const pref of c?.prefecture ?? []) q.append('prefecture', pref)
+  return q
+}
+
+export default function SearchConditionsPage() {
+  // 検索の画面から、今の条件を URL のクエリでもらう
+  const [searchParams] = useSearchParams()
+  const [form, setForm] = useState<any>(fromQuery(searchParams))
+  // 04b：保存した検索条件（サーバーに5件まで）と、そのモーダル
+  const [saved, setSaved] = useState<any[]>([])
+  const [managing, setManaging] = useState(false)
+  const [naming, setNaming] = useState(false)
+  const [name, setName] = useState('')
+  const [renaming, setRenaming] = useState<any>(null)
+  const [deleting, setDeleting] = useState<any>(null)
+  // 07：自分が男性の無料の会員か（身長の条件を使えない）と、誘導のモーダル
+  const [locked, setLocked] = useState(false)
+  const [upsell, setUpsell] = useState(false)
+  const toast = useToast()
+  const navigate = useNavigate()
+
+  // 04b：保存した検索条件の一覧を読む（失敗・401 は考えない）
+  const loadSaved = () => {
+    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me/search-conditions`, {
+      headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+    })
+      .then((r) => r.json())
+      .then((rows) => setSaved(rows))
+  }
+
+  useEffect(() => {
+    // ログインが要るかの守りを、ここにも書く
+    if (!sessionStorage.getItem('token')) {
+      navigate('/login')
+      return
+    }
+    loadSaved()
+    // 07：男性の無料の会員かを知るために、自分と自分のプロフィールを読む（ホームと同じ2本を、ここにも書いた）
+    const headers = { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me`, { headers })
+      .then((r) => r.json())
+      .then((u) =>
+        fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/users/${u.public_id}`, { headers }),
+      )
+      .then((r) => r.json())
+      .then((u) => setLocked(u.profile?.gender === 'male' && !u.is_paid))
+  }, [])
+
+  const togglePref = (pref: string) => {
+    const now = form.prefecture ?? []
+    setForm({ ...form, prefecture: now.includes(pref) ? now.filter((x: string) => x !== pref) : [...now, pref] })
+  }
+
+  // 条件を URL のクエリにして、検索の画面に戻る。この画面の履歴は入れ替えるので、
+  // 検索の画面でブラウザの「戻る」を押すと、前の条件の結果に戻る（FR-UI-043）
+  const search = (c: any) => {
+    sessionStorage.setItem('searchConditions', JSON.stringify(c))
+    navigate(`/search?${toQuery(c)}`, { replace: true })
+  }
+
+  const apply = (e: any) => {
+    e.preventDefault()
+    // 入力を確かめない。年齢の下が上より大きくても、そのまま送る
+    search(form)
+  }
+
+  // 04b：保存した検索条件を使えるか。有料かどうかの判断を、ここにもコピーした（is_paid だけを見る）
+  const lockedCondition = (c: any) => locked && (c.conditions?.height_min || c.conditions?.height_max)
+
+  // 04b：保存した検索条件を押したら、その条件で探す（FR-UI-044）。使えない条件はモーダルを出す（FR-UI-048）
+  const useSaved = (c: any) => {
+    if (lockedCondition(c)) {
+      setUpsell(true)
+      return
+    }
+    search(c.conditions)
+  }
+
+  // 04b：「この条件を保存」。5件あるかは、画面が持っている一覧の数で見る（ほかの端末で足した分は知らない）
+  const startSaving = () => {
+    if (saved.length >= 5) {
+      toast('保存できるのは5件までです。どれかを消してください', 'error')
+      return
+    }
+    setName('')
+    setNaming(true)
+  }
+
+  const save = () => {
+    // 確かめるのは空かどうかだけ（長さは見ない。API も見ない）
+    if (!name) {
+      toast('名前を入れてください', 'error')
+      return
+    }
+    // 欄の値を、そのまま送る（数も文字のまま）
+    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me/search-conditions`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${sessionStorage.getItem('token')}`,
+      },
+      body: JSON.stringify({ name, conditions: form }),
+    }).then((r) => {
+      setNaming(false)
+      if (r.status === 403) {
+        setUpsell(true)
+        return
+      }
+      if (r.status === 422) {
+        toast('保存できるのは5件までです。どれかを消してください', 'error')
+        return
+      }
+      if (!r.ok) {
+        toast('保存できませんでした', 'error')
+        return
+      }
+      toast('保存しました')
+      loadSaved()
+    })
+  }
+
+  const rename = () => {
+    if (!name) {
+      toast('名前を入れてください', 'error')
+      return
+    }
+    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me/search-conditions/${renaming.public_id}`, {
+      method: 'PUT',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${sessionStorage.getItem('token')}`,
+      },
+      body: JSON.stringify({ name }),
+    }).then((r) => {
+      setRenaming(null)
+      if (!r.ok) {
+        toast('直せませんでした', 'error')
+        return
+      }
+      toast('名前を直しました')
+      loadSaved()
+    })
+  }
+
+  const remove = () => {
+    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me/search-conditions/${deleting.public_id}`, {
+      method: 'DELETE',
+      headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+    }).then((r) => {
+      setDeleting(null)
+      if (!r.ok) {
+        toast('消せませんでした', 'error')
+        return
+      }
+      toast('消しました')
+      loadSaved()
+    })
+  }
+
+  return (
+    <div>
+      <div className="search-head">
+        <h1 className="page-title">検索条件</h1>
+        <button className="button button-small button-ghost" onClick={() => navigate(-1)}>
+          戻る
+        </button>
+      </div>
+
+      {/* 04b：保存した検索条件。押すと、その条件で探す（FR-UI-044） */}
+      <h2 className="section-title">保存した検索条件</h2>
+      {saved.length === 0 && <p className="soon">まだありません。下で条件を選んで「この条件を保存」を押すと、ここに出ます。</p>}
+      {saved.length > 0 && (
+        <div className="saved-list">
+          {saved.map((c) => (
+            <span key={c.public_id} className="saved-item">
+              <button type="button" className="chip saved-chip" onClick={() => useSaved(c)}>
+                {c.name}
+                {lockedCondition(c) && <span className="paid-mark">有料</span>}
+              </button>
+              {managing && (
+                <>
+                  <button
+                    type="button"
+                    className="saved-action"
+                    onClick={() => {
+                      setName(c.name)
+                      setRenaming(c)
+                    }}
+                  >
+                    名前を直す
+                  </button>
+                  <button type="button" className="saved-action saved-danger" onClick={() => setDeleting(c)}>
+                    消す
+                  </button>
+                </>
+              )}
+            </span>
+          ))}
+          <button type="button" className="saved-action" onClick={() => setManaging(!managing)}>
+            {managing ? '終わる' : '編集'}
+          </button>
+        </div>
+      )}
+
+      <h2 className="section-title">条件を選ぶ</h2>
+      <form className="card search-form" onSubmit={apply}>
+        {/* #147：年齢は、数を打たずにプルダウンで選ぶ（FR-UI-050） */}
+        <div className="search-range">
+          <label className="label">
+            年齢（下）
+            <select
+              className="input"
+              value={form.age_min ?? ''}
+              onChange={(e) => setForm({ ...form, age_min: e.target.value })}
+            >
+              <option value="">指定しない</option>
+              {AGES.map((age) => (
+                <option key={age} value={age}>
+                  {age}歳
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="label">
+            年齢（上）
+            <select
+              className="input"
+              value={form.age_max ?? ''}
+              onChange={(e) => setForm({ ...form, age_max: e.target.value })}
+            >
+              <option value="">指定しない</option>
+              {AGES.map((age) => (
+                <option key={age} value={age}>
+                  {age}歳
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {/* 07：男性の無料の会員には、身長の条件に「有料」の印を出し、押すとモーダル */}
+        {locked && (
+          <button type="button" className="paid-lock" onClick={() => setUpsell(true)}>
+            身長で探す <span className="paid-mark">有料</span>
+          </button>
+        )}
+        <div className={locked ? 'search-range hidden-range' : 'search-range'}>
+          <label className="label">
+            身長（下）
+            <input
+              className="input"
+              type="number"
+              value={form.height_min ?? ''}
+              onChange={(e) => setForm({ ...form, height_min: e.target.value })}
+            />
+          </label>
+          <label className="label">
+            身長（上）
+            <input
+              className="input"
+              type="number"
+              value={form.height_max ?? ''}
+              onChange={(e) => setForm({ ...form, height_max: e.target.value })}
+            />
+          </label>
+        </div>
+        <p className="label">都道府県（選ばなければ全国）</p>
+        <div className="pref-list">
+          {PREFECTURES.map((pref) => (
+            <button
+              type="button"
+              key={pref}
+              className={(form.prefecture ?? []).includes(pref) ? 'chip chip-on' : 'chip'}
+              onClick={() => togglePref(pref)}
+            >
+              {pref}
+            </button>
+          ))}
+        </div>
+        <Button type="submit">この条件で探す</Button>
+        {/* 04b：今の欄の条件に、名前を付けて保存する（FR-UI-045） */}
+        <Button type="button" variant="ghost" onClick={startSaving}>
+          この条件を保存
+        </Button>
+        <Button type="button" variant="ghost" onClick={() => setForm({})}>
+          条件を全部外す
+        </Button>
+      </form>
+
+      <UpsellDialog open={upsell} onClose={() => setUpsell(false)} />
+      <ConfirmDialog
+        open={naming}
+        title="この条件を保存"
+        confirmLabel="保存する"
+        onConfirm={save}
+        onClose={() => setNaming(false)}
+      >
+        <label className="label">
+          名前（例：東京・20代）
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={renaming !== null}
+        title="名前を直す"
+        confirmLabel="直す"
+        onConfirm={rename}
+        onClose={() => setRenaming(null)}
+      >
+        <label className="label">
+          名前
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={deleting !== null}
+        title={`「${deleting?.name}」を消しますか？`}
+        confirmLabel="消す"
+        danger
+        onConfirm={remove}
+        onClose={() => setDeleting(null)}
+      >
+        <p>保存した検索条件を消します。元に戻せません。</p>
+      </ConfirmDialog>
+    </div>
+  )
+}

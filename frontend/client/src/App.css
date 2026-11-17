@@ -1142,6 +1142,13 @@
   display: none;
 }
 
+/* ---- #147：検索の条件の画面 ---- */
+.search-summary {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: #6b5f63;
+}
+
 /* ---- 04b：保存した検索条件 ---- */
 .saved-list {
   display: flex;
