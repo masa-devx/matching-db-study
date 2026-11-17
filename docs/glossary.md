@@ -24,6 +24,8 @@
 | トークンの取り替え | 短い期限のトークンを、取り替え用のトークンで新しくすること（D-014） | ― | `/auth/refresh` | `Auth` | ― | 改善版だけ |
 | 検索 | 条件に合う相手を探すこと | タブは「検索」、ページの見出しは「さがす」 | `GET /users` | `Members`・`MemberSearch` | `users`・`profiles` | |
 | 保存した検索条件 | 会員が、検索の条件に名前を付けて取っておいたもの。1人5件まで（04b） | 検索のタブの上に、名前のボタンで並ぶ。「この条件を保存」 | `search-conditions`・`search_condition_id` | `Members`・`SearchCondition` | `search_conditions` | 条件の中身は `conditions`（`jsonb`）。項目は検索の API のクエリと同じ |
+| プロフィールの6項目 | 検索に使う、体型・お仕事・年収・タバコ・お酒・結婚歴。書かなくてよい（未回答）（#153） | ホームの「プロフィールを編集」・条件の画面の「プロフィール」 | `body_type`・`job`・`income`・`smoking`・`drinking`・`marital_status` | `Members`・`Profile` | `profiles` の同じ名前の列（今は文字。改善版はコードとマスタの表） | 条件を付けた項目が未回答の会員は、検索に出ない |
+| こだわり条件 | 検索の有料の機能。最終ログイン・登録して間もない会員・フリーワード・登録が新しい順（#150） | 条件の画面の「こだわり条件」 | `last_login`・`new_member`・`keyword`・`sort` | `Members`・`MemberSearch` | ― | 男性の無料の会員は使えない。身長は無料 |
 | いいね | 相手に好意を送ること。1人の相手に1回 | いいね | `likes` | `Matching`・`Like` | `likes` | |
 | マッチ | お互いにいいねした状態 | ― | `matches`・`match_id` | `Matching`・`UserMatch` | `user_matches` | `match` は PHP の予約語なので、クラスは `UserMatch` |
 | ブロック | 相手を自分から見えなくし、相手からも見えなくすること | ― | `blocks` | `Matching`・`Block` | `blocks` | |
