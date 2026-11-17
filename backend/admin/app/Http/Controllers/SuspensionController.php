@@ -42,6 +42,16 @@ class SuspensionController extends Controller
             'suspended_reason' => $request->input('reason'),
         ]);
 
+        // A1（#211）：履歴にも1行入れる。users の2つの列と、同じこと（日時・理由）を2か所に書く。
+        // トランザクションはない。もう止めている会員でも、そのまま入る（まだ解いていない行が2つになる）
+        DB::table('suspensions')->insert([
+            'user_id' => $user->id,
+            'reason' => $request->input('reason'),
+            'suspended_by' => $admin->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
         DB::table('admin_audit_logs')->insert([
             'admin_id' => $admin->id,
             'action' => 'member.suspend',
@@ -61,9 +71,16 @@ class SuspensionController extends Controller
         if (! $token) {
             return response()->json(['message' => 'ログインしてください'], 401);
         }
-        JWT::decode($token, new Key((string) config('app.key'), 'HS256'));
+        $payload = JWT::decode($token, new Key((string) config('app.key'), 'HS256'));
 
         DB::table('users')->where('public_id', $publicId)->update(['suspended_at' => null, 'suspended_reason' => null]);
+
+        // A1（#211）：まだ解いていない履歴の行に、解いた日時と管理者を入れる（2行あれば、2行とも）。
+        // 会員がいなければ、user_id が null の条件になり、何も変わらない（それでも 204 を返す）
+        DB::table('suspensions')
+            ->where('user_id', DB::table('users')->where('public_id', $publicId)->value('id'))
+            ->whereNull('lifted_at')
+            ->update(['lifted_at' => now(), 'lifted_by' => $payload->sub, 'updated_at' => now()]);
 
         return response()->noContent();
     }

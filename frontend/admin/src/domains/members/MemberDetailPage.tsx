@@ -232,6 +232,45 @@ export default function MemberDetailPage() {
         )}
       </Card>
 
+      {/* A1（#211）：停止の履歴（前は、解くと、理由と日時が消えていた） */}
+      <Card withBorder radius="md">
+        <Title order={4} mb="sm">
+          停止の履歴
+        </Title>
+        {(m.suspensions ?? []).length === 0 ? (
+          <Text c="dimmed">ありません</Text>
+        ) : (
+          <Table>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>止めた日時</Table.Th>
+                <Table.Th>止めた管理者</Table.Th>
+                <Table.Th>理由</Table.Th>
+                <Table.Th>解いた日時</Table.Th>
+                <Table.Th>解いた管理者</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {m.suspensions.map((s: any) => (
+                <Table.Tr key={s.suspended_at}>
+                  <Table.Td>{new Date(s.suspended_at).toLocaleString('ja-JP')}</Table.Td>
+                  <Table.Td>{s.suspended_by ?? '―'}</Table.Td>
+                  <Table.Td style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{s.reason || '―'}</Table.Td>
+                  <Table.Td>
+                    {s.lifted_at ? (
+                      new Date(s.lifted_at).toLocaleString('ja-JP')
+                    ) : (
+                      <Badge color="red">止めている</Badge>
+                    )}
+                  </Table.Td>
+                  <Table.Td>{s.lifted_by ?? '―'}</Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        )}
+      </Card>
+
       <Modal opened={opened} onClose={() => setOpened(false)} title="利用を止めますか？">
         <Stack>
           <Text size="sm">止めると、この会員はログインできなくなります。</Text>
