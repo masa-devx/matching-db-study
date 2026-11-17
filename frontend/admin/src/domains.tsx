@@ -4,6 +4,8 @@ import DashboardPage from './domains/dashboard/DashboardPage'
 import MemberDetailPage from './domains/members/MemberDetailPage'
 import MembersPage from './domains/members/MembersPage'
 import MessagesPage from './domains/messages/MessagesPage'
+import ReportCaseDetailPage from './domains/reports/ReportCaseDetailPage'
+import ReportCasesPage from './domains/reports/ReportCasesPage'
 import SalesPage from './domains/sales/SalesPage'
 
 // 12 管理画面の「1か所の一覧」（FR-ADMIN-002・NFR-ADMIN-004）。サイドバーの項目とルートは、ここから作る。
@@ -32,6 +34,15 @@ export const DOMAINS: Domain[] = [
     children: [{ path: '/members/:publicId', element: <MemberDetailPage /> }],
   },
   { path: '/messages', label: 'メッセージ', icon: 'chat', roles: ['owner', 'viewer'], element: <MessagesPage /> },
+  // A7（#203）：通報。見るのは owner も viewer も。状態を変えるボタンは、画面の中で owner にだけ出す
+  {
+    path: '/reports',
+    label: '通報',
+    icon: 'flag',
+    roles: ['owner', 'viewer'],
+    element: <ReportCasesPage />,
+    children: [{ path: '/reports/:publicId', element: <ReportCaseDetailPage /> }],
+  },
   { path: '/sales', label: '有料会員・売上', icon: 'yen', roles: ['owner', 'viewer'], element: <SalesPage /> },
   { path: '/audit-logs', label: '監査ログ', icon: 'log', roles: ['owner'], element: <AuditLogsPage /> },
 ]

@@ -5,6 +5,7 @@ import Icon from './components/Icon'
 import MatchCelebration from './components/MatchCelebration'
 import { SkeletonProfile } from './components/Skeleton'
 import { useToast } from './components/Toast'
+import ReportDialog from './components/ReportDialog'
 import UpsellDialog from './components/UpsellDialog'
 
 // レガシー版（03b）。相手のプロフィール。取る・持つ・見せる・決まりを、全部この部品に書く
@@ -19,6 +20,8 @@ export default function UserPage() {
   const [, startTransition] = useTransition()
   // マッチの演出に出す自分（写真とニックネーム）
   const [matchedWith, setMatchedWith] = useState<any>(null)
+  // M7（#202）：通報のモーダルを開いているか
+  const [reporting, setReporting] = useState(false)
   // M3（#187）：マッチしてできたトークルームの ID（いいねの応答か、プロフィールの応答から）
   const [roomId, setRoomId] = useState<any>(null)
   // 06：ブロックの確かめのモーダルを開いているか
@@ -188,7 +191,20 @@ export default function UserPage() {
         <button type="button" className="danger-link" onClick={() => setConfirming(true)}>
           ブロック
         </button>
+        {/* M7（#202）：困った相手を、運営に伝える */}
+        <button type="button" className="danger-link" onClick={() => setReporting(true)}>
+          通報
+        </button>
       </div>
+
+      <ReportDialog
+        open={reporting}
+        userId={publicId ?? ''}
+        nickname={user.profile?.nickname ?? ''}
+        onClose={() => setReporting(false)}
+        // ブロックもしたら、ブロックのときと同じく、前の画面に戻る
+        onDone={(blocked) => blocked && navigate(-1)}
+      />
 
       <UpsellDialog open={upsell} onClose={() => setUpsell(false)} />
       <ConfirmDialog

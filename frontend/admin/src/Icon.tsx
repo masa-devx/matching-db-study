@@ -6,6 +6,7 @@ const PATHS: Record<string, string> = {
   chat: 'M4 5h16v11H8l-4 4V5z',
   yen: 'M6 4l6 8 6-8M12 12v8M7 13h10M7 17h10',
   log: 'M6 3h9l3 3v15H6zM9 9h6M9 13h6M9 17h4',
+  flag: 'M5 21V4M5 4h11l-2 4 2 4H5',
 }
 
 export default function Icon({ name }: { name: string }) {
