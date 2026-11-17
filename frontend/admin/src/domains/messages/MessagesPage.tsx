@@ -1,9 +1,13 @@
-import { Card, Group, Loader, Pagination, Stack, Table, Text, TextInput, Title } from '@mantine/core'
+import { Badge, Button, Card, Group, Loader, Pagination, Stack, Table, Text, TextInput, Title } from '@mantine/core'
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 
 // 12 メッセージの一覧（FR-ADMIN-007）。本文の語・期間で絞る。50件ずつ（API は offset と 1件ごとに6本）
 export default function MessagesPage() {
+  // A2（#208）：送った会員（public_id）で絞る。API には前からあったが、画面から使えなかった。
+  // 会員の詳細の「この会員が送ったメッセージを見る」と、行の「この人で絞る」から来る。URL のクエリに持つ
+  const [params, setParams] = useSearchParams()
+  const sender = params.get('sender') ?? ''
   const [form, setForm] = useState({ q: '', from: '', to: '' })
   const [query, setQuery] = useState(form)
   const [page, setPage] = useState(1)
@@ -12,13 +16,14 @@ export default function MessagesPage() {
 
   useEffect(() => {
     setData(null)
-    const params = new URLSearchParams({ ...query, page: String(page) })
-    fetch(`${api}/api/messages?${params}`, {
+    const sent = new URLSearchParams({ ...query, page: String(page) })
+    if (sender) sent.set('sender', sender)
+    fetch(`${api}/api/messages?${sent}`, {
       headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('adminToken')}` },
     })
       .then((r) => r.json())
       .then(setData)
-  }, [api, query, page])
+  }, [api, query, page, sender])
 
   return (
     <Stack>
@@ -49,9 +54,25 @@ export default function MessagesPage() {
               value={form.to}
               onChange={(e) => setForm({ ...form, to: e.currentTarget.value })}
             />
-            <button type="submit" hidden />
+            {/* A2（#208）：ボタンを見えるようにした（前は、Enter でしか絞れなかった） */}
+            <Button type="submit">絞り込む</Button>
           </Group>
         </form>
+        {sender && (
+          <Group mt="sm" gap="xs">
+            <Badge variant="light">送った会員で絞っています</Badge>
+            <Button
+              variant="subtle"
+              size="xs"
+              onClick={() => {
+                setPage(1)
+                setParams({})
+              }}
+            >
+              外す
+            </Button>
+          </Group>
+        )}
       </Card>
       <Card withBorder radius="md" padding={0}>
         {!data ? (
@@ -78,6 +99,19 @@ export default function MessagesPage() {
                     </Table.Td>
                     <Table.Td>
                       <Link to={`/members/${m.sender.user_id}`}>{m.sender.nickname ?? '―'}</Link>
+                      {!sender && (
+                        <Button
+                          variant="subtle"
+                          size="compact-xs"
+                          ml={4}
+                          onClick={() => {
+                            setPage(1)
+                            setParams({ sender: m.sender.user_id })
+                          }}
+                        >
+                          この人で絞る
+                        </Button>
+                      )}
                     </Table.Td>
                     <Table.Td>
                       <Link to={`/members/${m.partner.user_id}`}>{m.partner.nickname ?? '―'}</Link>

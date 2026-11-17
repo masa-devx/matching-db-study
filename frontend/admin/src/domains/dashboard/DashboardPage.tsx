@@ -48,20 +48,35 @@ export default function DashboardPage() {
         ))}
       </SimpleGrid>
       <Card withBorder radius="md" padding="md">
+        {/* A5（#208）：折れ線を2つに分けた。前は、メッセージ（1日 千件ほど）と登録・マッチ（数十件）を
+            同じ目盛りに載せていて、登録とマッチが底に張り付いて読めなかった */}
         <Title order={4} mb="sm">
-          直近30日（日ごと）
+          登録とマッチ（直近30日・日ごと）
         </Title>
         <LineChart
-          h={280}
+          h={240}
           data={data.days.map((d: any) => ({ ...d, day: d.day.slice(5) }))}
           dataKey="day"
           withLegend
           series={[
             { name: 'registrations', label: '登録', color: 'blue.6' },
             { name: 'matches', label: 'マッチ', color: 'pink.6' },
-            { name: 'messages', label: 'メッセージ', color: 'teal.6' },
           ]}
           curveType="monotone"
+          valueFormatter={(v) => `${v.toLocaleString()}`}
+        />
+      </Card>
+      <Card withBorder radius="md" padding="md">
+        <Title order={4} mb="sm">
+          メッセージ（直近30日・日ごと）
+        </Title>
+        <LineChart
+          h={240}
+          data={data.days.map((d: any) => ({ ...d, day: d.day.slice(5) }))}
+          dataKey="day"
+          series={[{ name: 'messages', label: 'メッセージ', color: 'teal.6' }]}
+          curveType="monotone"
+          valueFormatter={(v) => `${v.toLocaleString()}件`}
         />
       </Card>
       <Card withBorder radius="md" padding="md">
