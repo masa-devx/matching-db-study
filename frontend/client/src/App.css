@@ -1165,6 +1165,106 @@
   accent-color: #d12f5f;
 }
 
+/* ---- #153：検索の条件の画面（まとまりごとのカードと、下に固定したボタン） ---- */
+.cond-card {
+  margin-bottom: 16px;
+  padding: 16px;
+}
+
+.cond-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cond-label {
+  margin: 16px 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #231c20;
+}
+
+.cond-note {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #6f6368;
+}
+
+.cond-range {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.cond-range .input {
+  margin-top: 0;
+}
+
+.cond-tilde {
+  color: #6f6368;
+}
+
+.cond-details summary {
+  min-height: 44px;
+  padding: 10px 12px;
+  font-size: 14px;
+  color: #231c20;
+  background: #ffffff;
+  border: 1px solid #ece3e1;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.cond-details[open] summary {
+  margin-bottom: 12px;
+}
+
+.cond-card .pref-list {
+  margin-bottom: 0;
+}
+
+.cond-card .saved-list {
+  margin-bottom: 0;
+}
+
+.cond-card .paid-lock {
+  margin: 8px 0 0;
+}
+
+.cond-reset {
+  display: block;
+  min-height: 44px;
+  margin: 0 auto 16px;
+  padding: 0 16px;
+  font: inherit;
+  font-size: 14px;
+  color: #6f6368;
+  text-decoration: underline;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+/* スクロールする枠（.frame-main）の下に貼り付く。枠の余白（16px）の分だけ外に広げ、後ろの中身が透けないようにする */
+.cond-footer {
+  position: sticky;
+  bottom: -16px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  margin: 0 -16px -16px;
+  padding: 12px 16px 16px;
+  background: #faf6f4;
+  border-top: 1px solid #ece3e1;
+}
+
+.cond-save {
+  width: auto;
+  padding: 12px 24px;
+}
+
 /* ---- 04b：保存した検索条件 ---- */
 .saved-list {
   display: flex;

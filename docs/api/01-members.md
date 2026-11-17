@@ -119,3 +119,11 @@ D-022。上の表は 01 で作った形のまま残し、ここに差分だけ�
 | curl の例 | `curl http://127.0.0.1:8000/api/users/<public_id>` | 同じ |
 
 `users` と `profiles` に分けたのは DB の都合なので、パスに `/profile` を付けない。検索の `GET /api/users`（04）と、一覧と1件の対になる。
+
+## #153 で変えること（検索に使う6項目。状態：**実装済み（レガシー版）**）
+
+| 項目 | レガシー版（legacy-repo） | 改善版（refactored-repo） |
+| --- | --- | --- |
+| `GET`・`PUT` の応答 | `profiles` の行に、`body_type`・`job`・`income`・`smoking`・`drinking`・`marital_status` が増える（選択肢の名前の文字。未回答は `null`） | `body_type`・`job`・`income`・`smoking`・`drinking`・`marital_status` を、`{"code": 3, "name": "普通"}` の形で返す（未回答は `null`） |
+| `PUT` の入力 | 画面が6項目を文字で送る。API は確かめない（`$request->all()` のまま。選択肢にない文字も保存される） | `*_code`（なし か マスタの表にあるコード）。なければ `422`（FR-015） |
+| 選択肢の一覧 | 画面に書いてある（ホーム・条件の画面・試しのデータの3か所に同じ一覧） | `GET /profile-options`（マスタの表から返す。画面は一覧を持たない） |
