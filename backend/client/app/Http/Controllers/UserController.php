@@ -52,8 +52,9 @@ class UserController extends Controller
         }
         $payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));
 
-        // 07：身長の条件は、男性の無料の会員は使えない（送ったときだけ確かめる。すぐ下で同じプロフィールをもう一度読む）
-        if ($request->filled('height_min') || $request->filled('height_max')) {
+        // #150：有料の機能は、最終ログイン・登録して間もない会員・フリーワード・登録が新しい順の4つ（身長は無料にした）。
+        // 男性の無料の会員は使えない（送ったときだけ確かめる。すぐ下で同じプロフィールをもう一度読む）
+        if ($request->filled('last_login') || $request->filled('new_member') || $request->filled('keyword') || $request->input('sort') === 'new') {
             // 07：男性の無料の会員は使えない（is_paid だけを見る。paid_until は見ない。送る・いいね・検索に写した）
             $myProfile = Profile::where('user_id', $payload->sub)->first();
             $myUser = User::find($payload->sub);
@@ -76,7 +77,7 @@ class UserController extends Controller
 
         $page = (int) $request->input('page', 1);
 
-        $users = User::whereNotNull('email_verified_at')
+        $query = User::whereNotNull('email_verified_at')
             ->where('id', '!=', $payload->sub)
             ->whereNotIn('id', $likedIds)
             ->whereNotIn('id', $blockIds)
@@ -102,9 +103,39 @@ class UserController extends Controller
                 if ($request->filled('height_max')) {
                     $q->where('height', '<=', $request->input('height_max'));
                 }
-            })
+                // #150：フリーワード。自己紹介かニックネームに、その言葉が入っている会員。
+                // 前後に % を付けるので索引は使えない。言葉の中の % と _ はそのまま渡る（% だけ送ると全員に当たる）。長さも確かめない
+                if ($request->filled('keyword')) {
+                    $keyword = $request->input('keyword');
+                    $q->where(function (Builder $w) use ($keyword) {
+                        $w->where('introduction', 'like', '%'.$keyword.'%')
+                            ->orWhere('nickname', 'like', '%'.$keyword.'%');
+                    });
+                }
+            });
+
+        // #150：最終ログイン。24h・3d・7d のどれか（ほかの値は、何も絞らずに通る）
+        if ($request->input('last_login') === '24h') {
+            $query->where('last_login_at', '>=', now()->subDay());
+        } elseif ($request->input('last_login') === '3d') {
+            $query->where('last_login_at', '>=', now()->subDays(3));
+        } elseif ($request->input('last_login') === '7d') {
+            $query->where('last_login_at', '>=', now()->subDays(7));
+        }
+        // #150：登録して1週間以内の会員だけ。created_at に索引はない
+        if ($request->filled('new_member')) {
+            $query->where('created_at', '>=', now()->subDays(7));
+        }
+
+        // #150：並び替え。sort=new なら登録が新しい順（同じ時刻の並びが決まらないのは、下と同じ）
+        if ($request->input('sort') === 'new') {
+            $query->orderBy('created_at', 'desc');
+        } else {
             // 最終ログインだけで並べる。同じ時刻の並びが決まらない。desc なので NULL（ログインしていない）が先頭に出る
-            ->orderBy('last_login_at', 'desc')
+            $query->orderBy('last_login_at', 'desc');
+        }
+
+        $users = $query
             // 飛ばす行も読んでから捨てる。読んでいるあいだにだれかがログインすると、重なる・抜ける
             ->offset(($page - 1) * 20)
             ->limit(20)

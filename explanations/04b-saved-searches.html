@@ -450,6 +450,7 @@ where "user_id" = 1
     <tr><td><code>frontend/client/src/SearchPage.tsx</code></td><td>今の条件を URL のクエリに出す（<code>useSearchParams</code>）。保存した検索条件の一覧・保存・名前を直す・消す・「有料」の印。<code>fetch</code> を4つ、画面に直接書いた。有料かどうかの判断も、画面にもう一度書いた</td></tr>
   </table>
   <p>同じ日に、検索の画面の使い勝手を直しました（#147）。条件の欄と保存した検索条件を、条件だけの画面（<code>SearchConditionsPage.tsx</code>。<code>/search/conditions</code>）に移し、年齢をプルダウンにし、性別の欄をなくしました。一覧の画面（<code>SearchPage.tsx</code>）は結果だけになりました。条件を URL のクエリに直す処理と都道府県の一覧は、2つの画面にコピーしてあります（レガシー版）。</p>
+  <p>続けて、検索の無料と有料の分け方を入れ替えました（#150）。身長を無料にし、有料の機能を4つ（最終ログイン・登録して間もない会員・フリーワード・登録が新しい順）足しました。表は変えていません。有料かどうかの確かめは、検索（<code>UserController::index</code>）と保存（<code>SearchConditionController::store</code>）と画面（<code>SearchConditionsPage.tsx</code>）の3か所にコピーしてあるので、3か所を直しました。測った結果は <code>docs/api/04-search.md</code> の終わりにあります（<code>keyword=%</code> で全員に当たる・フリーワードと新しい会員は表を全部読む・期限切れの会員が使える）。</p>
   <p>設計と違う所は1つです。直す（<code>PUT</code>）に、有料かどうかの確かめをコピーしませんでした。レガシー版でよく起きる「コピーし忘れ」を、そのまま測るためです。</p>
   <h3>9-2. 測った問題と数字</h3>
   <p>開発用の DB（保存した検索条件 59,805件）で、curl とブラウザで測りました。くわしい表は <code>docs/api/04b-saved-searches.md</code> の「レガシー版で起きること」にあります。</p>

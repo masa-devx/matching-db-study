@@ -18,7 +18,9 @@
 
 レガシー版は、設計を考えずに「とりあえず使える」形で作る。だれが使うかは、これまでと同じく JWT を読んで決める（`AuthController::me()` の処理をコピーする。4つ足して 17〜20か所目）。わざと残す問題は4つ：上限を数えてから入れるだけで止める・条件を確かめない・有料かどうかの確かめを検索からコピーする（`is_paid` だけ）・持ち主を確かめない。
 
-条件の中身（`conditions`）は、検索の API のクエリと同じ項目を持つ JSON のオブジェクト：`gender`・`age_min`・`age_max`・`prefecture`（都道府県の名前の配列）・`height_min`・`height_max`。どれもなくてよい。
+> 2026-11-17（#150）：有料の条件は、身長から4つ（`last_login`・`new_member`・`keyword`・`sort=new`）に入れ替えた。保存するときの確かめ（`SearchConditionController::store`）も、この4つを見る。下の表と「レガシー版で起きること」の「身長」は、入れ替える前に測った記録として残す。同じ問題は、この4つでそのまま起きる（期限切れの会員が保存できる・直すときは確かめない）。
+
+条件の中身（`conditions`）は、検索の API のクエリと同じ項目を持つ JSON のオブジェクト：`gender`・`age_min`・`age_max`・`prefecture`（都道府県の名前の配列）・`height_min`・`height_max`・`last_login`・`new_member`・`keyword`・`sort`。どれもなくてよい。
 
 ## `GET /api/me/search-conditions`（一覧）
 
