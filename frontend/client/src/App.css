@@ -1149,6 +1149,22 @@
   color: #6b5f63;
 }
 
+.check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 44px;
+  margin-bottom: 12px;
+  font-size: 14px;
+  color: #231c20;
+}
+
+.check input {
+  width: 20px;
+  height: 20px;
+  accent-color: #d12f5f;
+}
+
 /* ---- 04b：保存した検索条件 ---- */
 .saved-list {
   display: flex;
