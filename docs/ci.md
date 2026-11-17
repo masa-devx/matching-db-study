@@ -12,6 +12,12 @@ PR を出したとき・ブランチに push したときに、GitHub の上で�
 
 3つは別々のジョブにして、どれが落ちたかを PR の画面で分かるようにする。
 
+文書には、別のワークフロー（`.github/workflows/docs.yml`。`refactored-repo` とそこから切ったブランチで動く）がある。
+
+| ジョブ | コマンド（リポジトリのルートで） | 落ちる条件 |
+| --- | --- | --- |
+| 文書の言葉 | `python3 -I agents/tools/check-words.py` | 使わないと決めた言い方（[writing.md](../agents/rules/writing.md)）が、`docs/`・`agents/`・`.claude/agents/`・`.github/`・AGENTS.md にある。機械で見るのは、意味が1つに決まる言葉だけ。「守る」「入口」「まとまり」のように文脈で決まる言葉は、レビュー役が見る |
+
 ## 動かすとき
 
 | きっかけ | 対象のブランチ |

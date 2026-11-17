@@ -41,7 +41,8 @@ AGENTS.md の「主要コマンド」で、次を流して結果をそのまま�
 
 ## 6. PR を作る
 
-- 本文は `.github/pull_request_template.md` の見出しを埋める（何を・なぜ・ディレクトリとクラス・流れる SQL・テスト・前と後の数字・リリースと戻し方・見てほしいところ）
+- 本文は `.github/pull_request_template.md` の見出しを埋める（何を・なぜ・ディレクトリとクラス・流れる SQL・テスト・前と後の数字・リリースと戻し方・見てほしいところ）。文は `agents/rules/writing.md` の書き方と言葉で書く
+- 文書（`docs/`・`agents/`・`.github/`・AGENTS.md）を触ったら、`python3 -I agents/tools/check-words.py` を流す
 - コミット・push・PR の作成は、人に確かめてから行う。行き先は `refactored-repo`
 - PR を作ったらボードの Status を In review にする
 - 続けて `code-walkthrough`（解説）と `pr-review`（レビュー）に進むことを伝える

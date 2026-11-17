@@ -459,7 +459,7 @@ final class BindingServiceProvider extends ServiceProvider
 
 - 会員の側：QueryService は必要なときだけ作る（検索・重い一覧）。簡単な読み取りは、UseCase から Repository の `find〜` を使ってよい
 - 管理画面：読み取りはすべて QueryService（まとまりごとに1つ）。Controller から直接呼ぶ
-- QueryService は書き込まない。書き込みは必ず UseCase を通す（使ってよい部品はアーキテクチャのテストで守り、`save()`・`update()`・`delete()` を呼んでいないかはレビューで見る。8章）
+- QueryService は書き込まない。書き込みは必ず UseCase を通す（使ってよい部品はアーキテクチャのテストで確かめ、`save()`・`update()`・`delete()` を呼んでいないかはレビューで見る。8章）
 
 ## 6. トランザクション・日時・外への書き込み
 

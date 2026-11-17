@@ -74,6 +74,7 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 | ブランチを切り替えたあと | リポジトリのルート | `docker compose restart app` | ― | 切り替え先に `backend/client/` がないと、動いているサーバーのフォルダが一度消えて、API がエラーを返し続けるため |
 | CI | GitHub（PR と push で自動） | `.github/workflows/backend.yml`（会員の側）・`admin-backend.yml`（管理画面）。中身と決まりは [docs/ci.md](docs/ci.md)。結果は `gh pr checks <番号>` で見る | ― | CI の設定を緩めて通す（レベルを下げる・対象から外す） |
 | エディタの補完のファイルを作る | リポジトリのルート | `docker compose run --rm app php artisan ide-helper:models --nowrite`（`backend/client/_ide_helper_models.php` に書き出す。git には入らない） | db が起動している（列を DB から読む） | `--write`（Model のファイルに `@property` を書き込む。長くなり、マイグレーションとずれるため。quality-types.md） |
+| 文書の言葉を確かめる | リポジトリのルート | `python3 -I agents/tools/check-words.py`（使わないと決めた言い方が `docs/`・`agents/`・`.claude/agents/`・`.github/`・AGENTS.md に入っていないかを見る。CI でも流れる） | python3 | 見つかった言葉を「」で囲んで通す（古い言い方を説明のために引くときだけ囲む） |
 | ビルド | `frontend/client/` | `npm run build`（型の検査と `vite build`。`dist/` に出す。デプロイはしない） | `npm install` 済み | ― |
 
 未記入のコマンドは推測して実行しない。必要な操作について確認する。
@@ -122,3 +123,4 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 
 - 結論から端的に答える。前置き・繰り返し・求められていない補足を省き、できるだけ短い文章で返す。判断に必要な根拠と未確認の事項は省かない。返事は日本語で書く
 - 変更内容、実行した検証と結果、未検証の範囲を報告する。実行していないテストを通過扱いにしない
+- 返事・チケット・PR・議事録・ルールの文は、[writing.md](agents/rules/writing.md) の書き方と言葉で書く。たとえや、このリポジトリだけで通じる言い方を新しく作らない。新しい言葉が要るときは、先に `writing.md` の表（業務の言葉なら `docs/glossary.md`）に足す

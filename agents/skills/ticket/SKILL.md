@@ -20,6 +20,7 @@ description: 改訂版（refactored-repo）のチケット（Issue）を、10種
 - ひな形の見出しに沿って本文を書き、scratchpad に置く。コメント（`<!-- -->`）は消す
 - タイトルは「【種類】何を」（例：`【改善】トークンを読む所を1か所にする`）
 - ラベルは領域（`db`・`api`・`frontend`・`auth`・`docs`）だけ
+- 本文は `agents/rules/writing.md` の書き方と言葉で書く（チケットの本文は GitHub にあり、機械の検査が届かないので、書く前に表を読む）
 - チャットに表で見せる：タイトル・種類・Priority・Size・Area・Cycle・Status・本文の要点。本文の全部は貼らない
 - 種類と Priority は PM の役、Size と Area はリーダーの役として案を出す。人が決める
 

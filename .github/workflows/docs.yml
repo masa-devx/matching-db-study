@@ -1,0 +1,35 @@
+# 文書の言葉の検査。使わないと決めた言い方（agents/rules/writing.md）が入っていないかを見る。決まりは docs/ci.md
+name: docs
+
+on:
+  pull_request:
+    branches: [refactored-repo]
+    paths:
+      - "docs/**"
+      - "agents/**"
+      - ".claude/agents/**"
+      - ".github/**"
+      - "AGENTS.md"
+  push:
+    branches: [refactored-repo, "refactor/**", "feature/**", "fix/**", "hotfix/**", "chore/**", "spike/**"]
+    paths:
+      - "docs/**"
+      - "agents/**"
+      - ".claude/agents/**"
+      - ".github/**"
+      - "AGENTS.md"
+
+# 同じブランチで続けて push したら、前の実行は止める
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  words:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -I agents/tools/check-words.py
