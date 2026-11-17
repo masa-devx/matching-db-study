@@ -11,6 +11,7 @@ use App\Http\Controllers\MessageController;
 use App\Http\Controllers\PlanController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PurchaseController;
+use App\Http\Controllers\SearchConditionController;
 use App\Http\Controllers\TalkRoomController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserMatchController;
@@ -67,3 +68,9 @@ Route::delete('/me', [UserController::class, 'destroy']);
 Route::get('/plans', [PlanController::class, 'index']);
 Route::post('/me/purchases', [PurchaseController::class, 'store']);
 Route::get('/me/purchases', [PurchaseController::class, 'index']);
+
+// 04b 保存した検索条件（docs/api/04b-saved-searches.md）。検索そのもの（GET /users）は変えない
+Route::get('/me/search-conditions', [SearchConditionController::class, 'index']);
+Route::post('/me/search-conditions', [SearchConditionController::class, 'store']);
+Route::put('/me/search-conditions/{publicId}', [SearchConditionController::class, 'update']);
+Route::delete('/me/search-conditions/{publicId}', [SearchConditionController::class, 'destroy']);
