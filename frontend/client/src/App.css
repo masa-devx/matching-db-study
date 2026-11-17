@@ -1145,8 +1145,9 @@
 /* ---- #147：検索の条件の画面 ---- */
 .search-summary {
   margin: 0 0 12px;
-  font-size: 13px;
-  color: #6b5f63;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #6f6368;
 }
 
 .check {
@@ -1186,7 +1187,7 @@
 
 .cond-note {
   margin: 0 0 8px;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
   color: #6f6368;
 }
@@ -1231,6 +1232,60 @@
 
 .cond-card .paid-lock {
   margin: 8px 0 0;
+}
+
+/* #162：押せる場所は 44px 以上（design.md）。条件の画面の選択肢と、上の帯のボタン */
+.cond-card .chip {
+  min-height: 44px;
+}
+
+.search-head .button-small {
+  min-height: 44px;
+}
+
+/* #162：下に固定した帯の裏に、選んでいる欄が隠れないよう、スクロールの止まる位置を帯の高さの分だけ上にする */
+.frame-main:has(.cond-footer) {
+  scroll-padding-bottom: 96px;
+}
+
+/* #162：読み終わるまで、高さだけを取っておく（あとで中身が出ても、下が動かない） */
+.cond-placeholder {
+  height: 72px;
+  background: #f4eeec;
+  border-radius: 12px;
+}
+
+/* #162：保存した検索条件の中身を直しているときの知らせ */
+.cond-editing {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #231c20;
+  background: #fdecf1;
+  border-radius: 12px;
+}
+
+/* #162：無料の会員の欄に、有料の条件が残っているとき */
+.cond-editing .saved-action {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.cond-left-paid {
+  margin-top: 12px;
+}
+
+.cond-left-list {
+  margin: 0 0 12px;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #231c20;
 }
 
 .cond-reset {
@@ -1293,8 +1348,8 @@
   min-height: 44px;
   padding: 0 8px;
   font: inherit;
-  font-size: 13px;
-  color: #6b5f63;
+  font-size: 14px;
+  color: #6f6368;
   background: none;
   border: none;
   cursor: pointer;
@@ -1302,7 +1357,7 @@
 }
 
 .saved-danger {
-  color: #c62828;
+  color: #c23a3a;
 }
 
 /* ---- 動き（transform と opacity だけを動かす。NFR-UI-006） ---- */

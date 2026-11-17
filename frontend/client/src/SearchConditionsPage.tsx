@@ -68,7 +68,7 @@ for (let age = 18; age <= 99; age++) AGES.push(age)
 const HEIGHTS: number[] = []
 for (let cm = 130; cm <= 210; cm++) HEIGHTS.push(cm)
 
-// #153：プロフィールの6項目の選択肢。名前の文字を、そのまま API に送る。
+// #153：プロフィールの項目の選択肢（年収は、#162 で幅のプルダウンにしたので、上の INCOME_BANDS）。名前の文字を、そのまま API に送る。
 // 同じ一覧を、ホーム（HomePage）と試しのデータ（ProfileDetailsSeeder）にも書いた
 const DETAILS = [
   { key: 'body_type', label: '体型', options: ['スリム', 'やや細め', '普通', '筋肉質', 'ややぽっちゃり', 'ぽっちゃり'] },
@@ -89,15 +89,38 @@ const DETAILS = [
       'その他',
     ],
   },
-  {
-    key: 'income',
-    label: '年収',
-    options: ['300万円未満', '300〜500万円', '500〜700万円', '700〜1000万円', '1000万円以上'],
-  },
   { key: 'smoking', label: 'タバコ', options: ['吸わない', 'ときどき吸う', '吸う', '電子タバコ'] },
   { key: 'drinking', label: 'お酒', options: ['飲まない', 'ときどき飲む', '飲む'] },
   { key: 'marital_status', label: '結婚歴', options: ['未婚', '離婚', '死別'] },
 ]
+
+// #162：年収は「◯◯万円 から ◯◯万円」の幅で選ぶ。API とプロフィールは区分の名前（文字）で持っているので、
+// 幅を、当てはまる区分の名前の並びに直してから送る（レガシー版は、文字のままでは大小を比べられない）
+const INCOME_BANDS = [
+  { name: '300万円未満', low: 0, high: 300 },
+  { name: '300〜500万円', low: 300, high: 500 },
+  { name: '500〜700万円', low: 500, high: 700 },
+  { name: '700〜1000万円', low: 700, high: 1000 },
+  { name: '1000万円以上', low: 1000, high: 9999 },
+]
+const INCOME_STEPS = [300, 500, 700, 1000]
+
+// 下限と上限（万円。空の文字は「なし」）から、区分の名前の並びを作る
+const incomeBands = (min: string, max: string): string[] => {
+  if (!min && !max) return []
+  const low = min ? Number(min) : 0
+  const high = max ? Number(max) : 9999
+  return INCOME_BANDS.filter((b) => b.low >= low && b.high <= high).map((b) => b.name)
+}
+
+// 区分の名前の並びから、下限と上限を読む（とびとびに選んだ古い条件は、いちばん下からいちばん上までの幅で見せる）
+const incomeRange = (names: string[]) => {
+  const bands = INCOME_BANDS.filter((b) => names.includes(b.name))
+  if (bands.length === 0) return { min: '', max: '' }
+  const low = Math.min(...bands.map((b) => b.low))
+  const high = Math.max(...bands.map((b) => b.high))
+  return { min: low === 0 ? '' : String(low), max: high === 9999 ? '' : String(high) }
+}
 
 // SearchPage からコピーした（配列のはずの項目に、文字や数が入っていても回せるようにする。#159）
 const asList = (value: any): string[] => {
@@ -165,6 +188,12 @@ export default function SearchConditionsPage() {
   const [name, setName] = useState('')
   const [renaming, setRenaming] = useState<any>(null)
   const [deleting, setDeleting] = useState<any>(null)
+  // #162：一覧を読み終わったか（読み終わるまでは、「まだありません」を出さない。出すと、あとで一覧に替わって下のカードが動く）
+  const [savedLoaded, setSavedLoaded] = useState(false)
+  // #162：条件を直している保存した検索条件（B4）。入っているあいだ、下のボタンが「上書き保存」になる
+  const [editingSaved, setEditingSaved] = useState<any>(null)
+  // #162：送っているあいだは、ボタンを押せなくする（続けて押すと、2件入っていた）
+  const [sending, setSending] = useState(false)
   // 07・#150：自分が男性の無料の会員か（有料の4つの条件を使えない）と、誘導のモーダル
   // 読み終わるまでは null（印も欄も出さない。先に欄を出すと、無料の会員に有料の欄が一瞬見える）
   const [locked, setLocked] = useState<any>(null)
@@ -178,7 +207,10 @@ export default function SearchConditionsPage() {
       headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
     })
       .then((r) => r.json())
-      .then((rows) => setSaved(rows))
+      .then((rows) => {
+        setSaved(rows)
+        setSavedLoaded(true)
+      })
   }
 
   useEffect(() => {
@@ -224,6 +256,66 @@ export default function SearchConditionsPage() {
     c.conditions?.last_login || c.conditions?.new_member || c.conditions?.keyword || c.conditions?.sort === 'new'
   const lockedCondition = (c: any) => locked && paidCondition(c)
 
+  // #162：無料の会員の欄に、有料の条件が残っているか（有料のときに探した条件・URL から来た条件）。
+  // 欄は出さないので、何が残っているかを言葉で見せて、自分で外してもらう（黙って外して探すことはしない）
+  const leftPaid = [
+    form.last_login === '24h' ? '最終ログイン：24時間以内' : '',
+    form.last_login === '3d' ? '最終ログイン：3日以内' : '',
+    form.last_login === '7d' ? '最終ログイン：1週間以内' : '',
+    form.new_member ? '登録して1週間以内の会員だけ' : '',
+    form.keyword ? `フリーワード：${form.keyword}` : '',
+    form.sort === 'new' ? '並び替え：登録が新しい順' : '',
+  ].filter((x) => x)
+  const removePaid = () => {
+    const next = { ...form }
+    delete next.last_login
+    delete next.new_member
+    delete next.keyword
+    delete next.sort
+    setForm(next)
+  }
+
+  // #162：条件の画面を直接開いたとき（別のタブ・再読み込み・ブックマーク）は、前の履歴がないので、一覧へ移る
+  const back = () => {
+    if (window.history.state?.idx > 0) {
+      navigate(-1)
+    } else {
+      navigate(`/search?${searchParams}`, { replace: true })
+    }
+  }
+
+  // #162：保存した検索条件の中身を直す（B4）。条件を欄に入れ、下のボタンで上書き保存する
+  const startEditing = (c: any) => {
+    setForm({ ...(c.conditions ?? {}) })
+    setEditingSaved(c)
+    setManaging(false)
+    document.querySelector('.frame-main')?.scrollTo(0, 0)
+  }
+  const overwrite = () => {
+    setSending(true)
+    fetch(
+      `${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me/search-conditions/${editingSaved.public_id}`,
+      {
+        method: 'PUT',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${sessionStorage.getItem('token')}`,
+        },
+        body: JSON.stringify({ conditions: form }),
+      },
+    ).then((r) => {
+      setSending(false)
+      if (!r.ok) {
+        toast('直せませんでした', 'error')
+        return
+      }
+      toast(`「${editingSaved.name}」の条件を直しました`)
+      setEditingSaved(null)
+      loadSaved()
+    })
+  }
+
   // 04b：保存した検索条件を押したら、その条件で探す（FR-UI-044）。使えない条件はモーダルを出す（FR-UI-048）
   const useSaved = (c: any) => {
     if (lockedCondition(c)) {
@@ -254,6 +346,7 @@ export default function SearchConditionsPage() {
       return
     }
     // 欄の値を、そのまま送る（数も文字のまま）
+    setSending(true)
     fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me/search-conditions`, {
       method: 'POST',
       headers: {
@@ -263,6 +356,7 @@ export default function SearchConditionsPage() {
       },
       body: JSON.stringify({ name, conditions: form }),
     }).then((r) => {
+      setSending(false)
       setNaming(false)
       if (r.status === 403) {
         setUpsell(true)
@@ -286,6 +380,7 @@ export default function SearchConditionsPage() {
       toast('名前を入れてください', 'error')
       return
     }
+    setSending(true)
     fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me/search-conditions/${renaming.public_id}`, {
       method: 'PUT',
       headers: {
@@ -295,6 +390,7 @@ export default function SearchConditionsPage() {
       },
       body: JSON.stringify({ name }),
     }).then((r) => {
+      setSending(false)
       setRenaming(null)
       if (!r.ok) {
         toast('直せませんでした', 'error')
@@ -306,10 +402,12 @@ export default function SearchConditionsPage() {
   }
 
   const remove = () => {
+    setSending(true)
     fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me/search-conditions/${deleting.public_id}`, {
       method: 'DELETE',
       headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
     }).then((r) => {
+      setSending(false)
       setDeleting(null)
       if (!r.ok) {
         toast('消せませんでした', 'error')
@@ -324,7 +422,7 @@ export default function SearchConditionsPage() {
     <div className="cond-page">
       <div className="search-head">
         <h1 className="page-title">検索条件</h1>
-        <button className="button button-small button-ghost" onClick={() => navigate(-1)}>
+        <button className="button button-small button-ghost" onClick={back}>
           戻る
         </button>
       </div>
@@ -334,15 +432,26 @@ export default function SearchConditionsPage() {
         <div className="cond-head">
           <h2 className="section-title">保存した検索条件</h2>
           {saved.length > 0 && (
-            <button type="button" className="saved-action" onClick={() => setManaging(!managing)}>
+            <button
+              type="button"
+              className="saved-action"
+              aria-pressed={managing}
+              onClick={() => setManaging(!managing)}
+            >
               {managing ? '終わる' : '編集'}
             </button>
           )}
         </div>
-        {saved.length === 0 && (
+        {/* #162：読み終わるまでは、高さだけを取っておく（あとで中身が出ても、下のカードが動かない） */}
+        {!savedLoaded && <div className="cond-placeholder" aria-hidden="true" />}
+        {savedLoaded && saved.length === 0 && (
           <p className="cond-note">まだありません。下で条件を選んで「保存」を押すと、ここに出ます（5件まで）。</p>
         )}
-        {saved.length > 0 && <p className="cond-note">押すと、その条件で探します。</p>}
+        {savedLoaded && saved.length > 0 && (
+          <p className="cond-note">
+            押すと、その条件で探します。{managing && '「条件を直す」で、中身を欄に入れて直せます。'}（{saved.length}／5件）
+          </p>
+        )}
         <div className="saved-list">
           {saved.map((c) => (
             <span key={c.public_id} className="saved-item">
@@ -355,6 +464,7 @@ export default function SearchConditionsPage() {
                   <button
                     type="button"
                     className="saved-action"
+                    aria-label={`「${c.name}」の名前を直す`}
                     onClick={() => {
                       setName(c.name)
                       setRenaming(c)
@@ -362,7 +472,20 @@ export default function SearchConditionsPage() {
                   >
                     名前を直す
                   </button>
-                  <button type="button" className="saved-action saved-danger" onClick={() => setDeleting(c)}>
+                  <button
+                    type="button"
+                    className="saved-action"
+                    aria-label={`「${c.name}」の条件を直す`}
+                    onClick={() => startEditing(c)}
+                  >
+                    条件を直す
+                  </button>
+                  <button
+                    type="button"
+                    className="saved-action saved-danger"
+                    aria-label={`「${c.name}」を消す`}
+                    onClick={() => setDeleting(c)}
+                  >
                     消す
                   </button>
                 </>
@@ -373,6 +496,15 @@ export default function SearchConditionsPage() {
       </section>
 
       <form onSubmit={apply}>
+        {/* #162：保存した検索条件の中身を直しているとき（B4） */}
+        {editingSaved && (
+          <div className="cond-editing" role="status">
+            <span>「{editingSaved.name}」の条件を直しています。下の欄を変えて、「上書き保存」を押してください。</span>
+            <button type="button" className="saved-action" onClick={() => setEditingSaved(null)}>
+              やめる
+            </button>
+          </div>
+        )}
         {/* #153：まとまりごとにカードを分ける */}
         <section className="card cond-card">
           <h2 className="section-title">基本</h2>
@@ -439,12 +571,14 @@ export default function SearchConditionsPage() {
             </select>
           </div>
           {/* #153：都道府県は47個あるので、閉じておき、開いて選ぶ。選んだ名前は、閉じていても見える */}
-          <p className="cond-label">住んでいる所</p>
+          <p className="cond-label" id="cond-prefecture">
+            住んでいる所
+          </p>
           <details className="cond-details">
-            <summary>
+            <summary aria-describedby="cond-prefecture">
               {asList(form.prefecture).length > 0 ? asList(form.prefecture).join('・') : '全国（押して選ぶ）'}
             </summary>
-            <div className="pref-list">
+            <div className="pref-list" role="group" aria-labelledby="cond-prefecture">
               {PREFECTURES.map((pref) => (
                 <button
                   type="button"
@@ -464,10 +598,52 @@ export default function SearchConditionsPage() {
         <section className="card cond-card">
           <h2 className="section-title">プロフィール</h2>
           <p className="cond-note">当てはまるものを、いくつでも選べます。選んだ項目に答えていない相手は出ません。</p>
+          {/* #162：年収は、幅で選ぶ（B2）。選んだ幅に当てはまる区分の名前を、条件に入れる */}
+          <p className="cond-label">年収</p>
+          <div className="cond-range">
+            <select
+              className="input"
+              aria-label="年収（下）"
+              value={incomeRange(asList(form.income)).min}
+              onChange={(e) => {
+                // 下が上より大きくなったら、上を外す（当てはまる区分がなくなり、選んだものが消えて見えるため）
+                const max = incomeRange(asList(form.income)).max
+                const bands = incomeBands(e.target.value, max)
+                setForm({ ...form, income: bands.length > 0 || !e.target.value ? bands : incomeBands(e.target.value, '') })
+              }}
+            >
+              <option value="">下限なし</option>
+              {INCOME_STEPS.map((n) => (
+                <option key={n} value={n}>
+                  {n}万円
+                </option>
+              ))}
+            </select>
+            <span className="cond-tilde">〜</span>
+            <select
+              className="input"
+              aria-label="年収（上）"
+              value={incomeRange(asList(form.income)).max}
+              onChange={(e) => {
+                const min = incomeRange(asList(form.income)).min
+                const bands = incomeBands(min, e.target.value)
+                setForm({ ...form, income: bands.length > 0 || !e.target.value ? bands : incomeBands('', e.target.value) })
+              }}
+            >
+              <option value="">上限なし</option>
+              {INCOME_STEPS.map((n) => (
+                <option key={n} value={n}>
+                  {n}万円
+                </option>
+              ))}
+            </select>
+          </div>
           {DETAILS.map((d) => (
             <div key={d.key}>
-              <p className="cond-label">{d.label}</p>
-              <div className="pref-list">
+              <p className="cond-label" id={`cond-${d.key}`}>
+                {d.label}
+              </p>
+              <div className="pref-list" role="group" aria-labelledby={`cond-${d.key}`}>
                 {d.options.map((option) => (
                   <button
                     type="button"
@@ -491,10 +667,26 @@ export default function SearchConditionsPage() {
               こだわり条件 {locked === true && <span className="paid-mark">有料</span>}
             </h2>
           </div>
+          {/* #162：有料かどうかを読み終わるまでは、高さだけを取っておく */}
+          {locked === null && <div className="cond-placeholder" aria-hidden="true" />}
           {locked === true && (
             <button type="button" className="paid-lock" onClick={() => setUpsell(true)}>
               最終ログイン・新しい会員・フリーワード・並び替えは、有料会員になると使えます
             </button>
+          )}
+          {/* #162：無料の会員の欄に、有料の条件が残っているとき（B1）。何が残っているかを見せ、自分で外してもらう */}
+          {locked === true && leftPaid.length > 0 && (
+            <div className="cond-left-paid" role="status">
+              <p className="cond-note">有料の条件が残っています。このままでは探せません。</p>
+              <ul className="cond-left-list">
+                {leftPaid.map((x) => (
+                  <li key={x}>{x}</li>
+                ))}
+              </ul>
+              <Button type="button" variant="ghost" onClick={removePaid}>
+                有料の条件を外す
+              </Button>
+            </div>
           )}
           {locked === false && (
             <div className="paid-fields">
@@ -548,9 +740,15 @@ export default function SearchConditionsPage() {
 
         {/* #153：主なボタンは、画面の下に固定する。保存（小さめ）と、探す（大きめ）を横に並べ、間を空ける */}
         <div className="cond-footer">
-          <Button type="button" variant="ghost" className="cond-save" onClick={startSaving}>
-            保存
-          </Button>
+          {editingSaved ? (
+            <Button type="button" variant="ghost" className="cond-save" loading={sending} onClick={overwrite}>
+              上書き保存
+            </Button>
+          ) : (
+            <Button type="button" variant="ghost" className="cond-save" onClick={startSaving}>
+              保存
+            </Button>
+          )}
           <Button type="submit" className="cond-submit">
             この条件で探す
           </Button>
@@ -562,24 +760,41 @@ export default function SearchConditionsPage() {
         open={naming}
         title="この条件を保存"
         confirmLabel="保存する"
+        busy={sending}
         onConfirm={save}
         onClose={() => setNaming(false)}
       >
         <label className="label">
           名前（例：東京・20代）
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+          <input
+            className="input"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              // #162：Enter でも保存できるようにする（変換の確定の Enter は除く）
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) save()
+            }}
+          />
         </label>
       </ConfirmDialog>
       <ConfirmDialog
         open={renaming !== null}
         title="名前を直す"
         confirmLabel="直す"
+        busy={sending}
         onConfirm={rename}
         onClose={() => setRenaming(null)}
       >
         <label className="label">
           名前
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+          <input
+            className="input"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) rename()
+            }}
+          />
         </label>
       </ConfirmDialog>
       <ConfirmDialog
@@ -587,6 +802,7 @@ export default function SearchConditionsPage() {
         title={`「${deleting?.name}」を消しますか？`}
         confirmLabel="消す"
         danger
+        busy={sending}
         onConfirm={remove}
         onClose={() => setDeleting(null)}
       >
