@@ -30,7 +30,7 @@
 | スキップした相手の一覧 | `LikesPage` | `GET /api/me/skips` | `SkipController::index`（L45） | `skips`・`profiles`・`users` | ― | M3（#184）。新しい順。1件ごとに2本（1＋2N）。`skips` にインデックスがなく、表を全部読む。2回スキップした相手は2回出る |
 | スキップを元に戻す | `LikesPage` | `DELETE /api/me/skips/{publicId}` | `SkipController::destroy`（L74） | `users` | `skips` | M3（#184）。自分がスキップした行を消す（2行あれば2行とも）。消えた行がなくても 204 |
 | マッチした相手の一覧 | 呼んでいる画面は見つからない | `GET /api/me/matches` | `UserMatchController::index`（L26） | `blocks`・`user_matches`・`profiles`・`users` | ― | `user1_id`・`user2_id` を OR で探す（インデックスがなく表を全部読む）。全件（ページなし）。1件ごとにプロフィールと `public_id` を読む（1＋2N）。同じ組が2行あれば2回出る。ブロックは PHP で飛ばす。退会した相手は除かない |
-| トークの一覧 | `MessagesPage`・`TalkPage`・`components/TabBar` | `GET /api/me/talk-rooms` | `TalkRoomController::index`（L27） | `blocks`・`talk_room_members`・`talk_rooms`・`profiles`・`users`・`messages` | ― | 自分の参加者の行を全部読み、ルームごとに6本読む（1＋6N）。`talk_room_members.user_id` と `messages.talk_room_id` にインデックスがなく、表を全部読む。相手がいないルームでは 500。未読は時刻で比べる。並べるのは PHP。ページなし。ブロックは PHP で飛ばし、退会した相手は除かない。生年月日をそのまま返す。#187 で、`last_read_at`（自分が最後に開いた日時）を足した。画面が、新しいマッチ（まだ開いていなくて、まだ1通もない）を見分けるのに使う |
+| トークの一覧 | `MessagesPage`・`TalkPage`・`components/TabBar` | `GET /api/me/talk-rooms` | `TalkRoomController::index`（L27） | `blocks`・`talk_room_members`・`talk_rooms`・`profiles`・`users`・`messages` | ― | 自分の参加者の行を全部読み、ルームごとに6本読む（1＋6N）。`talk_room_members.user_id` と `messages.talk_room_id` にインデックスがなく、表を全部読む。相手がいないルームでは 500。未読は時刻で比べる。並べるのは PHP。ページなし。ブロックは PHP で飛ばし、退会した相手は除かない。生年月日をそのまま返す。#187 で、`last_read_at`（自分が最後に開いた日時）を足した。画面が、新しいマッチ（まだ開いていなくて、まだ1通もない）を見分けるのに使う。#190 で、`last_message.mine`（最後の1件が自分のものか）と `partner_last_read_at`（相手が最後に開いた日時）を足した。既読は有料の機能だが、この日時は**無料の会員にも返す**（出さないのは画面だけ）。トーク画面は、既読のために、5秒ごとにこの一覧を全部読み直す |
 | トークの履歴 | `TalkPage` | `GET /api/me/talk-rooms/{publicId}/messages` | `MessageController::index`（L26） | `talk_rooms`・`messages` | `talk_room_members.last_read_at` | **参加者かを確かめない**（UUID を知っていれば、だれでも読める）。ないルームは 500。新しい50件ずつ（OFFSET）。`page` を確かめない（0・負の数・文字は、Laravel の `offset()` が0に丸めるので1ページ目になる。コードのコメントの「`page=0` で 500」は誤り）。GET の中で既読を書く（画面は5秒ごとに呼ぶ）。`messages` の行をそのまま返す（中の連番の `id`・`sender_id` が出る） |
 | メッセージを送る | `TalkPage` | `POST /api/me/talk-rooms/{publicId}/messages` | `MessageController::store`（L55） | `profiles`・`users`・`talk_rooms` | `messages` | **参加者かを確かめない**（マッチしていない人も送れる）。男性の無料の会員は 403（`is_paid` だけを見る）。本文を確かめない（空は NOT NULL の違反で 500・長さの上限なし）。ないルームは `$room->id` を読んで 500。ブロックした相手のルームにも送れる |
 | Firebase のトークン | `firebase.ts`（`MessagesFsPage`・`TalkFsPage` が使う） | `POST /api/me/firebase-token` | `FirebaseTokenController::store`（L21） | `users` | ― | 署名のない JWT（`alg: none`）を返す。Emulator だけで通り、本物の Firebase では通らない。メールアドレスを確認していない会員も使える |
@@ -78,7 +78,7 @@
 | API | 状態 | SQL の本数 | 本数が増える理由 |
 | --- | --- | --- | --- |
 | `GET /api/users`（検索） | 200 | 25 | 前に4本（自分のプロフィール・いいね・ブロック2本）＋会員の一覧1本＋1人ずつプロフィール（N=20）。4＋(1＋N) |
-| `POST /api/me/likes`（マッチしない・する） | 201 | 6・12 | マッチすると、マッチ・ルーム・参加者2人を足す。#184 で、相手からのいいねがあれば（送り返すとき）、1日10回の上限の確かめを飛ばすようにした（先に2本読む）。#187 で、マッチしたときの応答に `room_id`（トークルームの ID）を足した |
+| `POST /api/me/likes`（マッチしない・する） | 201 | 6・12 | マッチすると、マッチ・ルーム・参加者2人を足す |
 | `GET /api/me/likes` | 200 | 270 | 前に3本（ブロック2本・いいね）＋1件ごとに3本（N=89）。3＋3N |
 | `GET /api/me/matches` | 200 | 181 | 前に3本（ブロック2本・マッチ）＋1件ごとに2本（N=89。ブロックした相手のマッチは飛ばす）。3＋2N |
 | `GET /api/me/talk-rooms` | 200 | 559 | 前に3本＋ルームごとに2本（100）＋ブロックしていないルームごとに4本（89）。3＋2×100＋4×89 |
