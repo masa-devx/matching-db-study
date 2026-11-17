@@ -2,7 +2,7 @@
 
 機能ごとに、画面・API・コントローラー・表をつなぐ。読みながら埋める（推測で埋めない。コードとルートで確かめた行だけ書く）。
 
-- 読む表・書く表は、コードから読み取り、2026-11-16 に流れる SQL で確かめた（2026-11-16 にあった 38本すべて）。2026-11-17 に 04b（保存した検索条件）の4本と、M1（パスワードを変える）の1本、M3（届いたいいね・スキップ）の4本が増えて 47本、M2（パスワードの再設定。#196）の2本が増えて 49本、M7・A7（通報。#202・#203）の4本が増えて 53本、A7（お知らせ・強制退会。#213）の4本が増えて 57本、A1（対応のメモ。#216）の1本が増えて 58本になった。この4本は、curl で実際に呼んで確かめた（`docs/api/04b-saved-searches.md` の「レガシー版で起きること」）。書き込みの API も、トランザクションの中で本当に流してから取り消した（メールと Firestore は偽物に差し替えた）。確かめた結果と SQL の本数は、末尾の「SQL で確かめた結果」
+- 読む表・書く表は、コードから読み取り、2026-11-16 に流れる SQL で確かめた（2026-11-16 にあった 38本すべて）。2026-11-17 に 04b（保存した検索条件）の4本と、M1（パスワードを変える）の1本、M3（届いたいいね・スキップ）の4本が増えて 47本、M2（パスワードの再設定。#196）の2本が増えて 49本、M7・A7（通報。#202・#203）の4本が増えて 53本、A7（お知らせ・強制退会。#213）の4本が増えて 57本、A1（対応のメモ。#216）の1本が増えて 58本、A2（やり取りを読む。#221）の1本が増えて 59本になった。この4本は、curl で実際に呼んで確かめた（`docs/api/04b-saved-searches.md` の「レガシー版で起きること」）。書き込みの API も、トランザクションの中で本当に流してから取り消した（メールと Firestore は偽物に差し替えた）。確かめた結果と SQL の本数は、末尾の「SQL で確かめた結果」
 - 行の番号は、会員の側は `backend/client/app/Http/Controllers/` のファイルの行（2026-11-16 に `refactored-repo` で読んだ）。移すとずれるので、テストの材料に使うときはメソッドの名前を正にする
 - **形の違う ID（`abc` など。UUID でない文字）は、どの API でも 500** になる。`public_id` は uuid の列なので、比べると PostgreSQL がエラー（22P02）を返す。下の表で「いない会員は 500」「いない相手でも 204」と書いたのは、形の正しい UUID のとき
 - 要件 ID と、返る状態コードの一覧は、ここには書かない。その API を移すチケットで、その API の分だけ書く（PR #132 のレビュー S14）
@@ -52,7 +52,7 @@
 | 保存した検索条件を直す | `SearchConditionsPage` | `PUT /api/me/search-conditions/{publicId}` | `SearchConditionController::update`（L81） | `search_conditions` | `search_conditions` | 04b。**安全の穴**（#156）：持ち主を確かめない（他人の条件を直せる）。送られた項目を全部入れるので、`user_id` を送ると他人の条件を自分のものにできる。有料かどうかの確かめがない（無料の男性が身長を足せる）。ない ID は 500。#162 から、画面は名前だけ・条件だけの2通りで呼ぶ |
 | 保存した検索条件を消す | `SearchConditionsPage` | `DELETE /api/me/search-conditions/{publicId}` | `SearchConditionController::destroy`（L99） | ― | `search_conditions` | 04b。**安全の穴**（#156）：持ち主を確かめない（他人の条件を消せる）。ない ID でも 204 |
 
-## 管理画面（`backend/admin`・20本）
+## 管理画面（`backend/admin`・21本）
 
 全体：会員の側と同じく、ルートにミドルウェアはなく、各コントローラーの中で管理者の JWT を読む。表は `DB::table()` で直接読む（Model を使わない・会員の側のコードを読み込まない）。画面は `frontend/admin/src/`。行の番号は `backend/admin/app/Http/Controllers/` のファイルの行。
 
@@ -67,11 +67,12 @@
 | 停止する | `domains/members/MemberDetailPage` | `POST /api/members/{publicId}/suspension` | `SuspensionController::store`（L20） | `admins`・`users` | `users.suspended_at`・`suspended_reason`・`admin_audit_logs` | owner だけ。理由を確かめない。トランザクションがない（停止と監査ログがずれうる）。断るのは会員の側のログインだけ（持っている JWT は使える） |
 | 停止を解く | `domains/members/MemberDetailPage` | `DELETE /api/members/{publicId}/suspension` | `SuspensionController::destroy`（L57） | ― | `users.suspended_at`・`suspended_reason` | **役割の確かめと監査ログをコピーし忘れている**（止めるほうのコードをコピーして作った）（見るだけの人でも解け、記録も残らない）。いない会員でも 204 |
 | メッセージの一覧 | `domains/messages/MessagesPage` | `GET /api/messages` | `MessageController::index`（L19） | `messages`・`users`・`profiles`・`talk_rooms`・`talk_room_members` | ― | 10万件を並べ替えて OFFSET で50件・毎回の件数・1件ごとに6本（2＋6N）。本文の部分一致。**本文を見られるのに、監査ログを書き忘れている**。中の連番の `id` を返す |
+| トークルームのやり取りを読む | `domains/messages/TalkRoomPage`（メッセージの一覧の「やり取りを見る」から） | `GET /api/talk-rooms/{publicId}` | `TalkRoomController::show`（L22） | `talk_rooms`・`talk_room_members`・`users`・`profiles`・`messages` | ― | A2（#221）。新しい方から 100件ずつ（OFFSET）・毎回の件数・1件ごとに送った人を読む（8＋100 本）。`messages` にインデックスがなく、ルームを読むたびに 10万件を全部読む。読んだことを、監査ログに残さない |
 | 購入の一覧 | `domains/sales/SalesPage` | `GET /api/purchases` | `SalesController::purchases`（L19） | `purchases`・`plans`・`users`・`profiles` | ― | 50件ずつ・1件ごとに3本（2＋3N）。値段は今のプランのもの |
 | 月ごとの売上 | `domains/sales/SalesPage` | `GET /api/sales/monthly` | `SalesController::monthly`（L47） | `purchases`・`plans` | ― | 今のプランの値段で足す（値段を変えると、過去の月の売上も変わる）。全期間 |
 | プランの一覧 | `domains/sales/SalesPage` | `GET /api/plans` | `PlanController::index`（L19） | `plans` | ― | `plans` の行をそのまま返す |
 | 値段を変える | `domains/sales/SalesPage` | `PUT /api/plans/{id}` | `PlanController::update`（L31） | `admins`・`plans` | `plans.price`・`admin_audit_logs` | **お金**。owner だけ。値段を確かめない（0 や負の数も入る）。ないプランでも監査ログを書く。中の連番の id を URL に使う（ほかは `public_id`）。トランザクションがない |
-| 監査ログの一覧 | `domains/audit-logs/AuditLogsPage` | `GET /api/audit-logs` | `AuditLogController::index`（L19） | `admin_audit_logs`・`admins` | ― | **API の設計（`docs/api/12-admin.md`）では owner だけだが、役割の確かめをコピーし忘れている**（見るだけの人も見られる。要件 `docs/requirements/admin.md` には書いていない）。50件ずつ・1件ごとに管理者の名前を読む（2＋N） |
+| 監査ログの一覧 | `domains/audit-logs/AuditLogsPage` | `GET /api/audit-logs` | `AuditLogController::index`（L19） | `admin_audit_logs`・`admins` | ― | **API の設計（`docs/api/12-admin.md`）では owner だけだが、役割の確かめをコピーし忘れている**（見るだけの人も見られる。要件 `docs/requirements/admin.md` には書いていない）。50件ずつ・1件ごとに管理者の名前を読む（2＋N）。#221 で、管理者の名前・操作・対象・期間の絞り込みを足した（どの列にもインデックスがない。期間は UTC で切り、「まで」の日が入らない） |
 | 通報の案件の一覧 | `domains/reports/ReportCasesPage` | `GET /api/report-cases` | `ReportCaseController::index`（L25） | `report_cases`・`reports`・`users`・`profiles` | ― | A7（#203）。2＋4N 本（20件で 82本）。「通報した人数」に、件数と同じ数を入れている。並びは、案件を作った新しい順 |
 | 通報の案件の中身 | `domains/reports/ReportCaseDetailPage` | `GET /api/report-cases/{publicId}` | `ReportCaseController::show`（L71） | `report_cases`・`reports`・`users`・`profiles`・`messages`・`admins` | ― | A7（#203）。通報を全部返す（通報 50件で 105本）。指したメッセージの持ち主を見ずに、中身を出す。読んだことは、監査ログに残らない |
 | 通報の案件の状態を変える | `domains/reports/ReportCaseDetailPage` | `PUT /api/report-cases/{publicId}` | `ReportCaseController::update`（L125） | `admins`・`report_cases` | `report_cases`・`admin_audit_logs` | A7（#203）。`owner` だけ。送られた値を確かめない（何をしたかなしで済みにできる・済みを「まだ」に戻せる・決まっていない状態が入る） |

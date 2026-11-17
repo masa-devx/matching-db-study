@@ -1,6 +1,20 @@
-import { Anchor, Badge, Card, Group, Loader, Pagination, Stack, Table, Text, Title } from '@mantine/core'
+import {
+  Anchor,
+  Badge,
+  Button,
+  Card,
+  Group,
+  Loader,
+  Pagination,
+  Select,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  Title,
+} from '@mantine/core'
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import { toDate } from '../../date'
 
 // 12 監査ログ（FR-ADMIN-011）。サイドバーには owner にだけ出す（API は役割を確かめ忘れている）
@@ -62,22 +76,93 @@ function Detail({ text }: { text: string }) {
 }
 
 export default function AuditLogsPage() {
-  const [page, setPage] = useState(1)
+  // A4（#221）：絞り込み（管理者・操作・対象・期間）。URL のクエリに持つ。会員の一覧に書いた持ち方を、ここにもコピーした
+  const FILTERS = ['admin', 'action', 'target', 'from', 'to']
+  const [params, setParams] = useSearchParams()
+  const page = Number(params.get('page') ?? '1')
+  const [form, setForm] = useState<Record<string, string>>(
+    Object.fromEntries(FILTERS.map((k) => [k, params.get(k) ?? ''])),
+  )
+  const apply = (next: Record<string, string>, nextPage = 1) => {
+    const merged: Record<string, string> = {}
+    for (const k of FILTERS) if (next[k]) merged[k] = next[k]
+    if (nextPage > 1) merged.page = String(nextPage)
+    setParams(merged)
+  }
+  const setPage = (n: number) => apply(Object.fromEntries(FILTERS.map((k) => [k, params.get(k) ?? ''])), n)
   const [data, setData] = useState<any>(null)
   const api = import.meta.env.VITE_ADMIN_API_URL ?? 'http://127.0.0.1:8100'
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: URL のクエリが変わったときだけ読む
   useEffect(() => {
     setData(null)
-    fetch(`${api}/api/audit-logs?page=${page}`, {
+    fetch(`${api}/api/audit-logs?${params}`, {
       headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('adminToken')}` },
     })
       .then((r) => r.json())
       .then(setData)
-  }, [api, page])
+  }, [api, params.toString()])
 
   return (
     <Stack>
       <Title order={2}>監査ログ</Title>
+      <Card withBorder radius="md">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            apply(form)
+          }}
+        >
+          <Group align="end">
+            <TextInput
+              label="管理者の名前"
+              placeholder="部分一致"
+              w={160}
+              value={form.admin}
+              onChange={(e) => setForm({ ...form, admin: e.currentTarget.value })}
+            />
+            <Select
+              label="操作"
+              w={240}
+              clearable
+              placeholder="すべて"
+              data={Object.entries(ACTIONS).map(([value, label]) => ({ value, label }))}
+              value={form.action || null}
+              onChange={(v) => setForm({ ...form, action: v ?? '' })}
+            />
+            <TextInput
+              label="対象の ID（会員・案件）"
+              placeholder="完全一致"
+              w={300}
+              value={form.target}
+              onChange={(e) => setForm({ ...form, target: e.currentTarget.value.trim() })}
+            />
+            <TextInput
+              label="いつから"
+              type="date"
+              value={form.from}
+              onChange={(e) => setForm({ ...form, from: e.currentTarget.value })}
+            />
+            <TextInput
+              label="いつまで"
+              type="date"
+              value={form.to}
+              onChange={(e) => setForm({ ...form, to: e.currentTarget.value })}
+            />
+            <Button type="submit">絞り込む</Button>
+            <Button
+              variant="subtle"
+              onClick={() => {
+                const empty = Object.fromEntries(FILTERS.map((k) => [k, '']))
+                setForm(empty)
+                apply(empty)
+              }}
+            >
+              外す
+            </Button>
+          </Group>
+        </form>
+      </Card>
       <Card withBorder radius="md" padding={0}>
         {!data ? (
           <Loader m="md" />
@@ -107,9 +192,25 @@ export default function AuditLogsPage() {
                     <Table.Td>
                       {/* A4（#208）：対象から、その画面に行ける（名前は、API が返さないので出せない） */}
                       {log.target_type === 'user' ? (
-                        <Anchor component={Link} to={`/members/${log.target_id}`} size="sm">
-                          会員の詳細へ
-                        </Anchor>
+                        <Group gap={6}>
+                          <Anchor component={Link} to={`/members/${log.target_id}`} size="sm">
+                            会員の詳細へ
+                          </Anchor>
+                          {/* A4（#221）：この会員への操作だけに絞る */}
+                          <Anchor
+                            component="button"
+                            type="button"
+                            size="xs"
+                            c="dimmed"
+                            onClick={() => {
+                              const next = { ...form, target: log.target_id }
+                              setForm(next)
+                              apply(next)
+                            }}
+                          >
+                            この対象で絞る
+                          </Anchor>
+                        </Group>
                       ) : log.target_type === 'report_case' ? (
                         <Anchor component={Link} to={`/reports/${log.target_id}`} size="sm">
                           通報の案件へ

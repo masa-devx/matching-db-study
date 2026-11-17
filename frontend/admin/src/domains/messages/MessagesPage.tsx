@@ -115,7 +115,18 @@ export default function MessagesPage() {
                     <Table.Td>
                       <Link to={`/members/${m.partner.user_id}`}>{m.partner.nickname ?? '―'}</Link>
                     </Table.Td>
-                    <Table.Td>{m.body}</Table.Td>
+                    <Table.Td>
+                      {m.body}
+                      {/* A2（#221）：前後の流れを読むために、やり取りの画面へ */}
+                      {m.room_id && (
+                        <Link
+                          to={`/messages/rooms/${m.room_id}`}
+                          style={{ marginLeft: 8, fontSize: 12, whiteSpace: 'nowrap' }}
+                        >
+                          やり取りを見る
+                        </Link>
+                      )}
+                    </Table.Td>
                   </Table.Tr>
                 ))}
               </Table.Tbody>
