@@ -15,7 +15,7 @@
 | `POST /api/me/talk-rooms/{public_id}/messages` | 送る | 作る | 作る |
 | `PUT /api/me/talk-rooms/{public_id}/read` | 読んだことにする | 作らない | 作る |
 
-レガシー版は、02〜04 と同じく、だれが使うかをコントローラの中で JWT を読んで決める（`AuthController::me()` の処理を、メソッドごとに写す。これで6〜8か所目）。入力も、ルームの持ち主かも確かめず、エラーの扱いは考えない。コントローラは、一覧が `TalkRoomController::index`、履歴と送るが `MessageController::index`・`store`。
+レガシー版は、02〜04 と同じく、だれが使うかをコントローラの中で JWT を読んで決める（`AuthController::me()` の処理を、メソッドごとにコピーする。これで6〜8か所目）。入力も、ルームの持ち主かも確かめず、エラーの扱いは考えない。コントローラは、一覧が `TalkRoomController::index`、履歴と送るが `MessageController::index`・`store`。
 
 03 の `GET /api/me/matches` は残す（画面のメッセージのタブは、05 から `GET /api/me/talk-rooms` を使う）。
 

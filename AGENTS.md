@@ -39,7 +39,7 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 | compose.yaml | PHP（`app`）・管理画面の PHP（`admin-app`。12）・PostgreSQL（開発用とテスト用）・Mailpit・Firebase Emulator（`firebase`。05c） |
 | docker/ | コンテナの作り方（`php/Dockerfile`・`firebase/Dockerfile`）と、DB を最初に作る SQL（`db/init/`） |
 | firebase/ | Firebase Emulator の設定（`firebase.json`）・セキュリティルール（`firestore.rules`）・インデックス（`firestore.indexes.json`）。止めたときのデータは `firebase/.emulator-data/`（git に入れない） |
-| docs/ | 何を作るか（product.md・requirements/）と、なぜそうしたか（decisions.md）。目次は docs/README.md |
+| docs/ | 何を作るか（product.md・requirements/）と、なぜそうしたか（decisions.md）。言葉の対応は用語集（glossary.md）。目次は docs/README.md |
 | explanations/ | 一歩ごとの解説と図（HTML）。目次は index.html、ひな形は _template.html |
 | agents/ | 開発ルール（rules/）・手順（skills/） |
 | .claude/ | Claude Code 向けの権限・フック・レビュー役。rules・skills は agents/ へのリンク |
@@ -53,12 +53,12 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 | --- | --- | --- | --- | --- |
 | 道具の版をそろえる | リポジトリのルート | `mise install` | mise | nodenv・nvm・Volta（mise に一本化したため） |
 | 解説を見る | claude.ai | AI が Artifact に載せたリンク（一覧は `agents/notes.local.md`）。手元で見るなら、リポジトリのルートで `python3 -m http.server 8765 -d explanations` → `http://localhost:8765/` | claude.ai のアカウント | `file://` で直接開く（ブラウザによって Mermaid の読み込みが止まるため） |
-| 解説を Artifact に載せる形に写す | リポジトリのルート | `python3 -I explanations/tools/to-artifact.py <元の HTML> <会話の作業用フォルダ>/artifacts/<ファイル名>` | python3 | 元の HTML をそのまま載せる（骨組みのタグと Mermaid の script が二重になるため） |
+| 解説を Artifact に載せる形に変える | リポジトリのルート | `python3 -I explanations/tools/to-artifact.py <元の HTML> <会話の作業用フォルダ>/artifacts/<ファイル名>` | python3 | 元の HTML をそのまま載せる（骨組みのタグと Mermaid の script が二重になるため） |
 | Eloquent が発行する SQL を集める | リポジトリのルート | `cat explanations/tools/collect-sql.tinker 呼び出しの.txt \| docker compose exec -T app php artisan tinker \| grep '^> *@@\\\|^@@'`（呼び出しの書き方はファイルの先頭。`$sql` は流す・`$dry` は `DB::pretend()` で流さない） | app と db が起動している | 推測で SQL を書く。書き込みを `$sql` で流す（開発用の DB が変わるため） |
 | レガシー版と改善版の SQL を並べる節を作る | リポジトリのルート | `python3 -I explanations/tools/compare-block.py explanations/sql/<番号>-<名前>.json explanations/<番号>-<名前>.html`（ページの `<!-- compare: … -->` の印の間を書き換える） | python3 | 並べる HTML を手で書く（エスケープの漏れと形のずれが起きるため） |
 | セットアップ | リポジトリのルート | ① `docker compose build app` ② `docker compose up -d --wait` ③ `docker compose run --rm app composer install` ④（初めての PC だけ・人が実行）`cp backend/client/.env.example backend/client/.env` → `docker compose run --rm app php artisan key:generate` ⑤ `docker compose run --rm app php artisan migrate` | Docker。④の秘密の値のファイルは、AI は作らない・読まない | 手元の PHP・Composer（D-011。版と拡張がそろわないため）。`php.new` のスクリプト・Laravel Boost（`backend/client/` に AI 向けの指示が置かれるが、方針と合わないので入れない） |
 | 起動 | リポジトリのルート | `docker compose up -d --wait` → API は `http://127.0.0.1:8000/api/health`、メールの受信箱は `http://127.0.0.1:58025`。止めるのは `docker compose stop` | Docker | `php artisan serve`（compose の環境変数を子のプロセスに渡さず、`.env` の SQLite につながるため）。`docker compose down -v`（DB の中身も消える。作り直すときだけ） |
-| 画面を起動 | `frontend/client/` | 初めてのときは `npm install` → `npm run dev` → `http://localhost:5173/`。API の送り先は `VITE_API_URL`（既定は `http://127.0.0.1:8000`。変えるときは `.env.example` を写して `.env.local` を作る） | `mise install` 済み・API が起動している | `http://127.0.0.1:5173` で開く（`localhost` とは別のオリジンになり、改善版で Cookie が届かなくなるため） |
+| 画面を起動 | `frontend/client/` | 初めてのときは `npm install` → `npm run dev` → `http://localhost:5173/`。API の送り先は `VITE_API_URL`（既定は `http://127.0.0.1:8000`。変えるときは `.env.example` をコピーして `.env.local` を作る） | `mise install` 済み・API が起動している | `http://127.0.0.1:5173` で開く（`localhost` とは別のオリジンになり、改善版で Cookie が届かなくなるため） |
 | 管理画面を起動 | リポジトリのルート・`frontend/admin/` | API は `docker compose up -d --wait`（`admin-app`）→ `http://127.0.0.1:8100/api/health`。画面は `frontend/admin` で、初めてのときは `npm install` → `npm run dev` → `http://localhost:5174/`。API の送り先は `VITE_ADMIN_API_URL`（既定は `http://127.0.0.1:8100`） | `mise install` 済み | 管理画面の Laravel で `php artisan migrate` を流す（表の作りは `backend/client/` で流す） |
 | テスト | リポジトリのルート | `docker compose run --rm app ./vendor/bin/pest`（全体）・`docker compose run --rm app ./vendor/bin/pest tests/Feature/HealthTest.php`（対象別） | db が起動している。テスト用の DB `matching_test` に流れる（違えば `tests/TestCase.php` が止める） | SQLite のメモリ DB（D-010）。手元の PHP で `php artisan test`（手元に PHP がない） |
 | 静的検査・整形 | リポジトリのルート | `docker compose run --rm app ./vendor/bin/phpstan analyse --memory-limit=1G`（Larastan。レガシー版はレベル 6・改善版は 9。D-016）・`docker compose run --rm app ./vendor/bin/pint --test`（整形の確かめ）・`docker compose run --rm app ./vendor/bin/pint`（整形する）。画面は `frontend/client/` で `npm run lint`（Biome。レガシー版は指摘が残ったまま）・`npm run format`（整形する） | なし | ESLint・Prettier・oxlint（画面は Biome に一本化したため） |
@@ -66,14 +66,15 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 | 流れた SQL を見る | リポジトリのルート | `tail -n 20 backend/client/storage/logs/sql-$(date -u +%F).log`（日付は UTC） | app が起動していて、`APP_ENV=local` | `php artisan db:show`・`docker compose config`（接続の設定や秘密の値をまとめて出すため、AI は使わない） |
 | 試しの会員を入れる（04） | リポジトリのルート | `docker compose exec app php artisan db:seed --class=SearchMembersSeeder`（会員 2万人。`search00001@example.test`〜・パスワードは `password`。流し直すと入れ直す。約1秒） | app と db が起動している・`legacy-repo` 系のブランチ | テスト用の DB に入れる（テストの前提が変わるため）。`DatabaseSeeder` から呼ぶ（ふだんのシードでも2万人になるため） |
 | 試しのメッセージを入れる（05） | リポジトリのルート | `docker compose exec app php artisan db:seed --class=MessagesSeeder`（マッチ 1000組・メッセージ 10万件。`search00001` はルーム 100。ルームのない前からのマッチにもルームを作る。流し直すと入れ直す。約3秒） | 先に「試しの会員を入れる（04）」を流す・`legacy-repo` 系のブランチ | テスト用の DB に入れる・`DatabaseSeeder` から呼ぶ（04 と同じ理由） |
-| 試しのメッセージを Firestore に写す（05c） | リポジトリのルート | `docker compose exec app php artisan db:seed --class=FirestoreMessagesSeeder`（PostgreSQL のルーム・受信箱・メッセージ 10万件を、Emulator の中身を消してから写す。約5秒）。中身は `http://localhost:4000/firestore` で見る | 先に「試しのメッセージを入れる（05）」を流す・`firebase` が起動している | 本物の Firebase のプロジェクトにつなぐ（`FIREBASE_PROJECT_ID` が `demo-` で始まらなければ、シーダーは止まる） |
+| 試しのメッセージを Firestore にコピーする（05c） | リポジトリのルート | `docker compose exec app php artisan db:seed --class=FirestoreMessagesSeeder`（PostgreSQL のルーム・受信箱・メッセージ 10万件を、Emulator の中身を消してからコピーする。約5秒）。中身は `http://localhost:4000/firestore` で見る | 先に「試しのメッセージを入れる（05）」を流す・`firebase` が起動している | 本物の Firebase のプロジェクトにつなぐ（`FIREBASE_PROJECT_ID` が `demo-` で始まらなければ、シーダーは止まる） |
 | 試しのブロックと退会を入れる（06） | リポジトリのルート | `docker compose exec app php artisan db:seed --class=BlocksSeeder`（ブロック 3万件・退会した会員 1025人。`search00001` がブロックした・された・お互い・退会したマッチの相手を混ぜる。流し直すと入れ直す。約1秒） | 先に「試しのメッセージを入れる（05）」を流す・`legacy-repo` 系のブランチ | テスト用の DB に入れる・`DatabaseSeeder` から呼ぶ（04 と同じ理由） |
 | 試しの有料会員を入れる（07） | リポジトリのルート | `docker compose exec app php artisan db:seed --class=PaidMembersSeeder`（search00301 以降の男性 3000人を有料にしたことがある会員にする：期限の中 1500・もうすぐ切れる 300・期限が過ぎた 1200（`is_paid` は true のまま）。購入 約2万4千件。決まった3人の名前は流したときに出る。`search00001` は無料のまま。流し直すと入れ直す。約2秒） | 先に「試しの会員を入れる（04）」を流す・`legacy-repo` 系のブランチ | テスト用の DB に入れる・`DatabaseSeeder` から呼ぶ（04 と同じ理由） |
 | 試しの管理者を入れる（12） | リポジトリのルート | `docker compose exec app php artisan db:seed --class=AdminsSeeder`（`owner@admin.example.test`（すべてできる）・`viewer@admin.example.test`（見るだけ）。パスワードは `password`。表の作りは `backend/client` にまとめているので、シーダーもここ。流し直すと入れ直す） | `migrate` 済み | テスト用の DB に入れる・`DatabaseSeeder` から呼ぶ |
 | DB に入る | リポジトリのルート | `docker compose exec db psql -U postgres -d matching_dev`（テスト用は `-d matching_test`） | db が起動している | ― |
 | ブランチを切り替えたあと | リポジトリのルート | `docker compose restart app` | ― | 切り替え先に `backend/client/` がないと、動いているサーバーのフォルダが一度消えて、API がエラーを返し続けるため |
-| CI | GitHub（PR と push で自動） | `.github/workflows/backend.yml`（`legacy-repo` にある）。中身と決まりは [docs/ci.md](docs/ci.md)。結果は `gh pr checks <番号>` で見る | ― | CI の設定を緩めて通す（レベルを下げる・対象から外す） |
+| CI | GitHub（PR と push で自動） | `.github/workflows/backend.yml`（会員の側）・`admin-backend.yml`（管理画面）。中身と決まりは [docs/ci.md](docs/ci.md)。結果は `gh pr checks <番号>` で見る | ― | CI の設定を緩めて通す（レベルを下げる・対象から外す） |
 | エディタの補完のファイルを作る | リポジトリのルート | `docker compose run --rm app php artisan ide-helper:models --nowrite`（`backend/client/_ide_helper_models.php` に書き出す。git には入らない） | db が起動している（列を DB から読む） | `--write`（Model のファイルに `@property` を書き込む。長くなり、マイグレーションとずれるため。quality-types.md） |
+| 文書の言葉を確かめる | リポジトリのルート | `python3 -I agents/tools/check-words.py`（使わないと決めた言い方が `docs/`・`agents/`・`.claude/agents/`・`.github/`・AGENTS.md に入っていないかを見る。CI でも流れる） | python3 | 見つかった言葉を「」で囲んで通す（古い言い方を説明のために引くときだけ囲む） |
 | ビルド | `frontend/client/` | `npm run build`（型の検査と `vite build`。`dist/` に出す。デプロイはしない） | `npm install` 済み | ― |
 
 未記入のコマンドは推測して実行しない。必要な操作について確認する。
@@ -93,6 +94,7 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 | 構造化ログの実装・変更 | [logging.md](agents/rules/logging.md) |
 | PHP のコードを書く・変える | [quality-types.md](agents/rules/quality-types.md) |
 | DB・マイグレーションの作成・変更 | [database.md](agents/rules/database.md) |
+| ルール・スキル・チケット・議事録・PR の文を書く | [writing.md](agents/rules/writing.md) |
 
 レビューは [review](agents/skills/review/SKILL.md) の手順で行う。矛盾する指示や未確定の仕様は、該当箇所を示して確認する。
 
@@ -104,7 +106,7 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 
 1. 一歩（機能）ごとに、[issue-plan](agents/skills/issue-plan/SKILL.md) で親 Issue と子 Issue（DB・テーブル設計／バックエンド API／フロントエンド）を作り、マイルストーンと Project「matching-db-study」につなぐ。表はその機能に必要なものだけ作る。入る前に要件（[docs/requirements/](docs/requirements/)）を質問しながら決め、[explain-step](agents/skills/explain-step/SKILL.md) で解説と図を作る。「実装して」と言われるまで実装しない
 2. 最初の範囲（[background.md](agents/background.md) の「最初の範囲」）は、`legacy-repo` で**レガシーコードとして作り切る**（Fat Controller・テストなし）。子 Issue 1つにブランチ1つ（`legacy/<子 Issue の番号>-<名前>`）と PR 1つ（`legacy-repo` へ）。順番は DB → API → フロント。**API の子 Issue では、先に [docs/api/](docs/api/README.md) のその一歩のファイルに設計（入力・応答・失敗・流れる SQL の目安）を書き、確かめてもらってから実装する**。PR の行き先が既定のブランチでないので、マージのあとに子 Issue を手で閉じ、子がすべて閉じたら親を閉じる。機能ができたら [explain-change](agents/skills/explain-change/SKILL.md) で 9-1・9-2（レガシー版と、測った問題）を記録する
-3. 作り切ったら、測った問題ごとに改善の親 Issue（`.github/ISSUE_TEMPLATE/parent.md` の「改善のときだけ」を書く）と子 Issue（最初は必ず「固定するテスト」）を issue-plan で立て、`refactored-repo` で直す。ブランチは `refactor/<子 Issue の番号>-<名前>`。**今の振る舞いを固定するテストを足す（要件 ID に対応させる）→ 直す → もう一度測る** の順に進め、explain-change で 9-3・9-4 を記録し、[docs/decisions.md](docs/decisions.md) に1行足す。00（環境）・05b は、レガシー版と改善版に分けなくてよい（画面も 03b からレガシー版と改善版に分ける。[docs/frontend.md](docs/frontend.md)）
+3. 作り切ったら、測った問題ごとに改善の親 Issue（`.github/ISSUE_TEMPLATE/parent.md` の「改善のときだけ」を書く）と子 Issue（最初は必ず「今の動きを確かめるテスト」）を issue-plan で立て、`refactored-repo` で直す。ブランチは `refactor/<子 Issue の番号>-<名前>`。**今の動きを確かめるテストを足す（要件 ID に対応させる）→ 直す → もう一度測る** の順に進め、explain-change で 9-3・9-4 を記録し、[docs/decisions.md](docs/decisions.md) に1行足す。00（環境）・05b は、レガシー版と改善版に分けなくてよい（画面も 03b からレガシー版と改善版に分ける。[docs/frontend.md](docs/frontend.md)）
 4. 区切りごとに、[review](agents/skills/review/SKILL.md) の手順で見直す（実装の会話を持たないサブエージェントに、差分と確かめたいことを渡す）
 5. コミット・push・Issue・PR の作成は、頼まれたときだけ行う
 
@@ -121,3 +123,4 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 
 - 結論から端的に答える。前置き・繰り返し・求められていない補足を省き、できるだけ短い文章で返す。判断に必要な根拠と未確認の事項は省かない。返事は日本語で書く
 - 変更内容、実行した検証と結果、未検証の範囲を報告する。実行していないテストを通過扱いにしない
+- 返事・チケット・PR・議事録・ルールの文は、[writing.md](agents/rules/writing.md) の書き方と言葉で書く。たとえや、このリポジトリだけで通じる言い方を新しく作らない。新しい言葉が要るときは、先に `writing.md` の表（業務の言葉なら `docs/glossary.md`）に足す

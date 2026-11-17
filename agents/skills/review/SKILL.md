@@ -16,7 +16,7 @@ PR作成前に必ず1回、実装とは別セッションで実行する。別�
 - 要件：Issue の本文の「要件」にある docs/requirements/ のファイル
 - 段階：`legacy/` ならレガシーコードで作る段階（Fat Controller・テストなしは指摘しない。`legacy-repo` の architecture.md の「一歩の段階」。改訂版の architecture.md にはない）、`refactor/` なら改善する段階
 
-観点は、Issue と要件との整合、異常系と境界値（対応するテストと骨抜きテストを含む）、セキュリティ、SSoT・過剰設計、これ以上単純にできないか、名前が意図を表し、コメントが「なぜ」を書いているか、該当ルールへの準拠。観点別に分ける場合は、design-reviewer、edge-case-reviewer、security-reviewerへ同じ資料を渡して並列で走らせる。
+観点は、Issue と要件との整合、異常系と境界値（対応するテストとテストを弱めて通していないかを含む）、セキュリティ、SSoT・過剰設計、これ以上単純にできないか、名前が意図を表し、コメントが「なぜ」を書いているか、該当ルールへの準拠。観点別に分ける場合は、design-reviewer、edge-case-reviewer、security-reviewerへ同じ資料を渡して並列で走らせる。
 
 ## 2. 指摘の優先度
 

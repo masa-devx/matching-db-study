@@ -16,6 +16,12 @@ agents/ の目次。作業内容に合うルールを読み、スキルで進め
 
 作業に合うルールを読む。複数の領域を変更する場合は、該当するルールをすべて読む。`paths:` が付いたルールは、そのファイルを触るときに読み込まれる。
 
+### 文書
+
+| ルール | 読むとき | 中身 |
+| --- | --- | --- |
+| [writing.md](rules/writing.md) | ルール・スキル・チケット・議事録・PR の文を書く | 書き方（1文に1つ・用語は先に説明）・使う言葉と使わない言葉の表 |
+
 ### アーキテクチャ
 
 | ルール | 読むとき | 中身 |
@@ -26,7 +32,7 @@ agents/ の目次。作業内容に合うルールを読み、スキルで進め
 
 | ルール | 読むとき | 中身 |
 | --- | --- | --- |
-| [testing.md](rules/testing.md) | 振る舞いを検証する、テストを変える | 単体と E2E の分け方・シードデータ・骨抜きの禁止・テストの独立性 |
+| [testing.md](rules/testing.md) | 振る舞いを検証する、テストを変える | 単体と E2E の分け方・シードデータ・テストを弱めて通すことの禁止・テストの独立性 |
 
 ### ログ
 
@@ -78,7 +84,7 @@ agents/ の目次。作業内容に合うルールを読み、スキルで進め
 | 機能や改善の親 Issue と子 Issue を作り、マイルストーンと Project につなぐ | [issue-plan](skills/issue-plan/SKILL.md) |
 | 一歩を小さなタスクに分け、確認を取ってから Google カレンダーに入れる | [study-calendar](skills/study-calendar/SKILL.md) |
 | 差分をレビューする（PR 前の自己点検を含む）、完了を判断する | [review](skills/review/SKILL.md) |
-| 雛形を写した直後に、【記入】を順番に埋める | [harness-setup](skills/harness-setup/SKILL.md) |
+| 雛形をコピーした直後に、【記入】を順番に埋める | [harness-setup](skills/harness-setup/SKILL.md) |
 | スキル・ルール・サブエージェントを、型どおりに足す | [harness-extend](skills/harness-extend/SKILL.md) |
 
 ### 改訂版（refactored-repo）の開発サイクル
@@ -118,7 +124,7 @@ agents/ の目次。作業内容に合うルールを読み、スキルで進め
 | 改訂版の設計・PR レビュー | [design-reviewer](../.claude/agents/design-reviewer.md) | 責務・ディレクトリ・依存の向き・名前・重複・やりすぎ・API の形 | しない |
 | 改訂版の設計・PR レビュー | [db-reviewer](../.claude/agents/db-reviewer.md) | 制約・インデックス・ロック・マイグレーション・SQL の本数・10倍のとき | しない |
 | 改訂版の設計・PR レビュー | [ops-reviewer](../.claude/agents/ops-reviewer.md) | ログ・エラー通知・監視・リリースの順番・戻し方 | しない |
-| 改訂版の PR レビュー | [test-reviewer](../.claude/agents/test-reviewer.md) | 要件 ID との対応・骨抜き・独立性・足りない場面 | しない |
+| 改訂版の PR レビュー | [test-reviewer](../.claude/agents/test-reviewer.md) | 要件 ID との対応・テストを弱めて通していないか・独立性・足りない場面 | しない |
 | 改訂版の PR レビュー | [frontend-reviewer](../.claude/agents/frontend-reviewer.md) | 状態・読み込みと失敗・アクセシビリティ・API とのずれ | しない |
 
 改訂版の PR レビューでは、上の6体と edge-case-reviewer・security-reviewer を `pr-review` が選んで並列に呼ぶ（[docs/process.md](../docs/process.md) の7章）。

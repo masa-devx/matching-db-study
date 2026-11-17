@@ -34,7 +34,7 @@
 | 項目 | レガシー版（legacy-repo） | 改善版（refactored-repo） |
 | --- | --- | --- |
 | いつ | 05 のトークルームと参加者2人を PostgreSQL に入れたあと、続けて | PostgreSQL のトランザクションがコミットしたあと |
-| Firestore に書くもの | ① `rooms/{talk_rooms.public_id}`（`members`）② 送った人の `users/{uid}/rooms/{roomId}`（`partnerUid`・`lastReadAt: null`）③ 相手の受信箱（同じ形）。**3件を別々の HTTP で書く**（REST の `createDocument`） | 3件を1回の `documents:commit` で書く。受信箱には一覧に出すもの（相手の名前と写真・`lastActivityAt`・`unread: 0`）も写す |
+| Firestore に書くもの | ① `rooms/{talk_rooms.public_id}`（`members`）② 送った人の `users/{uid}/rooms/{roomId}`（`partnerUid`・`lastReadAt: null`）③ 相手の受信箱（同じ形）。**3件を別々の HTTP で書く**（REST の `createDocument`） | 3件を1回の `documents:commit` で書く。受信箱には一覧に出すもの（相手の名前と写真・`lastActivityAt`・`unread: 0`）も書き込む |
 | 失敗したとき | 例外のまま `500`。**PostgreSQL のいいね・マッチ・ルームはもう入っている**ので、DB はマッチしたのに、Firestore にはルームがない（または受信箱が片方だけ）になる。画面は `500` を見て送り直し、2回目は いいねの UNIQUE の違反で `500` | Firestore に書けなくても、いいねは `201` で返す。書けなかった分は、あとで書き直す（表に「まだ書いていない」を残して、ジョブが書き直す。outbox） |
 | 応答 | 変わらない（`201`・`matched`） | 同じ |
 | 流れる SQL と HTTP の目安 | SQL 7本（05 と同じ）＋ Firestore への HTTP 3本（マッチしたときだけ） | SQL は同じ＋ HTTP 1本 |
@@ -56,7 +56,7 @@ Http::withToken('owner')->post("{$base}/users/{$meUid}/rooms?documentId={$room->
 
 ## レガシー版で起きること（#67 で測った）
 
-開発用の DB と、手元の Emulator（試しのデータを写したもの）で、コンテナの中でコントローラを直接呼んで確かめた。JWT・カスタムトークン・ID トークンは外に出していない。試したいいね・マッチ・ルームと Firestore のドキュメントは消した。
+開発用の DB と、手元の Emulator（試しのデータをコピーしたもの）で、コンテナの中でコントローラを直接呼んで確かめた。JWT・カスタムトークン・ID トークンは外に出していない。試したいいね・マッチ・ルームと Firestore のドキュメントは消した。
 
 | 送るもの・すること | レガシー版 |
 | --- | --- |

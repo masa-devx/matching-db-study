@@ -34,7 +34,7 @@ export default function SearchPage() {
 | API との通信 | 部品の中の `useEffect` で、そのつど `fetch`。URL とトークンの読み出しを、あちこちに書く | API を呼ぶところを1か所にまとめる（送り先・`401`・失敗・読み込み中）。検索の連打は `AbortController` で止める | 連打したとき、古い結果があとから上書きするか |
 | 状態管理 | なんでも `useState` と Context に置く | どの状態をどこに置くかを分ける。05b で Zustand に移す | 描き直しの回数（React Profiler） |
 | 画面の表示速度 | 考えない | 04 の検索の一覧で直す（長い一覧・画像・バンドルの大きさ） | Lighthouse の LCP・INP・CLS。`vite build` の大きさ |
-| テスト | なし | Vitest＋Testing Library（presenter と、API を呼ぶところ）。直す前に、今の動きを固定するテストを足す | テストが、要件 ID の受け入れ条件に対応しているか |
+| テスト | なし | Vitest＋Testing Library（presenter と、API を呼ぶところ）。直す前に、今の動きを確かめるテストを足す | テストが、要件 ID の受け入れ条件に対応しているか |
 | 開発効率 | ひな形の ESLint のまま。型は `any` でよい | ESLint・Prettier・型の検査を CI に入れる。API がまだないときの仮の応答 | CI で止まるか |
 
 ## 認証（D-014）

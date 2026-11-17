@@ -16,7 +16,7 @@
 | `GET /api/me/likes`（送った相手の一覧） | 相手ごとに `matched` を足す | [02-likes.md](02-likes.md) の「03 で変えること」 |
 | `GET /api/me/matches`（マッチした相手の一覧） | 新しく作る | このファイル |
 
-レガシー版は、02 と同じく、だれが使うかをコントローラの中で JWT を読んで決める（`AuthController::me()` の処理を、もう一度写す。これで4か所）。エラーの扱いは考えない。コントローラは `UserMatchController`（Model の `UserMatch` に名前をそろえる）。
+レガシー版は、02 と同じく、だれが使うかをコントローラの中で JWT を読んで決める（`AuthController::me()` の処理を、もう一度コピーする。これで4か所）。エラーの扱いは考えない。コントローラは `UserMatchController`（Model の `UserMatch` に名前をそろえる）。
 
 ## `GET /api/me/matches`（マッチした相手の一覧）
 
@@ -32,7 +32,7 @@
 レガシー版の書き方：
 
 ```php
-// AuthController::me() から写した JWT の処理（6行）
+// AuthController::me() からコピーした JWT の処理（6行）
 $me = $payload->sub;
 $matches = UserMatch::where('user1_id', $me)
     ->orWhere('user2_id', $me)
