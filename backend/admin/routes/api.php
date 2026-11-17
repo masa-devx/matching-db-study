@@ -13,6 +13,7 @@ use App\Http\Controllers\PlanController;
 use App\Http\Controllers\ReportCaseController;
 use App\Http\Controllers\SalesController;
 use App\Http\Controllers\SuspensionController;
+use App\Http\Controllers\TalkRoomController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
@@ -52,3 +53,6 @@ Route::post('/members/{publicId}/ban', [NoticeController::class, 'ban']);
 
 // A1 会員の、対応のメモ（#216）
 Route::post('/members/{publicId}/notes', [MemberNoteController::class, 'store']);
+
+// A2 トークルームのやり取りを、続けて読む（#221）
+Route::get('/talk-rooms/{publicId}', [TalkRoomController::class, 'show']);
