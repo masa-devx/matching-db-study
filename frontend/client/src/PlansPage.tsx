@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link, useLocation, useNavigate } from 'react-router'
 import Icon from './components/Icon'
 import { SkeletonRows } from './components/Skeleton'
 
@@ -9,6 +9,8 @@ export default function PlansPage() {
   const [me, setMe] = useState<any>(null)
   const [history, setHistory] = useState<any[]>([])
   const navigate = useNavigate()
+  // M8（#198）：どの画面から来たか（トーク・検索など）。買ったあと、そこに戻す
+  const from = useLocation().state?.from
   const api = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
   const headers = { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` }
 
@@ -37,6 +39,9 @@ export default function PlansPage() {
 
   if (!plans) return <SkeletonRows count={3} />
 
+  // M8：期限まで、あと何日か（期限がなければ null）
+  const daysLeft = me?.paid_until ? Math.ceil((new Date(me.paid_until).getTime() - Date.now()) / 86400000) : null
+
   return (
     <div>
       <div className="talk-head">
@@ -54,21 +59,85 @@ export default function PlansPage() {
       <div className="card">
         {/* is_paid だけを見る（期限が過ぎていても「有料会員」と出る） */}
         {me?.is_paid ? (
-          <p>有料会員です（{new Date(me.paid_until).toLocaleDateString('ja-JP')} まで）</p>
+          <>
+            <p>有料会員です（{new Date(me.paid_until).toLocaleDateString('ja-JP')} まで）</p>
+            {/* M8：期限が近い（7日以内）・過ぎたことを知らせる。日数の計算を、ここに書いた */}
+            {daysLeft !== null && daysLeft <= 7 && daysLeft >= 0 && (
+              <p className="plan-soon">
+                あと{daysLeft}日で、期限が切れます。続けて使うには、下のプランを選んでください。
+              </p>
+            )}
+            {daysLeft !== null && daysLeft < 0 && (
+              <p className="plan-soon">期限が過ぎています。続けて使うには、下のプランを選んでください。</p>
+            )}
+          </>
         ) : (
-          <p>
-            有料会員になると、メッセージを送る・いいねを何回でも・検索のこだわり条件（最終ログイン・新しい会員・フリーワード・並び替え）、が使えます。
-          </p>
+          <p>有料会員になると、できることが増えます。</p>
         )}
       </div>
+
+      {/* M8：無料と有料で、何が変わるか。数字（1日10回・1000文字など）を、API とは別に、ここにも書いた */}
+      <h2 className="section-title">無料と有料の違い</h2>
+      <table className="plan-table">
+        <thead>
+          <tr>
+            <th scope="col">できること</th>
+            <th scope="col">無料</th>
+            <th scope="col">有料</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">相手を探す・いいねを見る</th>
+            <td>できる</td>
+            <td>できる</td>
+          </tr>
+          <tr>
+            <th scope="row">いいねを送る</th>
+            <td>1日10回まで</td>
+            <td>何回でも</td>
+          </tr>
+          <tr>
+            <th scope="row">届いたいいねに「マッチする」</th>
+            <td>何回でも</td>
+            <td>何回でも</td>
+          </tr>
+          <tr>
+            <th scope="row">メッセージを読む</th>
+            <td>できる</td>
+            <td>できる</td>
+          </tr>
+          <tr>
+            <th scope="row">メッセージを送る</th>
+            <td>できない</td>
+            <td>できる</td>
+          </tr>
+          <tr>
+            <th scope="row">既読が分かる</th>
+            <td>分からない</td>
+            <td>分かる</td>
+          </tr>
+          <tr>
+            <th scope="row">検索のこだわり条件（最終ログイン・新しい会員・フリーワード・並び替え）</th>
+            <td>使えない</td>
+            <td>使える</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2 className="section-title">プランを選ぶ</h2>
 
       <ul className="list">
         {plans.map((p) => (
           <li key={p.id}>
-            <Link to={`/plans/${p.id}`} viewTransition className="row">
+            <Link to={`/plans/${p.id}`} state={{ from }} viewTransition className="row">
               <div className="row-body">
                 <div className="row-name">{p.name}</div>
-                <div className="row-sub">{p.price.toLocaleString()}円</div>
+                {/* M8：1か月あたりの値段も出す（長い期間が得かを、計算しなくて済む） */}
+                <div className="row-sub">
+                  {p.price.toLocaleString()}円
+                  {p.months > 1 && `（1か月あたり 約${Math.round(p.price / p.months).toLocaleString()}円）`}
+                </div>
               </div>
               <span className="badge">選ぶ</span>
             </Link>

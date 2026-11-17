@@ -1216,6 +1216,146 @@
   min-height: 44px;
 }
 
+/* ---- M4・M8・M9・M5 の小さい直し（#198） ---- */
+.hint.is-over {
+  font-weight: 600;
+  color: #c23a3a;
+}
+
+.plan-soon {
+  margin: 8px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #c23a3a;
+}
+
+.plan-table {
+  width: 100%;
+  margin-bottom: 24px;
+  font-size: 14px;
+  line-height: 1.5;
+  border-collapse: collapse;
+  background: #ffffff;
+  border-radius: 12px;
+}
+
+.plan-table th,
+.plan-table td {
+  padding: 12px 8px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid #f4eeec;
+}
+
+.plan-table thead th {
+  font-size: 12px;
+  color: #6f6368;
+}
+
+.plan-table tbody th {
+  font-weight: 400;
+}
+
+.plan-table td:last-child {
+  font-weight: 600;
+  color: #d12f5f;
+  white-space: nowrap;
+}
+
+.plan-table td:nth-child(2) {
+  color: #6f6368;
+  white-space: nowrap;
+}
+
+.photo-back {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 1;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+}
+
+.user-grid > li {
+  min-width: 0;
+}
+
+.user-card-new,
+.user-card-seen {
+  position: absolute;
+  top: 8px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+}
+
+.user-card-new {
+  left: 8px;
+  color: #ffffff;
+  background: #d12f5f;
+}
+
+.user-card-seen {
+  right: 8px;
+  color: #231c20;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.user-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.card-action {
+  flex: 1;
+  min-height: 40px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: #6f6368;
+  cursor: pointer;
+  background: #ffffff;
+  border: 1px solid #e4dad7;
+  border-radius: 999px;
+}
+
+.card-action-like {
+  color: #ffffff;
+  background: #d12f5f;
+  border-color: #d12f5f;
+}
+
+.card-action:active {
+  transform: scale(0.97);
+}
+
+.pref-region {
+  margin-top: 12px;
+}
+
+.pref-region-name {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 8px 0;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: #231c20;
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+
+.pref-region-all {
+  font-size: 12px;
+  font-weight: 400;
+  color: #d12f5f;
+  text-decoration: underline;
+}
+
 /* ---- M2：登録と、メールアドレスの確認（#193） ---- */
 .hint {
   display: block;
