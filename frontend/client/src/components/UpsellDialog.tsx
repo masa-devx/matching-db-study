@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router'
 import ConfirmDialog from './ConfirmDialog'
 
-// 07：有料会員への誘導（FR-UI-040）。送る・身長の条件・11回目のいいねで出す
+// 07：有料会員への誘導（FR-UI-040）。送る・検索のこだわり条件（#150 で、身長から入れ替えた）・11回目のいいねで出す
 export default function UpsellDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const navigate = useNavigate()
   return (
@@ -13,7 +13,7 @@ export default function UpsellDialog({ open, onClose }: { open: boolean; onClose
       onConfirm={() => navigate('/plans', { viewTransition: true })}
       onClose={onClose}
     >
-      <p>メッセージを送る・いいねを何回でも・身長で探す、が使えるようになります。</p>
+      <p>メッセージを送る・いいねを何回でも・検索のこだわり条件（最終ログイン・新しい会員・フリーワード・並び替え）、が使えるようになります。</p>
     </ConfirmDialog>
   )
 }

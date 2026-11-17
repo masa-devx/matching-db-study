@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router'
+import { Link, useNavigate, useNavigationType, useSearchParams } from 'react-router'
 import Button from './components/Button'
 import { SkeletonCards } from './components/Skeleton'
 import UpsellDialog from './components/UpsellDialog'
@@ -8,6 +8,13 @@ import UpsellDialog from './components/UpsellDialog'
 // 条件・取る・続き・見せるを、全部この部品に書く（03b と同じ形）。
 // 04b：今の条件を URL のクエリ（/search?age_min=20…）に出す。
 // #147：条件の欄と保存した検索条件は、条件の画面（SearchConditionsPage。/search/conditions）に移した。ここは結果だけ。
+
+// #159：保存した検索条件の中身は、API が確かめないので、配列のはずの項目に文字や数が入っていることがある。
+// そのまま for…of で回すと、文字は1文字ずつに分かれ、数は例外になる（画面が真っ白になった）。配列に直してから回す
+const asList = (value: any): string[] => {
+  if (value === undefined || value === null || value === '') return []
+  return Array.isArray(value) ? value.map((x) => String(x)) : [String(value)]
+}
 
 // 04b：URL のクエリを、条件の形に直す。値は確かめない（/search?age_min=abc も、そのまま API に送る）
 const fromQuery = (q: URLSearchParams) => {
@@ -36,10 +43,10 @@ const toQuery = (c: any) => {
   if (c?.age_max) q.append('age_max', c.age_max)
   if (c?.height_min) q.append('height_min', c.height_min)
   if (c?.height_max) q.append('height_max', c.height_max)
-  for (const pref of c?.prefecture ?? []) q.append('prefecture', pref)
+  for (const pref of asList(c?.prefecture)) q.append('prefecture', pref)
   // #153：プロフィールの6項目
   for (const key of ['body_type', 'job', 'income', 'smoking', 'drinking', 'marital_status']) {
-    for (const value of c?.[key] ?? []) q.append(key, value)
+    for (const value of asList(c?.[key])) q.append(key, value)
   }
   // #150：有料の4つ
   if (c?.last_login) q.append('last_login', c.last_login)
@@ -60,6 +67,8 @@ export default function SearchPage() {
   // 07：検索の API が 403 を返したときの、誘導のモーダル
   const [upsell, setUpsell] = useState(false)
   const navigate = useNavigate()
+  // #159：どうやってこの画面に来たか（POP は、ブラウザの「戻る」「進む」と再読み込み）
+  const navigationType = useNavigationType()
 
   // 1ページ分を取って、今の一覧の後ろに足す。重なっていても、そのまま足す
   const load = (p: number, c: any) => {
@@ -70,10 +79,10 @@ export default function SearchPage() {
     if (c.age_max) params.append('age_max', c.age_max)
     if (c.height_min) params.append('height_min', c.height_min)
     if (c.height_max) params.append('height_max', c.height_max)
-    for (const pref of c.prefecture ?? []) params.append('prefecture[]', pref)
+    for (const pref of asList(c.prefecture)) params.append('prefecture[]', pref)
     // #153：プロフィールの6項目。API には、名前に [] を付けて配列で送る
     for (const key of ['body_type', 'job', 'income', 'smoking', 'drinking', 'marital_status']) {
-      for (const value of c[key] ?? []) params.append(`${key}[]`, value)
+      for (const value of asList(c[key])) params.append(`${key}[]`, value)
     }
     // #150：有料の4つ（URL のクエリに直す処理と、同じ並びをもう一度書いた）
     if (c.last_login) params.append('last_login', c.last_login)
@@ -110,11 +119,20 @@ export default function SearchPage() {
     }
     // 04b：URL にクエリがないとき（タブから /search を開いたとき）は、タブの中で覚えた最後の条件に戻す（FR-UI-016）。
     // 履歴を増やさないよう replace で入れ替える。入れ替えると、この useEffect がもう一度動く
-    const last = JSON.parse(sessionStorage.getItem('searchConditions') ?? '{}')
-    if (searchParams.toString() === '' && toQuery(last).toString() !== '') {
+    // #159：ブラウザの「戻る」で条件なしの /search に戻ったときは、入れ替えない（入れ替えると、条件なしの結果に戻れない。FR-UI-043）。
+    // sessionStorage の中身が壊れていても、画面が止まらないようにする
+    let last: any = {}
+    try {
+      last = JSON.parse(sessionStorage.getItem('searchConditions') ?? '{}') ?? {}
+    } catch {
+      last = {}
+    }
+    if (navigationType !== 'POP' && searchParams.toString() === '' && toQuery(last).toString() !== '') {
       setSearchParams(toQuery(last), { replace: true })
       return
     }
+    // #159：今見ている条件を、最後の条件として覚える（URL を直接開いた・「戻る」で見た条件も、ほかのタブから戻ったときに残る）
+    sessionStorage.setItem('searchConditions', JSON.stringify(conditions))
     // 戻ってくるたびに、1ページ目から読み直す（どこまで見ていたかは覚えない）
     load(1, conditions)
   }, [searchParams.toString()])
@@ -153,14 +171,14 @@ export default function SearchPage() {
             conditions.height_min || conditions.height_max
               ? `${conditions.height_min ?? ''}〜${conditions.height_max ?? ''}cm`
               : '',
-            (conditions.prefecture ?? []).join('・'),
+            asList(conditions.prefecture).join('・'),
             // #153：プロフィールの6項目
-            (conditions.body_type ?? []).join('・'),
-            (conditions.job ?? []).join('・'),
-            (conditions.income ?? []).join('・'),
-            (conditions.smoking ?? []).join('・'),
-            (conditions.drinking ?? []).join('・'),
-            (conditions.marital_status ?? []).join('・'),
+            asList(conditions.body_type).join('・'),
+            asList(conditions.job).join('・'),
+            asList(conditions.income).join('・'),
+            asList(conditions.smoking).join('・'),
+            asList(conditions.drinking).join('・'),
+            asList(conditions.marital_status).join('・'),
             // #150：有料の4つ。言葉の対応を、条件の画面のプルダウンとは別に、ここにも書いた
             conditions.last_login === '24h' ? '24時間以内にログイン' : '',
             conditions.last_login === '3d' ? '3日以内にログイン' : '',

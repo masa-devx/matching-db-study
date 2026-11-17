@@ -99,6 +99,12 @@ const DETAILS = [
   { key: 'marital_status', label: '結婚歴', options: ['未婚', '離婚', '死別'] },
 ]
 
+// SearchPage からコピーした（配列のはずの項目に、文字や数が入っていても回せるようにする。#159）
+const asList = (value: any): string[] => {
+  if (value === undefined || value === null || value === '') return []
+  return Array.isArray(value) ? value.map((x) => String(x)) : [String(value)]
+}
+
 // SearchPage からコピーした（URL のクエリを、条件の形に直す）
 const fromQuery = (q: URLSearchParams) => {
   const c: any = {}
@@ -126,10 +132,10 @@ const toQuery = (c: any) => {
   if (c?.age_max) q.append('age_max', c.age_max)
   if (c?.height_min) q.append('height_min', c.height_min)
   if (c?.height_max) q.append('height_max', c.height_max)
-  for (const pref of c?.prefecture ?? []) q.append('prefecture', pref)
+  for (const pref of asList(c?.prefecture)) q.append('prefecture', pref)
   // #153：プロフィールの6項目
   for (const key of ['body_type', 'job', 'income', 'smoking', 'drinking', 'marital_status']) {
-    for (const value of c?.[key] ?? []) q.append(key, value)
+    for (const value of asList(c?.[key])) q.append(key, value)
   }
   // #150：有料の4つ
   if (c?.last_login) q.append('last_login', c.last_login)
@@ -142,7 +148,16 @@ const toQuery = (c: any) => {
 export default function SearchConditionsPage() {
   // 検索の画面から、今の条件を URL のクエリでもらう
   const [searchParams] = useSearchParams()
-  const [form, setForm] = useState<any>(fromQuery(searchParams))
+  // #159：プルダウンの選択肢にない値（URL の age_min=17 や height_min=165.5）は、欄に入れない。
+  // 入れると、プルダウンは「下限なし」に見えるのに、その値がそのまま送られる
+  const fromUrl: any = fromQuery(searchParams)
+  for (const key of ['age_min', 'age_max']) {
+    if (fromUrl[key] && !AGES.map(String).includes(fromUrl[key])) delete fromUrl[key]
+  }
+  for (const key of ['height_min', 'height_max']) {
+    if (fromUrl[key] && !HEIGHTS.map(String).includes(fromUrl[key])) delete fromUrl[key]
+  }
+  const [form, setForm] = useState<any>(fromUrl)
   // 04b：保存した検索条件（サーバーに5件まで）と、そのモーダル
   const [saved, setSaved] = useState<any[]>([])
   const [managing, setManaging] = useState(false)
@@ -186,7 +201,7 @@ export default function SearchConditionsPage() {
 
   // 都道府県と、プロフィールの6項目の、選ぶ・外す（どれも、選んだ名前の配列で持つ）
   const toggle = (key: string, value: string) => {
-    const now = form[key] ?? []
+    const now = asList(form[key])
     setForm({ ...form, [key]: now.includes(value) ? now.filter((x: string) => x !== value) : [...now, value] })
   }
 
@@ -205,9 +220,9 @@ export default function SearchConditionsPage() {
 
   // 04b：保存した検索条件を使えるか。有料かどうかの判断を、ここにもコピーした（is_paid だけを見る）
   // #150：有料の条件が、身長から4つ（最終ログイン・登録して間もない会員・フリーワード・登録が新しい順）に変わった
-  const lockedCondition = (c: any) =>
-    locked &&
-    (c.conditions?.last_login || c.conditions?.new_member || c.conditions?.keyword || c.conditions?.sort === 'new')
+  const paidCondition = (c: any) =>
+    c.conditions?.last_login || c.conditions?.new_member || c.conditions?.keyword || c.conditions?.sort === 'new'
+  const lockedCondition = (c: any) => locked && paidCondition(c)
 
   // 04b：保存した検索条件を押したら、その条件で探す（FR-UI-044）。使えない条件はモーダルを出す（FR-UI-048）
   const useSaved = (c: any) => {
@@ -215,7 +230,11 @@ export default function SearchConditionsPage() {
       setUpsell(true)
       return
     }
-    search(c.conditions)
+    // #159：有料かどうかを読み終わる前（locked が null）は、有料の条件の入ったものでは探さない（読み終わってから、もう一度押してもらう）
+    if (locked === null && paidCondition(c)) {
+      return
+    }
+    search(c.conditions ?? {})
   }
 
   // 04b：「この条件を保存」。5件あるかは、画面が持っている一覧の数で見る（ほかの端末で足した分は知らない）
@@ -423,15 +442,15 @@ export default function SearchConditionsPage() {
           <p className="cond-label">住んでいる所</p>
           <details className="cond-details">
             <summary>
-              {(form.prefecture ?? []).length > 0 ? (form.prefecture ?? []).join('・') : '全国（押して選ぶ）'}
+              {asList(form.prefecture).length > 0 ? asList(form.prefecture).join('・') : '全国（押して選ぶ）'}
             </summary>
             <div className="pref-list">
               {PREFECTURES.map((pref) => (
                 <button
                   type="button"
                   key={pref}
-                  className={(form.prefecture ?? []).includes(pref) ? 'chip chip-on' : 'chip'}
-                  aria-pressed={(form.prefecture ?? []).includes(pref)}
+                  className={asList(form.prefecture).includes(pref) ? 'chip chip-on' : 'chip'}
+                  aria-pressed={asList(form.prefecture).includes(pref)}
                   onClick={() => toggle('prefecture', pref)}
                 >
                   {pref}
@@ -453,8 +472,8 @@ export default function SearchConditionsPage() {
                   <button
                     type="button"
                     key={option}
-                    className={(form[d.key] ?? []).includes(option) ? 'chip chip-on' : 'chip'}
-                    aria-pressed={(form[d.key] ?? []).includes(option)}
+                    className={asList(form[d.key]).includes(option) ? 'chip chip-on' : 'chip'}
+                    aria-pressed={asList(form[d.key]).includes(option)}
                     onClick={() => toggle(d.key, option)}
                   >
                     {option}

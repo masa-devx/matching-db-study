@@ -15,7 +15,12 @@ use Illuminate\Support\Facades\DB;
  *
  * - 試しの会員 1人に 1〜5件（平均 3件。全部で約 6万件）
  * - search00001 は 4件（同時に保存して、上限の 5件を超えるかを測るため）・search00002 は 5件（上限）
- * - 5件に1件ほど、身長の条件（有料の機能）を入れる。無料の男性の分にも入る（有料のときに保存して、無料に戻った形）
+ * - 5件に1件ほど、身長の条件を入れる（#150 から無料）
+ * - 10件に1件ほど、有料の条件（最終ログイン・フリーワード・登録が新しい順のどれか）を入れる。
+ *   無料の男性の分にも入る（有料のときに保存して、無料に戻った形。画面で「有料」の印が付く）
+ * - search00001 の4件目には、必ず有料の条件（フリーワード）を入れる
+ * - 外部キーがないので、SearchMembersSeeder を流し直して消えた会員の分は、持ち主のいない行として残る。
+ *   このシーダーは、会員の表にいない user_id の行も消してから入れ直す
  * - 流し直すと、試しの会員の保存した検索条件を消してから入れ直す
  */
 class SearchConditionsSeeder extends Seeder
@@ -45,6 +50,8 @@ class SearchConditionsSeeder extends Seeder
         foreach (array_chunk(array_values($members), self::CHUNK) as $ids) {
             DB::table('search_conditions')->whereIn('user_id', $ids)->delete();
         }
+        // #159：会員のシーダーを流し直すと id が変わり、前の分が持ち主のいない行として残る。それも消す
+        DB::table('search_conditions')->whereNotIn('user_id', DB::table('users')->select('id'))->delete();
 
         $rows = [];
         $total = 0;
@@ -64,6 +71,18 @@ class SearchConditionsSeeder extends Seeder
                 ];
                 if ($faker->boolean(20)) {
                     $conditions['height_min'] = $faker->numberBetween(150, 175);
+                }
+                // #159：有料の条件（#150 で、身長から入れ替わった）
+                $paid = $email === 'search00001@example.test' ? $i === 4 : $faker->boolean(10);
+                if ($paid) {
+                    $conditions += $faker->randomElement([
+                        ['last_login' => '7d'],
+                        ['keyword' => 'カフェ'],
+                        ['sort' => 'new'],
+                    ]);
+                    if ($email === 'search00001@example.test') {
+                        $conditions['keyword'] = 'カフェ';
+                    }
                 }
                 $at = $now->copy()->subDays($faker->numberBetween(0, 180))->subMinutes($faker->numberBetween(0, 1439));
                 $rows[] = [
