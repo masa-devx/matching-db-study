@@ -13,6 +13,7 @@ import {
 } from '@mantine/core'
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
+import { toDate } from '../../date'
 
 // 12 会員の一覧（FR-ADMIN-004）。メールアドレス・ニックネームで探し、状態で絞る。50人ずつ（API は offset）
 export default function MembersPage() {
@@ -110,7 +111,7 @@ export default function MembersPage() {
                       </Group>
                     </Table.Td>
                     <Table.Td>{u.purchases}</Table.Td>
-                    <Table.Td>{new Date(u.created_at).toLocaleDateString('ja-JP')}</Table.Td>
+                    <Table.Td>{toDate(u.created_at).toLocaleDateString('ja-JP')}</Table.Td>
                   </Table.Tr>
                 ))}
               </Table.Tbody>

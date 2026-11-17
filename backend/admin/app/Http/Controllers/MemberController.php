@@ -106,6 +106,17 @@ class MemberController extends Controller
             ];
         }
 
+        // A1（#216）：対応のメモ。新しい順。1件ごとに、書いた管理者の名前を読む（1＋N 本）。全部を一度に返す
+        $notes = [];
+        foreach (DB::table('member_notes')->where('user_id', $user->id)->orderBy('created_at', 'desc')->get() as $note) {
+            $notes[] = [
+                'id' => $note->id,
+                'body' => $note->body,
+                'admin' => DB::table('admins')->where('id', $note->admin_id)->value('name'),
+                'created_at' => $note->created_at,
+            ];
+        }
+
         $detail = [
             'user_id' => $user->public_id,
             'email' => $user->email,
@@ -128,6 +139,7 @@ class MemberController extends Controller
             'banned_at' => $user->banned_at,
             'banned_reason' => $user->banned_reason,
             'notices' => $notices,
+            'notes' => $notes,
         ];
 
         // 監査ログ（ここでは書く）
