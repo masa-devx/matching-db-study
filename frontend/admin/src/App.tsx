@@ -1,6 +1,6 @@
 import { AppShell, Badge, Burger, Button, Group, NavLink, Text } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, Route, Routes, useLocation } from 'react-router'
 import { DOMAINS, type Role } from './domains'
 import Icon from './Icon'
@@ -11,8 +11,45 @@ export default function App() {
   const [token, setToken] = useState(sessionStorage.getItem('adminToken'))
   const [opened, { toggle, close }] = useDisclosure()
   const location = useLocation()
+  // A6（#208）：ログインの画面に出す知らせ（期限が切れたとき）
+  const [notice, setNotice] = useState('')
 
-  if (!token) return <LoginPage onLogin={() => setToken(sessionStorage.getItem('adminToken'))} />
+  // A6：ログインの期限（8時間）が切れていたら、ログインの画面に戻す。前は、API が 500 を返し、
+  // どの画面も読み込み中か真っ白のままだった。期限は、トークンの中身（exp）を画面で読んで決める
+  // （署名は確かめない。本当に使えるかを決めるのは API）。画面を移るたびと、1分ごとに見る
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 画面を移るたびに見直す
+  useEffect(() => {
+    const check = () => {
+      const now = sessionStorage.getItem('adminToken')
+      if (!now) return
+      let exp = 0
+      try {
+        exp = JSON.parse(atob(now.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).exp ?? 0
+      } catch {
+        exp = 0
+      }
+      if (exp * 1000 <= Date.now()) {
+        sessionStorage.removeItem('adminToken')
+        sessionStorage.removeItem('admin')
+        setNotice('ログインの期限が切れました。もう一度ログインしてください')
+        setToken(null)
+      }
+    }
+    check()
+    const timer = setInterval(check, 60000)
+    return () => clearInterval(timer)
+  }, [location.pathname, token])
+
+  if (!token)
+    return (
+      <LoginPage
+        notice={notice}
+        onLogin={() => {
+          setNotice('')
+          setToken(sessionStorage.getItem('adminToken'))
+        }}
+      />
+    )
 
   const admin = JSON.parse(sessionStorage.getItem('admin') ?? '{}') as { name?: string; role?: Role }
   const role = admin.role ?? 'viewer'

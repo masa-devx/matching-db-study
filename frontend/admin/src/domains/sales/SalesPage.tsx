@@ -1,7 +1,8 @@
 import { BarChart } from '@mantine/charts'
-import { Button, Card, Group, Loader, NumberInput, Pagination, Stack, Table, Text, Title } from '@mantine/core'
+import { Button, Card, Group, Loader, Modal, NumberInput, Pagination, Stack, Table, Text, Title } from '@mantine/core'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
+import { useNotice } from '../../Notice'
 
 // 12 有料会員・売上（FR-ADMIN-008・009）。月ごとの売上のグラフと表・プランの値段（owner だけ変えられる）・購入の一覧
 export default function SalesPage() {
@@ -10,6 +11,10 @@ export default function SalesPage() {
   const [prices, setPrices] = useState<Record<number, number>>({})
   const [purchases, setPurchases] = useState<any>(null)
   const [page, setPage] = useState(1)
+  // A3（#208）：値段を変える前に確かめる、プラン（null は、モーダルを閉じている）
+  const [confirming, setConfirming] = useState<any>(null)
+  const [busy, setBusy] = useState(false)
+  const [notice, notify] = useNotice()
   const api = import.meta.env.VITE_ADMIN_API_URL ?? 'http://127.0.0.1:8100'
   const role = JSON.parse(sessionStorage.getItem('admin') ?? '{}').role
   const headers = {
@@ -43,7 +48,17 @@ export default function SalesPage() {
   }, [page])
 
   const savePrice = async (id: number) => {
-    await fetch(`${api}/api/plans/${id}`, { method: 'PUT', headers, body: JSON.stringify({ price: prices[id] }) })
+    setBusy(true)
+    const r = await fetch(`${api}/api/plans/${id}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ price: prices[id] }),
+    })
+    setBusy(false)
+    setConfirming(null)
+    // A6（#208）：結果を知らせる。成功したら、表の「今の値段」も新しくする
+    notify(r.ok ? '値段を変えました' : '値段を変えられませんでした', r.ok)
+    if (r.ok) setPlans(plans.map((p) => (p.id === id ? { ...p, price: prices[id] } : p)))
     loadMonthly()
   }
 
@@ -69,6 +84,38 @@ export default function SalesPage() {
           />
         )}
       </Card>
+      {/* A3（#208）：月ごとの売上の表（グラフでは、正確な数字と件数が読めない）。新しい月が上 */}
+      <Card withBorder radius="md">
+        <Title order={4} mb="sm">
+          月ごとの売上（表）
+        </Title>
+        {monthly && (
+          <Table>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>月</Table.Th>
+                <Table.Th ta="right">購入の件数</Table.Th>
+                <Table.Th ta="right">売上</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {[...monthly]
+                .reverse()
+                .slice(0, 12)
+                .map((m) => (
+                  <Table.Tr key={m.month}>
+                    <Table.Td>{m.month}</Table.Td>
+                    <Table.Td ta="right">{Number(m.count).toLocaleString()}件</Table.Td>
+                    <Table.Td ta="right">{Number(m.sales).toLocaleString()}円</Table.Td>
+                  </Table.Tr>
+                ))}
+            </Table.Tbody>
+          </Table>
+        )}
+        <Text size="sm" c="dimmed" mt="sm">
+          売上は、今のプランの値段で計算しています（値段を変えると、過去の月の売上も変わります）。
+        </Text>
+      </Card>
       <Card withBorder radius="md">
         <Title order={4} mb="sm">
           プランの値段
@@ -88,7 +135,12 @@ export default function SalesPage() {
                         suffix="円"
                         thousandSeparator=","
                       />
-                      <Button variant="light" onClick={() => savePrice(p.id)}>
+                      {/* A3（#208）：押してすぐには変えず、前と後の値段を見せて確かめる */}
+                      <Button
+                        variant="light"
+                        disabled={Number(prices[p.id]) === Number(p.price)}
+                        onClick={() => setConfirming(p)}
+                      >
                         変える
                       </Button>
                     </Group>
@@ -137,6 +189,29 @@ export default function SalesPage() {
           </>
         )}
       </Card>
+
+      <Modal opened={confirming !== null} onClose={() => setConfirming(null)} title="値段を変えますか？">
+        {confirming && (
+          <Stack>
+            <Text>
+              {confirming.name}：{Number(confirming.price).toLocaleString()}円 →{' '}
+              <b>{Number(prices[confirming.id]).toLocaleString()}円</b>
+            </Text>
+            <Text size="sm" c="dimmed">
+              次に買う人から、新しい値段になります。
+            </Text>
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setConfirming(null)}>
+                やめる
+              </Button>
+              <Button loading={busy} onClick={() => savePrice(confirming.id)}>
+                変える
+              </Button>
+            </Group>
+          </Stack>
+        )}
+      </Modal>
+      {notice}
     </Stack>
   )
 }

@@ -2,7 +2,7 @@ import { Alert, Button, Center, Paper, PasswordInput, Stack, TextInput, Title } 
 import { useState } from 'react'
 
 // 12 管理者のログイン（会員とは別）。トークンと名前・役割を sessionStorage に置く（会員の画面のレガシー版と同じ置き方）
-export default function LoginPage({ onLogin }: { onLogin: () => void }) {
+export default function LoginPage({ onLogin, notice = '' }: { onLogin: () => void; notice?: string }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -37,6 +37,8 @@ export default function LoginPage({ onLogin }: { onLogin: () => void }) {
             <Title order={3}>管理画面にログイン</Title>
             <TextInput label="メールアドレス" value={email} onChange={(e) => setEmail(e.currentTarget.value)} />
             <PasswordInput label="パスワード" value={password} onChange={(e) => setPassword(e.currentTarget.value)} />
+            {/* A6（#208）：期限が切れて戻されたときの知らせ */}
+            {notice && !error && <Alert color="yellow">{notice}</Alert>}
             {error && <Alert color="red">{error}</Alert>}
             <Button type="submit" loading={sending}>
               ログイン
