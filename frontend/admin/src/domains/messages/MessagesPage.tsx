@@ -1,6 +1,7 @@
 import { Badge, Button, Card, Group, Loader, Pagination, Stack, Table, Text, TextInput, Title } from '@mantine/core'
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
+import { toDate } from '../../date'
 
 // 12 メッセージの一覧（FR-ADMIN-007）。本文の語・期間で絞る。50件ずつ（API は offset と 1件ごとに6本）
 export default function MessagesPage() {
@@ -94,9 +95,7 @@ export default function MessagesPage() {
               <Table.Tbody>
                 {data.data.map((m: any) => (
                   <Table.Tr key={m.id}>
-                    <Table.Td style={{ whiteSpace: 'nowrap' }}>
-                      {new Date(m.created_at).toLocaleString('ja-JP')}
-                    </Table.Td>
+                    <Table.Td style={{ whiteSpace: 'nowrap' }}>{toDate(m.created_at).toLocaleString('ja-JP')}</Table.Td>
                     <Table.Td>
                       <Link to={`/members/${m.sender.user_id}`}>{m.sender.nickname ?? '―'}</Link>
                       {!sender && (

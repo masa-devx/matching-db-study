@@ -199,6 +199,7 @@ erDiagram
 | `reports` | M7（#201） | 通報（だれが・だれを・どのメッセージを・理由・自由な文・入っている案件） | 主キー `id` だけ。外部キーなし（いない会員・ないメッセージ・ない案件を指す行が入る）。理由（`reason`）に CHECK がない。自由な文の長さを見ない。自分を通報する行も入る。通報された会員を、`report_cases` とこの表の2か所に持つ。インデックスがないので、案件の通報を探すと表を全部読む |
 | `suspensions` | A1（#211） | 会員の利用を止めた・解いた履歴（だれを・だれが・理由・解いた日時・解いた管理者） | 主キー `id` だけ。外部キーなし。今の状態は `users.suspended_at` にも持つので、同じ日時と理由が2か所にある。「まだ解いていない停止は、会員に1つ」を止めるものがなく、止めている会員をもう一度止めると、解いていない行が増える。インデックスがないので、会員の履歴を探すと表を全部読む |
 | `notices` | A7（#213） | 運営から会員へのお知らせ（だれに・種類・題・本文・送った管理者・もとの通報の案件・読んだ日時） | 主キー `id` だけ。外部キーなし。種類（`kind`）に CHECK がない。読んだ日時を行に持つので、1人に送るお知らせしか作れない。インデックスがないので、「私のお知らせ」を探すと表を全部読む |
+| `member_notes` | A1（#216） | 会員ごとの、対応のメモ（どの会員に・どの管理者が・本文・いつ） | 主キー `id` だけ。外部キーなし。本文の長さを見ない。インデックスがないので、会員のメモを探すと表を全部読む。直す・消す仕組みがない |
 | `users`（列を足す） | A7（#213） | `banned_at`・`banned_reason`（強制退会にした日時と理由） | 退会（`deleted_at`）・停止（`suspended_at`）・強制退会（`banned_at`）の3つの日時の列で、会員の状態を表す。強制退会は `deleted_at` も書くので、「退会」は、`banned_at` が空かどうかで見分ける |
 | `admins` | 12 | 管理画面の管理者（会員とは別にログインする）と役割 | 主キー `id`・`email` の UNIQUE。`role` に CHECK はなく、何でも入る。読み書きするのは管理画面（`backend/admin`） |
 | `admin_audit_logs` | 12 | 監査ログ（だれが・いつ・何に・何をしたか） | 主キー `id`・`admin_id` の外部キーだけ。対象は `target_type` と `target_id`（文字）で指すので外部キーはない。書き換え・削除を DB で止めていない |
@@ -234,3 +235,4 @@ Laravel のひな形が作った表（この学習では扱わない）：`passw
 | `report_cases`・`reports` | 通報（M7） | 部分 UNIQUE インデックス `unique (reported_id) where status <> 'closed'`（まだ済みでない案件は、会員に1つ。2つ目の insert は失敗するので、ある方を読み直す）・状態と理由と「何をしたか」の CHECK・「済みなら、何をしたかがある」の CHECK・外部キーは `restrict`（証拠が消えない）・`reports (report_case_id, created_at)` と `report_cases (status, last_reported_at desc)` のインデックス・通報された会員は案件にだけ持つ。DDL の案は [api/m7-reports.md](api/m7-reports.md) |
 | `suspensions` | 停止の履歴（A1） | 部分 UNIQUE インデックス `unique (user_id) where lifted_at is null`（まだ解いていない停止は、会員に1つ）・3つの列の外部キー（`restrict`）・`(user_id, created_at desc)` のインデックス・理由は 1〜1000文字の CHECK。履歴を正にして、`users.suspended_at` は、残すなら同じトランザクションで書く |
 | `notices`・`users` の状態 | お知らせ・強制退会（A7） | `notices`：3つの外部キー・`kind` と長さの CHECK・`(user_id, created_at desc)` と、未読の数のための部分インデックス `(user_id) where read_at is null`。会員の状態は、3つの日時の列をやめて、1つの列（`status`）と CHECK にし、変えた履歴を表に持つ |
+| `member_notes` | 対応のメモ（A1） | 2つの外部キー（`restrict`）・`(user_id, created_at desc)` のインデックス・本文 1〜2000文字の CHECK・直した日時の列 |

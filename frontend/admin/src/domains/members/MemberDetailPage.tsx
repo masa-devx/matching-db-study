@@ -20,6 +20,7 @@ import {
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { useNotice } from '../../Notice'
+import { toDate } from '../../date'
 
 // 12 会員の詳細と、利用を止める・解く（FR-ADMIN-005・006）。止める・解くのボタンは owner にだけ出す（画面で隠すだけ）
 export default function MemberDetailPage() {
@@ -33,6 +34,8 @@ export default function MemberDetailPage() {
   const [notice0, setNotice0] = useState({ kind: 'warning', title: '', body: '' })
   const [banOpened, setBanOpened] = useState(false)
   const [banReason, setBanReason] = useState('')
+  // A1（#216）：対応のメモの、書きかけ
+  const [memo, setMemo] = useState('')
   const navigate = useNavigate()
   const [notice, notify] = useNotice()
   // A1（#208）：写真は、会員の側の API にある（管理画面の API は、パスだけを返す）
@@ -93,6 +96,21 @@ export default function MemberDetailPage() {
     setNoticeOpened(false)
     notify(r.ok ? 'お知らせを送りました' : '送れませんでした', r.ok)
     if (r.ok) setNotice0({ kind: 'warning', title: '', body: '' })
+    load()
+  }
+
+  // A1（#216）：対応のメモを足す。空でないかは、画面だけで確かめる
+  const addMemo = async () => {
+    if (!memo.trim()) return
+    setBusy(true)
+    const r = await fetch(`${api}/api/members/${publicId}/notes`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ body: memo }),
+    })
+    setBusy(false)
+    notify(r.ok ? 'メモを書きました' : 'メモを書けませんでした', r.ok)
+    if (r.ok) setMemo('')
     load()
   }
 
@@ -161,13 +179,13 @@ export default function MemberDetailPage() {
 
       {m.banned_at && (
         <Alert color="dark" title="強制退会にしています">
-          {new Date(m.banned_at).toLocaleString('ja-JP')}・理由：{m.banned_reason ?? '―'}
+          {toDate(m.banned_at).toLocaleString('ja-JP')}・理由：{m.banned_reason ?? '―'}
         </Alert>
       )}
 
       {m.suspended_at && (
         <Alert color="red" title="利用を停止しています">
-          {new Date(m.suspended_at).toLocaleString('ja-JP')}・理由：{m.suspended_reason ?? '―'}
+          {toDate(m.suspended_at).toLocaleString('ja-JP')}・理由：{m.suspended_reason ?? '―'}
         </Alert>
       )}
 
@@ -182,7 +200,7 @@ export default function MemberDetailPage() {
               <Table.Th>メールアドレスの確認</Table.Th>
               <Table.Td>
                 {m.email_verified_at ? (
-                  `${new Date(m.email_verified_at).toLocaleString('ja-JP')} に確認`
+                  `${toDate(m.email_verified_at).toLocaleString('ja-JP')} に確認`
                 ) : (
                   <Badge color="yellow">まだ確認していない（検索に出ない）</Badge>
                 )}
@@ -191,8 +209,8 @@ export default function MemberDetailPage() {
             <Table.Tr>
               <Table.Th>登録日・最終ログイン</Table.Th>
               <Table.Td>
-                {new Date(m.created_at).toLocaleDateString('ja-JP')}・
-                {m.last_login_at ? new Date(m.last_login_at).toLocaleString('ja-JP') : '―'}
+                {toDate(m.created_at).toLocaleDateString('ja-JP')}・
+                {m.last_login_at ? toDate(m.last_login_at).toLocaleString('ja-JP') : '―'}
               </Table.Td>
             </Table.Tr>
             <Table.Tr>
@@ -203,7 +221,7 @@ export default function MemberDetailPage() {
             </Table.Tr>
             <Table.Tr>
               <Table.Th>有料の期限</Table.Th>
-              <Table.Td>{m.paid_until ? new Date(m.paid_until).toLocaleDateString('ja-JP') : '―'}</Table.Td>
+              <Table.Td>{m.paid_until ? toDate(m.paid_until).toLocaleDateString('ja-JP') : '―'}</Table.Td>
             </Table.Tr>
             {/* A1（#208）：検索に使う6項目（API は返していたが、出していなかった）。項目の名前を、会員の側からコピーした */}
             <Table.Tr>
@@ -280,13 +298,50 @@ export default function MemberDetailPage() {
             <Table.Tbody>
               {m.purchases.map((p: any) => (
                 <Table.Tr key={p.bought_at}>
-                  <Table.Td>{new Date(p.bought_at).toLocaleDateString('ja-JP')}</Table.Td>
+                  <Table.Td>{toDate(p.bought_at).toLocaleDateString('ja-JP')}</Table.Td>
                   <Table.Td>{p.plan}</Table.Td>
                   <Table.Td>{Number(p.price).toLocaleString()}円</Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>
           </Table>
+        )}
+      </Card>
+
+      {/* A1（#216）：対応のメモ（運営の中だけ。会員には見せない）。書く欄は、owner にだけ出す（画面で隠すだけ） */}
+      <Card withBorder radius="md">
+        <Title order={4} mb="sm">
+          対応のメモ
+        </Title>
+        {role === 'owner' && (
+          <Group align="flex-end" mb="md">
+            <Textarea
+              style={{ flex: 1 }}
+              label="メモを足す（会員には見えません）"
+              placeholder="例：11/18 メールで問い合わせ。プランの期限について答えた"
+              autosize
+              minRows={2}
+              value={memo}
+              onChange={(e) => setMemo(e.currentTarget.value)}
+            />
+            <Button loading={busy} disabled={!memo.trim()} onClick={addMemo}>
+              書く
+            </Button>
+          </Group>
+        )}
+        {(m.notes ?? []).length === 0 ? (
+          <Text c="dimmed">ありません</Text>
+        ) : (
+          <Stack gap="xs">
+            {m.notes.map((n: any) => (
+              <Card key={n.id} withBorder radius="sm" padding="sm" bg="gray.0">
+                <Text size="xs" c="dimmed">
+                  {toDate(n.created_at).toLocaleString('ja-JP')}・{n.admin ?? '―'}
+                </Text>
+                <Text style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{n.body}</Text>
+              </Card>
+            ))}
+          </Stack>
         )}
       </Card>
 
@@ -311,7 +366,7 @@ export default function MemberDetailPage() {
             <Table.Tbody>
               {m.notices.map((n: any) => (
                 <Table.Tr key={n.id}>
-                  <Table.Td>{new Date(n.created_at).toLocaleString('ja-JP')}</Table.Td>
+                  <Table.Td>{toDate(n.created_at).toLocaleString('ja-JP')}</Table.Td>
                   <Table.Td>
                     <Badge color={n.kind === 'warning' ? 'red' : 'blue'}>
                       {n.kind === 'warning' ? '注意' : 'お知らせ'}
@@ -326,7 +381,7 @@ export default function MemberDetailPage() {
                   <Table.Td>{n.sent_by ?? '―'}</Table.Td>
                   <Table.Td>
                     {n.read_at ? (
-                      new Date(n.read_at).toLocaleString('ja-JP')
+                      toDate(n.read_at).toLocaleString('ja-JP')
                     ) : (
                       <Badge color="yellow">まだ読んでいない</Badge>
                     )}
@@ -359,15 +414,11 @@ export default function MemberDetailPage() {
             <Table.Tbody>
               {m.suspensions.map((s: any) => (
                 <Table.Tr key={s.suspended_at}>
-                  <Table.Td>{new Date(s.suspended_at).toLocaleString('ja-JP')}</Table.Td>
+                  <Table.Td>{toDate(s.suspended_at).toLocaleString('ja-JP')}</Table.Td>
                   <Table.Td>{s.suspended_by ?? '―'}</Table.Td>
                   <Table.Td style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{s.reason || '―'}</Table.Td>
                   <Table.Td>
-                    {s.lifted_at ? (
-                      new Date(s.lifted_at).toLocaleString('ja-JP')
-                    ) : (
-                      <Badge color="red">止めている</Badge>
-                    )}
+                    {s.lifted_at ? toDate(s.lifted_at).toLocaleString('ja-JP') : <Badge color="red">止めている</Badge>}
                   </Table.Td>
                   <Table.Td>{s.lifted_by ?? '―'}</Table.Td>
                 </Table.Tr>
