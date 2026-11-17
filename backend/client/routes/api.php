@@ -8,6 +8,7 @@ use App\Http\Controllers\EmailVerificationController;
 use App\Http\Controllers\FirebaseTokenController;
 use App\Http\Controllers\LikeController;
 use App\Http\Controllers\MessageController;
+use App\Http\Controllers\PasswordController;
 use App\Http\Controllers\PlanController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PurchaseController;
@@ -74,3 +75,6 @@ Route::get('/me/search-conditions', [SearchConditionController::class, 'index'])
 Route::post('/me/search-conditions', [SearchConditionController::class, 'store']);
 Route::put('/me/search-conditions/{publicId}', [SearchConditionController::class, 'update']);
 Route::delete('/me/search-conditions/{publicId}', [SearchConditionController::class, 'destroy']);
+
+// M1 設定画面（#181）。パスワードを変える（docs/api/01b-auth.md）
+Route::put('/me/password', [PasswordController::class, 'update']);
