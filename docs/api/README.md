@@ -39,6 +39,10 @@ API の正本。作る前に設計を書き、確かめてもらってから実�
 | [03](03-matches.md) | `GET /api/me/matches` | マッチした相手の一覧 | 実装済み（レガシー版） |
 | [04](04-search.md) | `GET /api/users` | 相手を探す（絞り込み・並び・続き） | 実装済み（レガシー版） |
 | [04](04-search.md) | `POST /api/auth/login`（変更） | 最終ログインを書き換える | 実装済み（レガシー版） |
+| [04b](04b-saved-searches.md) | `GET /api/me/search-conditions` | 保存した検索条件の一覧 | 実装済み（レガシー版） |
+| [04b](04b-saved-searches.md) | `POST /api/me/search-conditions` | 検索の条件に名前を付けて保存する（1人5件まで） | 実装済み（レガシー版） |
+| [04b](04b-saved-searches.md) | `PUT /api/me/search-conditions/{public_id}` | 保存した検索条件を直す | 実装済み（レガシー版） |
+| [04b](04b-saved-searches.md) | `DELETE /api/me/search-conditions/{public_id}` | 保存した検索条件を消す | 実装済み（レガシー版） |
 | [05](05-messages.md) | `GET /api/me/talk-rooms` | トークの一覧（相手ごとの最新の1件・未読の数） | 実装済み（レガシー版） |
 | [05](05-messages.md) | `GET /api/me/talk-rooms/{public_id}/messages` | トークの履歴（レガシー版は読んだことにするのもこの中） | 実装済み（レガシー版） |
 | [05](05-messages.md) | `POST /api/me/talk-rooms/{public_id}/messages` | 送る | 実装済み（レガシー版） |
