@@ -10,7 +10,7 @@
 <main>
   <p class="meta"><a href="index.html">← 目次へ</a></p>
   <h1>04b 保存した検索条件と、検索の画面の URL</h1>
-  <p class="meta">作成: 2026-11-17 ／ 状態: <span class="status">解説だけ</span></p>
+  <p class="meta">作成: 2026-11-17 ／ 状態: <span class="status">レガシー版まで</span></p>
 
   <div class="card point">
     <strong>この一歩でできるようになること</strong>
@@ -439,9 +439,32 @@ where "user_id" = 1
   <h2>9. 実装の記録</h2>
   <p class="meta">レガシー版のあと（9-1・9-2）と、改善したあと（9-3・9-4）に、explain-change が書く。</p>
   <h3>9-1. レガシー版</h3>
-  <p>まだ実装していない。</p>
+  <p>2026-11-17 に、<code>legacy-repo</code> に作りました（#140 表・#141 API・#142 画面）。</p>
+  <table>
+    <tr><th>ファイル</th><th>書いたこと</th></tr>
+    <tr><td><code>database/migrations/2026_11_17_100000_create_search_conditions_table.php</code></td><td>表。<code>user_id</code> は数の列だけ（外部キーもインデックスもなし）。<code>conditions</code> は <code>jsonb</code></td></tr>
+    <tr><td><code>app/Models/SearchCondition.php</code></td><td>どの列でも一括代入できる。<code>conditions</code> は配列で読む</td></tr>
+    <tr><td><code>database/seeders/SearchConditionsSeeder.php</code></td><td>試しの会員 1人に 1〜5件（59,805件）</td></tr>
+    <tr><td><code>app/Http/Controllers/SearchConditionController.php</code></td><td>一覧・保存・直す・消す。JWT の処理をメソッドごとにコピー（17〜20か所目）。上限は数えてから入れるだけ。有料かどうかの確かめは、検索からコピー（保存だけ。直すほうにはない）。直す・消すは <code>public_id</code> だけで探す</td></tr>
+    <tr><td><code>routes/api.php</code></td><td><code>/api/me/search-conditions</code> の4本</td></tr>
+    <tr><td><code>frontend/client/src/SearchPage.tsx</code></td><td>今の条件を URL のクエリに出す（<code>useSearchParams</code>）。保存した検索条件の一覧・保存・名前を直す・消す・「有料」の印。<code>fetch</code> を4つ、画面に直接書いた。有料かどうかの判断も、画面にもう一度書いた</td></tr>
+  </table>
+  <p>設計と違う所は1つです。直す（<code>PUT</code>）に、有料かどうかの確かめをコピーしませんでした。レガシー版でよく起きる「コピーし忘れ」を、そのまま測るためです。</p>
   <h3>9-2. 測った問題と数字</h3>
-  <p>まだ実装していない。</p>
+  <p>開発用の DB（保存した検索条件 59,805件）で、curl とブラウザで測りました。くわしい表は <code>docs/api/04b-saved-searches.md</code> の「レガシー版で起きること」にあります。</p>
+  <table>
+    <tr><th>問題</th><th>測ったこと</th><th>結果</th><th>要件 ID</th></tr>
+    <tr><td>上限を超える</td><td>4件ある会員で、保存を10本同時に送る（同時に処理できるサーバーを、コンテナの中だけで一時的に立てた）</td><td><strong><code>201</code> が 7本。11件になった</strong>。いつものサーバー（1本ずつ処理）では 5件で止まり、表に出ない</td><td>FR-SAVED-005・NFR-SAVED-001</td></tr>
+    <tr><td>何でも保存できる</td><td>年齢 17・身長 300・知らない項目・配列・文字だけ・200文字の名前</td><td>どれも <code>201</code>。名前なし・条件なしは <code>500</code>（SQL のエラーが応答に出る）</td><td>FR-SAVED-007・008</td></tr>
+    <tr><td>期限切れでも有料の条件</td><td>期限が過ぎた男性（<code>is_paid</code> は true のまま）が、身長を入れて保存する</td><td><strong><code>201</code></strong></td><td>FR-SAVED-009・FR-PAID-005</td></tr>
+    <tr><td>確かめのコピーし忘れ</td><td>男性の無料の会員が、直すときに身長を足す</td><td><strong><code>200</code></strong>（保存では <code>403</code>）</td><td>FR-SAVED-009</td></tr>
+    <tr><td>他人の条件を変えられる</td><td>会員 A のトークンで、会員 B の条件を直す・自分のものにする・消す</td><td><strong><code>200</code>・<code>200</code>・<code>204</code></strong>。自分のものにすると、A は6件になる</td><td>FR-SAVED-005・006</td></tr>
+    <tr><td>ない ID</td><td>ない ID・UUID の形でない ID を直す・消す</td><td>直すは <code>500</code>。消すは、ない ID なら <code>204</code>・形が違えば <code>500</code></td><td>FR-SAVED-004</td></tr>
+    <tr><td>会員を消しても残る</td><td>会員を DB から消す（確かめたあと <code>rollback</code>）</td><td>保存した検索条件が 5件残る</td><td>FR-SAVED-014</td></tr>
+    <tr><td>一覧が表を全部読む</td><td><code>EXPLAIN (ANALYZE, BUFFERS)</code>（<code>where user_id = …</code>）</td><td>Seq Scan。4件を返すのに 59,801行を捨て、1,549 ページを読む（2.1 ms）</td><td>NFR-SAVED-004</td></tr>
+    <tr><td>画面の指摘</td><td>Biome（<code>npm run lint</code>）</td><td>エラー 34 → 43・警告 45 → 52（レガシー版なので残す）</td><td>―</td></tr>
+  </table>
+  <p>画面は、headless の Chrome（幅 375px）で FR-UI-041〜048 と FR-UI-016 を1つずつ確かめ、全部通りました（画面の例外 0回）。ただし、レガシー版の API は条件を確かめないので、URL に範囲の外の値（<code>/search?age_min=17</code>）を入れても、誤り（<code>422</code>）にならず、そのまま検索します（FR-UI-042 の後半は、改善する段階で満たす）。名前の長さ（31文字以上）も、画面と API のどちらも止めません（FR-UI-045・FR-SAVED-008）。</p>
   <h3>9-3. 足したテスト</h3>
   <p>まだ実装していない。</p>
   <h3>9-4. 改善版と、前と後の数字</h3>
