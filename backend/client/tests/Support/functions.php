@@ -22,16 +22,15 @@ use function Pest\Laravel\withHeader;
  * 日時の列には now() が入るので、決まった日時にしたいときは、呼ぶ前に travelTo()（Pest\Laravel の関数。$this->travelTo() と同じ）で時刻を止める。
  */
 
-/** 作った会員のパスワード（UserFactory と同じ） */
-const MEMBER_PASSWORD = 'password';
-
 /**
  * 会員（users とプロフィール）を1人作る。メールアドレスは確認済み。
+ * 作らないもの：購入の行（purchases）・管理画面の監査ログ（admin_audit_logs）。
+ * 購入の履歴まで要るテストは、購入の API を呼ぶか、部品を足す。
  *
  * @param  'male'|'female'  $gender
- * @param  bool  $paid  有料会員（is_paid が true。期限は今から30日）
- * @param  bool  $withdrawn  退会した（UserController::destroy と同じく、deleted_at を入れ、メールアドレスを書き換える）
- * @param  bool  $suspended  管理画面で利用を止めた（suspended_at を入れる）
+ * @param  bool  $paid  有料会員（is_paid が true。期限は今から30日。purchases の行は作らない）
+ * @param  bool  $withdrawn  退会した（退会の API（DELETE /api/me）と同じく、deleted_at を入れ、メールアドレスを書き換える）
+ * @param  bool  $suspended  管理画面で利用を止めた（suspended_at を入れる。監査ログは作らない）
  */
 function createMember(
     string $gender = 'female',
@@ -94,7 +93,8 @@ function createBlock(TestMember $blocker, TestMember $blocked): int
 
 /**
  * 2人がマッチした状態を作る：お互いのいいね・マッチ・（既定で）トークルームと参加者2人。
- * 行の向きは LikeController::store と同じ（user1_id が送り返した人・user2_id が先に送った人）。
+ * お互いのいいねもこの関数が作るので、同じ2人で先に createLike() しない（likes の UNIQUE に当たって落ちる）。
+ * 行の向きは、いいねを送る API（POST /api/me/likes）と同じ（user1_id が送り返した人・user2_id が先に送った人）。
  * Firestore には書かない（Firestore まで確かめるテストは、API を呼んでマッチさせる）。
  *
  * @param  TestMember  $likedFirst  先にいいねを送った会員
@@ -120,10 +120,10 @@ function createMatch(TestMember $likedFirst, TestMember $likedBack, bool $withTa
 }
 
 /**
- * ログインしたときと同じ作りのトークン（JWT）を作る（AuthController::login と同じ中身・同じ鍵）。
+ * ログインの API（POST /api/auth/login）が返すのと同じ作りのトークン（JWT）を作る（同じ中身・同じ鍵）。
  * ログインの API は呼ばない（呼ぶと last_login_at が変わり、テストの前提が動くため）。
  *
- * @param  int|null  $expiresAt  期限（UNIX 時間）。期限切れを確かめるときに、過去の値を渡す。渡さなければ今から30日
+ * @param  int|null  $expiresAt  期限（UNIX 時間）。time() をもとに書く（期限切れなら time() - 60）。travelTo() で止めた now() をもとにしない。渡さなければ今から30日
  */
 function memberToken(TestMember $member, ?int $expiresAt = null): string
 {

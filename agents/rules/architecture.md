@@ -465,7 +465,7 @@ final class BindingServiceProvider extends ServiceProvider
 
 - トランザクションは UseCase が `TransactionManagerInterface::run()` で張る。Controller・Repository・QueryService では張らない
 - 読んでから書く処理で、同時に2回来ると壊れるもの（停止・購入・回数の上限）は、Repository に `〜ForUpdate()`（行のロック）を作って使う
-- 日時は `ClockInterface::now()` から取る（`DateTimeImmutable`・UTC）。UseCase の単体テストでは固定した時刻の偽物に差し替え、API テストでは `$this->travelTo()` で止める（`SystemClock` は Carbon の時刻を返すので、止めた時刻が届く）
+- 日時は `ClockInterface::now()` から取る（`DateTimeImmutable`・UTC）。UseCase の単体テストでは固定した時刻の偽物に差し替え、API テストでは `travelTo()`（`$this->travelTo()` と同じ）で止める（`SystemClock` は Carbon の時刻を返すので、止めた時刻が届く）
 - 外への書き込み（Firestore・メール・将来の決済と AI）は、**`run()` の外、コミットのあと**で行う。トランザクションの中で外へ書かない（DB が巻き戻っても、外には残るため）
 
 ## 7. エラー

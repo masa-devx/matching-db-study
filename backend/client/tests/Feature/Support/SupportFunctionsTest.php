@@ -6,6 +6,7 @@ use Illuminate\Support\Carbon;
 
 use function Pest\Laravel\assertDatabaseCount;
 use function Pest\Laravel\assertDatabaseHas;
+use function Pest\Laravel\assertDatabaseMissing;
 use function Pest\Laravel\getJson;
 use function Pest\Laravel\travelTo;
 use function Tests\Support\actingAsMember;
@@ -15,8 +16,8 @@ use function Tests\Support\createMatch;
 use function Tests\Support\createMember;
 use function Tests\Support\memberToken;
 
-// tests/Support/functions.php の関数が、API が作るのと同じ形の行を作ることを確かめる。
-// ここが崩れると、ほかの API テストの前提が全部崩れる
+// tests/Support/functions.php の関数が、PHPDoc に書いたとおりの行を作ることを確かめる。
+// API が作る行と同じ形かどうかは、ここでは比べない（それぞれの API の API テストで見る）
 
 it('createMember は、確認済みの無料の会員とプロフィールを1行ずつ作る', function () {
     $member = createMember(gender: 'male', nickname: 'たろう');
@@ -32,6 +33,7 @@ it('createMember は、確認済みの無料の会員とプロフィールを1�
         'deleted_at' => null,
         'suspended_at' => null,
     ]);
+    assertDatabaseMissing('users', ['id' => $member->id, 'email_verified_at' => null]);
     assertDatabaseHas('profiles', ['user_id' => $member->id, 'gender' => 'male', 'nickname' => 'たろう']);
     expect($member->gender)->toBe('male')
         ->and($member->nickname)->toBe('たろう');
@@ -62,7 +64,7 @@ it('createLike と createBlock は、向きのとおりに1行ずつ作り、止
     assertDatabaseCount('likes', 1);
     assertDatabaseHas('likes', ['id' => $likeId, 'from_user_id' => $a->id, 'to_user_id' => $b->id, 'created_at' => '2026-11-10 12:00:00']);
     assertDatabaseCount('blocks', 1);
-    assertDatabaseHas('blocks', ['id' => $blockId, 'blocker_id' => $b->id, 'blocked_id' => $a->id]);
+    assertDatabaseHas('blocks', ['id' => $blockId, 'blocker_id' => $b->id, 'blocked_id' => $a->id, 'created_at' => '2026-11-10 12:00:00']);
     assertDatabaseCount('user_matches', 0);
 });
 
@@ -76,6 +78,7 @@ it('createMatch は、お互いのいいね・マッチ・トークルーム・�
     assertDatabaseHas('likes', ['from_user_id' => $first->id, 'to_user_id' => $back->id]);
     assertDatabaseHas('likes', ['from_user_id' => $back->id, 'to_user_id' => $first->id]);
     // 向きは、いいねを送る API と同じ：user1_id が送り返した人
+    assertDatabaseCount('user_matches', 1);
     assertDatabaseHas('user_matches', ['id' => $match->id, 'user1_id' => $back->id, 'user2_id' => $first->id]);
     assertDatabaseHas('talk_rooms', ['id' => $match->talkRoomId, 'public_id' => $match->talkRoomPublicId, 'match_id' => $match->id]);
     assertDatabaseCount('talk_room_members', 2);
@@ -103,11 +106,11 @@ it('actingAsMember のあとのリクエストは、その会員として通る'
         ->assertJsonPath('email', $me->email);
 });
 
-it('memberToken に過去の期限を渡すと、期限切れのトークンになる', function () {
+it('memberToken に過去の期限を渡すと、期限切れのトークンになる（FR-AUTH-013）', function () {
     $me = createMember();
     $expired = memberToken($me, expiresAt: time() - 60);
 
-    // 分かっている不具合：期限切れのトークンは、401 ではなく 500 になる（JWT の例外をつかまえていない。AuthController::me）
+    // 分かっている不具合：期限切れのトークンは、401（FR-AUTH-013）ではなく 500 になる（JWT の例外をつかまえていない）
     getJson('/api/me', ['Authorization' => 'Bearer '.$expired])->assertStatus(500);
     // 期限の中のトークンなら通るので、500 の理由は期限
     getJson('/api/me', ['Authorization' => 'Bearer '.memberToken($me)])->assertOk();

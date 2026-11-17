@@ -59,16 +59,17 @@ API ごとに、下の表から当てはまる観点を選ぶ。「API テスト
 
 データと、ログインした状態は、`backend/client/tests/Support/functions.php` の関数で作る。テストでは `use function Tests\Support\createMember;` のように読み込む。部品そのもののテストは `tests/Feature/Support/SupportFunctionsTest.php`、部品だけで書いた見本は `tests/Feature/SentLikesListTest.php`。
 
-| 関数 | 作るもの |
-| --- | --- |
-| `createMember(gender:, paid:, withdrawn:, suspended:, nickname:)` | 会員とプロフィール。既定は、メールアドレスを確認した・無料の・女性。`TestMember`（`id`・`publicId`・`email`・`nickname`・`gender`）を返す |
-| `createLike($from, $to)` | いいねを1つ。マッチは作らない |
-| `createMatch(likedFirst:, likedBack:, withTalkRoom:)` | お互いのいいね・マッチ・トークルームと参加者2人。Firestore には書かない。`TestMatch`（`id`・`talkRoomId`・`talkRoomPublicId`）を返す |
-| `createBlock($blocker, $blocked)` | ブロックを1つ |
-| `actingAsMember($member)` | その会員のトークンを `Authorization` に付ける。続けて `->getJson(...)` と書く |
-| `memberToken($member, expiresAt:)` | トークンの文字だけが要るとき（期限切れを確かめるときは、過去の `expiresAt` を渡す） |
+| 関数 | 作るもの | 作らないもの |
+| --- | --- | --- |
+| `createMember()` | 会員とプロフィール。既定は、メールアドレスを確認した・無料の・女性。引数で、性別・有料・退会・停止を変える | 購入の行（`purchases`）・管理画面の監査ログ |
+| `createLike()` | いいねを1つ | マッチ |
+| `createMatch()` | お互いのいいね・マッチ・トークルームと参加者2人 | Firestore のルーム |
+| `createBlock()` | ブロックを1つ | ― |
+| `actingAsMember()` | その会員のトークンを `Authorization` に付ける。続けて `->getJson(...)` と書く | ― |
+| `memberToken()` | トークンの文字だけ（期限切れを確かめるときに使う） | ― |
 
-- 足りない部品（メッセージ・購入など）は、要るチケットで `functions.php` に足し、`SupportFunctionsTest.php` にテストを1本足す
+- 引数と返す値は、`functions.php` の PHPDoc を正とする（この表には書かない）
+- 足りない部品（メッセージ・購入など）は、要るチケットで `functions.php` に足し、`SupportFunctionsTest.php` にテストを1本足す。この表にも1行足す
 - 時刻は `travelTo()`（`Pest\Laravel` の関数。`$this->travelTo()` と同じ）で止める。部品は日時の列に `now()` を入れるので、止めてから呼ぶと、その日時の行ができる
 
 ```php
@@ -82,7 +83,7 @@ actingAsMember($me)->getJson('/api/me/likes')
     ->assertJsonPath('0.user_id', $newer->publicId);   // 新しい順
 ```
 
-- トークンの期限だけは、本物の時計で決まる（JWT のライブラリが `time()` を見るため、`travelTo()` は効かない）
+- トークンの期限だけは、本物の時計で決まる（JWT のライブラリが `time()` を見るため、`travelTo()` は効かない）。`memberToken()` に期限を渡すときは、`time()` をもとに書く（期限切れなら `time() - 60`）
 
 ## 単体とE2Eの切り分け
 
@@ -158,7 +159,7 @@ await expect(createInvoice(input)).rejects.toThrow(InvoiceValidationError);
 - **新しい URL に移したときのテスト**（今の URL を変えずに残し、同じ機能を新しい URL に作るとき。`docs/cycles/01-backend-foundation/03-how.md` の「今の URL を壊さずに直す流れ」）
   1. 新しい URL のテストは、今の URL に対する、今の動きを確かめるテストをコピーして作る
   2. 違ってよい点（`data` で包む・状態コード（形の違う ID は 404 など）・出さない項目）は、移すチケットの表に並べる。表にないものは、期待値を変えない
-  3. 今の URL に対する、今の動きを確かめるテストは、今の振る舞いのまま期待値を書く（例：形の違う ID は 500 のまま）。今の URL を消すときに、このテストも一緒に消す
+  3. 今の URL に対する、今の動きを確かめるテストは、今の振る舞いのまま期待値を書く（例：形の違う ID は 500 のまま）。今の URL を消すときに、このテストも一緒に消す。消すチケットに、新しい URL のどのテストが引き継いだかを書く
 - **安全の穴を直すときのテスト**（要件と違う動きのうち、他人のデータや権限に関わるものを直すとき）
   1. 直すのは、ほかの変更（移す・性能）と別のコミットにする
   2. 直す前に、「分かっている不具合：…」として今の動きを確かめているテストを、要件どおりの期待値に変え、落ちることを先に見せる
