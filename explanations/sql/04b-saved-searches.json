@@ -19,11 +19,13 @@
      "kind": "improved",
      "title": "改善版",
      "count": "3本＋begin・commit",
-     "code": "$conditions = SearchConditions::fromArray($request->validated('conditions'));  // 検索と同じ検証\nDB::transaction(function () use ($me, $name, $conditions) {\n    // 会員の行を押さえてから数える（同じ会員の保存を1つずつにする）\n    DB::table('users')->where('id', $me->id)->lockForUpdate()->value('id');\n    if (SearchCondition::where('user_id', $me->id)->count() >= 5) {\n        throw new SavedSearchLimitExceeded;   // 422\n    }\n    SearchCondition::create([\n        'user_id' => $me->id, 'name' => $name, 'conditions' => $conditions->toArray(),\n    ]);\n});",
+     "code": "$conditions = SearchConditions::fromArray($request->validated('conditions'));  // 検索と同じ検証\nDB::transaction(function () use ($me, $name, $conditions) {\n    // 会員の行を押さえてから数える（同じ会員の保存を1つずつにする）\n    DB::table('users')->where('id', $me->id)->lockForUpdate()->value('id');\n    if (SearchCondition::where('user_id', $me->id)->count() >= 5) {\n        throw new SavedSearchLimitExceeded;   // 422\n    }\n    SearchCondition::create([\n        'public_id' => (string) Str::uuid7(),   // アプリで作る（DB の既定の値に任せると、読み直す1本が増える）\n        'user_id' => $me->id, 'name' => $name, 'conditions' => $conditions->toArray(),\n    ]);\n});",
      "sql": "begin;\n\n-- ① 会員の行を押さえる（同じ会員の2つ目は、ここで待つ）\nselect \"id\" from \"users\"\nwhere \"id\" = 1 limit 1\nfor update;\n\n-- ② 押さえたまま数える\nselect count(*) as \"aggregate\"\nfrom \"search_conditions\"\nwhere \"user_id\" = 1;\n\n-- ③ 入れる\ninsert into \"search_conditions\"\n  (\"user_id\", \"name\", \"conditions\", \"updated_at\", \"created_at\")\nvalues (1, '東京・20代',\n  '{\"age_min\":20,\"age_max\":29,\"prefecture\":[\"東京都\"]}',\n  '2026-11-17 09:46:12', '2026-11-17 09:46:12')\nreturning \"id\";\n\ncommit;",
      "notes": [
-      "ロックの1本が増える。待つのは同じ会員の保存だけ",
-      "条件は、検索の API と同じ検証を通ったものだけが入る（NFR-SAVED-002）"
+      "ロックの1本が増える。待つのは、この会員の行に書き込む処理（ログインの最終ログインの更新など）と、この会員を指す行を入れる処理（ほかの会員が、この会員にいいね・ブロックをするとき。外部キーを確かめるために、親の行を軽く押さえるため）",
+      "待つ範囲を狭めたいときは、<code>for update</code> の代わりに <code>for no key update</code> で押さえる（外部キーの確かめとはぶつからず、同じ会員の2つ目の保存は待たせられる）。どちらにするかは、直す段階で決める",
+      "条件は、検索の API と同じ検証を通ったものだけが入る（NFR-SAVED-002）",
+      "<code>public_id</code> はアプリで UUID v7 を作って入れる。DB の既定の値に任せると、応答に返すために読み直す1本が増え、4本になる"
      ]
     }
    ]

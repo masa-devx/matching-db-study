@@ -138,7 +138,7 @@ create table search_conditions (
   id         bigint generated always as identity primary key,
   public_id  uuid not null default uuidv7() unique,
   user_id    bigint not null references users (id) on delete cascade,
-  name       varchar(30) not null check (char_length(name) between 1 and 30),
+  name       text not null check (char_length(name) between 1 and 30),   -- 上限は CHECK の1か所で決める
   conditions jsonb not null check (jsonb_typeof(conditions) = 'object'),
   created_at timestamptz not null,
   updated_at timestamptz not null
@@ -149,7 +149,7 @@ create index search_conditions_user_id_id_index on search_conditions (user_id, i
     <tr><th>項目</th><th>レガシー版</th><th>改善版</th><th>違いで起きること</th></tr>
     <tr><td>持ち主（<code>user_id</code>）</td><td>数の列だけ</td><td>外部キー（<code>on delete cascade</code>）</td><td>レガシー版は、会員を消しても条件が残り、いない会員を指せる（FR-SAVED-014）</td></tr>
     <tr><td>インデックス</td><td>主キーと <code>public_id</code> だけ</td><td><code>(user_id, id)</code></td><td>レガシー版は、自分の一覧を読むのに表を全部読む（6万件で 1549 ページ・Seq Scan）。改善版は、自分の行だけを保存した順に読める</td></tr>
-    <tr><td>名前</td><td><code>varchar(255)</code></td><td><code>varchar(30)</code> と CHECK</td><td>レガシー版は、空の名前も 255文字の名前も入る（FR-SAVED-008）</td></tr>
+    <tr><td>名前</td><td><code>varchar(255)</code></td><td><code>text</code> と CHECK（1〜30文字。型と CHECK の両方に上限を書くと、超えたときのエラーが2種類になる）</td><td>レガシー版は、空の名前も 255文字の名前も入る（FR-SAVED-008）</td></tr>
     <tr><td>条件の中身</td><td>何でも入る</td><td>「オブジェクトであること」だけ CHECK。項目と範囲はアプリ</td><td>レガシー版は、配列・数・文字だけの JSON も入る。項目ごとの CHECK を書かないのは、項目が増えるたびに制約を直すことになるため（NFR-SAVED-003）</td></tr>
     <tr><td>1人5件</td><td>なし（アプリが数えるだけ）</td><td>なし（アプリが、会員の行を押さえてから数える）</td><td>「1人5件まで」は、行をまたぐ決まりなので CHECK では書けない</td></tr>
     <tr><td>日時</td><td><code>timestamp</code>（時間帯なし）</td><td><code>timestamptz</code></td><td>ほかの表と同じ（database.md）</td></tr>
@@ -168,9 +168,9 @@ alter table profiles
   add column marital_status varchar(255);   -- どの列も、選択肢にない文字が入る</code></pre>
   <pre><code class="language-sql">-- 改善版：選択肢はマスタの表に置き、プロフィールはコード（数）で指す
 create table incomes (
-  code       smallint primary key,          -- 1〜5。小さいほど低い区分
+  code       smallint primary key,          -- 1〜5。並びは意味しない（番号を振り直さずに済むように）
   name       varchar(20) not null unique,   -- '500〜700万円'。画面に出す名前
-  sort_order smallint not null
+  sort_order smallint not null             -- 並びと、大小の比べは、こちらで行う
 );
 -- body_types・jobs・smoking_habits・drinking_habits・marital_statuses も同じ形
 
@@ -185,9 +185,9 @@ alter table profiles
     <tr><th>項目</th><th>レガシー版（文字）</th><th>改善版（コードとマスタ）</th></tr>
     <tr><td>選択肢にない値</td><td>入る（「1億円」も保存される）</td><td>外部キーが断る</td></tr>
     <tr><td>選択肢の名前を変える</td><td>前に保存した行と合わなくなる（全部の行を書き換える）</td><td>マスタの1行を直すだけ</td></tr>
-    <tr><td>年収「500万円以上」</td><td>比べられない。当てはまる区分を全部選んでもらう</td><td><code>income_code &gt;= 3</code> で比べられる</td></tr>
+    <tr><td>年収「500万円以上」</td><td>比べられない。当てはまる区分を全部選んでもらう</td><td><code>sort_order</code> の大小で比べられる（「以上」にするか「区分をいくつか選ぶ」ままにするかは、まだ決めていない）</td></tr>
     <tr><td>選択肢の一覧の置き場</td><td>ホーム・条件の画面・試しのデータの3か所に同じ一覧</td><td>マスタの表の1か所。画面は API から読む</td></tr>
-    <tr><td>1行の大きさ</td><td>文字（「ややぽっちゃり」は 21バイト）</td><td><code>smallint</code>（2バイト）。表が小さくなり、全部読むときも速い</td></tr>
+    <tr><td>1行の大きさ</td><td>文字（「ややぽっちゃり」は 21バイト＋長さの1バイト）</td><td><code>smallint</code>（2バイト）。表が少し小さくなる（効き目は、表の膨らみ（消えた行の跡）に比べると小さい）</td></tr>
     <tr><td>項目を足すとき</td><td>列を足し、画面の一覧を3か所直す</td><td>マスタの表と列を足す（どちらもマイグレーションは要る）</td></tr>
   </table>
   <p><strong>流れる SQL</strong>（レガシー版は、6項目を全部付けて探したときに実際に流れたもの。ログから取り出し、値を入れて行を分けた）</p>
@@ -219,21 +219,46 @@ where u.email_verified_at is not null
   and u.id &lt;&gt; 26444
   and p.gender_code = 2
   and p.body_type_code in (3)
-  and p.income_code &gt;= 3                         -- 500万円以上（コードの大小）
+  and p.income_code in (3, 4)                    -- 500〜700万円か 700〜1000万円（FR-SEARCH-017）
   and p.smoking_code in (1)
   and not exists (select 1 from likes l where l.from_user_id = 26444 and l.to_user_id = u.id)
   and (u.last_login_at, u.public_id) &lt; ('2026-11-17 09:00:00+00', '0193…')   -- 続き（カーソル）
 order by u.last_login_at desc, u.public_id desc
 limit 21;</code></pre>
-  <p><strong>インデックス</strong>：レガシー版には足していません。年収2区分・タバコ・体型で探すと、<code>profiles</code> を全部読みます（57人を見つけるのに 19,972行を捨て、3,986 ページ）。改善版でどうするかは、次の案を測って決めます。</p>
+  <p><strong>インデックス</strong>：レガシー版には足していません。年収2区分・タバコ・体型で探すと、<code>profiles</code> を全部読みます（53人を見つけるのに 19,976行を捨て、602 ページ。表を詰めてから測り直した数字で、はじめに書いた 3,986 ページは、試しのデータの入れ方で表が膨らんでいたもの）。改善版でどうするかは、次の案を測って決めます。</p>
   <table>
     <tr><th>案</th><th>中身</th><th>良いところ</th><th>弱いところ</th></tr>
     <tr><td>A. 項目ごとに1つずつ</td><td><code>(income_code)</code>・<code>(smoking_code)</code> … を別々に作る</td><td>分かりやすい。PostgreSQL が複数のインデックスを組み合わせて使える（ビットマップ）</td><td>選択肢が3〜11個しかない列は、1つの値に当たる行が多く、インデックスを使っても読む行があまり減らない。書き込みのたびに6つを直す</td></tr>
-    <tr><td>B. よく使う組を1つにまとめる</td><td><code>(gender_code, prefecture_code, …)</code> の複合インデックス</td><td>その組で探すときは速い</td><td>条件の組み合わせは会員ごとに違う（6項目の付け方だけで64通り）。全部の組は作れない。並びの左の列を条件に付けないと使えない</td></tr>
+    <tr><td>B. よく使う組を1つにまとめる</td><td><code>(gender_code, prefecture_code, …)</code> の複合インデックス</td><td>その組で探すときは速い</td><td>条件の組み合わせは会員ごとに違う（6項目の付け方だけで64通り）。全部の組は作れない。並びの左の列に条件がないときは、PostgreSQL 18 なら、左の列の値の種類が少なければ飛ばして使える（skip scan）が、種類が多いと使えない</td></tr>
     <tr><td>C. 並びのインデックスをたどる</td><td><code>users (last_login_at, public_id)</code> を新しい順にたどり、条件に合う行を20人見つけたら止める</td><td>条件に合う会員が多いときは、少し読むだけで終わる。インデックスを足さない</td><td>条件に合う会員が少ないと、最後までたどることになり、かえって遅い</td></tr>
-    <tr><td>D. 複数の列を1つの索引で（GIN・bloom）</td><td><code>btree_gin</code> や <code>bloom</code> で、6項目をまとめた1つのインデックス</td><td>どの組み合わせでも使える</td><td>拡張を入れる必要がある。並び（最終ログイン順）には使えないので、合った行を並べ直す</td></tr>
+    <tr><td>D-1. <code>btree_gin</code></td><td>拡張 <code>btree_gin</code> を入れ、6項目をまとめた GIN のインデックスを1つ作る</td><td>どの組み合わせでも使える。大小の比べ（<code>&gt;=</code>）にも効く</td><td>拡張を入れる必要がある。並び（最終ログイン順）には使えないので、合った行を並べ直す。<code>in (…)</code> には、ビットマップの走査で使う</td></tr>
+    <tr><td>D-2. <code>bloom</code></td><td>拡張 <code>bloom</code> で、6項目をまとめた1つのインデックス</td><td>小さい。どの組み合わせでも使える</td><td>使える比べは <code>=</code> だけ（大小には効かない）。使える型は <code>int4</code> と <code>text</code> だけなので、<code>smallint</code> の列にはそのまま張れない。合っていない行も拾うことがあり、表を読んで確かめ直す</td></tr>
   </table>
+  <p>案 B を作っても並べ直しが残るのは、絞る条件が <code>profiles</code> の列、並びが <code>users.last_login_at</code> で、表が分かれているためです（絞り込みと並びの両方に効く1つのインデックスは作れません）。登録が新しい順（<code>sort=new</code>）と「登録して間もない会員」には、<code>users (created_at, public_id)</code> のインデックスが要るかも測ります。</p>
   <p>直す段階で確かめること：条件に合う会員が多いとき（例：タバコ＝吸わない）と少ないとき（例：6項目を全部付ける）の両方で、<code>EXPLAIN (ANALYZE, BUFFERS)</code> の読んだページの数を、案ごとに比べます。「どの列にインデックスを張るか」は、列の値の種類の数（選択肢の数）と、条件に合う行の割合で決まります。</p>
+
+  <p><strong>フリーワードを速くする案（<code>pg_trgm</code>）</strong></p>
+  <p><code>like '%カフェ%'</code> のように前にも <code>%</code> が付く探し方は、ふつうのインデックス（B-tree）を使えません。<code>pg_trgm</code> は、文字を3つずつの組（トライグラム）に切って索引にする拡張で、<code>'%…%'</code> でもインデックスを使えるようにします。</p>
+  <pre><code class="language-sql">create extension pg_trgm;
+create index profiles_introduction_trgm on profiles using gin (introduction gin_trgm_ops);
+create index profiles_nickname_trgm     on profiles using gin (nickname gin_trgm_ops);
+-- 自己紹介「または」ニックネームなので、2つのインデックスの結果を合わせて使う（BitmapOr）</code></pre>
+  <table>
+    <tr><th>見る所</th><th>中身</th></tr>
+    <tr><td>効く場面</td><td>3文字以上の言葉（「カフェ」「映画鑑賞」）。合う行が少ないほど、読むページが減る</td></tr>
+    <tr><td>効かない場面</td><td><strong>2文字以下の言葉</strong>（「映画」「旅行」「犬」。日本語ではよくある長さ）。言葉から3文字の組が取れないので、インデックスを端から端まで読むことになり、表を全部読むより遅くなることがある。要件は 1〜50文字（FR-SEARCH-014）なので、「短い言葉は表を全部読む」か「下限を3文字にする」かを決める</td></tr>
+    <tr><td>書き込み</td><td>自己紹介を直すたびに、多くの組を入れ直すので、保存が重くなる</td></tr>
+    <tr><td>日本語</td><td>日本語の文字を組にできるかは、DB の文字の設定（<code>LC_CTYPE</code>）で決まる。今の DB で組が取れるかは、拡張を入れて <code>show_trgm('カフェ巡り')</code> で確かめる（まだ確かめていない）</td></tr>
+    <tr><td><code>%</code> と <code>_</code></td><td>インデックスとは別の話。会員が打った <code>%</code>・<code>_</code>・<code>\</code> は、ただの文字として探すよう、前に <code>\</code> を付けて打ち消す（今のレガシー版は、<code>%</code> だけで全員に当たる）</td></tr>
+  </table>
+  <p><strong>レガシー版から改善版への、データの移し方</strong>（直す段階で、順番に流す）</p>
+  <ol>
+    <li>マスタの表と <code>*_code</code> の列を足す（まだ、文字の列も残す）</li>
+    <li>名前とコードの対応で、文字の列から <code>*_code</code> に移す。選択肢にない文字（「1億円」など）を NULL にするか、止めて人が直すかを、ここで決める</li>
+    <li>保存した検索条件の <code>jsonb</code> の中にも、名前の配列（<code>"income": ["500〜700万円"]</code>・<code>"prefecture": ["東京都"]</code>）が入っている。これもコードに書き換える。<strong>これを忘れると、「今の決まりに合わない項目を捨てる」（FR-SAVED-015）で、会員が保存した条件が黙って消える</strong></li>
+    <li>アプリを、コードを読む形に切り替える。そのあとで、文字の列を消す</li>
+  </ol>
+  <p>外部キーを足すとき、PostgreSQL は今ある行を全部確かめます。今の2万人なら一瞬ですが、会員が増えたら、先に <code>not valid</code> で足し、あとから <code>validate constraint</code> で確かめる2段にします（確かめのあいだ、書き込みを止めずに済みます）。</p>
 
   <h2>5. 見本：レガシー版と改善版</h2>
   <h3>レガシー版（Fat Controller・テストなし）</h3>
@@ -329,6 +354,7 @@ DB::transaction(function () use ($me, $name, $conditions) {
         throw new SavedSearchLimitExceeded;   // 422
     }
     SearchCondition::create([
+        'public_id' =&gt; (string) Str::uuid7(),   // アプリで作る（DB の既定の値に任せると、読み直す1本が増える）
         'user_id' =&gt; $me-&gt;id, 'name' =&gt; $name, 'conditions' =&gt; $conditions-&gt;toArray(),
     ]);
 });</code></pre>
@@ -354,7 +380,7 @@ values (1, '東京・20代',
 returning "id";
 
 commit;</code></pre>
-      <ul><li>ロックの1本が増える。待つのは同じ会員の保存だけ</li><li>条件は、検索の API と同じ検証を通ったものだけが入る（NFR-SAVED-002）</li></ul>
+      <ul><li>ロックの1本が増える。待つのは、この会員の行に書き込む処理（ログインの最終ログインの更新など）と、この会員を指す行を入れる処理（ほかの会員が、この会員にいいね・ブロックをするとき。外部キーを確かめるために、親の行を軽く押さえるため）</li><li>待つ範囲を狭めたいときは、<code>for update</code> の代わりに <code>for no key update</code> で押さえる（外部キーの確かめとはぶつからず、同じ会員の2つ目の保存は待たせられる）。どちらにするかは、直す段階で決める</li><li>条件は、検索の API と同じ検証を通ったものだけが入る（NFR-SAVED-002）</li><li><code>public_id</code> はアプリで UUID v7 を作って入れる。DB の既定の値に任せると、応答に返すために読み直す1本が増え、4本になる</li></ul>
     </section>
   </div>
   <h4>一覧を見る（<code>GET /api/me/search-conditions</code>）</h4>
@@ -457,7 +483,7 @@ where "user_id" = 1
   <!-- /compare -->
   <table>
     <tr><th>操作</th><th>レガシー版</th><th>改善版</th><th>違いのもと</th></tr>
-    <tr><td>保存する</td><td>2本（数える・入れる）。ほかに、JWT のあとの有料の確かめで最大2本</td><td>3本＋begin・commit（押さえる・数える・入れる）</td><td>数える前に、会員の行を押さえる</td></tr>
+    <tr><td>保存する</td><td>2本（数える・入れる）＋ <code>public_id</code> を読み直す1本。ほかに、JWT のあとの有料の確かめで最大2本</td><td>3本＋begin・commit（押さえる・数える・入れる。<code>public_id</code> はアプリで作るので、読み直さない）</td><td>数える前に、会員の行を押さえる</td></tr>
     <tr><td>一覧を見る</td><td>1本</td><td>1本</td><td>SQL は同じ。読んだあとに、古い項目を捨て、使えるかを付ける</td></tr>
     <tr><td>直す</td><td>2本（ID で読む・書く）</td><td>1本</td><td><code>where</code> に持ち主を入れ、読まずに書く</td></tr>
     <tr><td>消す</td><td>1本</td><td>1本</td><td><code>where</code> に持ち主を入れる。消えた行が 0 なら 404</td></tr>
@@ -503,7 +529,7 @@ where "user_id" = 1
   <p>先に自分で答えてから、開いて見る。</p>
   <details><summary>なぜそうするのか？</summary><p>条件を <code>jsonb</code> の1列にするのは、この条件を読むのが「持ち主がフォームに戻して検索するとき」だけで、検索の項目があとから増えるからです。列で持つと、項目を足すたびに表・Model・API を直します。<code>jsonb</code> なら表は変えず、条件の決まり（<code>SearchConditions</code>）だけを直します。サーバーに持つのは、タブを閉じても・別の端末でも残すためです。上限を行ロックで止めるのは、数えてから入れるまでのあいだに、同じ会員のほかの保存が入らないようにするためです。</p></details>
   <details><summary>ほかの方法は？なぜ選ばなかったか？</summary><p>列で持つ案は、DB が型と範囲を確かめてくれますが、項目が増えるたびに直す所が多くなります。ほかの会員の条件をまたいで集計する使い方（「25歳を探している人は何人か」）があるなら、列のほうが向いています。1項目1行（EAV）は、値が全部文字になり、型も範囲も確かめられないので選びません。画面の URL や localStorage は、別の端末で残らないので、「毎回入れ直す」を解決できません。上限を番号の列と UNIQUE で止める案は、ロックが要らない代わりに、空いている番号を探す処理が要り、上限を変えにくくなります。</p></details>
-  <details><summary>弱点は？</summary><p>DB が <code>jsonb</code> の中身を確かめないので、アプリの検証を通らずに入ったデータ（手で直した・古い版が入れた）は、形が違うことがあります。読むときに捨てる処理が、その受け皿です。行ロックは、同じ会員のほかの書き込み（プロフィールの保存・いいね・購入など、会員の行を押さえる処理）を、そのあいだ待たせます。保存は短いので、ふつうは問題になりません。また、検索の項目の名前を変えると（<code>height_min</code> → <code>min_height</code> など）、前に保存した条件からその項目が消えます。名前を変えるときは、保存したデータも書き換えるマイグレーションが要ります。</p></details>
+  <details><summary>弱点は？</summary><p>DB が <code>jsonb</code> の中身を確かめないので、アプリの検証を通らずに入ったデータ（手で直した・古い版が入れた）は、形が違うことがあります。読むときに捨てる処理が、その受け皿です。行ロック（<code>for update</code>）は、その会員の行に書き込む処理（ログインのときの最終ログインの更新など）と、その会員を指す行を入れる処理（ほかの会員が、この会員にいいね・ブロックをするとき）を、そのあいだ待たせます。保存は短いので、ふつうは問題になりません。待つ範囲を狭めたいときは、<code>for no key update</code> で押さえます。また、この止め方は、DB の分離レベルが既定（READ COMMITTED）であることに頼っています（REPEATABLE READ に上げると、押さえたあとの数え直しが前の状態を見るので、上限を超えます）。また、検索の項目の名前を変えると（<code>height_min</code> → <code>min_height</code> など）、前に保存した条件からその項目が消えます。名前を変えるときは、保存したデータも書き換えるマイグレーションが要ります。</p></details>
   <details><summary>問題が起きたら、どう調べて直すか？</summary><p>「6件ある」と言われたら、<code>select user_id, count(*) from search_conditions group by user_id having count(*) &gt; 5</code> で、上限を超えた会員を数えます。同じ秒に2件入っていれば、同時に送られたと分かります。直すのは、保存の処理（行ロック）で、超えた分をどうするかは運営と決めます。「保存した条件で検索すると 422 になる」と言われたら、その行の <code>conditions</code> を読み、今の決まりに合わない値がないかを見ます。読むときに捨てる処理が抜けている項目があれば、そこを直します。「知らないうちに条件が変わった・消えた」と言われたら、直す・消すの SQL の <code>where</code> に持ち主が入っているかを、クエリログで確かめます。</p></details>
   <details><summary>データが10倍・100倍になったら？</summary><p>1人5件までなので、会員が20万人で最大100万件、200万人で最大1000万件です。読むのはいつも「自分の5件」なので、<code>user_id</code> の索引があれば、件数が増えても速さはほとんど変わりません。索引がないレガシー版は、表を全部読むので、件数に比例して遅くなります。<code>jsonb</code> は1行が大きくなりやすいので、条件の大きさに上限を付けます（検証を通せば、項目の数で自然に決まります）。行ロックは会員ごとなので、会員が増えても、待ちは増えません。もし「この条件に合う新しい会員を通知する」を足すなら、すべての条件を読んで検索することになり、<code>jsonb</code> のままでは重くなります。そのときは、通知に使う項目を列に出すか、別の仕組み（条件ごとの検索を順に流すジョブ）を考えます。</p></details>
   <details><summary>Eloquent でどんな SQL が流れ、どう直したか？ Rails（ActiveRecord）・Prisma ならどう書くか？</summary>
@@ -532,6 +558,7 @@ where "user_id" = 1
   <p>同じ日に、検索の画面の使い勝手を直しました（#147）。条件の欄と保存した検索条件を、条件だけの画面（<code>SearchConditionsPage.tsx</code>。<code>/search/conditions</code>）に移し、年齢をプルダウンにし、性別の欄をなくしました。一覧の画面（<code>SearchPage.tsx</code>）は結果だけになりました。条件を URL のクエリに直す処理と都道府県の一覧は、2つの画面にコピーしてあります（レガシー版）。</p>
   <p>続けて、検索の無料と有料の分け方を入れ替えました（#150）。身長を無料にし、有料の機能を4つ（最終ログイン・登録して間もない会員・フリーワード・登録が新しい順）足しました。表は変えていません。有料かどうかの確かめは、検索（<code>UserController::index</code>）と保存（<code>SearchConditionController::store</code>）と画面（<code>SearchConditionsPage.tsx</code>）の3か所にコピーしてあるので、3か所を直しました。測った結果は <code>docs/api/04-search.md</code> の終わりにあります（<code>keyword=%</code> で全員に当たる・フリーワードと新しい会員は表を全部読む・期限切れの会員が使える）。</p>
   <p>さらに、検索の無料の項目を6つ足し、条件の画面を作り直しました（#153）。<code>profiles</code> に6つの列（文字）を足し、検索の条件に <code>whereIn</code> を6つ並べました。条件の画面は、まとまりごとのカード・下に固定したボタン・開いて選ぶ都道府県・身長のプルダウンに変えました。選択肢の一覧は、ホーム・条件の画面・試しのデータの3か所にコピーしてあります。表・SQL・インデックスの、レガシー版と改善版の比べは、4章の「検索の項目を足すときの、表・SQL・インデックス」にあります。</p>
+  <p>最後に、今日足した分を5つの角度（要件・DB・セキュリティ・異常系・画面）でレビューし、指摘を直しました（#159）。画面の不具合は4つ：ブラウザの「戻る」で条件なしの結果に戻れない・形の違う保存した検索条件を押すと画面が真っ白になる・プルダウンに見えていない値が送られる・有料かどうかを読み終わる前に押すと確かめを通り抜ける。どれも、直す前にブラウザで再現させてから直しました。試しのデータの入れ方（6本の <code>update</code>）で表が7倍に膨らみ、測った数字が狂っていたことも、このレビューで分かりました。</p>
   <p>設計と違う所は1つです。直す（<code>PUT</code>）に、有料かどうかの確かめをコピーしませんでした。レガシー版でよく起きる「コピーし忘れ」を、そのまま測るためです。</p>
   <h3>9-2. 測った問題と数字</h3>
   <p>開発用の DB（保存した検索条件 59,805件）で、curl とブラウザで測りました。くわしい表は <code>docs/api/04b-saved-searches.md</code> の「レガシー版で起きること」にあります。</p>

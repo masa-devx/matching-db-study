@@ -56,7 +56,9 @@ export default function PlansPage() {
         {me?.is_paid ? (
           <p>有料会員です（{new Date(me.paid_until).toLocaleDateString('ja-JP')} まで）</p>
         ) : (
-          <p>有料会員になると、メッセージを送る・いいねを何回でも・身長で探す、が使えます。</p>
+          <p>
+            有料会員になると、メッセージを送る・いいねを何回でも・検索のこだわり条件（最終ログイン・新しい会員・フリーワード・並び替え）、が使えます。
+          </p>
         )}
       </div>
 
