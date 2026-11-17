@@ -18,6 +18,8 @@
 
 07 で、有料会員を足す（#80）。`users` に有料かどうか（`is_paid`）といつまで有料か（`paid_until`）、プランの表 `plans`（期間と今の値段。3行はマイグレーションで入れる）、購入の記録 `purchases`（どのプランを買ったかだけ）。設計を考えずに「とりあえず使える」形で、機能を使えるかは `is_paid` だけで決める（期限が過ぎても、だれも false に戻さない）。購入の記録は値段と期間を持たないので、プランの値段を変えると、前の記録の値段も変わって見える。主キーと外部キーだけで、インデックスは足さない。
 
+04b で、保存した検索条件を足す（#140）。会員が検索の条件に名前を付けて取っておく表 `search_conditions`。条件の中身は `jsonb` の1列にまとめる（検索の項目があとから増えても、表を変えないため）。設計を考えずに「とりあえず使える」形で、`user_id` は数の列だけ（外部キーもインデックスもない）。1人5件の上限・名前の長さ・条件の中身は、DB では確かめない。
+
 12 で、管理画面の表を足す（#89）。管理者 `admins`（会員とは別にログインする。役割は `owner`・`viewer`）と、監査ログ `admin_audit_logs`（だれが・いつ・何に・何をしたか）。会員の利用を止めた日時と理由（`users.suspended_at`・`suspended_reason`）。表は会員の側と共通の DB に置き、表の作りは `backend/client` にまとめる。管理画面（`backend/admin`）は読み書きするだけ。主キー・UNIQUE・外部キーだけで、インデックスは足さない。監査ログの書き換え・削除を止める仕組みはない。
 
 ### ER 図
@@ -38,6 +40,7 @@ erDiagram
   USERS ||--o{ BLOCKS : "blocked_id（外部キー・blocked_id だけで探すインデックスはない）"
   USERS ||--o{ PURCHASES : "user_id（外部キー・インデックスなし）"
   PLANS ||--o{ PURCHASES : "plan_id（外部キー）"
+  USERS ||--o{ SEARCH_CONDITIONS : "user_id（外部キーなし・インデックスなし）"
   ADMINS ||--o{ ADMIN_AUDIT_LOGS : "admin_id（外部キー・インデックスなし）"
   USERS {
     bigint id PK "中で使う。つながりと JWT の sub"
@@ -121,6 +124,15 @@ erDiagram
     timestamp created_at "買った日時。時間帯なし"
     timestamp updated_at "時間帯なし"
   }
+  SEARCH_CONDITIONS {
+    bigint id PK
+    uuid public_id UK "URL と応答に出す ID。既定は uuidv7()"
+    bigint user_id "持ち主。外部キーなし・インデックスなし"
+    varchar name "パターンの名前。長さは確かめない"
+    jsonb conditions "条件の中身。何でも入る"
+    timestamp created_at "時間帯なし"
+    timestamp updated_at "時間帯なし"
+  }
   ADMINS {
     bigint id PK
     varchar email UK
@@ -163,6 +175,7 @@ erDiagram
 | `blocks` | 06 | ブロック（だれが・だれを・いつ）。マッチ・メッセージは消さずに、読むときに除く | 主キー `id`・`(blocker_id, blocked_id)` の UNIQUE・2つの列の外部キー（`ON DELETE CASCADE`）。自分で自分をブロックする行も入る。UNIQUE は `blocker_id` が先なので、私をブロックした人（`blocked_id = ?`）を探すと表を全部読む |
 | `plans` | 07 | 有料のプラン（期間と今の値段）。1か月 3,980円・3か月 9,800円・6か月 16,800円の3行をマイグレーションで入れる | 主キー `id` だけ。同じ期間が2行入る・値段が0や負の数でも入る |
 | `purchases` | 07 | 購入の記録（だれが・どのプランを・いつ） | 主キー `id`・`user_id`（`ON DELETE CASCADE`）と `plan_id` の外部キーだけ。値段と期間を持たないので、プランの値段を変えると前の記録の値段も変わる。`user_id` から探すと表を全部読む |
+| `search_conditions` | 04b | 保存した検索条件（だれの・名前・条件の中身） | 主キー `id`・`public_id` の UNIQUE だけ。`user_id` に外部キーがないので、会員を消しても残り、ない会員を指せる。インデックスもないので、`user_id` から探すと表を全部読む（6万件で 1549 ページ）。`conditions`（`jsonb`）の中身・名前の長さ・1人5件の上限は、DB では確かめない |
 | `admins` | 12 | 管理画面の管理者（会員とは別にログインする）と役割 | 主キー `id`・`email` の UNIQUE。`role` に CHECK はなく、何でも入る。読み書きするのは管理画面（`backend/admin`） |
 | `admin_audit_logs` | 12 | 監査ログ（だれが・いつ・何に・何をしたか） | 主キー `id`・`admin_id` の外部キーだけ。対象は `target_type` と `target_id`（文字）で指すので外部キーはない。書き換え・削除を DB で止めていない |
 
@@ -192,3 +205,4 @@ Laravel のひな形が作った表（この学習では扱わない）：`passw
 | `likes` | いいね（02） | `(from_user_id, to_user_id)` の UNIQUE・2つの列から `users.id` への外部キー（`ON DELETE CASCADE`）・`from_user_id <> to_user_id` の CHECK・`to_user_id` のインデックス |
 | `user_matches` | マッチ（03）。1組を1行で持ち、`user1_id` に小さい ID を入れる | `(user1_id, user2_id)` の UNIQUE・`user1_id < user2_id` の CHECK（`user_matches_user1`）・`user2_id` のインデックス・2つの列から `users.id` への外部キー（`ON DELETE CASCADE`） |
 | `refresh_tokens` | 取り替え用のトークン（01b） | `token_hash` の UNIQUE（SHA-256）・`user_id` → `users.id` の外部キー・家族の番号・期限・使った時刻・止めた時刻 |
+| `search_conditions` | 保存した検索条件（04b） | `user_id` → `users.id` の外部キー（`ON DELETE CASCADE`）・`(user_id, id)` のインデックス（自分の一覧を保存した順に読む）・`public_id` の UNIQUE・`name` は 1〜30文字の CHECK・`conditions` は「オブジェクトであること」の CHECK（`jsonb_typeof(conditions) = 'object'`）。中身の項目と範囲はアプリで確かめる（検索の API と同じ決まり）。1人5件の上限は、会員の行を押さえてから数える（制約では書けない）・日時は `timestamptz` |

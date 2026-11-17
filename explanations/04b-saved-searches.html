@@ -121,6 +121,40 @@ flowchart TD
   </table>
   <div class="card point"><strong>この一歩で選ぶもの</strong>：取っておく条件はサーバーの表に持ち（C）、今の条件は画面の URL に出し（A。役割が違うので両方使う）、名前を付けて5件まで（B）、条件の中身は <code>jsonb</code> の1列（Y）。決め手は、この条件を読むのが「持ち主がフォームに戻して検索するとき」だけで、検索の項目があとから増えることです。<code>jsonb</code> の弱いところ（DB が中身を確かめない）は、保存するときに検索の API と同じ検証を通し、読むときに今の決まりに合わない項目を捨てて補います。上限は、改善版では行ロック（B）で止めます。レガシー版は、数えてから入れるだけ（A）・検証なし・持ち主を確かめない形で作り、何が困るかを測ります。</div>
 
+  <h3>表の作り（レガシー版と改善版）</h3>
+  <p>同じ表を、レガシー版と改善版でどう作るかを並べます。レガシー版はマイグレーション（#140）で作った実物、改善版は直す段階で作る予定の形です。</p>
+  <pre><code class="language-sql">-- レガシー版：とりあえず使える形
+create table search_conditions (
+  id         bigserial primary key,
+  public_id  uuid not null default uuidv7() unique,
+  user_id    bigint not null,          -- 外部キーなし・インデックスなし
+  name       varchar(255) not null,    -- 長さは確かめない
+  conditions jsonb not null,           -- 何でも入る
+  created_at timestamp(0),
+  updated_at timestamp(0)
+);</code></pre>
+  <pre><code class="language-sql">-- 改善版：DB が確かめられることは、DB で確かめる
+create table search_conditions (
+  id         bigint generated always as identity primary key,
+  public_id  uuid not null default uuidv7() unique,
+  user_id    bigint not null references users (id) on delete cascade,
+  name       varchar(30) not null check (char_length(name) between 1 and 30),
+  conditions jsonb not null check (jsonb_typeof(conditions) = 'object'),
+  created_at timestamptz not null,
+  updated_at timestamptz not null
+);
+-- 自分の一覧を、保存した順に読む
+create index search_conditions_user_id_id_index on search_conditions (user_id, id);</code></pre>
+  <table>
+    <tr><th>項目</th><th>レガシー版</th><th>改善版</th><th>違いで起きること</th></tr>
+    <tr><td>持ち主（<code>user_id</code>）</td><td>数の列だけ</td><td>外部キー（<code>on delete cascade</code>）</td><td>レガシー版は、会員を消しても条件が残り、いない会員を指せる（FR-SAVED-014）</td></tr>
+    <tr><td>インデックス</td><td>主キーと <code>public_id</code> だけ</td><td><code>(user_id, id)</code></td><td>レガシー版は、自分の一覧を読むのに表を全部読む（6万件で 1549 ページ・Seq Scan）。改善版は、自分の行だけを保存した順に読める</td></tr>
+    <tr><td>名前</td><td><code>varchar(255)</code></td><td><code>varchar(30)</code> と CHECK</td><td>レガシー版は、空の名前も 255文字の名前も入る（FR-SAVED-008）</td></tr>
+    <tr><td>条件の中身</td><td>何でも入る</td><td>「オブジェクトであること」だけ CHECK。項目と範囲はアプリ</td><td>レガシー版は、配列・数・文字だけの JSON も入る。項目ごとの CHECK を書かないのは、項目が増えるたびに制約を直すことになるため（NFR-SAVED-003）</td></tr>
+    <tr><td>1人5件</td><td>なし（アプリが数えるだけ）</td><td>なし（アプリが、会員の行を押さえてから数える）</td><td>「1人5件まで」は、行をまたぐ決まりなので CHECK では書けない</td></tr>
+    <tr><td>日時</td><td><code>timestamp</code>（時間帯なし）</td><td><code>timestamptz</code></td><td>ほかの表と同じ（database.md）</td></tr>
+  </table>
+
   <h2>5. 見本：レガシー版と改善版</h2>
   <h3>レガシー版（Fat Controller・テストなし）</h3>
   <pre><code class="language-php">// SearchConditionController::store（JWT の処理をコピーする）
