@@ -51,13 +51,13 @@
 | 会員の一覧 | `domains/members/MembersPage` | `GET /api/members` | `MemberController::index`（L20） | `users`・`profiles`・`purchases` | ― | メールアドレスかニックネームの部分一致（前にも `%` が付き、索引が使えない）。50人ずつ（OFFSET）・毎回の件数・1人ごとに2本（2＋2N）。**`users` の行をそのまま返す（パスワードのハッシュ・確認用の文字も出る）** |
 | 会員の詳細 | `domains/members/MemberDetailPage` | `GET /api/members/{publicId}` | `MemberController::show`（L63） | `users`・`purchases`・`plans`・`profiles`・`likes`・`user_matches`・`blocks` | `admin_audit_logs` | 見たことを監査ログに書く（`member.view`）。購入の値段は今のプランのもの（1件ごとに1本） |
 | 停止する | `domains/members/MemberDetailPage` | `POST /api/members/{publicId}/suspension` | `SuspensionController::store`（L20） | `admins`・`users` | `users.suspended_at`・`suspended_reason`・`admin_audit_logs` | owner だけ。理由を確かめない。トランザクションがない（停止と監査ログがずれうる）。断るのは会員の側のログインだけ（持っている JWT は使える） |
-| 停止を解く | `domains/members/MemberDetailPage` | `DELETE /api/members/{publicId}/suspension` | `SuspensionController::destroy`（L57） | ― | `users.suspended_at`・`suspended_reason` | **役割の確かめと監査ログを書き忘れている**（見るだけの人でも解け、記録も残らない）。いない会員でも 204 |
+| 停止を解く | `domains/members/MemberDetailPage` | `DELETE /api/members/{publicId}/suspension` | `SuspensionController::destroy`（L57） | ― | `users.suspended_at`・`suspended_reason` | **役割の確かめと監査ログをコピーし忘れている**（止めるほうのコードをコピーして作った）（見るだけの人でも解け、記録も残らない）。いない会員でも 204 |
 | メッセージの一覧 | `domains/messages/MessagesPage` | `GET /api/messages` | `MessageController::index`（L19） | `messages`・`users`・`profiles`・`talk_rooms`・`talk_room_members` | ― | 10万件を並べ替えて OFFSET で50件・毎回の件数・1件ごとに6本（2＋6N）。本文の部分一致。**本文を見られるのに、監査ログを書き忘れている**。中の連番の `id` を返す |
 | 購入の一覧 | `domains/sales/SalesPage` | `GET /api/purchases` | `SalesController::purchases`（L19） | `purchases`・`plans`・`users`・`profiles` | ― | 50件ずつ・1件ごとに3本（2＋3N）。値段は今のプランのもの |
 | 月ごとの売上 | `domains/sales/SalesPage` | `GET /api/sales/monthly` | `SalesController::monthly`（L47） | `purchases`・`plans` | ― | 今のプランの値段で足す（値段を変えると、過去の月の売上も変わる）。全期間 |
 | プランの一覧 | `domains/sales/SalesPage` | `GET /api/plans` | `PlanController::index`（L19） | `plans` | ― | `plans` の行をそのまま返す |
 | 値段を変える | `domains/sales/SalesPage` | `PUT /api/plans/{id}` | `PlanController::update`（L31） | `admins`・`plans` | `plans.price`・`admin_audit_logs` | **お金**。owner だけ。値段を確かめない（0 や負の数も入る）。ないプランでも監査ログを書く。中の連番の id を URL に使う（ほかは `public_id`）。トランザクションがない |
-| 監査ログの一覧 | `domains/audit-logs/AuditLogsPage` | `GET /api/audit-logs` | `AuditLogController::index`（L19） | `admin_audit_logs`・`admins` | ― | **API の設計（`docs/api/12-admin.md`）では owner だけだが、役割の確かめを書き忘れている**（見るだけの人も見られる。要件 `docs/requirements/admin.md` には書いていない）。50件ずつ・1件ごとに管理者の名前を読む（2＋N） |
+| 監査ログの一覧 | `domains/audit-logs/AuditLogsPage` | `GET /api/audit-logs` | `AuditLogController::index`（L19） | `admin_audit_logs`・`admins` | ― | **API の設計（`docs/api/12-admin.md`）では owner だけだが、役割の確かめをコピーし忘れている**（見るだけの人も見られる。要件 `docs/requirements/admin.md` には書いていない）。50件ずつ・1件ごとに管理者の名前を読む（2＋N） |
 
 ## SQL で確かめた結果（2026-11-16）
 

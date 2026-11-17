@@ -22,7 +22,7 @@
 | `GET /api/sales/monthly` | 月ごとの売上 | 作る | 作る |
 | `GET /api/plans`・`PUT /api/plans/{id}` | プランの一覧・値段を変える（`owner` だけ） | 作る | 作る |
 | `GET /api/audit-logs` | 監査ログの一覧（`owner` だけ） | 作る | 作る |
-| 会員の側（`backend/client`） | 止めた会員を断る | ログインの API だけで断る（ほかの API にはコピーしない） | ログインした会員を読むミドルウェア（`AuthenticateMember`）で断る |
+| 会員の側（`backend/client`） | 止めた会員を断る | ログインの API だけで断る（ほかの API にはコピーしない） | ログインした会員を読むミドルウェア（`AuthenticateMember`。ルートに付けるときの名前は `auth.member`）で断る |
 
 レガシー版は Fat Controller。だれが使うかは、管理者の JWT を読んで決める処理を、コントローラごとにコピーする（会員の側の 16か所と同じ形を、管理画面の中にもう一度作る）。役割（`viewer` を断る）と監査ログの書き込みも、コントローラごとにコピーする（コピーし忘れを測る）。入力は確かめず、エラーの扱いは考えない。
 

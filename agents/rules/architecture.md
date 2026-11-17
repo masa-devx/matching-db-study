@@ -500,7 +500,7 @@ final class BindingServiceProvider extends ServiceProvider
 
 - 置き場：`tests/Arch/LayersTest.php`。`phpunit.xml` のテストの組に `Arch`（`tests/Arch`）を足す。CI でほかのテストと一緒に流れる
 - 正本は会員の側（`backend/client/tests/Arch/`）。管理画面（`backend/admin`）にも Pest と `pestphp/pest-plugin-arch` を入れ、同じファイルをコピーする。違うのは例外の一覧だけ
-- テストで守れないこと（QueryService が `->save()`・`->update()`・`->delete()` を呼ばない・UseCase の if が判断の中身を持たない）は、レビューで見る（`pr-review`）
+- テストで確かめられないこと（QueryService が `->save()`・`->update()`・`->delete()` を呼ばない・UseCase の if が判断の中身を持たない）は、レビューで見る（`pr-review`）
 
 ```php
 // tests/Arch/LayersTest.php
