@@ -114,6 +114,13 @@ export default function UserPage() {
         <div className="chips">
           {user.profile?.prefecture && <span className="chip">{user.profile.prefecture}</span>}
           {user.profile?.height && <span className="chip">{user.profile.height}cm</span>}
+          {/* #153：検索に使う6項目。答えたものだけ出す */}
+          {user.profile?.body_type && <span className="chip">{user.profile.body_type}</span>}
+          {user.profile?.job && <span className="chip">{user.profile.job}</span>}
+          {user.profile?.income && <span className="chip">年収 {user.profile.income}</span>}
+          {user.profile?.smoking && <span className="chip">タバコ：{user.profile.smoking}</span>}
+          {user.profile?.drinking && <span className="chip">お酒：{user.profile.drinking}</span>}
+          {user.profile?.marital_status && <span className="chip">{user.profile.marital_status}</span>}
         </div>
 
         <div className="card">

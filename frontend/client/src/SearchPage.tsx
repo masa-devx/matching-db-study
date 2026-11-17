@@ -17,6 +17,10 @@ const fromQuery = (q: URLSearchParams) => {
   if (q.get('height_min')) c.height_min = q.get('height_min')
   if (q.get('height_max')) c.height_max = q.get('height_max')
   if (q.getAll('prefecture').length > 0) c.prefecture = q.getAll('prefecture')
+  // #153：プロフィールの6項目
+  for (const key of ['body_type', 'job', 'income', 'smoking', 'drinking', 'marital_status']) {
+    if (q.getAll(key).length > 0) c[key] = q.getAll(key)
+  }
   // #150：有料の4つ
   if (q.get('last_login')) c.last_login = q.get('last_login')
   if (q.get('new_member')) c.new_member = q.get('new_member')
@@ -33,6 +37,10 @@ const toQuery = (c: any) => {
   if (c?.height_min) q.append('height_min', c.height_min)
   if (c?.height_max) q.append('height_max', c.height_max)
   for (const pref of c?.prefecture ?? []) q.append('prefecture', pref)
+  // #153：プロフィールの6項目
+  for (const key of ['body_type', 'job', 'income', 'smoking', 'drinking', 'marital_status']) {
+    for (const value of c?.[key] ?? []) q.append(key, value)
+  }
   // #150：有料の4つ
   if (c?.last_login) q.append('last_login', c.last_login)
   if (c?.new_member) q.append('new_member', c.new_member)
@@ -63,6 +71,10 @@ export default function SearchPage() {
     if (c.height_min) params.append('height_min', c.height_min)
     if (c.height_max) params.append('height_max', c.height_max)
     for (const pref of c.prefecture ?? []) params.append('prefecture[]', pref)
+    // #153：プロフィールの6項目。API には、名前に [] を付けて配列で送る
+    for (const key of ['body_type', 'job', 'income', 'smoking', 'drinking', 'marital_status']) {
+      for (const value of c[key] ?? []) params.append(`${key}[]`, value)
+    }
     // #150：有料の4つ（URL のクエリに直す処理と、同じ並びをもう一度書いた）
     if (c.last_login) params.append('last_login', c.last_login)
     if (c.new_member) params.append('new_member', c.new_member)
@@ -142,6 +154,13 @@ export default function SearchPage() {
               ? `${conditions.height_min ?? ''}〜${conditions.height_max ?? ''}cm`
               : '',
             (conditions.prefecture ?? []).join('・'),
+            // #153：プロフィールの6項目
+            (conditions.body_type ?? []).join('・'),
+            (conditions.job ?? []).join('・'),
+            (conditions.income ?? []).join('・'),
+            (conditions.smoking ?? []).join('・'),
+            (conditions.drinking ?? []).join('・'),
+            (conditions.marital_status ?? []).join('・'),
             // #150：有料の4つ。言葉の対応を、条件の画面のプルダウンとは別に、ここにも書いた
             conditions.last_login === '24h' ? '24時間以内にログイン' : '',
             conditions.last_login === '3d' ? '3日以内にログイン' : '',

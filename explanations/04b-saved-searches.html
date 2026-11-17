@@ -155,6 +155,86 @@ create index search_conditions_user_id_id_index on search_conditions (user_id, i
     <tr><td>日時</td><td><code>timestamp</code>（時間帯なし）</td><td><code>timestamptz</code></td><td>ほかの表と同じ（database.md）</td></tr>
   </table>
 
+  <h3>検索の項目を足すときの、表・SQL・インデックス（#153）</h3>
+  <p>2026-11-17 に、検索に使う6項目（体型・お仕事・年収・タバコ・お酒・結婚歴）をプロフィールに足しました。レガシー版は実物、改善版は直す段階で作る予定の形です。改善版の SQL は、まだ Laravel に作らせていません（表がないため）。直す段階で、作らせて確かめます。</p>
+  <p><strong>表の作り</strong></p>
+  <pre><code class="language-sql">-- レガシー版：選択肢の名前（文字）を、そのまま列に入れる
+alter table profiles
+  add column body_type      varchar(255),   -- 'スリム'・'普通' など。NULL は未回答
+  add column job            varchar(255),
+  add column income         varchar(255),   -- '500〜700万円' など。大小を比べられない
+  add column smoking        varchar(255),
+  add column drinking       varchar(255),
+  add column marital_status varchar(255);   -- どの列も、選択肢にない文字が入る</code></pre>
+  <pre><code class="language-sql">-- 改善版：選択肢はマスタの表に置き、プロフィールはコード（数）で指す
+create table incomes (
+  code       smallint primary key,          -- 1〜5。小さいほど低い区分
+  name       varchar(20) not null unique,   -- '500〜700万円'。画面に出す名前
+  sort_order smallint not null
+);
+-- body_types・jobs・smoking_habits・drinking_habits・marital_statuses も同じ形
+
+alter table profiles
+  add column body_type_code      smallint references body_types (code),
+  add column job_code            smallint references jobs (code),
+  add column income_code         smallint references incomes (code),   -- NULL は未回答
+  add column smoking_code        smallint references smoking_habits (code),
+  add column drinking_code       smallint references drinking_habits (code),
+  add column marital_status_code smallint references marital_statuses (code);</code></pre>
+  <table>
+    <tr><th>項目</th><th>レガシー版（文字）</th><th>改善版（コードとマスタ）</th></tr>
+    <tr><td>選択肢にない値</td><td>入る（「1億円」も保存される）</td><td>外部キーが断る</td></tr>
+    <tr><td>選択肢の名前を変える</td><td>前に保存した行と合わなくなる（全部の行を書き換える）</td><td>マスタの1行を直すだけ</td></tr>
+    <tr><td>年収「500万円以上」</td><td>比べられない。当てはまる区分を全部選んでもらう</td><td><code>income_code &gt;= 3</code> で比べられる</td></tr>
+    <tr><td>選択肢の一覧の置き場</td><td>ホーム・条件の画面・試しのデータの3か所に同じ一覧</td><td>マスタの表の1か所。画面は API から読む</td></tr>
+    <tr><td>1行の大きさ</td><td>文字（「ややぽっちゃり」は 21バイト）</td><td><code>smallint</code>（2バイト）。表が小さくなり、全部読むときも速い</td></tr>
+    <tr><td>項目を足すとき</td><td>列を足し、画面の一覧を3か所直す</td><td>マスタの表と列を足す（どちらもマイグレーションは要る）</td></tr>
+  </table>
+  <p><strong>流れる SQL</strong>（レガシー版は、6項目を全部付けて探したときに実際に流れたもの。ログから取り出し、値を入れて行を分けた）</p>
+  <pre><code class="language-sql">-- レガシー版
+select * from "users"
+where "email_verified_at" is not null
+  and "id" != 26444
+  and "id" not in (…いいねした相手…)
+  and "deleted_at" is null
+  and exists (
+    select * from "profiles"
+    where "users"."id" = "profiles"."user_id"
+      and "gender" = 'female'
+      and "body_type" in ('普通')
+      and "job" in ('会社員')
+      and "income" in ('500〜700万円')          -- 文字で比べる
+      and "smoking" in ('吸わない')
+      and "drinking" in ('飲む')
+      and "marital_status" in ('未婚')
+  )
+order by "last_login_at" desc
+limit 20 offset 0;</code></pre>
+  <pre><code class="language-sql">-- 改善版（予定の形）
+select u.public_id, p.nickname, p.birthdate, …
+from users u
+join profiles p on p.user_id = u.id
+where u.email_verified_at is not null
+  and u.deleted_at is null
+  and u.id &lt;&gt; 26444
+  and p.gender_code = 2
+  and p.body_type_code in (3)
+  and p.income_code &gt;= 3                         -- 500万円以上（コードの大小）
+  and p.smoking_code in (1)
+  and not exists (select 1 from likes l where l.from_user_id = 26444 and l.to_user_id = u.id)
+  and (u.last_login_at, u.public_id) &lt; ('2026-11-17 09:00:00+00', '0193…')   -- 続き（カーソル）
+order by u.last_login_at desc, u.public_id desc
+limit 21;</code></pre>
+  <p><strong>インデックス</strong>：レガシー版には足していません。年収2区分・タバコ・体型で探すと、<code>profiles</code> を全部読みます（57人を見つけるのに 19,972行を捨て、3,986 ページ）。改善版でどうするかは、次の案を測って決めます。</p>
+  <table>
+    <tr><th>案</th><th>中身</th><th>良いところ</th><th>弱いところ</th></tr>
+    <tr><td>A. 項目ごとに1つずつ</td><td><code>(income_code)</code>・<code>(smoking_code)</code> … を別々に作る</td><td>分かりやすい。PostgreSQL が複数のインデックスを組み合わせて使える（ビットマップ）</td><td>選択肢が3〜11個しかない列は、1つの値に当たる行が多く、インデックスを使っても読む行があまり減らない。書き込みのたびに6つを直す</td></tr>
+    <tr><td>B. よく使う組を1つにまとめる</td><td><code>(gender_code, prefecture_code, …)</code> の複合インデックス</td><td>その組で探すときは速い</td><td>条件の組み合わせは会員ごとに違う（6項目の付け方だけで64通り）。全部の組は作れない。並びの左の列を条件に付けないと使えない</td></tr>
+    <tr><td>C. 並びのインデックスをたどる</td><td><code>users (last_login_at, public_id)</code> を新しい順にたどり、条件に合う行を20人見つけたら止める</td><td>条件に合う会員が多いときは、少し読むだけで終わる。インデックスを足さない</td><td>条件に合う会員が少ないと、最後までたどることになり、かえって遅い</td></tr>
+    <tr><td>D. 複数の列を1つの索引で（GIN・bloom）</td><td><code>btree_gin</code> や <code>bloom</code> で、6項目をまとめた1つのインデックス</td><td>どの組み合わせでも使える</td><td>拡張を入れる必要がある。並び（最終ログイン順）には使えないので、合った行を並べ直す</td></tr>
+  </table>
+  <p>直す段階で確かめること：条件に合う会員が多いとき（例：タバコ＝吸わない）と少ないとき（例：6項目を全部付ける）の両方で、<code>EXPLAIN (ANALYZE, BUFFERS)</code> の読んだページの数を、案ごとに比べます。「どの列にインデックスを張るか」は、列の値の種類の数（選択肢の数）と、条件に合う行の割合で決まります。</p>
+
   <h2>5. 見本：レガシー版と改善版</h2>
   <h3>レガシー版（Fat Controller・テストなし）</h3>
   <pre><code class="language-php">// SearchConditionController::store（JWT の処理をコピーする）
@@ -451,6 +531,7 @@ where "user_id" = 1
   </table>
   <p>同じ日に、検索の画面の使い勝手を直しました（#147）。条件の欄と保存した検索条件を、条件だけの画面（<code>SearchConditionsPage.tsx</code>。<code>/search/conditions</code>）に移し、年齢をプルダウンにし、性別の欄をなくしました。一覧の画面（<code>SearchPage.tsx</code>）は結果だけになりました。条件を URL のクエリに直す処理と都道府県の一覧は、2つの画面にコピーしてあります（レガシー版）。</p>
   <p>続けて、検索の無料と有料の分け方を入れ替えました（#150）。身長を無料にし、有料の機能を4つ（最終ログイン・登録して間もない会員・フリーワード・登録が新しい順）足しました。表は変えていません。有料かどうかの確かめは、検索（<code>UserController::index</code>）と保存（<code>SearchConditionController::store</code>）と画面（<code>SearchConditionsPage.tsx</code>）の3か所にコピーしてあるので、3か所を直しました。測った結果は <code>docs/api/04-search.md</code> の終わりにあります（<code>keyword=%</code> で全員に当たる・フリーワードと新しい会員は表を全部読む・期限切れの会員が使える）。</p>
+  <p>さらに、検索の無料の項目を6つ足し、条件の画面を作り直しました（#153）。<code>profiles</code> に6つの列（文字）を足し、検索の条件に <code>whereIn</code> を6つ並べました。条件の画面は、まとまりごとのカード・下に固定したボタン・開いて選ぶ都道府県・身長のプルダウンに変えました。選択肢の一覧は、ホーム・条件の画面・試しのデータの3か所にコピーしてあります。表・SQL・インデックスの、レガシー版と改善版の比べは、4章の「検索の項目を足すときの、表・SQL・インデックス」にあります。</p>
   <p>設計と違う所は1つです。直す（<code>PUT</code>）に、有料かどうかの確かめをコピーしませんでした。レガシー版でよく起きる「コピーし忘れ」を、そのまま測るためです。</p>
   <h3>9-2. 測った問題と数字</h3>
   <p>開発用の DB（保存した検索条件 59,805件）で、curl とブラウザで測りました。くわしい表は <code>docs/api/04b-saved-searches.md</code> の「レガシー版で起きること」にあります。</p>

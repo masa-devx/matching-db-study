@@ -96,6 +96,13 @@ export default function HomePage(props: any) {
         nickname: form.nickname,
         prefecture: form.prefecture,
         height: form.height,
+        // #153：検索に使う6項目（選ばなければ空の文字。API が null に直す）
+        body_type: form.body_type,
+        job: form.job,
+        income: form.income,
+        smoking: form.smoking,
+        drinking: form.drinking,
+        marital_status: form.marital_status,
         introduction: form.introduction,
         image: form.image,
       }),
@@ -133,6 +140,13 @@ export default function HomePage(props: any) {
             <div className="chips">
               {me.profile?.prefecture && <span className="chip">{me.profile.prefecture}</span>}
               {me.profile?.height && <span className="chip">{me.profile.height}cm</span>}
+              {/* #153：検索に使う6項目。答えたものだけ出す（相手のプロフィールと同じ並びを、ここにも書いた） */}
+              {me.profile?.body_type && <span className="chip">{me.profile.body_type}</span>}
+              {me.profile?.job && <span className="chip">{me.profile.job}</span>}
+              {me.profile?.income && <span className="chip">年収 {me.profile.income}</span>}
+              {me.profile?.smoking && <span className="chip">タバコ：{me.profile.smoking}</span>}
+              {me.profile?.drinking && <span className="chip">お酒：{me.profile.drinking}</span>}
+              {me.profile?.marital_status && <span className="chip">{me.profile.marital_status}</span>}
             </div>
             <div className="card">
               <h2 className="section-title">自己紹介</h2>
@@ -182,6 +196,51 @@ export default function HomePage(props: any) {
                 onChange={(e) => setForm({ ...form, height: e.target.value })}
               />
             </label>
+            {/* #153：検索に使う6項目。選択肢の一覧を、条件の画面（SearchConditionsPage）からコピーした */}
+            {[
+              { key: 'body_type', label: '体型', options: ['スリム', 'やや細め', '普通', '筋肉質', 'ややぽっちゃり', 'ぽっちゃり'] },
+              {
+                key: 'job',
+                label: 'お仕事',
+                options: [
+                  '会社員',
+                  '公務員',
+                  '経営者・役員',
+                  '自営業',
+                  '医療関係',
+                  'IT 関係',
+                  '教育関係',
+                  '接客・販売',
+                  'クリエイター',
+                  '学生',
+                  'その他',
+                ],
+              },
+              {
+                key: 'income',
+                label: '年収',
+                options: ['300万円未満', '300〜500万円', '500〜700万円', '700〜1000万円', '1000万円以上'],
+              },
+              { key: 'smoking', label: 'タバコ', options: ['吸わない', 'ときどき吸う', '吸う', '電子タバコ'] },
+              { key: 'drinking', label: 'お酒', options: ['飲まない', 'ときどき飲む', '飲む'] },
+              { key: 'marital_status', label: '結婚歴', options: ['未婚', '離婚', '死別'] },
+            ].map((d) => (
+              <label className="label" key={d.key}>
+                {d.label}
+                <select
+                  className="input"
+                  value={form[d.key] ?? ''}
+                  onChange={(e) => setForm({ ...form, [d.key]: e.target.value })}
+                >
+                  <option value="">回答しない</option>
+                  {d.options.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
             <label className="label">
               自己紹介
               <textarea

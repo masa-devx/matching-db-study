@@ -20,6 +20,8 @@
 
 04b で、保存した検索条件を足す（#140）。会員が検索の条件に名前を付けて取っておく表 `search_conditions`。条件の中身は `jsonb` の1列にまとめる（検索の項目があとから増えても、表を変えないため）。設計を考えずに「とりあえず使える」形で、`user_id` は数の列だけ（外部キーもインデックスもない）。1人5件の上限・名前の長さ・条件の中身は、DB では確かめない。
 
+#153 で、`profiles` に検索に使う6項目を足す（体型・お仕事・年収・タバコ・お酒・結婚歴）。今のプロフィールと同じく、選択肢の名前（日本語の文字）をそのまま入れる。CHECK もマスタの表もないので、選択肢にない文字も入り、選択肢の名前を変えると前の行と合わなくなる。年収も文字なので、「500万円以上」のような大小の比べができない。インデックスは足さない。
+
 12 で、管理画面の表を足す（#89）。管理者 `admins`（会員とは別にログインする。役割は `owner`・`viewer`）と、監査ログ `admin_audit_logs`（だれが・いつ・何に・何をしたか）。会員の利用を止めた日時と理由（`users.suspended_at`・`suspended_reason`）。表は会員の側と共通の DB に置き、表の作りは `backend/client` にまとめる。管理画面（`backend/admin`）は読み書きするだけ。主キー・UNIQUE・外部キーだけで、インデックスは足さない。監査ログの書き換え・削除を止める仕組みはない。
 
 ### ER 図
@@ -69,6 +71,12 @@ erDiagram
     varchar height "NULL 可。文字で何でも入る"
     text introduction "NULL 可"
     varchar image "NULL 可。デモ画像のパス"
+    varchar body_type "NULL 可（未回答）。体型の名前。何でも入る（#153）"
+    varchar job "NULL 可。お仕事の名前（#153）"
+    varchar income "NULL 可。年収の区分の名前。大小を比べられない（#153）"
+    varchar smoking "NULL 可。タバコ（#153）"
+    varchar drinking "NULL 可。お酒（#153）"
+    varchar marital_status "NULL 可。結婚歴（#153）"
     timestamp created_at "時間帯なし"
     timestamp updated_at "時間帯なし"
   }
@@ -201,7 +209,7 @@ Laravel のひな形が作った表（この学習では扱わない）：`passw
 | `genders` | 性別のマスタ（男性・女性・その他・回答しない） | 主キー `code`（`smallint`） |
 | `prefectures` | 都道府県のマスタ（JIS の都道府県コード 1〜47） | 主キー `code`（`smallint`） |
 | `users` | アカウント（メールアドレス・パスワード・確認した時刻）と最終ログイン | メールアドレスは小文字にそろえて UNIQUE・`last_login_at` は NOT NULL（登録した時刻を最初の値にする）・`public_id`（UUID v7。URL で会員を指す ID）の UNIQUE。04 の検索のために `(last_login_at, public_id)` のインデックス |
-| `profiles` | その会員についての情報（性別・生年月日・ニックネーム・都道府県・身長・自己紹介・画像） | `user_id` が主キー兼外部キー（1対1）・`gender_code` → `genders.code`・`prefecture_code` → `prefectures.code` の外部キー・`birthdate` は `date`・ニックネームの長さの CHECK。身長は型だけ（範囲はアプリ。D-013） |
+| `profiles` | その会員についての情報（性別・生年月日・ニックネーム・都道府県・身長・自己紹介・画像） | `user_id` が主キー兼外部キー（1対1）・`gender_code` → `genders.code`・`prefecture_code` → `prefectures.code` の外部キー・`birthdate` は `date`・ニックネームの長さの CHECK。身長は型だけ（範囲はアプリ。D-013）。#153 の6項目は、マスタの表（`body_types`・`jobs`・`incomes`・`smoking_habits`・`drinking_habits`・`marital_statuses`。主キーは `smallint` の `code`、並び順の `sort_order`）と、`profiles` の `*_code`（NULL 可＝未回答・外部キー）にする。年収はコードの大小で「以上」を比べられる。検索のインデックスは、測ってから決める（解説の 04b の「検索の項目」） |
 | `likes` | いいね（02） | `(from_user_id, to_user_id)` の UNIQUE・2つの列から `users.id` への外部キー（`ON DELETE CASCADE`）・`from_user_id <> to_user_id` の CHECK・`to_user_id` のインデックス |
 | `user_matches` | マッチ（03）。1組を1行で持ち、`user1_id` に小さい ID を入れる | `(user1_id, user2_id)` の UNIQUE・`user1_id < user2_id` の CHECK（`user_matches_user1`）・`user2_id` のインデックス・2つの列から `users.id` への外部キー（`ON DELETE CASCADE`） |
 | `refresh_tokens` | 取り替え用のトークン（01b） | `token_hash` の UNIQUE（SHA-256）・`user_id` → `users.id` の外部キー・家族の番号・期限・使った時刻・止めた時刻 |

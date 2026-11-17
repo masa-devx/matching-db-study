@@ -64,6 +64,41 @@ const PREFECTURES = [
 const AGES: number[] = []
 for (let age = 18; age <= 99; age++) AGES.push(age)
 
+// #153：身長のプルダウンに出す数（130〜210cm）
+const HEIGHTS: number[] = []
+for (let cm = 130; cm <= 210; cm++) HEIGHTS.push(cm)
+
+// #153：プロフィールの6項目の選択肢。名前の文字を、そのまま API に送る。
+// 同じ一覧を、ホーム（HomePage）と試しのデータ（ProfileDetailsSeeder）にも書いた
+const DETAILS = [
+  { key: 'body_type', label: '体型', options: ['スリム', 'やや細め', '普通', '筋肉質', 'ややぽっちゃり', 'ぽっちゃり'] },
+  {
+    key: 'job',
+    label: 'お仕事',
+    options: [
+      '会社員',
+      '公務員',
+      '経営者・役員',
+      '自営業',
+      '医療関係',
+      'IT 関係',
+      '教育関係',
+      '接客・販売',
+      'クリエイター',
+      '学生',
+      'その他',
+    ],
+  },
+  {
+    key: 'income',
+    label: '年収',
+    options: ['300万円未満', '300〜500万円', '500〜700万円', '700〜1000万円', '1000万円以上'],
+  },
+  { key: 'smoking', label: 'タバコ', options: ['吸わない', 'ときどき吸う', '吸う', '電子タバコ'] },
+  { key: 'drinking', label: 'お酒', options: ['飲まない', 'ときどき飲む', '飲む'] },
+  { key: 'marital_status', label: '結婚歴', options: ['未婚', '離婚', '死別'] },
+]
+
 // SearchPage からコピーした（URL のクエリを、条件の形に直す）
 const fromQuery = (q: URLSearchParams) => {
   const c: any = {}
@@ -72,6 +107,10 @@ const fromQuery = (q: URLSearchParams) => {
   if (q.get('height_min')) c.height_min = q.get('height_min')
   if (q.get('height_max')) c.height_max = q.get('height_max')
   if (q.getAll('prefecture').length > 0) c.prefecture = q.getAll('prefecture')
+  // #153：プロフィールの6項目（どれも、いくつでも選べる）
+  for (const key of ['body_type', 'job', 'income', 'smoking', 'drinking', 'marital_status']) {
+    if (q.getAll(key).length > 0) c[key] = q.getAll(key)
+  }
   // #150：有料の4つ
   if (q.get('last_login')) c.last_login = q.get('last_login')
   if (q.get('new_member')) c.new_member = q.get('new_member')
@@ -88,6 +127,10 @@ const toQuery = (c: any) => {
   if (c?.height_min) q.append('height_min', c.height_min)
   if (c?.height_max) q.append('height_max', c.height_max)
   for (const pref of c?.prefecture ?? []) q.append('prefecture', pref)
+  // #153：プロフィールの6項目
+  for (const key of ['body_type', 'job', 'income', 'smoking', 'drinking', 'marital_status']) {
+    for (const value of c?.[key] ?? []) q.append(key, value)
+  }
   // #150：有料の4つ
   if (c?.last_login) q.append('last_login', c.last_login)
   if (c?.new_member) q.append('new_member', c.new_member)
@@ -141,9 +184,10 @@ export default function SearchConditionsPage() {
       .then((u) => setLocked(u.profile?.gender === 'male' && !u.is_paid))
   }, [])
 
-  const togglePref = (pref: string) => {
-    const now = form.prefecture ?? []
-    setForm({ ...form, prefecture: now.includes(pref) ? now.filter((x: string) => x !== pref) : [...now, pref] })
+  // 都道府県と、プロフィールの6項目の、選ぶ・外す（どれも、選んだ名前の配列で持つ）
+  const toggle = (key: string, value: string) => {
+    const now = form[key] ?? []
+    setForm({ ...form, [key]: now.includes(value) ? now.filter((x: string) => x !== value) : [...now, value] })
   }
 
   // 条件を URL のクエリにして、検索の画面に戻る。この画面の履歴は入れ替えるので、
@@ -258,7 +302,7 @@ export default function SearchConditionsPage() {
   }
 
   return (
-    <div>
+    <div className="cond-page">
       <div className="search-head">
         <h1 className="page-title">検索条件</h1>
         <button className="button button-small button-ghost" onClick={() => navigate(-1)}>
@@ -267,9 +311,19 @@ export default function SearchConditionsPage() {
       </div>
 
       {/* 04b：保存した検索条件。押すと、その条件で探す（FR-UI-044） */}
-      <h2 className="section-title">保存した検索条件</h2>
-      {saved.length === 0 && <p className="soon">まだありません。下で条件を選んで「この条件を保存」を押すと、ここに出ます。</p>}
-      {saved.length > 0 && (
+      <section className="card cond-card">
+        <div className="cond-head">
+          <h2 className="section-title">保存した検索条件</h2>
+          {saved.length > 0 && (
+            <button type="button" className="saved-action" onClick={() => setManaging(!managing)}>
+              {managing ? '終わる' : '編集'}
+            </button>
+          )}
+        </div>
+        {saved.length === 0 && (
+          <p className="cond-note">まだありません。下で条件を選んで「保存」を押すと、ここに出ます（5件まで）。</p>
+        )}
+        {saved.length > 0 && <p className="cond-note">押すと、その条件で探します。</p>}
         <div className="saved-list">
           {saved.map((c) => (
             <span key={c.public_id} className="saved-item">
@@ -296,140 +350,192 @@ export default function SearchConditionsPage() {
               )}
             </span>
           ))}
-          <button type="button" className="saved-action" onClick={() => setManaging(!managing)}>
-            {managing ? '終わる' : '編集'}
-          </button>
         </div>
-      )}
+      </section>
 
-      <h2 className="section-title">条件を選ぶ</h2>
-      <form className="card search-form" onSubmit={apply}>
-        {/* #147：年齢は、数を打たずにプルダウンで選ぶ（FR-UI-050） */}
-        <div className="search-range">
-          <label className="label">
-            年齢（下）
+      <form onSubmit={apply}>
+        {/* #153：まとまりごとにカードを分ける */}
+        <section className="card cond-card">
+          <h2 className="section-title">基本</h2>
+          {/* #147：年齢は、数を打たずにプルダウンで選ぶ（FR-UI-050） */}
+          <p className="cond-label">年齢</p>
+          <div className="cond-range">
             <select
               className="input"
+              aria-label="年齢（下）"
               value={form.age_min ?? ''}
               onChange={(e) => setForm({ ...form, age_min: e.target.value })}
             >
-              <option value="">指定しない</option>
+              <option value="">下限なし</option>
               {AGES.map((age) => (
                 <option key={age} value={age}>
                   {age}歳
                 </option>
               ))}
             </select>
-          </label>
-          <label className="label">
-            年齢（上）
+            <span className="cond-tilde">〜</span>
             <select
               className="input"
+              aria-label="年齢（上）"
               value={form.age_max ?? ''}
               onChange={(e) => setForm({ ...form, age_max: e.target.value })}
             >
-              <option value="">指定しない</option>
+              <option value="">上限なし</option>
               {AGES.map((age) => (
                 <option key={age} value={age}>
                   {age}歳
                 </option>
               ))}
             </select>
-          </label>
-        </div>
-        {/* #150：身長は無料になった */}
-        <div className="search-range">
-          <label className="label">
-            身長（下）
-            <input
+          </div>
+          {/* #153：身長もプルダウン（FR-UI-055）。#150 から無料 */}
+          <p className="cond-label">身長</p>
+          <div className="cond-range">
+            <select
               className="input"
-              type="number"
+              aria-label="身長（下）"
               value={form.height_min ?? ''}
               onChange={(e) => setForm({ ...form, height_min: e.target.value })}
-            />
-          </label>
-          <label className="label">
-            身長（上）
-            <input
+            >
+              <option value="">下限なし</option>
+              {HEIGHTS.map((cm) => (
+                <option key={cm} value={cm}>
+                  {cm}cm
+                </option>
+              ))}
+            </select>
+            <span className="cond-tilde">〜</span>
+            <select
               className="input"
-              type="number"
+              aria-label="身長（上）"
               value={form.height_max ?? ''}
               onChange={(e) => setForm({ ...form, height_max: e.target.value })}
-            />
-          </label>
-        </div>
-        <p className="label">都道府県（選ばなければ全国）</p>
-        <div className="pref-list">
-          {PREFECTURES.map((pref) => (
-            <button
-              type="button"
-              key={pref}
-              className={(form.prefecture ?? []).includes(pref) ? 'chip chip-on' : 'chip'}
-              onClick={() => togglePref(pref)}
             >
-              {pref}
-            </button>
-          ))}
-        </div>
-        {/* #150：有料の4つ。男性の無料の会員には「有料」の印を出し、押すとモーダル。欄は出さない */}
-        <p className="label">こだわり条件</p>
-        {locked === true && (
-          <button type="button" className="paid-lock" onClick={() => setUpsell(true)}>
-            最終ログイン・新しい会員・フリーワード・並び替え <span className="paid-mark">有料</span>
-          </button>
-        )}
-        {locked === false && (
-          <div className="paid-fields">
-            <label className="label">
-              最終ログイン
-              <select
-                className="input"
-                value={form.last_login ?? ''}
-                onChange={(e) => setForm({ ...form, last_login: e.target.value })}
-              >
-                <option value="">指定しない</option>
-                <option value="24h">24時間以内</option>
-                <option value="3d">3日以内</option>
-                <option value="7d">1週間以内</option>
-              </select>
-            </label>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={!!form.new_member}
-                onChange={(e) => setForm({ ...form, new_member: e.target.checked ? '1' : '' })}
-              />
-              登録して1週間以内の会員だけ
-            </label>
-            <label className="label">
-              フリーワード（自己紹介・ニックネーム）
-              <input
-                className="input"
-                value={form.keyword ?? ''}
-                onChange={(e) => setForm({ ...form, keyword: e.target.value })}
-              />
-            </label>
-            <label className="label">
-              並び替え
-              <select
-                className="input"
-                value={form.sort ?? ''}
-                onChange={(e) => setForm({ ...form, sort: e.target.value })}
-              >
-                <option value="">ログインが新しい順</option>
-                <option value="new">登録が新しい順</option>
-              </select>
-            </label>
+              <option value="">上限なし</option>
+              {HEIGHTS.map((cm) => (
+                <option key={cm} value={cm}>
+                  {cm}cm
+                </option>
+              ))}
+            </select>
           </div>
-        )}
-        <Button type="submit">この条件で探す</Button>
-        {/* 04b：今の欄の条件に、名前を付けて保存する（FR-UI-045） */}
-        <Button type="button" variant="ghost" onClick={startSaving}>
-          この条件を保存
-        </Button>
-        <Button type="button" variant="ghost" onClick={() => setForm({})}>
+          {/* #153：都道府県は47個あるので、閉じておき、開いて選ぶ。選んだ名前は、閉じていても見える */}
+          <p className="cond-label">住んでいる所</p>
+          <details className="cond-details">
+            <summary>
+              {(form.prefecture ?? []).length > 0 ? (form.prefecture ?? []).join('・') : '全国（押して選ぶ）'}
+            </summary>
+            <div className="pref-list">
+              {PREFECTURES.map((pref) => (
+                <button
+                  type="button"
+                  key={pref}
+                  className={(form.prefecture ?? []).includes(pref) ? 'chip chip-on' : 'chip'}
+                  aria-pressed={(form.prefecture ?? []).includes(pref)}
+                  onClick={() => toggle('prefecture', pref)}
+                >
+                  {pref}
+                </button>
+              ))}
+            </div>
+          </details>
+        </section>
+
+        {/* #153：プロフィールの6項目（無料）。選ばなければ、その項目では絞らない */}
+        <section className="card cond-card">
+          <h2 className="section-title">プロフィール</h2>
+          <p className="cond-note">当てはまるものを、いくつでも選べます。選んだ項目に答えていない相手は出ません。</p>
+          {DETAILS.map((d) => (
+            <div key={d.key}>
+              <p className="cond-label">{d.label}</p>
+              <div className="pref-list">
+                {d.options.map((option) => (
+                  <button
+                    type="button"
+                    key={option}
+                    className={(form[d.key] ?? []).includes(option) ? 'chip chip-on' : 'chip'}
+                    aria-pressed={(form[d.key] ?? []).includes(option)}
+                    onClick={() => toggle(d.key, option)}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </section>
+
+        {/* #150：有料の4つ。男性の無料の会員には「有料」の印を出し、押すとモーダル。欄は出さない */}
+        <section className="card cond-card">
+          <div className="cond-head">
+            <h2 className="section-title">
+              こだわり条件 {locked === true && <span className="paid-mark">有料</span>}
+            </h2>
+          </div>
+          {locked === true && (
+            <button type="button" className="paid-lock" onClick={() => setUpsell(true)}>
+              最終ログイン・新しい会員・フリーワード・並び替えは、有料会員になると使えます
+            </button>
+          )}
+          {locked === false && (
+            <div className="paid-fields">
+              <label className="label">
+                最終ログイン
+                <select
+                  className="input"
+                  value={form.last_login ?? ''}
+                  onChange={(e) => setForm({ ...form, last_login: e.target.value })}
+                >
+                  <option value="">指定しない</option>
+                  <option value="24h">24時間以内</option>
+                  <option value="3d">3日以内</option>
+                  <option value="7d">1週間以内</option>
+                </select>
+              </label>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={!!form.new_member}
+                  onChange={(e) => setForm({ ...form, new_member: e.target.checked ? '1' : '' })}
+                />
+                登録して1週間以内の会員だけ
+              </label>
+              <label className="label">
+                フリーワード（自己紹介・ニックネーム）
+                <input
+                  className="input"
+                  value={form.keyword ?? ''}
+                  onChange={(e) => setForm({ ...form, keyword: e.target.value })}
+                />
+              </label>
+              <label className="label">
+                並び替え
+                <select
+                  className="input"
+                  value={form.sort ?? ''}
+                  onChange={(e) => setForm({ ...form, sort: e.target.value })}
+                >
+                  <option value="">ログインが新しい順</option>
+                  <option value="new">登録が新しい順</option>
+                </select>
+              </label>
+            </div>
+          )}
+        </section>
+
+        <button type="button" className="cond-reset" onClick={() => setForm({})}>
           条件を全部外す
-        </Button>
+        </button>
+
+        {/* #153：主なボタンは、画面の下に固定する。保存（小さめ）と、探す（大きめ）を横に並べ、間を空ける */}
+        <div className="cond-footer">
+          <Button type="button" variant="ghost" className="cond-save" onClick={startSaving}>
+            保存
+          </Button>
+          <Button type="submit" className="cond-submit">
+            この条件で探す
+          </Button>
+        </div>
       </form>
 
       <UpsellDialog open={upsell} onClose={() => setUpsell(false)} />

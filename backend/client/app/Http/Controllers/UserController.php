@@ -103,6 +103,27 @@ class UserController extends Controller
                 if ($request->filled('height_max')) {
                     $q->where('height', '<=', $request->input('height_max'));
                 }
+                // #153：体型・お仕事・年収・タバコ・お酒・結婚歴。選択肢の名前（文字）の配列で来る（配列でなければ 500）。
+                // 選択肢にない文字でも、そのまま探す。未回答（NULL）の会員は in に当たらないので出ない。
+                // 年収も文字なので「500万円以上」とは比べられず、当てはまる区分を全部選んでもらう。同じ6行を並べた
+                if ($request->filled('body_type')) {
+                    $q->whereIn('body_type', $request->input('body_type'));
+                }
+                if ($request->filled('job')) {
+                    $q->whereIn('job', $request->input('job'));
+                }
+                if ($request->filled('income')) {
+                    $q->whereIn('income', $request->input('income'));
+                }
+                if ($request->filled('smoking')) {
+                    $q->whereIn('smoking', $request->input('smoking'));
+                }
+                if ($request->filled('drinking')) {
+                    $q->whereIn('drinking', $request->input('drinking'));
+                }
+                if ($request->filled('marital_status')) {
+                    $q->whereIn('marital_status', $request->input('marital_status'));
+                }
                 // #150：フリーワード。自己紹介かニックネームに、その言葉が入っている会員。
                 // 前後に % を付けるので索引は使えない。言葉の中の % と _ はそのまま渡る（% だけ送ると全員に当たる）。長さも確かめない
                 if ($request->filled('keyword')) {
