@@ -100,8 +100,9 @@ it('トークンがなければ、送った相手の一覧は 401 になる（FR
         ->assertExactJson(['message' => 'ログインしてください']);
 });
 
-it('壊れたトークンでは、送った相手の一覧は 500 になる（FR-AUTH-013）', function () {
-    // 分かっている不具合：要件は 401 だが、JWT の例外をつかまえていないので 500 になる（docs/api/02-likes.md）
+// 要件 ID はない（FR-AUTH-013 は期限の要件。docs/api/01b-auth.md の表では、壊れたトークンも FR-AUTH-013 にまとめている）
+it('壊れたトークンでは、送った相手の一覧は 500 になる', function () {
+    // 分かっている不具合：401 になるべきだが、JWT の例外をつかまえていないので 500 になる（docs/api/02-likes.md）
     getJson('/api/me/likes', ['Authorization' => 'Bearer abc'])->assertStatus(500);
 });
 

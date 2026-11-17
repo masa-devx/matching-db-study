@@ -49,6 +49,9 @@ it('createMember は、引数で有料・退会・停止の会員を作る', fun
     assertDatabaseHas('users', ['id' => $paid->id, 'is_paid' => true, 'paid_until' => '2026-12-10 12:00:00']);
     assertDatabaseHas('users', ['id' => $withdrawn->id, 'email' => $withdrawn->email, 'deleted_at' => '2026-11-10 12:00:00']);
     assertDatabaseHas('users', ['id' => $suspended->id, 'suspended_at' => '2026-11-10 12:00:00']);
+    // PHPDoc に書いたとおり、購入の行と監査ログは作らない
+    assertDatabaseCount('purchases', 0);
+    assertDatabaseCount('admin_audit_logs', 0);
     // 退会した会員のメールアドレスは、退会の API と同じ形に書き換わっている
     expect($withdrawn->email)->toContain('#deleted#');
 });
