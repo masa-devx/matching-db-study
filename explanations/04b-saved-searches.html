@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>04b 保存した検索条件と、検索の画面の URL</title>
+<link rel="stylesheet" href="assets/page.css">
+</head>
+<body>
+<main>
+  <p class="meta"><a href="index.html">← 目次へ</a></p>
+  <h1>04b 保存した検索条件と、検索の画面の URL</h1>
+  <p class="meta">作成: 2026-11-17 ／ 状態: <span class="status">レガシー版まで</span></p>
+
+  <div class="card point">
+    <strong>この一歩でできるようになること</strong>
+    <ul>
+      <li>項目があとから増えるデータを、列で持つか <code>jsonb</code> でまとめるかを、「だれが・どう読むか」で決められる</li>
+      <li>「1人5件まで」のような件数の上限を、同時に送られても破れない形（行ロック）で作れる</li>
+      <li>「自分のものだけ直せる・消せる」を、SQL の <code>where</code> で確かめる形にできる</li>
+    </ul>
+  </div>
+
+  <h2>1. 何を作るか</h2>
+  <p>検索の条件（性別・年齢の幅・都道府県・身長の幅）に名前を付けて、サーバーに保存します。会員は、検索の画面で「東京・20代」「関西・30代」のようなパターンを選ぶだけで、同じ条件で検索できます。保存できるのは1人5件までです。別の端末でログインしても、同じパターンが出ます。</p>
+  <p>今の検索は、条件をブラウザのタブの中（sessionStorage）にだけ置いています。タブを閉じる・ログインし直す・別の端末で開く、のどれでも消えるので、会員は毎回同じ条件を入れ直しています。</p>
+  <p>有料の条件（身長）の決まりは、検索と同じです。男性の無料の会員は、身長を入れた条件を保存できません。有料のときに保存した条件は、無料に戻っても消えませんが、その条件での検索はできません。もう一度有料になれば、そのまま使えます。</p>
+  <p>あわせて、今の条件を検索の画面の URL（<code>/search?age_min=20&amp;prefecture=東京都</code>）に出します。再読み込み・ブックマーク・ブラウザの「戻る」で、同じ条件に戻れます。役割は2つに分かれます。<strong>URL は「今の条件」</strong>、<strong>サーバーの表は「名前を付けて取っておく条件」</strong>です。保存した条件を選ぶと、その条件が URL に入り、URL の条件で検索します。</p>
+  <p>レガシー版は、設計を考えずに「とりあえず使える」形で作ります。上限は数えてから入れるだけ、条件は確かめずに入れる、有料かどうかの確かめは検索のコントローラーからコピーする、持ち主は確かめない、の4つです。要件は <a href="../docs/requirements/saved-searches.md">docs/requirements/saved-searches.md</a>（FR-SAVED-001〜015）にあります。</p>
+
+  <h2>2. 先に知っておく言葉</h2>
+  <table>
+    <tr><th>言葉</th><th>意味（1〜2文）</th></tr>
+    <tr><td><code>jsonb</code></td><td>PostgreSQL の、JSON を入れる列の型。<code>{"age_min": 20}</code> のような入れ子のデータを1つの列に持てる。入れるときに形を整えて保存するので、中の項目で探すこともできる。</td></tr>
+    <tr><td>スキーマ（表の作り）</td><td>表にどんな列があり、それぞれがどんな型か、という決まり。列で持つと DB が型を確かめるが、<code>jsonb</code> の中身は DB が確かめない。</td></tr>
+    <tr><td>EAV（1項目1行）</td><td>「どの条件の・どの項目が・どんな値か」を1行ずつ持つ形（Entity・Attribute・Value）。項目は自由に増やせるが、値が全部文字になり、1件を読むのに行を集め直す。</td></tr>
+    <tr><td>行ロック（<code>for update</code>）</td><td>トランザクションの中で行を読みながら押さえ、ほかのトランザクションがその行を押さえるのを、終わるまで待たせる。同じ会員の処理を1つずつにできる（07 でも使った）。</td></tr>
+    <tr><td>数えてから入れる（check-then-act）</td><td>「今4件だから入れてよい」と確かめてから入れる書き方。確かめてから入れるまでのあいだに、ほかの処理が入れるので、同時に来ると上限を超える。</td></tr>
+    <tr><td>IDOR</td><td>ID を知っていれば、他人のデータを読める・変えられる不具合（Insecure Direct Object Reference）。持ち主を確かめないと起きる。</td></tr>
+    <tr><td>一括代入（mass assignment）</td><td>送られてきた項目を、そのまま全部 Model に入れること。<code>user_id</code> のような、変えられては困る列まで書き換えられる。</td></tr>
+  </table>
+
+  <h2>3. 図で見る</h2>
+  <p>1枚目は表、2枚目は同時に2回保存したとき、3枚目は保存した条件で検索するときの判断です。</p>
+  <pre class="mermaid">
+erDiagram
+  USERS ||--o{ SEARCH_CONDITIONS : "保存する（5件まで）"
+  USERS {
+    bigint id PK
+    uuid public_id UK
+    boolean is_paid "レガシー版は、これだけを見る"
+  }
+  SEARCH_CONDITIONS {
+    bigint id PK
+    uuid public_id UK "URL と応答に出す ID"
+    bigint user_id FK "持ち主。レガシー版は外部キーなし・索引なし"
+    varchar name "パターンの名前（1〜30文字）"
+    jsonb conditions "条件の中身。検索のクエリと同じ項目"
+    timestamp created_at
+    timestamp updated_at
+  }
+  </pre>
+
+  <pre class="mermaid">
+sequenceDiagram
+  participant X as 保存（1回目）
+  participant Y as 保存（2回目）
+  participant P as PostgreSQL
+  Note over X,P: レガシー版（数えてから入れる。ロックなし）。今は4件
+  X->>P: count(*) → 4
+  Y->>P: count(*) → 4
+  X->>P: insert（5件目）
+  Y->>P: insert（6件目。上限を超えた）
+  Note over X,P: 改善版（会員の行を押さえてから数える）
+  X->>P: select … for update（押さえる）
+  Y->>P: select … for update（X が終わるまで待つ）
+  X->>P: count → 4・insert・commit
+  P-->>Y: 押さえられた
+  Y->>P: count → 5 → 422
+  </pre>
+
+  <pre class="mermaid">
+flowchart TD
+  A["保存した条件を選んで検索する"] --> B["画面が、条件を検索のクエリにして送る（GET /api/users）"]
+  B --> C{"条件に、有料の項目（身長）が入っている？"}
+  C -- "いいえ" --> Y["200 検索の結果"]
+  C -- "はい" --> D{"会員は男性？"}
+  D -- "いいえ" --> Y
+  D -- "はい" --> E{"今が有料の期限より前？"}
+  E -- "はい" --> Y
+  E -- "いいえ" --> N["403 paid_required。身長だけ外して検索はしない"]
+  </pre>
+
+  <h2>4. 設計の選択肢を比べる</h2>
+  <h3>どこに持つか</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. 画面の URL（<code>/search?age_min=25</code>）</td><td>ブックマーク・共有・ブラウザの「戻る」が効く。サーバーは変えない</td><td>ほかのタブから戻ると消える。「毎回入れ直す」は解決しない</td><td>条件を人に見せたいとき（通販・検索サイト）</td></tr>
+    <tr><td>B. ブラウザの <code>localStorage</code></td><td>画面だけで済む。閉じても残る</td><td>別の端末では残らない。同じ端末で別の会員がログインすると、前の人の条件が出る</td><td>ログインのないサービス</td></tr>
+    <tr><td>C. サーバーの表</td><td>どの端末でも、ログインすれば残る</td><td>表・API・テストが増える</td><td>ログインして使うサービス</td></tr>
+  </table>
+  <h3>何件持つか</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. 1人に1件（最後の条件を自動で覚える）</td><td>会員は何もしなくてよい。表は1対1</td><td>条件の違うパターンを切り替えられない</td><td>条件が「その人の好み」で、あまり変わらないとき</td></tr>
+    <tr><td>B. 名前を付けて複数（上限あり）</td><td>パターンを切り替えられる</td><td>保存・直す・消すの操作と、上限の決まりが要る</td><td>違う条件を並べて探すとき（求人・不動産に多い）</td></tr>
+  </table>
+  <h3>条件の中身の持ち方</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>X. 列で持つ（<code>age_min</code>・<code>age_max</code>…）＋都道府県は別の表</td><td>DB が型と範囲を確かめる（CHECK）。ほかの会員の条件をまたいで集計しやすい</td><td>検索の項目を足すたびに、マイグレーション・Model・API を直す</td><td>項目が決まっていて、条件をまたいで調べたいとき</td></tr>
+    <tr><td>Y. <code>jsonb</code> の1列</td><td>項目が増えても表を変えない。中身を検索のクエリと同じ形にできる</td><td>DB は中身を確かめない。項目をなくすと、古い形のデータが残る</td><td>持ち主が読んでフォームに戻すだけで、項目が増えるとき</td></tr>
+    <tr><td>Z. 1項目1行（EAV）</td><td>項目ごとに行で持てる</td><td>値が全部文字になる。1件を読むのに行を集め直す。型も範囲も確かめられない</td><td>項目を運営が画面から足すような、特別なとき</td></tr>
+  </table>
+  <h3>5件の上限の止め方</h3>
+  <table>
+    <tr><th>案</th><th>良いところ</th><th>弱いところ</th><th>向いている場面</th></tr>
+    <tr><td>A. 数えてから入れる（ロックなし）</td><td>短い</td><td>同時に送ると上限を超える</td><td>レガシー版</td></tr>
+    <tr><td>B. 会員の行を <code>for update</code> で押さえてから数える</td><td>分かりやすい。いいねの1日の上限（07）と同じ形</td><td>同じ会員のほかの書き込みが、そのあいだ待つ</td><td>改善版</td></tr>
+    <tr><td>C. 番号の列（1〜5）と <code>UNIQUE (user_id, slot)</code></td><td>DB の制約だけで6件目が入らない。ロックが要らない</td><td>空いている番号を探す処理が要る。上限を変えにくい</td><td>上限が小さく、変わらないとき</td></tr>
+  </table>
+  <div class="card point"><strong>この一歩で選ぶもの</strong>：取っておく条件はサーバーの表に持ち（C）、今の条件は画面の URL に出し（A。役割が違うので両方使う）、名前を付けて5件まで（B）、条件の中身は <code>jsonb</code> の1列（Y）。決め手は、この条件を読むのが「持ち主がフォームに戻して検索するとき」だけで、検索の項目があとから増えることです。<code>jsonb</code> の弱いところ（DB が中身を確かめない）は、保存するときに検索の API と同じ検証を通し、読むときに今の決まりに合わない項目を捨てて補います。上限は、改善版では行ロック（B）で止めます。レガシー版は、数えてから入れるだけ（A）・検証なし・持ち主を確かめない形で作り、何が困るかを測ります。</div>
+
+  <h3>表の作り（レガシー版と改善版）</h3>
+  <p>同じ表を、レガシー版と改善版でどう作るかを並べます。レガシー版はマイグレーション（#140）で作った実物、改善版は直す段階で作る予定の形です。</p>
+  <pre><code class="language-sql">-- レガシー版：とりあえず使える形
+create table search_conditions (
+  id         bigserial primary key,
+  public_id  uuid not null default uuidv7() unique,
+  user_id    bigint not null,          -- 外部キーなし・インデックスなし
+  name       varchar(255) not null,    -- 長さは確かめない
+  conditions jsonb not null,           -- 何でも入る
+  created_at timestamp(0),
+  updated_at timestamp(0)
+);</code></pre>
+  <pre><code class="language-sql">-- 改善版：DB が確かめられることは、DB で確かめる
+create table search_conditions (
+  id         bigint generated always as identity primary key,
+  public_id  uuid not null default uuidv7() unique,
+  user_id    bigint not null references users (id) on delete cascade,
+  name       varchar(30) not null check (char_length(name) between 1 and 30),
+  conditions jsonb not null check (jsonb_typeof(conditions) = 'object'),
+  created_at timestamptz not null,
+  updated_at timestamptz not null
+);
+-- 自分の一覧を、保存した順に読む
+create index search_conditions_user_id_id_index on search_conditions (user_id, id);</code></pre>
+  <table>
+    <tr><th>項目</th><th>レガシー版</th><th>改善版</th><th>違いで起きること</th></tr>
+    <tr><td>持ち主（<code>user_id</code>）</td><td>数の列だけ</td><td>外部キー（<code>on delete cascade</code>）</td><td>レガシー版は、会員を消しても条件が残り、いない会員を指せる（FR-SAVED-014）</td></tr>
+    <tr><td>インデックス</td><td>主キーと <code>public_id</code> だけ</td><td><code>(user_id, id)</code></td><td>レガシー版は、自分の一覧を読むのに表を全部読む（6万件で 1549 ページ・Seq Scan）。改善版は、自分の行だけを保存した順に読める</td></tr>
+    <tr><td>名前</td><td><code>varchar(255)</code></td><td><code>varchar(30)</code> と CHECK</td><td>レガシー版は、空の名前も 255文字の名前も入る（FR-SAVED-008）</td></tr>
+    <tr><td>条件の中身</td><td>何でも入る</td><td>「オブジェクトであること」だけ CHECK。項目と範囲はアプリ</td><td>レガシー版は、配列・数・文字だけの JSON も入る。項目ごとの CHECK を書かないのは、項目が増えるたびに制約を直すことになるため（NFR-SAVED-003）</td></tr>
+    <tr><td>1人5件</td><td>なし（アプリが数えるだけ）</td><td>なし（アプリが、会員の行を押さえてから数える）</td><td>「1人5件まで」は、行をまたぐ決まりなので CHECK では書けない</td></tr>
+    <tr><td>日時</td><td><code>timestamp</code>（時間帯なし）</td><td><code>timestamptz</code></td><td>ほかの表と同じ（database.md）</td></tr>
+  </table>
+
+  <h2>5. 見本：レガシー版と改善版</h2>
+  <h3>レガシー版（Fat Controller・テストなし）</h3>
+  <pre><code class="language-php">// SearchConditionController::store（JWT の処理をコピーする）
+// 07 の検索からコピー：身長が入っていて、男性で is_paid でなければ 403（期限は見ない）
+$conditions = $request-&gt;input('conditions');
+if (isset($conditions['height_min']) || isset($conditions['height_max'])) {
+    $profile = Profile::where('user_id', $me)-&gt;first();
+    $user = User::find($me);
+    if ($profile?-&gt;gender === 'male' &amp;&amp; ! $user-&gt;is_paid) {
+        return response()-&gt;json(['message' =&gt; '有料会員になると使えます'], 403);
+    }
+}
+// 数えてから入れる（ロックなし）
+if (SearchCondition::where('user_id', $me)-&gt;count() &gt;= 5) {
+    return response()-&gt;json(['message' =&gt; '5件までです'], 422);
+}
+$row = SearchCondition::create(['user_id' =&gt; $me, 'name' =&gt; $request-&gt;input('name'), 'conditions' =&gt; $conditions]);
+
+// update・destroy：ID だけで探す（持ち主を確かめない）
+SearchCondition::where('public_id', $publicId)-&gt;first()-&gt;update($request-&gt;all());
+SearchCondition::where('public_id', $publicId)-&gt;delete();</code></pre>
+  <div class="card warn"><ul>
+    <li><strong>上限を超える</strong>：数えてから入れるまでのあいだに、ほかの保存が入れる。同時に送ると6件目が入る（FR-SAVED-005）</li>
+    <li><strong>何でも保存できる</strong>：条件を確かめないので、年齢 17・身長 300・知らない項目・とても大きい JSON が入る（FR-SAVED-007）。名前の長さも確かめない</li>
+    <li><strong>期限切れでも有料の条件を保存できる</strong>：検索からコピーした確かめは <code>is_paid</code> だけを見る。期限（<code>paid_until</code>）が過ぎた会員が、身長の入った条件を保存でき、検索もできる（FR-SAVED-009・010）。同じ確かめが、これで4か所目</li>
+    <li><strong>他人の条件を直せる・消せる</strong>：ID（UUID）を知っていれば、だれのものでも変えられる（FR-SAVED-006）。<code>$request-&gt;all()</code> で <code>user_id</code> も書き換えられる</li>
+    <li><strong>会員を消しても残る</strong>：外部キーがないので、持ち主のいない行が残る（FR-SAVED-014）</li>
+  </ul></div>
+  <h3>改善版</h3>
+  <pre><code class="language-php">// 条件の決まりは1か所（検索の API と保存の両方が使う）
+final readonly class SearchConditions
+{
+    public static function fromArray(array $input): self { /* 範囲を確かめる。違えば 422 */ }
+    public static function fromStored(array $stored): self { /* 今の決まりに合わない項目を捨てる */ }
+    public function usesPaidFeature(): bool { return $this-&gt;heightMin !== null || $this-&gt;heightMax !== null; }
+}
+
+// 保存：検証 → 有料の判断（07 の1つの関数）→ ロックして数える → 入れる
+$conditions = SearchConditions::fromArray($request-&gt;validated('conditions'));
+if ($conditions-&gt;usesPaidFeature() &amp;&amp; ! $features-&gt;canUse($me, 'search_detail')) {
+    throw new PaidRequired;   // 403
+}
+DB::transaction(function () use ($me, $name, $conditions) {
+    DB::table('users')-&gt;where('id', $me-&gt;id)-&gt;lockForUpdate()-&gt;value('id');
+    if (SearchCondition::where('user_id', $me-&gt;id)-&gt;count() &gt;= 5) {
+        throw new SavedSearchLimitExceeded;   // 422
+    }
+    SearchCondition::create(['user_id' =&gt; $me-&gt;id, 'name' =&gt; $name, 'conditions' =&gt; $conditions-&gt;toArray()]);
+});</code></pre>
+  <p>大事なのは3つです。条件の決まり（<code>SearchConditions</code>）が1か所にあり、検索と保存が同じものを使うこと。有料かどうかの判断が、07 で作る1つの関数（期限を見る）であること。数える前に、会員の行を押さえること。直す・消すは、<code>where</code> に持ち主（<code>user_id</code>）を入れ、変わった行が 0 なら 404 にします（下の SQL）。</p>
+
+  <h3>Eloquent が発行する SQL（レガシー版と改善版を並べる）</h3>
+  <p>左がレガシー版、右が改善版です。SQL は Laravel に作らせて確かめたもので（表がまだないので、すべて <code>DB::pretend()</code> で、流さずに SQL だけを取り出した）、例は会員 1 が「東京・20代」（年齢 20〜29・東京都）を保存する場合です。中身は <code>explanations/sql/04b-saved-searches.json</code> にあり、<code>explanations/tools/compare-block.py</code> で作り直せます。</p>
+  <p class="meta">ログ（<code>sql-*.log</code>）では、値は <code>?</code> になり、別に渡されます（プリペアドステートメント）。読みやすいよう、ここでは値を入れて、行を分けて書きました。長い値（UUID）は <code>…</code> で略しています。</p>
+  <!-- compare: sql/04b-saved-searches.json -->
+  <h4>保存する（<code>POST /api/me/search-conditions</code>）。会員 1 が「東京・20代」を保存する</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">2本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$count = SearchCondition::where('user_id', $me)-&gt;count();
+if ($count &gt;= 5) {
+    return response()-&gt;json(['message' =&gt; '5件までです'], 422);
+}
+// 送られた条件を、確かめずにそのまま入れる
+SearchCondition::create([
+    'user_id' =&gt; $me,
+    'name' =&gt; $request-&gt;input('name'),
+    'conditions' =&gt; $request-&gt;input('conditions'),
+]);</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① 今の件数を数える（ロックなし）
+select count(*) as "aggregate"
+from "search_conditions"
+where "user_id" = 1;
+
+-- ② 入れる（①と②のあいだに、ほかの保存が入れる）
+insert into "search_conditions"
+  ("user_id", "name", "conditions", "updated_at", "created_at")
+values (1, '東京・20代',
+  '{"age_min":20,"age_max":29,"prefecture":["東京都"]}',
+  '2026-11-17 09:46:12', '2026-11-17 09:46:12')
+returning "id";</code></pre>
+      <ul><li>表がまだないので <code>DB::pretend()</code> で作らせた（以下も同じ）</li><li>同時に2回送ると、どちらも①で「4件」と数え、6件目が入る（FR-SAVED-005）</li><li><code>conditions</code> の中身を確かめないので、年齢 17・身長 300・知らない項目も入る（FR-SAVED-007）</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版<span class="count">3本＋begin・commit</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$conditions = SearchConditions::fromArray($request-&gt;validated('conditions'));  // 検索と同じ検証
+DB::transaction(function () use ($me, $name, $conditions) {
+    // 会員の行を押さえてから数える（同じ会員の保存を1つずつにする）
+    DB::table('users')-&gt;where('id', $me-&gt;id)-&gt;lockForUpdate()-&gt;value('id');
+    if (SearchCondition::where('user_id', $me-&gt;id)-&gt;count() &gt;= 5) {
+        throw new SavedSearchLimitExceeded;   // 422
+    }
+    SearchCondition::create([
+        'user_id' =&gt; $me-&gt;id, 'name' =&gt; $name, 'conditions' =&gt; $conditions-&gt;toArray(),
+    ]);
+});</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">begin;
+
+-- ① 会員の行を押さえる（同じ会員の2つ目は、ここで待つ）
+select "id" from "users"
+where "id" = 1 limit 1
+for update;
+
+-- ② 押さえたまま数える
+select count(*) as "aggregate"
+from "search_conditions"
+where "user_id" = 1;
+
+-- ③ 入れる
+insert into "search_conditions"
+  ("user_id", "name", "conditions", "updated_at", "created_at")
+values (1, '東京・20代',
+  '{"age_min":20,"age_max":29,"prefecture":["東京都"]}',
+  '2026-11-17 09:46:12', '2026-11-17 09:46:12')
+returning "id";
+
+commit;</code></pre>
+      <ul><li>ロックの1本が増える。待つのは同じ会員の保存だけ</li><li>条件は、検索の API と同じ検証を通ったものだけが入る（NFR-SAVED-002）</li></ul>
+    </section>
+  </div>
+  <h4>一覧を見る（<code>GET /api/me/search-conditions</code>）</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">1本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$rows = SearchCondition::where('user_id', $me)-&gt;orderBy('id')-&gt;get();
+
+return response()-&gt;json($rows);   // 行をそのまま返す（中の id・user_id も出る）</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">select * from "search_conditions"
+where "user_id" = 1
+order by "id" asc;</code></pre>
+      <ul><li>「今の自分が使えるか」を返さない。画面が、有料かどうかの判断をもう一度コピーして決める</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版<span class="count">1本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$rows = SearchCondition::where('user_id', $me-&gt;id)-&gt;orderBy('id')-&gt;get();
+
+return $rows-&gt;map(fn ($row) =&gt; [
+    'id' =&gt; $row-&gt;public_id,
+    'name' =&gt; $row-&gt;name,
+    // 今の決まりに合わない項目は捨てる（FR-SAVED-015）
+    'conditions' =&gt; SearchConditions::fromStored($row-&gt;conditions)-&gt;toArray(),
+    'usable' =&gt; $features-&gt;canUse($me, SearchConditions::fromStored($row-&gt;conditions)),
+]);</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">select * from "search_conditions"
+where "user_id" = 1
+order by "id" asc;</code></pre>
+      <ul><li>SQL は同じ。違うのは、読んだあとの扱い（古い項目を捨てる・使えるかを付ける）</li><li>5件までなので、ページ送りは要らない</li></ul>
+    </section>
+  </div>
+  <h4>直す（<code>PUT /api/me/search-conditions/{id}</code>）</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">2本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">// 持ち主を確かめない
+$row = SearchCondition::where('public_id', $publicId)-&gt;first();
+$row-&gt;update($request-&gt;all());   // user_id も書き換えられる</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">-- ① ID だけで探す（だれのものでも見つかる）
+select * from "search_conditions"
+where "public_id" = '0193aaaa-…-000000000001'
+limit 1;
+
+-- ② 書き換える
+update "search_conditions"
+set "name" = '東京・30代',
+    "conditions" = '{"age_min":30,"age_max":39}',
+    "updated_at" = '2026-11-17 09:46:12'
+where "id" = 3;</code></pre>
+      <ul><li>他人の条件を書き換えられる（FR-SAVED-006）</li><li>ない ID なら <code>first()</code> が null を返し、500 になる</li><li><code>$request->all()</code> をそのまま渡すので、<code>user_id</code> を送ると持ち主を変えられる</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版<span class="count">1本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$updated = SearchCondition::where('user_id', $me-&gt;id)   // 自分のものだけ
+    -&gt;where('public_id', $publicId)
+    -&gt;update(['name' =&gt; $name, 'conditions' =&gt; $conditions-&gt;toArray()]);
+if ($updated === 0) {
+    throw new SavedSearchNotFound;   // 404（他人のものも、ないものも同じ）
+}</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">update "search_conditions"
+set "name" = '東京・30代',
+    "conditions" = '{"age_min":30,"age_max":39}',
+    "updated_at" = '2026-11-17 09:46:12'
+where "user_id" = 1
+  and "public_id" = '0193aaaa-…-000000000001';</code></pre>
+      <ul><li><code>where</code> に持ち主を入れる。変わった行が 0 なら 404</li><li>読んでから書く2本が、1本になる</li></ul>
+    </section>
+  </div>
+  <h4>消す（<code>DELETE /api/me/search-conditions/{id}</code>）</h4>
+  <div class="compare">
+    <section class="compare-col legacy">
+      <p class="compare-title">レガシー版<span class="count">1本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">SearchCondition::where('public_id', $publicId)-&gt;delete();
+
+return response()-&gt;noContent();   // 消えなくても 204</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">delete from "search_conditions"
+where "public_id" = '0193aaaa-…-000000000001';</code></pre>
+      <ul><li>他人の条件を消せる（FR-SAVED-006）</li><li>ない ID でも 204 を返す（FR-SAVED-004 は 404）</li></ul>
+    </section>
+    <section class="compare-col improved">
+      <p class="compare-title">改善版<span class="count">1本</span></p>
+      <pre><code class="language-php" data-label="PHP（Eloquent）">$deleted = SearchCondition::where('user_id', $me-&gt;id)
+    -&gt;where('public_id', $publicId)
+    -&gt;delete();
+if ($deleted === 0) {
+    throw new SavedSearchNotFound;   // 404
+}</code></pre>
+      <p class="arrow">↓ 発行される SQL</p>
+      <pre><code class="language-sql" data-label="SQL（PostgreSQL）">delete from "search_conditions"
+where "user_id" = 1
+  and "public_id" = '0193aaaa-…-000000000001';</code></pre>
+      <ul><li>消えた行が 0 なら 404</li></ul>
+    </section>
+  </div>
+  <!-- /compare -->
+  <table>
+    <tr><th>操作</th><th>レガシー版</th><th>改善版</th><th>違いのもと</th></tr>
+    <tr><td>保存する</td><td>2本（数える・入れる）。ほかに、JWT のあとの有料の確かめで最大2本</td><td>3本＋begin・commit（押さえる・数える・入れる）</td><td>数える前に、会員の行を押さえる</td></tr>
+    <tr><td>一覧を見る</td><td>1本</td><td>1本</td><td>SQL は同じ。読んだあとに、古い項目を捨て、使えるかを付ける</td></tr>
+    <tr><td>直す</td><td>2本（ID で読む・書く）</td><td>1本</td><td><code>where</code> に持ち主を入れ、読まずに書く</td></tr>
+    <tr><td>消す</td><td>1本</td><td>1本</td><td><code>where</code> に持ち主を入れる。消えた行が 0 なら 404</td></tr>
+  </table>
+  <p class="meta">API の設計（<code>docs/api/04b-saved-searches.md</code>）は、API の子 Issue で書きます。そのときに、上の本数と合わせます。</p>
+
+  <h2>6. どう確かめるか</h2>
+  <table>
+    <tr><th>段階</th><th>確かめること</th></tr>
+    <tr><td>① レガシー版で問題を見る</td><td>
+      <ul>
+        <li>同時に保存する：4件ある会員で、保存を10本同時に送る（<code>xargs -P 10</code> で curl）。<code>select count(*) from search_conditions where user_id = …</code> が 5 を超える</li>
+        <li>確かめない条件：<code>{"age_min": 17, "height_min": 300, "x": "y"}</code> を保存して、201 が返る</li>
+        <li>期限切れ：<code>paid_until</code> が過ぎた男性（<code>is_paid</code> は true のまま）で、身長を入れて保存し、201 が返る</li>
+        <li>他人の条件：会員 A のトークンで、会員 B の条件の ID を <code>PUT</code>・<code>DELETE</code> し、B の行が変わる・消える</li>
+        <li>索引：<code>EXPLAIN (ANALYZE, BUFFERS) select * from search_conditions where user_id = …</code>。レガシー版は <code>user_id</code> に索引がなく、表を全部読む（Seq Scan）。試しのデータ（会員 2万人 × 平均3件 = 6万件）で見る</li>
+      </ul></td></tr>
+    <tr><td>② 振る舞いを固定するテスト</td><td>
+      <ul>
+        <li><code>FR-SAVED-001 条件に名前を付けて保存できる</code></li>
+        <li><code>FR-SAVED-005 6つ目は保存できない</code>（順に6回送る。同時に送るテストは、改善のときに足す）</li>
+        <li><code>FR-SAVED-006 他人の条件は直せない・消せない</code>（レガシー版では落ちる。分かっている不具合として、今の動きをコメントに残す）</li>
+        <li><code>FR-SAVED-009 男性の無料の会員は、身長を入れて保存できない</code></li>
+        <li><code>FR-SAVED-010 無料に戻ると、身長の入った条件では検索できない</code></li>
+      </ul></td></tr>
+    <tr><td>③ 改善したあとに比べる数字</td><td>同時に10本送ったあとの件数（6以上 → 5）・確かめない条件が保存される数（入る → 422）・他人の条件を変えられるか（変わる → 404）・一覧の <code>EXPLAIN</code>（Seq Scan → Index Scan。読んだ行の数）・直すときの SQL の本数（2本 → 1本）</td></tr>
+  </table>
+
+  <h2>7. 気をつけること（罠）</h2>
+  <div class="card warn"><ul>
+    <li><strong><code>jsonb</code> に入れる前に確かめる</strong>：DB は中身を確かめません。送られたものをそのまま入れると、検索の API が受け付けない値や、とても大きいデータが入ります。保存のときに検索と同じ検証を通します</li>
+    <li><strong>読むときも信用しない</strong>：検索の項目をなくしたり範囲を変えたりすると、前に保存した条件に古い形が残ります。読むときに、今の決まりに合わない項目を捨てます（FR-SAVED-015）</li>
+    <li><strong>決まりを2か所に書かない</strong>：条件の範囲（年齢 18〜99 など）を検索と保存の両方に書くと、片方だけ直してずれます。1か所に置き、両方から使います</li>
+    <li><strong>上限は「数える」だけでは止まらない</strong>：数えてから入れるまでのあいだに、ほかの処理が入れます。行を押さえるか、DB の制約で止めます</li>
+    <li><strong>UUID は秘密ではない</strong>：ID が推測しにくくても、持ち主の確かめの代わりにはなりません。画面の通信やログから知られることがあります</li>
+    <li><strong>保存した時点の「使えるか」を持たない</strong>：有料かどうかは変わります。保存するときに「使える」と行に書くと、無料に戻ったあとも使えてしまいます。読むたびに、今の状態で判断します</li>
+    <li><strong>無料に戻った会員の条件を消さない</strong>：消すと、もう一度有料になったときに作り直しになります。残して「使えない」と見せます</li>
+    <li><strong>URL の値は、だれでも書き換えられる</strong>：<code>/search?age_min=1</code> のように、画面の欄では選べない値を入れて開けます。URL の値をそのまま信用せず、API の検証（422）に任せ、画面は誤りを見せます。ページの番号や、秘密にしたい値は URL に出しません</li>
+    <li><strong>画面で隠すだけでは止まらない</strong>：画面が身長の条件を出さなくても、API を直接呼べば送れます。止めるのは API です</li>
+  </ul></div>
+
+  <h2>8. 理解を確かめる6つの問い</h2>
+  <p>先に自分で答えてから、開いて見る。</p>
+  <details><summary>なぜそうするのか？</summary><p>条件を <code>jsonb</code> の1列にするのは、この条件を読むのが「持ち主がフォームに戻して検索するとき」だけで、検索の項目があとから増えるからです。列で持つと、項目を足すたびに表・Model・API を直します。<code>jsonb</code> なら表は変えず、条件の決まり（<code>SearchConditions</code>）だけを直します。サーバーに持つのは、タブを閉じても・別の端末でも残すためです。上限を行ロックで止めるのは、数えてから入れるまでのあいだに、同じ会員のほかの保存が入らないようにするためです。</p></details>
+  <details><summary>ほかの方法は？なぜ選ばなかったか？</summary><p>列で持つ案は、DB が型と範囲を確かめてくれますが、項目が増えるたびに直す所が多くなります。ほかの会員の条件をまたいで集計する使い方（「25歳を探している人は何人か」）があるなら、列のほうが向いています。1項目1行（EAV）は、値が全部文字になり、型も範囲も確かめられないので選びません。画面の URL や localStorage は、別の端末で残らないので、「毎回入れ直す」を解決できません。上限を番号の列と UNIQUE で止める案は、ロックが要らない代わりに、空いている番号を探す処理が要り、上限を変えにくくなります。</p></details>
+  <details><summary>弱点は？</summary><p>DB が <code>jsonb</code> の中身を確かめないので、アプリの検証を通らずに入ったデータ（手で直した・古い版が入れた）は、形が違うことがあります。読むときに捨てる処理が、その受け皿です。行ロックは、同じ会員のほかの書き込み（プロフィールの保存・いいね・購入など、会員の行を押さえる処理）を、そのあいだ待たせます。保存は短いので、ふつうは問題になりません。また、検索の項目の名前を変えると（<code>height_min</code> → <code>min_height</code> など）、前に保存した条件からその項目が消えます。名前を変えるときは、保存したデータも書き換えるマイグレーションが要ります。</p></details>
+  <details><summary>問題が起きたら、どう調べて直すか？</summary><p>「6件ある」と言われたら、<code>select user_id, count(*) from search_conditions group by user_id having count(*) &gt; 5</code> で、上限を超えた会員を数えます。同じ秒に2件入っていれば、同時に送られたと分かります。直すのは、保存の処理（行ロック）で、超えた分をどうするかは運営と決めます。「保存した条件で検索すると 422 になる」と言われたら、その行の <code>conditions</code> を読み、今の決まりに合わない値がないかを見ます。読むときに捨てる処理が抜けている項目があれば、そこを直します。「知らないうちに条件が変わった・消えた」と言われたら、直す・消すの SQL の <code>where</code> に持ち主が入っているかを、クエリログで確かめます。</p></details>
+  <details><summary>データが10倍・100倍になったら？</summary><p>1人5件までなので、会員が20万人で最大100万件、200万人で最大1000万件です。読むのはいつも「自分の5件」なので、<code>user_id</code> の索引があれば、件数が増えても速さはほとんど変わりません。索引がないレガシー版は、表を全部読むので、件数に比例して遅くなります。<code>jsonb</code> は1行が大きくなりやすいので、条件の大きさに上限を付けます（検証を通せば、項目の数で自然に決まります）。行ロックは会員ごとなので、会員が増えても、待ちは増えません。もし「この条件に合う新しい会員を通知する」を足すなら、すべての条件を読んで検索することになり、<code>jsonb</code> のままでは重くなります。そのときは、通知に使う項目を列に出すか、別の仕組み（条件ごとの検索を順に流すジョブ）を考えます。</p></details>
+  <details><summary>Eloquent でどんな SQL が流れ、どう直したか？ Rails（ActiveRecord）・Prisma ならどう書くか？</summary>
+    <p>レガシー版の「直す」は、<code>where("public_id" = ?)</code> で読んでから <code>update … where "id" = ?</code> の2本で、持ち主を見ません。改善版は、<code>update … where "user_id" = ? and "public_id" = ?</code> の1本にして、変わった行が 0 なら 404 にします。保存は、<code>select … for update</code> で会員の行を押さえてから数えます。</p>
+    <table>
+      <tr><th>やること</th><th>Eloquent</th><th>Rails（ActiveRecord）</th><th>Prisma</th></tr>
+      <tr><td>JSON の列</td><td><code>$casts = ['conditions' =&gt; 'array']</code>・マイグレーションは <code>$table-&gt;jsonb('conditions')</code></td><td><code>t.jsonb :conditions</code>（そのままハッシュで読める）</td><td><code>conditions Json</code></td></tr>
+      <tr><td>自分のものだけ直す</td><td><code>SearchCondition::where('user_id', $me)-&gt;where('public_id', $id)-&gt;update([...])</code></td><td><code>current_user.search_conditions.where(public_id: id).update_all(...)</code></td><td><code>prisma.searchCondition.updateMany({ where: { userId, publicId }, data })</code>（<code>count</code> が 0 なら 404）</td></tr>
+      <tr><td>行を押さえて数える</td><td><code>DB::transaction</code> の中で <code>-&gt;lockForUpdate()</code></td><td><code>user.with_lock { ... }</code></td><td><code>$transaction</code> の中で <code>$queryRaw`select id from users where id = ${id} for update`</code>（専用の書き方がない）</td></tr>
+    </table>
+  </details>
+
+  <h2>9. 実装の記録</h2>
+  <p class="meta">レガシー版のあと（9-1・9-2）と、改善したあと（9-3・9-4）に、explain-change が書く。</p>
+  <h3>9-1. レガシー版</h3>
+  <p>2026-11-17 に、<code>legacy-repo</code> に作りました（#140 表・#141 API・#142 画面）。</p>
+  <table>
+    <tr><th>ファイル</th><th>書いたこと</th></tr>
+    <tr><td><code>database/migrations/2026_11_17_100000_create_search_conditions_table.php</code></td><td>表。<code>user_id</code> は数の列だけ（外部キーもインデックスもなし）。<code>conditions</code> は <code>jsonb</code></td></tr>
+    <tr><td><code>app/Models/SearchCondition.php</code></td><td>どの列でも一括代入できる。<code>conditions</code> は配列で読む</td></tr>
+    <tr><td><code>database/seeders/SearchConditionsSeeder.php</code></td><td>試しの会員 1人に 1〜5件（59,805件）</td></tr>
+    <tr><td><code>app/Http/Controllers/SearchConditionController.php</code></td><td>一覧・保存・直す・消す。JWT の処理をメソッドごとにコピー（17〜20か所目）。上限は数えてから入れるだけ。有料かどうかの確かめは、検索からコピー（保存だけ。直すほうにはない）。直す・消すは <code>public_id</code> だけで探す</td></tr>
+    <tr><td><code>routes/api.php</code></td><td><code>/api/me/search-conditions</code> の4本</td></tr>
+    <tr><td><code>frontend/client/src/SearchPage.tsx</code></td><td>今の条件を URL のクエリに出す（<code>useSearchParams</code>）。保存した検索条件の一覧・保存・名前を直す・消す・「有料」の印。<code>fetch</code> を4つ、画面に直接書いた。有料かどうかの判断も、画面にもう一度書いた</td></tr>
+  </table>
+  <p>設計と違う所は1つです。直す（<code>PUT</code>）に、有料かどうかの確かめをコピーしませんでした。レガシー版でよく起きる「コピーし忘れ」を、そのまま測るためです。</p>
+  <h3>9-2. 測った問題と数字</h3>
+  <p>開発用の DB（保存した検索条件 59,805件）で、curl とブラウザで測りました。くわしい表は <code>docs/api/04b-saved-searches.md</code> の「レガシー版で起きること」にあります。</p>
+  <table>
+    <tr><th>問題</th><th>測ったこと</th><th>結果</th><th>要件 ID</th></tr>
+    <tr><td>上限を超える</td><td>4件ある会員で、保存を10本同時に送る（同時に処理できるサーバーを、コンテナの中だけで一時的に立てた）</td><td><strong><code>201</code> が 7本。11件になった</strong>。いつものサーバー（1本ずつ処理）では 5件で止まり、表に出ない</td><td>FR-SAVED-005・NFR-SAVED-001</td></tr>
+    <tr><td>何でも保存できる</td><td>年齢 17・身長 300・知らない項目・配列・文字だけ・200文字の名前</td><td>どれも <code>201</code>。名前なし・条件なしは <code>500</code>（SQL のエラーが応答に出る）</td><td>FR-SAVED-007・008</td></tr>
+    <tr><td>期限切れでも有料の条件</td><td>期限が過ぎた男性（<code>is_paid</code> は true のまま）が、身長を入れて保存する</td><td><strong><code>201</code></strong></td><td>FR-SAVED-009・FR-PAID-005</td></tr>
+    <tr><td>確かめのコピーし忘れ</td><td>男性の無料の会員が、直すときに身長を足す</td><td><strong><code>200</code></strong>（保存では <code>403</code>）</td><td>FR-SAVED-009</td></tr>
+    <tr><td>他人の条件を変えられる</td><td>会員 A のトークンで、会員 B の条件を直す・自分のものにする・消す</td><td><strong><code>200</code>・<code>200</code>・<code>204</code></strong>。自分のものにすると、A は6件になる</td><td>FR-SAVED-005・006</td></tr>
+    <tr><td>ない ID</td><td>ない ID・UUID の形でない ID を直す・消す</td><td>直すは <code>500</code>。消すは、ない ID なら <code>204</code>・形が違えば <code>500</code></td><td>FR-SAVED-004</td></tr>
+    <tr><td>会員を消しても残る</td><td>会員を DB から消す（確かめたあと <code>rollback</code>）</td><td>保存した検索条件が 5件残る</td><td>FR-SAVED-014</td></tr>
+    <tr><td>一覧が表を全部読む</td><td><code>EXPLAIN (ANALYZE, BUFFERS)</code>（<code>where user_id = …</code>）</td><td>Seq Scan。4件を返すのに 59,801行を捨て、1,549 ページを読む（2.1 ms）</td><td>NFR-SAVED-004</td></tr>
+    <tr><td>画面の指摘</td><td>Biome（<code>npm run lint</code>）</td><td>エラー 34 → 43・警告 45 → 52（レガシー版なので残す）</td><td>―</td></tr>
+  </table>
+  <p>画面は、headless の Chrome（幅 375px）で FR-UI-041〜048 と FR-UI-016 を1つずつ確かめ、全部通りました（画面の例外 0回）。ただし、レガシー版の API は条件を確かめないので、URL に範囲の外の値（<code>/search?age_min=17</code>）を入れても、誤り（<code>422</code>）にならず、そのまま検索します（FR-UI-042 の後半は、改善する段階で満たす）。名前の長さ（31文字以上）も、画面と API のどちらも止めません（FR-UI-045・FR-SAVED-008）。</p>
+  <h3>9-3. 足したテスト</h3>
+  <p>まだ実装していない。</p>
+  <h3>9-4. 改善版と、前と後の数字</h3>
+  <p>まだ実装していない。</p>
+</main>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+  // page.js が選んだ表示（data-scheme）に合わせる。なければ端末の設定
+  const scheme = document.documentElement.dataset.scheme;
+  const dark = scheme ? scheme.startsWith("dark") : (document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches));
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/page.js"></script>
+</body>
+</html>
