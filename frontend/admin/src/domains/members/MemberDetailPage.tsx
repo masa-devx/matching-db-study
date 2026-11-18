@@ -12,14 +12,16 @@ import {
   SimpleGrid,
   Stack,
   Table,
+  Tabs,
   Text,
   Textarea,
   TextInput,
   Title,
 } from '@mantine/core'
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { useNotice } from '../../Notice'
+import { PaidBadge, paidStateOf } from './paid'
 import { toDate } from '../../date'
 
 // 12 会員の詳細と、利用を止める・解く（FR-ADMIN-005・006）。止める・解くのボタンは owner にだけ出す（画面で隠すだけ）
@@ -37,6 +39,11 @@ export default function MemberDetailPage() {
   // A1（#216）：対応のメモの、書きかけ
   const [memo, setMemo] = useState('')
   const navigate = useNavigate()
+  // A1（#224）：開いているタブ
+  const [sp, setSp] = useSearchParams()
+  // タブは、画面の中の状態で切り替える（押したら、すぐ変わる）。URL は、あとから合わせるだけ。
+  // 最初は、URL の更新を待って切り替えていたが、押してから中身が変わるまで 2〜4秒かかった
+  const [tab, setTab] = useState(sp.get('tab') ?? 'basic')
   const [notice, notify] = useNotice()
   // A1（#208）：写真は、会員の側の API にある（管理画面の API は、パスだけを返す）
   const clientApi = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
@@ -131,6 +138,11 @@ export default function MemberDetailPage() {
   if (!m) return <Loader />
   if (!m.user_id) return <Alert color="red">{m.message ?? '会員が見つかりません'}</Alert>
 
+  // A1（#224）：有料の区分と、期限までの日数。対応の記録（メモ・お知らせ・停止）の件数
+  const paidState = paidStateOf(m)
+  const daysLeft = m.paid_until ? Math.ceil((toDate(m.paid_until).getTime() - Date.now()) / 86400000) : null
+  const recordCount = (m.notes ?? []).length + (m.notices ?? []).length + (m.suspensions ?? []).length
+
   const stats: [string, number][] = [
     ['送ったいいね', m.likes_sent],
     ['もらったいいね', m.likes_received],
@@ -149,7 +161,7 @@ export default function MemberDetailPage() {
             ← 戻る
           </Button>
           <Title order={2}>{m.profile?.nickname ?? '―'}</Title>
-          {m.is_paid && <Badge color="grape">有料</Badge>}
+          <PaidBadge state={paidState} />
           {m.suspended_at && <Badge color="red">停止中</Badge>}
           {m.banned_at ? <Badge color="dark">強制退会</Badge> : m.deleted_at && <Badge color="gray">退会</Badge>}
         </Group>
@@ -189,244 +201,337 @@ export default function MemberDetailPage() {
         </Alert>
       )}
 
-      <Card withBorder radius="md">
-        <Table>
-          <Table.Tbody>
-            <Table.Tr>
-              <Table.Th w={180}>メールアドレス</Table.Th>
-              <Table.Td>{m.email}</Table.Td>
-            </Table.Tr>
-            <Table.Tr>
-              <Table.Th>メールアドレスの確認</Table.Th>
-              <Table.Td>
-                {m.email_verified_at ? (
-                  `${toDate(m.email_verified_at).toLocaleString('ja-JP')} に確認`
-                ) : (
-                  <Badge color="yellow">まだ確認していない（検索に出ない）</Badge>
-                )}
-              </Table.Td>
-            </Table.Tr>
-            <Table.Tr>
-              <Table.Th>登録日・最終ログイン</Table.Th>
-              <Table.Td>
-                {toDate(m.created_at).toLocaleDateString('ja-JP')}・
-                {m.last_login_at ? toDate(m.last_login_at).toLocaleString('ja-JP') : '―'}
-              </Table.Td>
-            </Table.Tr>
-            <Table.Tr>
-              <Table.Th>プロフィール</Table.Th>
-              <Table.Td>
-                {m.profile?.gender}・{m.profile?.birthday}・{m.profile?.prefecture}・{m.profile?.height}cm
-              </Table.Td>
-            </Table.Tr>
-            <Table.Tr>
-              <Table.Th>有料の期限</Table.Th>
-              <Table.Td>{m.paid_until ? toDate(m.paid_until).toLocaleDateString('ja-JP') : '―'}</Table.Td>
-            </Table.Tr>
-            {/* A1（#208）：検索に使う6項目（API は返していたが、出していなかった）。項目の名前を、会員の側からコピーした */}
-            <Table.Tr>
-              <Table.Th>体型・お仕事・年収</Table.Th>
-              <Table.Td>
-                {m.profile?.body_type ?? '―'}・{m.profile?.job ?? '―'}・{m.profile?.income ?? '―'}
-              </Table.Td>
-            </Table.Tr>
-            <Table.Tr>
-              <Table.Th>タバコ・お酒・結婚歴</Table.Th>
-              <Table.Td>
-                {m.profile?.smoking ?? '―'}・{m.profile?.drinking ?? '―'}・{m.profile?.marital_status ?? '―'}
-              </Table.Td>
-            </Table.Tr>
-            <Table.Tr>
-              <Table.Th>メッセージ</Table.Th>
-              <Table.Td>
-                <Anchor component={Link} to={`/messages?sender=${m.user_id}`}>
-                  この会員が送ったメッセージを見る
-                </Anchor>
-              </Table.Td>
-            </Table.Tr>
-          </Table.Tbody>
-        </Table>
-      </Card>
+      {/* A1（#224）：縦に長かった画面を、タブに分けた。開いているタブは、URL のクエリ（?tab=）に持つ */}
+      <Tabs
+        value={tab}
+        onChange={(v) => {
+          setTab(v ?? 'basic')
+          setSp(v && v !== 'basic' ? { tab: v } : {}, { replace: true })
+        }}
+        keepMounted={false}
+      >
+        <Tabs.List mb="md">
+          <Tabs.Tab value="basic">基本</Tabs.Tab>
+          <Tabs.Tab value="profile">プロフィール</Tabs.Tab>
+          <Tabs.Tab value="paid" rightSection={<PaidBadge state={paidState} small />}>
+            有料
+          </Tabs.Tab>
+          <Tabs.Tab
+            value="record"
+            rightSection={
+              recordCount > 0 && (
+                <Badge size="sm" variant="light" circle>
+                  {recordCount}
+                </Badge>
+              )
+            }
+          >
+            対応の記録
+          </Tabs.Tab>
+        </Tabs.List>
 
-      {/* A1（#208）：写真と自己紹介（通報や問い合わせのときに、中身を確かめるため） */}
-      <Card withBorder radius="md">
-        <Group align="flex-start" wrap="nowrap">
-          {m.profile?.image ? (
-            <Image
-              src={`${clientApi}${m.profile.image}`}
-              alt="プロフィールの写真"
-              w={120}
-              h={160}
-              radius="md"
-              fit="cover"
-            />
-          ) : (
-            <Text c="dimmed" w={120}>
-              写真なし
-            </Text>
-          )}
-          <Stack gap={4}>
-            <Title order={4}>自己紹介</Title>
-            <Text style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-              {m.profile?.introduction || 'まだ書いていません'}
-            </Text>
-          </Stack>
-        </Group>
-      </Card>
+        <Tabs.Panel value="basic">
+          <Stack>
+            <Card withBorder radius="md">
+              <Table>
+                <Table.Tbody>
+                  <Table.Tr>
+                    <Table.Th w={180}>メールアドレス</Table.Th>
+                    <Table.Td>{m.email}</Table.Td>
+                  </Table.Tr>
+                  <Table.Tr>
+                    <Table.Th>メールアドレスの確認</Table.Th>
+                    <Table.Td>
+                      {m.email_verified_at ? (
+                        `${toDate(m.email_verified_at).toLocaleString('ja-JP')} に確認`
+                      ) : (
+                        <Badge color="yellow">まだ確認していない（検索に出ない）</Badge>
+                      )}
+                    </Table.Td>
+                  </Table.Tr>
+                  <Table.Tr>
+                    <Table.Th>登録日・最終ログイン</Table.Th>
+                    <Table.Td>
+                      {toDate(m.created_at).toLocaleDateString('ja-JP')}・
+                      {m.last_login_at ? toDate(m.last_login_at).toLocaleString('ja-JP') : '―'}
+                    </Table.Td>
+                  </Table.Tr>
+                  <Table.Tr>
+                    <Table.Th>プロフィール</Table.Th>
+                    <Table.Td>
+                      {m.profile?.gender}・{m.profile?.birthday}・{m.profile?.prefecture}・{m.profile?.height}cm
+                    </Table.Td>
+                  </Table.Tr>
+                  <Table.Tr>
+                    <Table.Th>有料の期限</Table.Th>
+                    <Table.Td>{m.paid_until ? toDate(m.paid_until).toLocaleDateString('ja-JP') : '―'}</Table.Td>
+                  </Table.Tr>
+                  {/* A1（#208）：検索に使う6項目（API は返していたが、出していなかった）。項目の名前を、会員の側からコピーした */}
+                  <Table.Tr>
+                    <Table.Th>体型・お仕事・年収</Table.Th>
+                    <Table.Td>
+                      {m.profile?.body_type ?? '―'}・{m.profile?.job ?? '―'}・{m.profile?.income ?? '―'}
+                    </Table.Td>
+                  </Table.Tr>
+                  <Table.Tr>
+                    <Table.Th>タバコ・お酒・結婚歴</Table.Th>
+                    <Table.Td>
+                      {m.profile?.smoking ?? '―'}・{m.profile?.drinking ?? '―'}・{m.profile?.marital_status ?? '―'}
+                    </Table.Td>
+                  </Table.Tr>
+                  <Table.Tr>
+                    <Table.Th>メッセージ</Table.Th>
+                    <Table.Td>
+                      <Anchor component={Link} to={`/messages?sender=${m.user_id}`}>
+                        この会員が送ったメッセージを見る
+                      </Anchor>
+                    </Table.Td>
+                  </Table.Tr>
+                </Table.Tbody>
+              </Table>
+            </Card>
 
-      <SimpleGrid cols={{ base: 2, md: 3, xl: 6 }}>
-        {stats.map(([label, n]) => (
-          <Card key={label} withBorder radius="md">
-            <Text size="sm" c="dimmed">
-              {label}
-            </Text>
-            <Text fz={22} fw={700}>
-              {n}
-            </Text>
-          </Card>
-        ))}
-      </SimpleGrid>
-
-      <Card withBorder radius="md">
-        <Title order={4} mb="sm">
-          購入の記録
-        </Title>
-        {m.purchases.length === 0 ? (
-          <Text c="dimmed">ありません</Text>
-        ) : (
-          <Table>
-            <Table.Tbody>
-              {m.purchases.map((p: any) => (
-                <Table.Tr key={p.bought_at}>
-                  <Table.Td>{toDate(p.bought_at).toLocaleDateString('ja-JP')}</Table.Td>
-                  <Table.Td>{p.plan}</Table.Td>
-                  <Table.Td>{Number(p.price).toLocaleString()}円</Table.Td>
-                </Table.Tr>
+            <SimpleGrid cols={{ base: 2, md: 3, xl: 6 }}>
+              {stats.map(([label, n]) => (
+                <Card key={label} withBorder radius="md">
+                  <Text size="sm" c="dimmed">
+                    {label}
+                  </Text>
+                  <Text fz={22} fw={700}>
+                    {n}
+                  </Text>
+                </Card>
               ))}
-            </Table.Tbody>
-          </Table>
-        )}
-      </Card>
+            </SimpleGrid>
+          </Stack>
+        </Tabs.Panel>
 
-      {/* A1（#216）：対応のメモ（運営の中だけ。会員には見せない）。書く欄は、owner にだけ出す（画面で隠すだけ） */}
-      <Card withBorder radius="md">
-        <Title order={4} mb="sm">
-          対応のメモ
-        </Title>
-        {role === 'owner' && (
-          <Group align="flex-end" mb="md">
-            <Textarea
-              style={{ flex: 1 }}
-              label="メモを足す（会員には見えません）"
-              placeholder="例：11/18 メールで問い合わせ。プランの期限について答えた"
-              autosize
-              minRows={2}
-              value={memo}
-              onChange={(e) => setMemo(e.currentTarget.value)}
-            />
-            <Button loading={busy} disabled={!memo.trim()} onClick={addMemo}>
-              書く
-            </Button>
-          </Group>
-        )}
-        {(m.notes ?? []).length === 0 ? (
-          <Text c="dimmed">ありません</Text>
-        ) : (
-          <Stack gap="xs">
-            {m.notes.map((n: any) => (
-              <Card key={n.id} withBorder radius="sm" padding="sm" bg="gray.0">
-                <Text size="xs" c="dimmed">
-                  {toDate(n.created_at).toLocaleString('ja-JP')}・{n.admin ?? '―'}
+        <Tabs.Panel value="profile">
+          {/* A1（#208）：写真と自己紹介（通報や問い合わせのときに、中身を確かめるため） */}
+          <Card withBorder radius="md">
+            <Group align="flex-start" wrap="nowrap">
+              {m.profile?.image ? (
+                <Image
+                  src={`${clientApi}${m.profile.image}`}
+                  alt="プロフィールの写真"
+                  w={120}
+                  h={160}
+                  radius="md"
+                  fit="cover"
+                />
+              ) : (
+                <Text c="dimmed" w={120}>
+                  写真なし
                 </Text>
-                <Text style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{n.body}</Text>
-              </Card>
-            ))}
+              )}
+              <Stack gap={4}>
+                <Title order={4}>自己紹介</Title>
+                <Text style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                  {m.profile?.introduction || 'まだ書いていません'}
+                </Text>
+              </Stack>
+            </Group>
+          </Card>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="paid">
+          <Stack>
+            {/* A1（#224）：有料の区分・今のプラン・期限・残りの日数・購入の回数と合計を、まとめて出す */}
+            <Card withBorder radius="md">
+              <Table>
+                <Table.Tbody>
+                  <Table.Tr>
+                    <Table.Th w={180}>有料の区分</Table.Th>
+                    <Table.Td>
+                      <PaidBadge state={paidState} />
+                    </Table.Td>
+                  </Table.Tr>
+                  <Table.Tr>
+                    <Table.Th>今のプラン</Table.Th>
+                    <Table.Td>
+                      {m.purchases[0]?.plan
+                        ? `${m.purchases[0].plan}（いちばん新しい購入）`
+                        : '―（購入したことがない）'}
+                    </Table.Td>
+                  </Table.Tr>
+                  <Table.Tr>
+                    <Table.Th>期限</Table.Th>
+                    <Table.Td>
+                      {m.paid_until ? toDate(m.paid_until).toLocaleString('ja-JP') : '―'}
+                      {daysLeft !== null && (daysLeft >= 0 ? `（あと ${daysLeft}日）` : `（${-daysLeft}日前に切れた）`)}
+                    </Table.Td>
+                  </Table.Tr>
+                  <Table.Tr>
+                    <Table.Th>購入の回数・合計</Table.Th>
+                    <Table.Td>
+                      {m.purchases.length}回・
+                      {m.purchases.reduce((sum: number, x: any) => sum + Number(x.price ?? 0), 0).toLocaleString()}円
+                      <Text span size="sm" c="dimmed">
+                        （今のプランの値段で計算）
+                      </Text>
+                    </Table.Td>
+                  </Table.Tr>
+                </Table.Tbody>
+              </Table>
+              {paidState === 'expired' && (
+                <Text size="sm" c="red" mt="sm">
+                  期限が過ぎていますが、会員の側では「有料」の印が付いたままです（期限を見ずに、有料として扱う機能があります）。
+                </Text>
+              )}
+            </Card>
+            <Card withBorder radius="md">
+              <Title order={4} mb="sm">
+                購入の記録
+              </Title>
+              {m.purchases.length === 0 ? (
+                <Text c="dimmed">ありません</Text>
+              ) : (
+                <Table>
+                  <Table.Tbody>
+                    {m.purchases.map((p: any) => (
+                      <Table.Tr key={p.bought_at}>
+                        <Table.Td>{toDate(p.bought_at).toLocaleDateString('ja-JP')}</Table.Td>
+                        <Table.Td>{p.plan}</Table.Td>
+                        <Table.Td>{Number(p.price).toLocaleString()}円</Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              )}
+            </Card>
           </Stack>
-        )}
-      </Card>
+        </Tabs.Panel>
 
-      {/* A7（#213）：この会員に送ったお知らせと、読んだかどうか */}
-      <Card withBorder radius="md">
-        <Title order={4} mb="sm">
-          送ったお知らせ
-        </Title>
-        {(m.notices ?? []).length === 0 ? (
-          <Text c="dimmed">ありません</Text>
-        ) : (
-          <Table>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th w={170}>送った日時</Table.Th>
-                <Table.Th w={90}>種類</Table.Th>
-                <Table.Th>題・本文</Table.Th>
-                <Table.Th w={120}>送った管理者</Table.Th>
-                <Table.Th w={170}>読んだ日時</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {m.notices.map((n: any) => (
-                <Table.Tr key={n.id}>
-                  <Table.Td>{toDate(n.created_at).toLocaleString('ja-JP')}</Table.Td>
-                  <Table.Td>
-                    <Badge color={n.kind === 'warning' ? 'red' : 'blue'}>
-                      {n.kind === 'warning' ? '注意' : 'お知らせ'}
-                    </Badge>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text fw={600}>{n.title}</Text>
-                    <Text size="sm" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                      {n.body}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>{n.sent_by ?? '―'}</Table.Td>
-                  <Table.Td>
-                    {n.read_at ? (
-                      toDate(n.read_at).toLocaleString('ja-JP')
-                    ) : (
-                      <Badge color="yellow">まだ読んでいない</Badge>
-                    )}
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        )}
-      </Card>
+        <Tabs.Panel value="record">
+          <Stack>
+            {/* A1（#216）：対応のメモ（運営の中だけ。会員には見せない）。書く欄は、owner にだけ出す（画面で隠すだけ） */}
+            <Card withBorder radius="md">
+              <Title order={4} mb="sm">
+                対応のメモ
+              </Title>
+              {role === 'owner' && (
+                <Group align="flex-end" mb="md">
+                  <Textarea
+                    style={{ flex: 1 }}
+                    label="メモを足す（会員には見えません）"
+                    placeholder="例：11/18 メールで問い合わせ。プランの期限について答えた"
+                    autosize
+                    minRows={2}
+                    value={memo}
+                    onChange={(e) => setMemo(e.currentTarget.value)}
+                  />
+                  <Button loading={busy} disabled={!memo.trim()} onClick={addMemo}>
+                    書く
+                  </Button>
+                </Group>
+              )}
+              {(m.notes ?? []).length === 0 ? (
+                <Text c="dimmed">ありません</Text>
+              ) : (
+                <Stack gap="xs">
+                  {m.notes.map((n: any) => (
+                    <Card key={n.id} withBorder radius="sm" padding="sm" bg="gray.0">
+                      <Text size="xs" c="dimmed">
+                        {toDate(n.created_at).toLocaleString('ja-JP')}・{n.admin ?? '―'}
+                      </Text>
+                      <Text style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{n.body}</Text>
+                    </Card>
+                  ))}
+                </Stack>
+              )}
+            </Card>
 
-      {/* A1（#211）：停止の履歴（前は、解くと、理由と日時が消えていた） */}
-      <Card withBorder radius="md">
-        <Title order={4} mb="sm">
-          停止の履歴
-        </Title>
-        {(m.suspensions ?? []).length === 0 ? (
-          <Text c="dimmed">ありません</Text>
-        ) : (
-          <Table>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>止めた日時</Table.Th>
-                <Table.Th>止めた管理者</Table.Th>
-                <Table.Th>理由</Table.Th>
-                <Table.Th>解いた日時</Table.Th>
-                <Table.Th>解いた管理者</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {m.suspensions.map((s: any) => (
-                <Table.Tr key={s.suspended_at}>
-                  <Table.Td>{toDate(s.suspended_at).toLocaleString('ja-JP')}</Table.Td>
-                  <Table.Td>{s.suspended_by ?? '―'}</Table.Td>
-                  <Table.Td style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{s.reason || '―'}</Table.Td>
-                  <Table.Td>
-                    {s.lifted_at ? toDate(s.lifted_at).toLocaleString('ja-JP') : <Badge color="red">止めている</Badge>}
-                  </Table.Td>
-                  <Table.Td>{s.lifted_by ?? '―'}</Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        )}
-      </Card>
+            {/* A7（#213）：この会員に送ったお知らせと、読んだかどうか */}
+            <Card withBorder radius="md">
+              <Title order={4} mb="sm">
+                送ったお知らせ
+              </Title>
+              {(m.notices ?? []).length === 0 ? (
+                <Text c="dimmed">ありません</Text>
+              ) : (
+                <Table>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th w={170}>送った日時</Table.Th>
+                      <Table.Th w={90}>種類</Table.Th>
+                      <Table.Th>題・本文</Table.Th>
+                      <Table.Th w={120}>送った管理者</Table.Th>
+                      <Table.Th w={170}>読んだ日時</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {m.notices.map((n: any) => (
+                      <Table.Tr key={n.id}>
+                        <Table.Td>{toDate(n.created_at).toLocaleString('ja-JP')}</Table.Td>
+                        <Table.Td>
+                          <Badge color={n.kind === 'warning' ? 'red' : 'blue'}>
+                            {n.kind === 'warning' ? '注意' : 'お知らせ'}
+                          </Badge>
+                        </Table.Td>
+                        <Table.Td>
+                          <Text fw={600}>{n.title}</Text>
+                          <Text size="sm" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                            {n.body}
+                          </Text>
+                        </Table.Td>
+                        <Table.Td>{n.sent_by ?? '―'}</Table.Td>
+                        <Table.Td>
+                          {n.read_at ? (
+                            toDate(n.read_at).toLocaleString('ja-JP')
+                          ) : (
+                            <Badge color="yellow">まだ読んでいない</Badge>
+                          )}
+                        </Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              )}
+            </Card>
+
+            {/* A1（#211）：停止の履歴（前は、解くと、理由と日時が消えていた） */}
+            <Card withBorder radius="md">
+              <Title order={4} mb="sm">
+                停止の履歴
+              </Title>
+              {(m.suspensions ?? []).length === 0 ? (
+                <Text c="dimmed">ありません</Text>
+              ) : (
+                <Table>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>止めた日時</Table.Th>
+                      <Table.Th>止めた管理者</Table.Th>
+                      <Table.Th>理由</Table.Th>
+                      <Table.Th>解いた日時</Table.Th>
+                      <Table.Th>解いた管理者</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {m.suspensions.map((s: any) => (
+                      <Table.Tr key={s.suspended_at}>
+                        <Table.Td>{toDate(s.suspended_at).toLocaleString('ja-JP')}</Table.Td>
+                        <Table.Td>{s.suspended_by ?? '―'}</Table.Td>
+                        <Table.Td style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                          {s.reason || '―'}
+                        </Table.Td>
+                        <Table.Td>
+                          {s.lifted_at ? (
+                            toDate(s.lifted_at).toLocaleString('ja-JP')
+                          ) : (
+                            <Badge color="red">止めている</Badge>
+                          )}
+                        </Table.Td>
+                        <Table.Td>{s.lifted_by ?? '―'}</Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              )}
+            </Card>
+          </Stack>
+        </Tabs.Panel>
+      </Tabs>
 
       <Modal opened={opened} onClose={() => setOpened(false)} title="利用を止めますか？">
         <Stack>

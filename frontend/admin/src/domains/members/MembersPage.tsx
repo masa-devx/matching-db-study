@@ -3,6 +3,7 @@ import {
   Button,
   Card,
   Checkbox,
+  Collapse,
   Group,
   Loader,
   NumberInput,
@@ -18,6 +19,7 @@ import {
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { toDate } from '../../date'
+import { PaidBadge } from './paid'
 
 // A1（#218）：都道府県の一覧（会員の側の画面にある一覧を、管理画面にもコピーした）
 const PREFECTURES = [
@@ -73,6 +75,7 @@ const PREFECTURES = [
 // 絞り込みの項目（URL のクエリの名前。API のクエリの名前と同じ）。足すときは、ここと、下の欄と、API の3か所を直す
 const KEYS = [
   'q',
+  'plan',
   'status',
   'gender',
   'age_min',
@@ -85,10 +88,41 @@ const KEYS = [
   'id',
   'sort',
 ]
+// 「くわしい条件」に入れる項目（#224 で、よく使う 語・有料の区分・状態 を前に出し、残りを畳んだ）
+const DETAIL_KEYS = [
+  'gender',
+  'age_min',
+  'age_max',
+  'prefecture',
+  'registered_from',
+  'registered_to',
+  'last_login',
+  'unverified',
+  'id',
+]
+
+// 今かかっている条件を、短い言葉にする（条件の札に出す）。値の名前を、欄とは別に、ここにも書いた
+const describe = (key: string, value: string): string => {
+  const names: Record<string, Record<string, string>> = {
+    plan: { free: '無料', paid: '有料（期限の中）', expiring: 'もうすぐ切れる', expired: '期限が過ぎた' },
+    status: { suspended: '停止中', withdrawn: '退会', banned: '強制退会', paid: '有料の印あり' },
+    gender: { male: '男性', female: '女性' },
+    last_login: { '7d': '7日以内にログイン', '30d': '30日以内にログイン', none: '30日より前・一度もなし' },
+  }
+  if (names[key]) return names[key][value] ?? value
+  if (key === 'q') return `「${value}」`
+  if (key === 'age_min') return `${value}歳から`
+  if (key === 'age_max') return `${value}歳まで`
+  if (key === 'registered_from') return `登録 ${value} から`
+  if (key === 'registered_to') return `登録 ${value} まで`
+  if (key === 'unverified') return 'メールアドレスが未確認'
+  if (key === 'id') return `ID ${value.slice(0, 8)}…`
+  return value
+}
 
 // 12 会員の一覧（FR-ADMIN-004）。50人ずつ（API は offset）。
 // A1（#208）：絞り込みとページは、URL のクエリに持つ（詳細から「戻る」で、同じ所に戻る）。
-// A1（#218）：絞り込みを増やした（性別・年齢・都道府県・登録日・最終ログイン・未確認・会員の ID・並び）
+// A1（#218）：絞り込みを増やした。A1（#224）：有料の区分で分け、欄を整理した
 export default function MembersPage() {
   const [params, setParams] = useSearchParams()
   const page = Number(params.get('page') ?? '1')
@@ -96,6 +130,8 @@ export default function MembersPage() {
   const [form, setForm] = useState<Record<string, string>>(
     Object.fromEntries(KEYS.map((k) => [k, params.get(k) ?? ''])),
   )
+  // くわしい条件を開いているか。URL に、くわしい条件が入っていれば、最初から開く
+  const [open, setOpen] = useState(DETAIL_KEYS.some((k) => params.get(k)))
   const [data, setData] = useState<any>(null)
   const navigate = useNavigate()
   const api = import.meta.env.VITE_ADMIN_API_URL ?? 'http://127.0.0.1:8100'
@@ -108,13 +144,20 @@ export default function MembersPage() {
     setParams(merged)
   }
   const set = (key: string, value: string) => setForm({ ...form, [key]: value })
-  // 状態と並びは、押したらすぐ絞る。ほかの欄は「絞り込む」を押してから
+  // 有料の区分・状態・並びは、押したらすぐ絞る。ほかの欄は「絞り込む」を押してから
   const setNow = (key: string, value: string) => {
     const next = { ...form, [key]: value }
     setForm(next)
     apply(next)
   }
-  const used = KEYS.filter((k) => !['q', 'status', 'sort'].includes(k) && params.get(k)).length
+  const active = KEYS.filter((k) => k !== 'sort' && params.get(k))
+  const detailCount = DETAIL_KEYS.filter((k) => params.get(k)).length
+
+  // 上の帯の検索窓などから、URL だけが変わったときに、欄の中身を合わせる
+  // biome-ignore lint/correctness/useExhaustiveDependencies: URL のクエリが変わったときだけ
+  useEffect(() => {
+    setForm(Object.fromEntries(KEYS.map((k) => [k, params.get(k) ?? ''])))
+  }, [params.toString()])
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: URL のクエリが変わったときだけ読む
   useEffect(() => {
@@ -136,120 +179,189 @@ export default function MembersPage() {
             apply(form)
           }}
         >
-          <Stack>
+          <Stack gap="sm">
             <Group align="end">
               <TextInput
                 label="メールアドレス・ニックネーム"
                 placeholder="部分一致"
+                w={280}
                 value={form.q}
                 onChange={(e) => set('q', e.currentTarget.value)}
               />
-              <SegmentedControl
-                value={form.status || 'all'}
-                onChange={(v) => setNow('status', v === 'all' ? '' : v)}
-                data={[
-                  { value: 'all', label: 'すべて' },
-                  { value: 'paid', label: '有料' },
-                  { value: 'suspended', label: '停止中' },
-                  { value: 'withdrawn', label: '退会' },
-                  { value: 'banned', label: '強制退会' },
-                ]}
-              />
-            </Group>
-            <Group align="end">
-              <Select
-                label="性別"
-                w={120}
-                clearable
-                placeholder="すべて"
-                data={[
-                  { value: 'male', label: '男性' },
-                  { value: 'female', label: '女性' },
-                ]}
-                value={form.gender || null}
-                onChange={(v) => set('gender', v ?? '')}
-              />
-              <NumberInput
-                label="年齢（下）"
-                w={110}
-                min={18}
-                max={120}
-                value={form.age_min === '' ? '' : Number(form.age_min)}
-                onChange={(v) => set('age_min', v === '' ? '' : String(v))}
-              />
-              <NumberInput
-                label="年齢（上）"
-                w={110}
-                min={18}
-                max={120}
-                value={form.age_max === '' ? '' : Number(form.age_max)}
-                onChange={(v) => set('age_max', v === '' ? '' : String(v))}
-              />
-              <Select
-                label="都道府県"
-                w={150}
-                clearable
-                searchable
-                placeholder="すべて"
-                data={PREFECTURES}
-                value={form.prefecture || null}
-                onChange={(v) => set('prefecture', v ?? '')}
-              />
-              <TextInput
-                label="登録日（から）"
-                type="date"
-                value={form.registered_from}
-                onChange={(e) => set('registered_from', e.currentTarget.value)}
-              />
-              <TextInput
-                label="登録日（まで）"
-                type="date"
-                value={form.registered_to}
-                onChange={(e) => set('registered_to', e.currentTarget.value)}
-              />
-            </Group>
-            <Group align="end">
-              <Select
-                label="最終ログイン"
-                w={220}
-                clearable
-                placeholder="すべて"
-                data={[
-                  { value: '7d', label: '7日以内' },
-                  { value: '30d', label: '30日以内' },
-                  { value: 'none', label: '30日より前・一度もなし' },
-                ]}
-                value={form.last_login || null}
-                onChange={(v) => set('last_login', v ?? '')}
-              />
-              <TextInput
-                label="会員の ID"
-                placeholder="完全一致"
-                w={320}
-                value={form.id}
-                onChange={(e) => set('id', e.currentTarget.value.trim())}
-              />
-              <Checkbox
-                label="メールアドレスが未確認"
-                mb={8}
-                checked={form.unverified === '1'}
-                onChange={(e) => set('unverified', e.currentTarget.checked ? '1' : '')}
-              />
               <Button type="submit">絞り込む</Button>
-              <Button
-                variant="subtle"
-                onClick={() => {
-                  const empty = Object.fromEntries(KEYS.map((k) => [k, '']))
-                  setForm(empty)
-                  apply(empty)
-                }}
-              >
-                条件を全部外す
+              <Button variant="default" onClick={() => setOpen(!open)} aria-expanded={open}>
+                くわしい条件{detailCount > 0 ? `（${detailCount}）` : ''} {open ? '▲' : '▼'}
               </Button>
             </Group>
+            <Group align="end" gap="xl" style={{ minWidth: 0 }}>
+              <div style={{ maxWidth: '100%', minWidth: 0 }}>
+                <Text size="sm" fw={500} mb={4}>
+                  有料の区分
+                </Text>
+                <SegmentedControl
+                  style={{ maxWidth: '100%', overflowX: 'auto' }}
+                  aria-label="有料の区分"
+                  value={form.plan || 'all'}
+                  onChange={(v) => setNow('plan', v === 'all' ? '' : v)}
+                  data={[
+                    { value: 'all', label: 'すべて' },
+                    { value: 'free', label: '無料' },
+                    { value: 'paid', label: '有料' },
+                    { value: 'expiring', label: 'もうすぐ切れる' },
+                    { value: 'expired', label: '期限が過ぎた' },
+                  ]}
+                />
+              </div>
+              <div style={{ maxWidth: '100%', minWidth: 0 }}>
+                <Text size="sm" fw={500} mb={4}>
+                  状態
+                </Text>
+                <SegmentedControl
+                  style={{ maxWidth: '100%', overflowX: 'auto' }}
+                  aria-label="状態"
+                  value={form.status || 'all'}
+                  onChange={(v) => setNow('status', v === 'all' ? '' : v)}
+                  data={[
+                    { value: 'all', label: 'すべて' },
+                    { value: 'suspended', label: '停止中' },
+                    { value: 'withdrawn', label: '退会' },
+                    { value: 'banned', label: '強制退会' },
+                  ]}
+                />
+              </div>
+            </Group>
+            <Collapse expanded={open}>
+              <Stack gap="sm" pt="xs">
+                <Group align="end">
+                  <Select
+                    label="性別"
+                    w={120}
+                    clearable
+                    placeholder="すべて"
+                    data={[
+                      { value: 'male', label: '男性' },
+                      { value: 'female', label: '女性' },
+                    ]}
+                    value={form.gender || null}
+                    onChange={(v) => set('gender', v ?? '')}
+                  />
+                  <NumberInput
+                    label="年齢（下）"
+                    w={110}
+                    min={18}
+                    max={120}
+                    value={form.age_min === '' ? '' : Number(form.age_min)}
+                    onChange={(v) => set('age_min', v === '' ? '' : String(v))}
+                  />
+                  <NumberInput
+                    label="年齢（上）"
+                    w={110}
+                    min={18}
+                    max={120}
+                    value={form.age_max === '' ? '' : Number(form.age_max)}
+                    onChange={(v) => set('age_max', v === '' ? '' : String(v))}
+                  />
+                  <Select
+                    label="都道府県"
+                    w={150}
+                    clearable
+                    searchable
+                    placeholder="すべて"
+                    data={PREFECTURES}
+                    value={form.prefecture || null}
+                    onChange={(v) => set('prefecture', v ?? '')}
+                  />
+                  <Select
+                    label="最終ログイン"
+                    w={220}
+                    clearable
+                    placeholder="すべて"
+                    data={[
+                      { value: '7d', label: '7日以内' },
+                      { value: '30d', label: '30日以内' },
+                      { value: 'none', label: '30日より前・一度もなし' },
+                    ]}
+                    value={form.last_login || null}
+                    onChange={(v) => set('last_login', v ?? '')}
+                  />
+                </Group>
+                <Group align="end">
+                  <TextInput
+                    label="登録日（から）"
+                    type="date"
+                    value={form.registered_from}
+                    onChange={(e) => set('registered_from', e.currentTarget.value)}
+                  />
+                  <TextInput
+                    label="登録日（まで）"
+                    type="date"
+                    value={form.registered_to}
+                    onChange={(e) => set('registered_to', e.currentTarget.value)}
+                  />
+                  <TextInput
+                    label="会員の ID"
+                    placeholder="完全一致"
+                    w={320}
+                    value={form.id}
+                    onChange={(e) => set('id', e.currentTarget.value.trim())}
+                  />
+                  <Checkbox
+                    label="メールアドレスが未確認"
+                    mb={8}
+                    checked={form.unverified === '1'}
+                    onChange={(e) => set('unverified', e.currentTarget.checked ? '1' : '')}
+                  />
+                  <Button type="submit" variant="light">
+                    この条件で絞り込む
+                  </Button>
+                </Group>
+              </Stack>
+            </Collapse>
           </Stack>
         </form>
       </Card>
+
+      {/* A1（#224）：今かかっている条件を、札で出す。札の × で、その条件だけを外せる */}
+      {active.length > 0 && (
+        <Group gap="xs" aria-label="今の条件">
+          <Text size="sm" c="dimmed">
+            今の条件：
+          </Text>
+          {active.map((k) => (
+            <Badge
+              key={k}
+              variant="light"
+              size="lg"
+              pr={4}
+              rightSection={
+                <Button
+                  variant="subtle"
+                  size="compact-xs"
+                  px={4}
+                  aria-label={`${describe(k, params.get(k) ?? '')} を外す`}
+                  onClick={() => setNow(k, '')}
+                >
+                  ×
+                </Button>
+              }
+            >
+              {describe(k, params.get(k) ?? '')}
+            </Badge>
+          ))}
+          <Button
+            variant="subtle"
+            size="compact-sm"
+            onClick={() => {
+              const empty = Object.fromEntries(KEYS.map((k) => [k, k === 'sort' ? form.sort : '']))
+              setForm(empty)
+              apply(empty)
+            }}
+          >
+            条件を全部外す
+          </Button>
+        </Group>
+      )}
+
       <Card withBorder radius="md" padding={0}>
         {!data ? (
           <Loader m="md" />
@@ -261,7 +373,7 @@ export default function MembersPage() {
           <>
             <Group justify="space-between" p="md">
               <Text size="sm" c="dimmed">
-                全部で {data.total.toLocaleString()} 人{used > 0 && `（くわしい条件 ${used}つで絞っています）`}
+                全部で {data.total.toLocaleString()} 人
               </Text>
               <Select
                 size="xs"
@@ -276,53 +388,68 @@ export default function MembersPage() {
                 onChange={(v) => setNow('sort', v === 'created' ? '' : (v ?? ''))}
               />
             </Group>
-            <Table highlightOnHover>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>ニックネーム</Table.Th>
-                  <Table.Th>メールアドレス</Table.Th>
-                  <Table.Th>性別・年齢</Table.Th>
-                  <Table.Th>状態</Table.Th>
-                  <Table.Th>購入</Table.Th>
-                  <Table.Th>最終ログイン</Table.Th>
-                  <Table.Th>登録日</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {data.data.map((u: any) => (
-                  <Table.Tr
-                    key={u.public_id}
-                    style={{ cursor: 'pointer' }}
-                    tabIndex={0}
-                    onClick={() => navigate(`/members/${u.public_id}`)}
-                    onKeyDown={(e) => e.key === 'Enter' && navigate(`/members/${u.public_id}`)}
-                  >
-                    <Table.Td>{u.nickname ?? '―'}</Table.Td>
-                    <Table.Td>{u.email}</Table.Td>
-                    <Table.Td>
-                      {/* 性別の名前を、ここにも書く（決まっていない値は、そのまま出す） */}
-                      {u.gender === 'male' ? '男性' : u.gender === 'female' ? '女性' : (u.gender ?? '―')}
-                      {u.age !== null && u.age !== undefined && `・${u.age}歳`}
-                    </Table.Td>
-                    <Table.Td>
-                      <Group gap={4}>
-                        {u.is_paid && <Badge color="grape">有料</Badge>}
-                        {u.suspended_at && <Badge color="red">停止中</Badge>}
-                        {u.banned_at ? (
-                          <Badge color="dark">強制退会</Badge>
-                        ) : (
-                          u.deleted_at && <Badge color="gray">退会</Badge>
-                        )}
-                        {!u.email_verified_at && <Badge color="yellow">未確認</Badge>}
-                      </Group>
-                    </Table.Td>
-                    <Table.Td>{u.purchases}</Table.Td>
-                    <Table.Td>{u.last_login_at ? toDate(u.last_login_at).toLocaleDateString('ja-JP') : '―'}</Table.Td>
-                    <Table.Td>{toDate(u.created_at).toLocaleDateString('ja-JP')}</Table.Td>
+            <Table.ScrollContainer minWidth={980}>
+              <Table highlightOnHover>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>ニックネーム</Table.Th>
+                    <Table.Th>メールアドレス</Table.Th>
+                    <Table.Th>性別・年齢</Table.Th>
+                    <Table.Th>有料の区分</Table.Th>
+                    <Table.Th>プラン・期限</Table.Th>
+                    <Table.Th>状態</Table.Th>
+                    <Table.Th>最終ログイン</Table.Th>
+                    <Table.Th>登録日</Table.Th>
                   </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
+                </Table.Thead>
+                <Table.Tbody>
+                  {data.data.map((u: any) => (
+                    <Table.Tr
+                      key={u.public_id}
+                      style={{ cursor: 'pointer' }}
+                      tabIndex={0}
+                      onClick={() => navigate(`/members/${u.public_id}`)}
+                      onKeyDown={(e) => e.key === 'Enter' && navigate(`/members/${u.public_id}`)}
+                    >
+                      <Table.Td>{u.nickname ?? '―'}</Table.Td>
+                      <Table.Td>{u.email}</Table.Td>
+                      <Table.Td>
+                        {/* 性別の名前を、ここにも書く（決まっていない値は、そのまま出す） */}
+                        {u.gender === 'male' ? '男性' : u.gender === 'female' ? '女性' : (u.gender ?? '―')}
+                        {u.age !== null && u.age !== undefined && `・${u.age}歳`}
+                      </Table.Td>
+                      <Table.Td>
+                        <PaidBadge state={u.paid_state} />
+                      </Table.Td>
+                      <Table.Td>
+                        {u.paid_state === 'free' ? (
+                          <Text c="dimmed">―</Text>
+                        ) : (
+                          <>
+                            {u.plan ?? '―'}・{u.paid_until ? toDate(u.paid_until).toLocaleDateString('ja-JP') : '―'}{' '}
+                            まで
+                          </>
+                        )}
+                      </Table.Td>
+                      <Table.Td>
+                        <Group gap={4}>
+                          {u.suspended_at && <Badge color="red">停止中</Badge>}
+                          {u.banned_at ? (
+                            <Badge color="dark">強制退会</Badge>
+                          ) : (
+                            u.deleted_at && <Badge color="gray">退会</Badge>
+                          )}
+                          {!u.email_verified_at && <Badge color="yellow">未確認</Badge>}
+                          {!u.suspended_at && !u.deleted_at && u.email_verified_at && <Text c="dimmed">利用中</Text>}
+                        </Group>
+                      </Table.Td>
+                      <Table.Td>{u.last_login_at ? toDate(u.last_login_at).toLocaleDateString('ja-JP') : '―'}</Table.Td>
+                      <Table.Td>{toDate(u.created_at).toLocaleDateString('ja-JP')}</Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </Table.ScrollContainer>
             {data.total === 0 && (
               <Text c="dimmed" p="md">
                 条件に合う会員は、いません

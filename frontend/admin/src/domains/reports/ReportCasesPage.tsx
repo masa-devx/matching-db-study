@@ -1,11 +1,13 @@
 import { Badge, Card, Group, Loader, Pagination, SegmentedControl, Stack, Table, Text, Title } from '@mantine/core'
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router'
+import { useNavigate, useSearchParams } from 'react-router'
 import { toDate } from '../../date'
 
 // A7 通報の案件の一覧（FR-REPORT-010。#203）。通報は、通報された会員ごとの「案件」にまとまる。状態で絞る。20件ずつ
 export default function ReportCasesPage() {
-  const [status, setStatus] = useState('open')
+  // A6（#224）：開いたときの状態を、URL のクエリ（?status=）から読む（ダッシュボードの「対応中」から来るため）
+  const [params] = useSearchParams()
+  const [status, setStatus] = useState(params.get('status') ?? 'open')
   const [page, setPage] = useState(1)
   const [data, setData] = useState<any>(null)
   const navigate = useNavigate()
