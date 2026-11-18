@@ -9,7 +9,8 @@ tools: Read, Grep, Glob, Bash
 
 ## 見ること
 
-1. 置き場：足したファイルが `architecture.md` の「判断の順」（業務の決まり → Domain、手順 → UseCase、HTTP の形 → Http、DB・外・Laravel の都合 → Infrastructure、読み取り → QueryService）と、層と依存の向き・名前の決まりに合っているか
+1. 置き場：足したファイルが `architecture.md` の「判断の順」（HTTP の形 → Http（Controller・Request・Resource・Middleware）、業務のロジックと手順 → Service、DB とのやり取りとクエリ → Model、外のサービス → Client）と、依存の向き・名前の決まりに合っているか
+1. 中身：Controller に業務の判断（`if`）が残っていないか。Service が太っていないか。`architecture.md` の8章の「レビューで見る」の一覧（役割の Middleware のグループ・Resource の中のクエリ・Request の DB を読む検証・Model のイベント）
 2. 責務：クラスとメソッドの担当を一文で言えるか。1つのメソッドが、入力の確かめ・業務の判断・DB・応答の形を全部していないか
 3. 依存の向き：ルート・コントローラー・画面のイベントの処理に業務ロジックやクエリを直書きしていないか。基盤が機能を知っていないか。ほかの機能の表を直接読んでいないか
 4. 名前：意図を表しているか。同じものを違う名前で呼んでいないか（`docs/product.md` の用語）
