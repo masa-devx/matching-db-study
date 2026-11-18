@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import AuditLogsPage from './domains/audit-logs/AuditLogsPage'
+import BlockRankingPage from './domains/blocks/BlockRankingPage'
 import DashboardPage from './domains/dashboard/DashboardPage'
 import MemberDetailPage from './domains/members/MemberDetailPage'
 import MembersPage from './domains/members/MembersPage'
@@ -52,6 +53,8 @@ export const DOMAINS: Domain[] = [
     element: <ReportCasesPage />,
     children: [{ path: '/reports/:publicId', element: <ReportCaseDetailPage /> }],
   },
+  // A7（#227）：多くの人からブロックされている会員
+  { path: '/blocks', label: 'ブロック', icon: 'ban', roles: ['owner', 'viewer'], element: <BlockRankingPage /> },
   { path: '/sales', label: '有料会員・売上', icon: 'yen', roles: ['owner', 'viewer'], element: <SalesPage /> },
   { path: '/audit-logs', label: '監査ログ', icon: 'log', roles: ['owner'], element: <AuditLogsPage /> },
 ]
