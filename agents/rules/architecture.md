@@ -21,30 +21,36 @@ paths:
 
 新しいコードを書く前に、上から順に問う。
 
-1. **HTTP の形か？**（入力の形・状態コード・JSON の項目・トークン）→ Http（Controller・Request・Resource・Middleware）
-2. **業務のロジックか？**（「無料の男性は1日10回まで」「お互いにいいねしたらマッチ」・確かめる → 保存する → 外へ知らせる の手順・トランザクション・役割の確かめと監査ログ）→ Service
-3. **DB とのやり取りか？**（検索・一覧・集計のクエリの組み立て・リレーション・型の変換・その1行だけで答えが決まる判定）→ Model
-4. どの業務のまとまりにも属さない基盤（SQL のログ・リクエスト ID）→ `app/Support/`
+1. **HTTP の形か？**（入力の形・状態コード・JSON の項目・トークンを読む・どのルートに役割の確かめが要るか）→ Http（Controller・Request・Resource・Middleware）
+2. **業務のロジックか？**（「無料の男性は1日10回まで」「お互いにいいねしたらマッチ」・相手がいるか・確かめる → 保存する → 外へ知らせる の手順・トランザクション・監査ログ）→ Service
+3. **DB とのやり取りか？**（検索・一覧・集計のクエリの組み立て・リレーション・型の変換・その行（1件）の値だけで答えが決まる判定）→ Model
+4. **外のサービスの呼び出しか？**（Firestore・メール・将来の決済）→ Client
+5. どの業務のまとまりにも属さない基盤（SQL のログ・リクエスト ID）→ `app/Support/`
 
 ## 2. 依存の向き
 
 ```text
+Middleware ──→ Service（トークンの会員が使えるか・役割）
 Controller ──→ Service ──→ Model
-   │              └──→ ほかの Service・例外
+   │              ├──→ Client（外のサービス）
+   │              └──→ 業務の例外
    ├──→ Request（入力の形）
    └──→ Resource（出力の形。Service が返した Model から、返してよい項目を選ぶ）
-Middleware：トークンを読み、ログインした会員の ID を Request に載せる
 ```
 
-| 置き場 | 受け持ち | 使ってよい | 使ってはいけない |
+テストが確かめるのは「使ってはいけない」の列（8章）。「主に使うもの」は目安で、テストでは確かめない。
+
+| 置き場 | 受け持ち | 主に使うもの（目安） | 使ってはいけない |
 | --- | --- | --- | --- |
-| Controller | 受け取る → Service を呼ぶ → 返す | Request・Resource・Service・例外・`App\Support` | Model・DB（`DB::`・`Illuminate\Database`）・JWT・`app()`・`resolve()` |
-| Request | 入力の形だけを確かめる | Laravel の検証 | Model・DB・JWT |
-| Resource | 返してよい項目だけを並べる | 受け取った Model の値 | DB・JWT・新しいクエリ（リレーションを新しく読まない。N+1） |
-| Middleware | トークンを読む（ここだけ） | JWT・`App\Support` | Model・DB |
-| Service | 業務のロジック・手順・トランザクション | Model・ほかの Service・例外・Laravel の機能（`DB::transaction()`・`now()`・`config()`）・`App\Support` | Http（Request・Resource・`Illuminate\Http`）・`request()`・`auth()`・`session()`・`response()`・`abort()` |
-| Model | DB とのやり取り（クエリの組み立て・リレーション・型・1行の判定） | ほかの Model・Eloquent | Service・Http・`request()`・`auth()`。Observer・モデルのイベント（保存したときの裏の動きが、Service から追えなくなる） |
-| `App\Support` | 基盤 | Laravel の機能 | Http・Service・Model |
+| Controller | 受け取る → Service を呼ぶ → 返す | Request・Resource・Service | Model・DB（`DB::`・`Schema::`・`Illuminate\Database`）・JWT・`app()`・`resolve()`・`App::`・コンテナ |
+| Request | 入力の形だけを確かめる | Laravel の検証 | Model・DB・JWT・`app()`。DB を読む検証（`exists:`・`unique:`）も使わない（「いるか」は業務の確かめなので Service。8章のレビューで見る） |
+| Resource | 返してよい項目だけを並べる | 受け取った Model の値 | DB・JWT・`app()`・新しいクエリ（`Model::query()`・リレーションの `->count()`。N+1。8章のレビューで見る） |
+| Middleware | トークンを読む（ここだけ）・使えるか（退会・停止）と役割の確かめを Service に頼む | JWT・Service | Model・DB・`app()` |
+| Service | 業務のロジック・手順・トランザクション・監査ログ・ログインのときにトークンを作る | Model・Client・ほかの Service・業務の例外・Laravel の機能（`DB::transaction()`・`now()`・`config()`）・JWT（作るときだけ）・`App\Support` | Http（Request・Resource・`Illuminate\Http`。外の API の `Illuminate\Http\Client` の例外は使ってよい）・`request()`・`auth()`・`session()`・`response()`・`redirect()`・`abort()`・`abort_if()`・`abort_unless()`・`Auth::`・`Request::`・`Session::`・Symfony の HTTP の例外 |
+| Model | DB とのやり取り（クエリの組み立て・リレーション・型・その行の判定） | ほかの Model・Eloquent | Service・Client・Http・ログ（`App\Support\Logging`）・Service と同じ HTTP の関数とファサード・Observer とモデルのイベント（保存したときの裏の動きが、Service から追えなくなる） |
+| Client | 外のサービスを呼ぶ（Firestore・メール） | Laravel の `Http::`・`Mail::` | Http・Service・Model |
+| 業務の例外 | 業務の決まりに反したことを表す | `BusinessException` | Http・`abort()`・Symfony の HTTP の例外（状態コードは `bootstrap/app.php` で決める） |
+| `App\Support` | 基盤 | Laravel の機能 | Http・Service・Model・Client |
 
 - この表は `tests/Arch/LayersTest.php` で機械で確かめる（8章）。破るときは、先にこのファイルを直す
 - Service は HTTP を知らない。だから、同じ Service をコマンド・キュー・テストからも呼べる
@@ -60,8 +66,10 @@ app/
 │   ├── Requests/<まとまり>/〜Request.php
 │   ├── Resources/<まとまり>/〜Resource.php
 │   └── Middleware/
-├── Services/<まとまり>/〜Service.php
-├── Exceptions/<まとまり>/〜Exception.php         業務の決まりに反したときの例外
+├── Services/<まとまり>/〜Service.php             Service のクラスだけを置く
+├── Clients/<相手>/〜Client.php                   外のサービスの呼び出し（Firestore/FirestoreClient.php など）
+├── Exceptions/BusinessException.php              業務の例外の親（7章）
+├── Exceptions/<まとまり>/〜Exception.php
 ├── Models/〜.php                                 Laravel の標準の置き場のまま（移さない）
 └── Support/                                      基盤（Logging など）
 ```
@@ -70,11 +78,11 @@ app/
 
 Laravel と Rails の公式の考え方に合わせる。**Controller は、URL の名詞（リソース）1つに1つ**。
 
-- メソッドは `index`（一覧）・`show`（1件）・`store`（作る）・`update`（直す）・`destroy`（消す）の5つまで
+- メソッドは `index`（一覧）・`show`（1件）・`store`（作る）・`update`（直す）・`destroy`（消す）の5つまで。1つの操作だけの Controller は `__invoke` でもよい。テストで確かめる（8章）
 - この5つ以外のメソッドが欲しくなったら、**隠れている名詞を探して、Controller を分ける**（Laravel：「Controller は焦点を絞っておく。標準の操作以外のメソッドがいつも要るなら、2つの小さい Controller に分ける」。Rails：「独自のアクションをたくさん足しているなら、別のリソースが隠れていないかを考える」）
 - 1人に1つしかないもの（「自分」）は、`index` のない名詞にする（`GET /me` → `MeController@show`。Laravel のシングルトンのリソース）
-- URL の形（状態を名詞にする `POST /members/{id}/suspension`・一度きりの動作は動詞のパス `POST /auth/login`）は、`docs/cycles/01-backend-foundation/03-how.md` の「CRUD ではない操作の書き方」に従う。Controller の名前は、その名詞にそろえる（`SuspensionController`）
-- 例外：ログインと新規登録は `AuthController` にまとめる（人が決めた）。足してよいのはログイン・ログアウト・新規登録まで。パスワードの再設定・メールの確認は、別の名詞（`PasswordResetController` など）にする
+- URL の形（状態を名詞にする `POST /members/{id}/suspension`・一度きりの動作は動詞のパス `POST /auth/login`）は、`docs/cycles/01-backend-foundation/03-how.md` の「CRUD ではない操作の書き方」に従う。Controller の名前は、その名詞にそろえる（`SuspensionController`）。新しい URL の名詞は、#127（ルートの骨組み）で決める
+- 例外：ログインと新規登録は `Auth/AuthController` にまとめる（人が決めた）。メソッドは `login`・`logout`・`store`（新規登録）まで。パスワードの再設定・メールの確認は、別の名詞（`PasswordResetController` など）にする
 
 | 現場でよくある、詰め込んだ `UserController` | 隠れていた名詞 | 分けた先 |
 | --- | --- | --- |
@@ -82,12 +90,13 @@ Laravel と Rails の公式の考え方に合わせる。**Controller は、URL 
 | いいね | いいね | `Matching/LikeController@store` |
 | ブロック・通報 | ブロック・通報 | `Matching/BlockController`・`Members/ReportController` |
 | 会員の検索 | 会員（の一覧） | `Members/MemberController@index` |
-| プロフィールを見る・直す | プロフィール | `Members/ProfileController@show`・`update` |
+| 自分のプロフィールを見る・直す | 自分 | `Members/MeController@show`・`update` |
 
 ### Service の分け方
 
-- 名詞（業務のまとまり）ごとに1クラス（`ProfileService`・`LikeService`）。`final` にし、名前は `Service` で終わる
-- **public のメソッドは、Controller から呼ぶ操作**（`show`・`update` など。Controller のメソッドとそろえる）。**private のメソッドは、その中の手順**（`findMember`・`assertOwner` など）
+- **業務のまとまりの中で、近い名詞（同じ表や同じ画面を扱うもの）をまとめて1クラス**にする（人が決めた。`LikeService` が、送ったいいねと届いたいいねを受け持つ）。1つの Service を、いくつかの Controller から呼んでよい
+- `final` にし、名前は `Service` で終わる。`app/Services/` には Service のクラスだけを置く（戻り値は Model か配列。配列は PHPDoc で形を書く）
+- **public のメソッドは操作の名前**（動詞から始める：`search`・`showMine`・`updateMine`・`send`・`listReceived`・`suspend`）。Controller のメソッドの名前（`index`・`store`）にそろえない（いくつかの Controller から呼ぶと、ぶつかるため）。**private のメソッドは、その中の手順**（`findMember`・`assertNotBlocked` など）
 - メソッドの数の上限は決めない。太ったら見直す（`docs/backend.md` の「やり直しのきっかけ」）
 
 ## 4. 書き方
@@ -97,16 +106,15 @@ Laravel と Rails の公式の考え方に合わせる。**Controller は、URL 
 Controller は**受け取る → 呼ぶ → 返す**だけ。`if` で業務の判断をしない。Model を直接使わない。
 
 ```php
-// app/Http/Controllers/Members/ProfileController.php
-final class ProfileController extends Controller
+// app/Http/Controllers/Members/MeController.php（PATCH /me。自分のプロフィールを直す）
+final class MeController extends Controller
 {
     public function __construct(private readonly ProfileService $profiles) {}
 
-    public function update(UpdateProfileRequest $request, string $publicId): ProfileResource
+    public function update(UpdateProfileRequest $request): ProfileResource
     {
-        $profile = $this->profiles->update(
-            memberId: (int) $request->attributes->get('member_id'),   // Middleware が載せた、ログインした会員
-            publicId: $publicId,
+        $profile = $this->profiles->updateMine(
+            memberId: (int) $request->attributes->get('member_id'),   // Middleware が載せた、ログインした会員（読む所を1つにまとめるかは、移すときに考える）
             input: $request->validated(),
         );
 
@@ -115,7 +123,12 @@ final class ProfileController extends Controller
 }
 ```
 
-Request は**形だけ**を確かめる。「自分のプロフィールか」「回数を超えていないか」は業務の決まりなので Service で確かめる。
+自分のものを直す API は、URL に相手の ID を入れない（`PATCH /me`）。`PUT /users/{publicId}` の形だと、他人の ID を送ったとき、いれば 403・いなければ 404 になり、会員がいるかどうかが分かってしまう（#239 のレビュー）。
+
+Request は**形だけ**を確かめる。「相手がいるか」「回数を超えていないか」は業務の決まりなので Service で確かめる。
+
+- Service に渡すのは `$request->validated()` だけ。`$request->all()` を渡さない（送られた項目が全部 Model に入り、`paid_until` などを自分で書き換えられる）
+- Model の `$fillable` に、役割・停止・有料の期限・確認用の文字の列を入れない
 
 ```php
 // app/Http/Requests/Members/UpdateProfileRequest.php
@@ -129,7 +142,7 @@ final class UpdateProfileRequest extends FormRequest
 }
 ```
 
-Resource は**返してよい項目だけ**を並べる。Model を丸ごと返さない（パスワードのハッシュや確認用の文字が出る）。
+Resource は**返してよい項目だけ**を並べる。Model を丸ごと返さない（パスワードのハッシュや確認用の文字が出る）。中で新しくクエリを書かない。
 
 ```php
 // app/Http/Resources/Members/ProfileResource.php
@@ -143,14 +156,14 @@ final class ProfileResource extends JsonResource
 }
 ```
 
-トークンを読むのは Middleware だけ。Controller ごとに JWT を読まない。
+トークンを読むのは Middleware だけ。Controller ごとに JWT を読まない。トークンが正しくても、退会・停止した会員は通さない（使えるかは Service に聞く）。
 
 ```php
 // app/Http/Middleware/AuthenticateMember.php
 public function handle(Request $request, Closure $next): Response
 {
     $memberId = $this->memberIdFrom($request->bearerToken());   // JWT を読む。読めなければ null
-    if ($memberId === null) {
+    if ($memberId === null || ! $this->members->canUseApi($memberId)) {   // MemberAuthService：退会・停止していないか
         return response()->json(['message' => 'ログインしてください'], 401);
     }
     $request->attributes->set('member_id', $memberId);
@@ -167,27 +180,20 @@ public function handle(Request $request, Closure $next): Response
 // app/Services/Members/ProfileService.php
 final class ProfileService
 {
-    /** @param  array<string, mixed>  $input */
-    public function update(int $memberId, string $publicId, array $input): Profile
+    /** @param  array<string, mixed>  $input  Request の validated() */
+    public function updateMine(int $memberId, array $input): Profile
     {
-        $member = $this->findMember($publicId);
-        $this->assertOwner($member, $memberId);
+        $profile = $this->findProfile($memberId);
+        $profile->update($input);
 
-        $member->profile->update($input);
-
-        return $member->profile;
+        return $profile;
     }
 
-    private function findMember(string $publicId): User
+    private function findProfile(int $memberId): Profile
     {
-        return User::query()->with('profile')->where('public_id', $publicId)->firstOrFail();   // いなければ 404
-    }
-
-    private function assertOwner(User $member, int $memberId): void
-    {
-        if ($member->id !== $memberId) {
-            throw new ProfileNotOwnedException();   // bootstrap/app.php で 403 に変える（7章）
-        }
+        // 1つの条件で1件を読むだけなので、Service に書いてよい（下の「クエリの置き場の線」）
+        return Profile::query()->where('user_id', $memberId)->first()
+            ?? throw new ProfileNotFoundException();   // bootstrap/app.php で 404 と「プロフィールが見つかりません」に変える（7章）
     }
 }
 ```
@@ -211,7 +217,7 @@ class User extends Model
         return ['paid_until' => 'immutable_datetime', 'suspended_at' => 'immutable_datetime'];
     }
 
-    // その1行だけで答えが決まる判定は Model に1つだけ置き、全員がこれを呼ぶ（判定が Controller ごとにずれない）
+    // その行の値だけで答えが決まる判定は Model に1つだけ置き、全員がこれを呼ぶ（判定が Controller ごとにずれない）
     public function isPaidAt(CarbonImmutable $now): bool
     {
         return $this->paid_until !== null && $this->paid_until->greaterThan($now);
@@ -241,68 +247,77 @@ class User extends Model
 
 | Model に書く | Model に書かない（Service に書く） |
 | --- | --- |
-| リレーション・型の変換（`casts()`） | メールを送る・Firestore に書く（外への書き込み） |
-| その1行だけで答えが決まる判定（`isPaidAt()`・`isSuspended()`） | いくつもの表への書き込みと、その順番（いいね → マッチ → トークルーム） |
-| 検索・一覧・集計のクエリの組み立て（スコープ） | トランザクション |
+| リレーション・型の変換（`casts()`） | メールを送る・Firestore に書く（Client を Service から呼ぶ） |
+| その行の値だけで答えが決まる判定（`isPaidAt()`・`isSuspended()`） | いくつもの表への書き込みと、その順番（いいね → マッチ → トークルーム） |
+| 検索・一覧・集計のクエリの組み立て（スコープ） | トランザクション・ログ |
 | | ログインしている人を見る（`auth()`）・Request を読む |
+
+**クエリの置き場の線**：1つの条件で1件を読む・保存するだけなら、Service に書いてよい（`Profile::query()->where('user_id', $id)->first()`）。条件が2つ以上のもの・一覧・集計・同じ条件を2か所以上で使うものは、Model のスコープにする（`User::query()->active()`）。
 
 ## 5. トランザクション・日時・外への書き込み
 
 - トランザクションは Service が `DB::transaction()` で張る。Controller・Model では張らない
 - 読んでから書く処理で、同時に2回来ると壊れるもの（停止・購入・回数の上限）は、`lockForUpdate()`（行のロック）をかけて読む
 - 日時は `now()`（`CarbonImmutable`・UTC）。API テストでは `travelTo()` で止める
-- 外への書き込み（Firestore・メール・将来の決済と AI）は、**トランザクションの外、コミットのあと**で行う（DB が巻き戻っても、外には残るため）
+- 外への書き込み（Firestore・メール・将来の決済と AI）は、Client を通し、**トランザクションの外、コミットのあと**で行う（DB が巻き戻っても、外には残るため）
 
 ```php
 $room = DB::transaction(fn (): TalkRoom => $this->openRoom($match));   // DB だけ
-$this->firestore->openRoom($room);                                     // コミットのあとで、外へ
+$this->firestore->openRoom($room);                                     // コミットのあとで、外へ（FirestoreClient）
 ```
 
 ## 6. ログ
 
-- ログ（`App\Support\Logging`）は、Http と Service から出す。Model からは出さない
-- 出し方は `agents/rules/logging.md`
+- ログ（`App\Support\Logging`）は、Http と Service から出す。Model からは出さない（テストで確かめる）
+- 出し方と、出してはいけない値（秘密の値・個人情報）は `agents/rules/logging.md`
 
 ## 7. エラー
 
-- 業務の決まりに反したら、Service が `app/Exceptions/<まとまり>/〜Exception` を投げる。Service は状態コードを知らない（`abort()` を使わない）
-- 例外を状態コードとメッセージに変えるのは、各アプリの `bootstrap/app.php` の1か所だけ
-- 業務の例外を足したら、`render` と `dontReport` の両方に足す。API テストで、下の表の行ごとに状態コードとメッセージを確かめる
+- 業務の決まりに反したら、Service が `app/Exceptions/<まとまり>/〜Exception` を投げる。業務の例外は、みな `App\Exceptions\BusinessException`（親）を継ぐ。Service は状態コードを知らない（`abort()` を使わない）
+- **見つからないときも、業務の例外にする**（`MemberNotFoundException`）。`firstOrFail()` を Laravel に任せると、応答が `No query results for model [App\Models\User] 999` になり、Model のクラス名が見えてしまう（`docs/api/01-members.md` の改善版は「会員が見つかりません」）
+- 例外を状態コードとメッセージに変えるのは、各アプリの `bootstrap/app.php` の1か所だけ。業務の例外を足したら、`render` に1行足す。ログに出さない決まり（`dontReport`）は、親の `BusinessException` に1回だけ書く
+- API テストで、下の表の行ごとに状態コードとメッセージを確かめる
 
 ```php
 // bootstrap/app.php
 ->withExceptions(function (Exceptions $exceptions): void {
-    $exceptions->render(fn (ProfileNotOwnedException $e) => response()->json(['message' => '自分のプロフィールだけを直せます'], 403));
+    $exceptions->render(fn (ProfileNotFoundException $e) => response()->json(['message' => 'プロフィールが見つかりません'], 404));
+    $exceptions->render(fn (PaidPlanRequiredException $e) => response()->json(['message' => '有料会員になると使えます'], 403));
 
-    // 業務の例外は、決まりどおりに断っただけなので、エラーのログに出さない（logging.md の「ノイズを増やさない」）
-    $exceptions->dontReport([ProfileNotOwnedException::class]);
+    // 業務の例外は、決まりどおりに断っただけなので、エラーのログに出さない（logging.md の「ノイズを増やさない」）。親の1つだけを書く
+    $exceptions->dontReport([BusinessException::class]);
 })
 ```
 
 | 起きること | 止める場所 | 応答 |
 | --- | --- | --- |
-| トークンがない・壊れている | Middleware | 401 |
+| トークンがない・壊れている・退会した・停止された会員 | Middleware（使えるかは Service に聞く） | 401 |
 | 入力の形が違う | Request | 422（Laravel の形のまま） |
-| 役割が足りない（管理画面） | Service（`PermissionDeniedException`） | 403 |
-| 業務の決まりに反する | Service の例外 | 403・404・409 |
-| 見つからない | Service（`firstOrFail()`。Laravel が 404 に変える） | 404 |
+| 役割が足りない（管理画面） | 書き込みのルートの Middleware（役割は Service に聞く） | 403 |
+| 業務の決まりに反する | Service の業務の例外 | 403・409 |
+| 見つからない | Service の業務の例外（`〜NotFoundException`） | 404 |
 | DB・外のサービスが落ちた | どこでも握りつぶさない（`logging.md`） | 500 |
 
 ## 8. アーキテクチャのテスト
 
-2章（依存の向き）と、3章の名前の一部（`final`・`Service` で終わる）と、`strict_types` を、Pest の `arch()` で確かめる。
+2章（「使ってはいけない」の列）と、3章の名前の一部（Controller のメソッドの名前・Service の `final` と名前）と、`strict_types` を、Pest の `arch()` で確かめる。
 
 - 置き場：`tests/Arch/LayersTest.php`（中身はファイルを読む。ここにはコピーしない）。`phpunit.xml` のテストの組 `Arch` で、CI でほかのテストと一緒に流れる
 - 正本は会員の側（`backend/client/tests/Arch/`）。管理画面（`backend/admin/tests/Arch/`）には、同じファイルをコピーする。違うのは、ファイルの上の「このアプリだけのもの」（古いコントローラーの一覧 `LEGACY_CONTROLLERS`）だけ。印（`// ==== ここから下は、会員の側…`）より下は、2つのファイルで同じにする。管理画面の `tests/Arch/SameRulesAsClientTest.php` が、印より下を比べ、違えば落ちる。印より上に決まり（`arch(`・`test(` など）が書かれていないことも確かめる。管理画面の CI は `backend/client/tests/Arch/**` が変わったときにも動く
-- 足すとき・直すときは、わざと違反を作って落ちるのを見る（新しい Controller に `use App\Models\User;`、Service に `use Illuminate\Http\Request;`）。当てはまるファイルがないあいだは、どのテストも通るので、通っただけでは、効いているかが分からない
-- テストで確かめられないことは、レビューで見る（`pr-review`）
+- 足すとき・直すときは、わざと違反を作って落ちるのを見る（新しい Controller に `use App\Models\User;`、Service に `abort_if()`）。当てはまるファイルがないあいだは、どのテストも通るので、通っただけでは、効いているかが分からない
+- テストで確かめられないことは、レビューで見る（`pr-review`・`design-reviewer`）
   - Controller に、業務の判断（`if`）が残っていないか（使っているクラスは正しくても、中身は機械で見られない）
-  - Service の中で、役割の確かめ（管理画面）と監査ログを書き忘れていないか（API テストで、見るだけの管理者は 403・監査ログの行がある、を確かめる）
+  - 管理画面の書き込みのルートが、役割を確かめる Middleware のグループの中にあるか。書き込みの Service が、同じトランザクションで監査ログを書いているか（API テストで、見るだけの管理者は 403・監査ログの行がある、を確かめる）
+  - Resource の中のクエリ（`Model::query()`・`$this->resource->likes()->count()`。Model の型は使ってよいので、テストでは止められない）
+  - Request の DB を読む検証（`exists:`・`unique:`。`Illuminate\Validation` の中なので、テストでは止められない）
+  - Model のイベント（`booted()` の中の `static::created()`・`$dispatchesEvents`・Provider での `observe()`。テストが止めるのは `ObservedBy` の属性だけ）
   - `$request->bearerToken()` でトークンを読む形・文字列でクラス名や関数名を書く形（`call_user_func('now')` など）・ほかのクラスを通した間接の依存
-- `arch()` の比べ方は「名前の始まり」。そのために、書き方を変えた所がある（#106・#234 で、違反を置いて確かめた）
+- `arch()` の比べ方。そのために、書き方を変えた所がある（#106・#234・#239 で、違反を置いて確かめた）
+  - クラス・名前空間は「名前の始まり」で比べる。`Illuminate\Http` は `Illuminate\Http\Client` も止めるので、Service では `ignoring('Illuminate\Http\Client')` で外している
+  - **関数は「完全一致」**で比べる。`abort` は `abort_if` を止めないので、1つずつ並べる
   - 名前空間の配列：`expect([名前空間の一覧])->not->toUse(…)` は、違反があっても通る。名前空間は1つずつ `expect()` に渡す（`foreach` で回す）。`toUseStrictTypes()` は、配列でも落ちる
   - ヘルパー関数：`expect(関数の一覧)->not->toBeUsedIn(層の一覧)` では落ちない。置き場ごとに `not->toUse(関数の一覧)` と書く
-  - ファサードの別名（`\DB::`・`use DB;`）は、名前が `Illuminate` で始まらないので落ちない。ファイルの文字を読んで、完全に一致するものを探すテストにした
+  - ファサードの別名（`\DB::`・`use Auth;`）は、名前が `Illuminate` で始まらないので落ちない。ファイルの文字を読んで、完全に一致するものを探すテストにした（Http・Service・Model）
   - 古いコントローラー：`ignoring` に渡した名前で始まる新しいクラス（`UserControllerV2`）は、検査から外れる。直下にあるファイルを、一覧と完全に一致で比べるテストを置いた
   - ないクラス：`use` したクラスが実在しないと、依存として数えない（#236 で、Model のない管理画面に `use App\Models\User;` を置いて確かめた。実在する Model なら落ちる）。動かないコードなので、実際の穴にはならない
 - 期待は、`arch('名前', function (): void { expect(…)->…; })` と、無名関数の中に書く（鎖でつなぐ書き方は、Larastan が「ないメソッド」と指摘する）
@@ -317,23 +332,24 @@ $this->firestore->openRoom($room);                                     // コミ
 
 ### 過剰設計の禁止
 
-- 要件にない汎用化・設定項目・抽象化を足さない。interface は、外のサービス（Firestore・メール・将来の決済）を差し替えてテストしたいときだけ作る
+- 要件にない汎用化・設定項目・抽象化を足さない。interface は、外のサービス（Client）を差し替えてテストしたいときだけ作る
 - 起こりえない入力への防御を足さない。形の確かめは Request、業務の確かめは Service
 - 凝った書き方より、読んですぐ分かる書き方を選ぶ
 
 ### 1ファイル1責務
 
-- ファイルの担当を一文で言えること。「プロフィールを見る・直す」は合格、「会員まわりの処理いろいろ」は失格
+- ファイルの担当を一文で言えること。「自分のプロフィールを見る・直す」は合格、「会員まわりの処理いろいろ」は失格
 - Controller のメソッドが10行を超えたら、判断か DB の処理が混ざっている。Service へ出す
 
 ### 副作用の分離
 
-- 外への書き込み（メール・Firestore）は Service の中で、トランザクションのあとに、目に見える1行として書く。Model のイベントや Observer に隠さない
+- 外への書き込み（メール・Firestore）は Service の中で、トランザクションのあとに、Client を呼ぶ目に見える1行として書く。Model のイベントや Observer に隠さない
 - 環境変数は `config()` で読む（`env()` は `config/` の中だけ）
 
 ## 10. まだ移していない古いコード
 
-- 既存の API を触るチケットでは、**先にその API の今の動きを確かめるテスト（API テスト）を足し、それから**この形へ移す。移す単位はコントローラーのファイルなので、そのファイルの全メソッドに API テストがあること
+- 既存の API を触るチケットでは、**先にその API の今の動きを確かめるテスト（API テスト）を足し、それから**この形へ移す
+- **移す単位は、API（Controller のメソッド）1つ以上**。画面・機能に要る API だけを移してよい。移した API に「API テストがある」こと。古いファイルは、全部のメソッドを移したら消し、アーキテクチャのテストの `LEGACY_CONTROLLERS` からも消す（途中までのあいだは、一覧に残す）
 - 「API テストがある」とは、その API に、**少なくとも**成功が1本と、`docs/api/` に書いた失敗（401・404・422・403 など）ごとに1本があること。どの観点（他人の行が変わらない・境界の両側・出してはいけない人など）を書くかは、`testing.md` の API テストの観点に従う
 - 移すコミットと、振る舞いを変えるコミット（不具合の直し・性能）を分ける
   - 同じ URL のまま中を移すとき：移すコミットでは、API テストが1本も変わらずに通る
@@ -344,7 +360,7 @@ $this->firestore->openRoom($room);                                     // コミ
   - データは `tests/Support/` の作る関数（例：`createMember()`・`createLike()`）で作る。Model の Factory を呼ぶのは、この関数の中だけ
   - 時刻は `travelTo()` で止める。ログインは、本物のトークンを作って送る（`actingAsMember()`）。部品の一覧は `testing.md` の「テストの部品」
   - 外への書き込み（Firestore）は、移す前と後で同じ方法で確かめる（Emulator の中身を読む）
-- 新しく書くコードは、必ずこの形で書く。古いコントローラー（`app/Http/Controllers/` の直下）に機能を足さない。移したら、古いファイルを消し、アーキテクチャのテストの `LEGACY_CONTROLLERS` からも消す
+- 新しく書くコードは、必ずこの形で書く。古いコントローラー（`app/Http/Controllers/` の直下）に機能を足さない
 - 移すたびに、**次の改善の候補**（移して気づいたこと。例：「検索の条件が増えるたびに `scopeSearch` が長くなる」）を、そのサイクルの `06-walkthrough.md` に1行残す。振り返りと、太ったときの見直しの材料にする
 - 古いコードの中で見つけた問題は、移すときに直さず、改善か不具合のチケットにする（測った問題の一覧は各一歩の解説の 9-2）
 - そのあとは、機能を足すとき・不具合を直すときに、触る所をこの形に移す
@@ -356,29 +372,36 @@ $this->firestore->openRoom($room);                                     // コミ
 if ($profile->gender === 'male' && ! $user->is_paid) {
     $today = Like::where('from_user_id', $id)->whereDate('created_at', now()->toDateString())->count();
 }
-// ✅ Controller は Service を呼ぶだけ。判断は Service、数えるクエリは Model
-$result = $this->likes->store($memberId, $request->validated());
+// ✅ Controller は Service を呼ぶだけ。判断は Service、数えるクエリ（条件が2つ）は Model のスコープ
+$result = $this->likes->send($memberId, $request->validated());
 
 // ❌ Service が HTTP を知っている（コマンドやテストから呼べない）
-public function update(Request $request): JsonResponse { abort(403); }
+public function updateMine(Request $request): JsonResponse { abort_if($x, 403); }
 // ✅ 値を受け取り、Model を返す。断るときは業務の例外
-public function update(int $memberId, string $publicId, array $input): Profile { throw new ProfileNotOwnedException(); }
+public function updateMine(int $memberId, array $input): Profile { throw new ProfileNotFoundException(); }
 
 // ❌ 有料かどうかを、あちこちで書く（期限を見ない所ができる）
 if ($user->is_paid) { ... }
 // ✅ Model の判定を1つだけ置き、全員が呼ぶ
 if ($user->isPaidAt(now())) { ... }
 
-// ❌ Model を丸ごと返す（パスワードのハッシュ・確認用の文字まで出る）
+// ❌ Model を丸ごと返す（パスワードのハッシュ・確認用の文字まで出る）・送られた項目を全部入れる
 return $user;
-// ✅ Resource で、返してよい項目だけを選ぶ
+$profile->update($request->all());
+// ✅ Resource で、返してよい項目だけを選ぶ。入れるのは validated() だけ
 return new ProfileResource($user->profile);
+$profile->update($request->validated());
+
+// ❌ 見つからないときを Laravel に任せる（Model のクラス名が応答に出る）
+return User::query()->where('public_id', $publicId)->firstOrFail();
+// ✅ 業務の例外にする
+return User::query()->where('public_id', $publicId)->first() ?? throw new MemberNotFoundException();
 
 // ❌ 保存したときに、裏でメールを送る（Service を読んでも見えない）
 protected static function booted(): void { static::created(fn (User $u) => Mail::to($u)->send(...)); }
 // ✅ Service の中で、コミットのあとに書く
 $user = DB::transaction(fn (): User => User::create($input));
-Mail::to($user)->send(new VerifyMail($user));
+$this->mailer->sendVerification($user);
 
 // ❌ トランザクションの中で外へ書く
 DB::transaction(function () use ($room) { $room->save(); $this->firestore->openRoom($room); });
@@ -392,29 +415,27 @@ $this->firestore->openRoom($room);
 形と依存の向きは同じ。違いは使い方だけ。
 
 - 管理画面には、まだ Model がない（古いコントローラーは全部 `DB::` で書いている）。移すときに、使う表の Model を `backend/admin/app/Models/` に作る（会員の側の Model は読み込まない。表の作りは `backend/client` のマイグレーションが正本）
-- 書き込み（停止・解除・値段の変更・お知らせ・メモ）は、必ず Service で役割を確かめ、**同じトランザクションで監査ログを保存する**
+- **役割の確かめは、書き込みのルートのグループに付けた Middleware（`admin.can-write`）でまとめて行う**（人が決めた。#239 の A1）。レガシー版の問題（#130）は、確かめを Controller ごとに貼り忘れたこと。グループに入れれば、書き忘れが起きない。Middleware は、役割を Service（`Admins/AuthService::canWrite()`）に聞く
+- 書き込みの Service は、**同じトランザクションで監査ログを保存する**
 - 例外：ログイン（役割はまだ分からない）と、見たことの記録（`member.view`。それ自体が監査ログ）は、役割を確かめない
+- 監査ログに残す値（停止の理由など）にも、`agents/rules/logging.md` の「秘密値をログに流さない」を当てはめる。自由に書ける文には、個人情報（メールアドレス・電話番号）を書かないよう、画面に注意を出す
 - 管理画面が書いてよい表と列は [docs/backend.md](../../docs/backend.md) の4章に従う
 
 ```php
-// backend/admin/app/Models/Admin.php
-public function canWrite(): bool
-{
-    return $this->role === 'owner';   // 見るだけの人（viewer）は false
-}
+// backend/admin/routes/api.php
+Route::middleware(['auth.admin', 'admin.can-write'])->group(function (): void {
+    Route::post('/members/{publicId}/suspension', [SuspensionController::class, 'store']);
+    Route::delete('/members/{publicId}/suspension', [SuspensionController::class, 'destroy']);
+});
 
 // backend/admin/app/Services/Members/SuspensionService.php
-public function store(int $adminId, string $memberPublicId, string $reason): void
+public function suspend(int $adminId, string $memberPublicId, string $reason): void
 {
-    $admin = Admin::query()->findOrFail($adminId);
-    if (! $admin->canWrite()) {
-        throw new PermissionDeniedException();   // 403
-    }
-
-    DB::transaction(function () use ($admin, $memberPublicId, $reason): void {
-        $member = User::query()->where('public_id', $memberPublicId)->lockForUpdate()->firstOrFail();
+    DB::transaction(function () use ($adminId, $memberPublicId, $reason): void {
+        $member = User::query()->where('public_id', $memberPublicId)->lockForUpdate()->first()
+            ?? throw new MemberNotFoundException();
         $member->update(['suspended_at' => now(), 'suspended_reason' => $reason]);
-        AuditLog::record($admin, 'member.suspend', $member, ['reason' => $reason]);   // 同じトランザクションで
+        AuditLog::record($adminId, 'member.suspend', $member, ['reason' => $reason]);   // 同じトランザクションで
     });
 }
 ```
