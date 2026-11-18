@@ -16,7 +16,7 @@ paths:
 | --- | --- | --- | --- | --- |
 | 単体 | Pest・Vitest（画面） | `backend/client/tests/Unit/`・`backend/admin/tests/Unit/`（`app/` の構造を再現）・`frontend/client/src/**/*.test.tsx` | `docker compose run --rm app ./vendor/bin/pest tests/Unit`（画面は 03b で決める） | ロジックの境界値・異常系 |
 | 結合（API テスト） | Pest（テスト用の PostgreSQL に対して実行） | `backend/client/tests/Feature/`・`backend/admin/tests/Feature/` | `docker compose run --rm app ./vendor/bin/pest tests/Feature`（管理画面は `admin-app`） | DB や API をまたぐ制御・API の振る舞い |
-| アーキテクチャ | Pest の `arch()`（`pestphp/pest-plugin-arch`） | `backend/client/tests/Arch/`（正本）・`backend/admin/tests/Arch/`（コピー） | `docker compose run --rm app ./vendor/bin/pest tests/Arch`（管理画面は `admin-app`） | 層の依存の向きと名前（`architecture.md` の8章） |
+| アーキテクチャ | Pest の `arch()`（`pestphp/pest-plugin-arch`） | `backend/client/tests/Arch/`（正本）・`backend/admin/tests/Arch/`（コピー。決まりの部分が正本と同じかを `SameRulesAsClientTest.php` が比べる） | `docker compose run --rm app ./vendor/bin/pest tests/Arch`（管理画面は `admin-app`） | 層の依存の向きと名前（`architecture.md` の8章） |
 
 - 管理画面（`backend/admin`）も、Pest と、本物の PostgreSQL で動く（#105）。テスト用の DB は `matching_admin_test`（会員の側の `matching_test` とは別。2つを同時に流しても、ぶつからない）。管理画面はマイグレーションを持たないので、表は、会員の側のマイグレーション（`backend/client/database/migrations`）で作る（`backend/admin/tests/TestCase.php`）。部品は `backend/admin/tests/Support/functions.php`：`createAdmin()`（役割を引数で）・`createMember()`・`actingAsAdmin()`。会員の側の同じ名前の関数とは、別のもの（管理画面は Model を持たないので、表に直接入れる）
 | E2E | 03b（React を足す）で決める | 03b で決める | 03b で決める | 主要フロー・認可・状態遷移 |
