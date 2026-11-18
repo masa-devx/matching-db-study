@@ -2,13 +2,13 @@
 
 会員の側（`backend/client`）と管理画面（`backend/admin`）の、全体の地図。エンジニアリーダーとメンバーのエンジニアが、どこに何があり、どこへ移していくかを掴むために読む。
 
-- 状態：第1版（2026-11-15。サイクル 01）。今のコードはレガシー版のまま（Fat Controller）。下の形へは、触るチケットが来た API から少しずつ移す
+- 状態：第2版（2026-11-18。#236 で、4層から Controller → Service → Model に変えた）。今のコードはレガシー版のまま（Fat Controller）。下の形へは、画面・機能ごとに少しずつ移す
 - **層・依存の向き・ディレクトリ・名前・書き方（サンプルコード）・エラー・トランザクション・アーキテクチャのテストの決まりは [agents/rules/architecture.md](../agents/rules/architecture.md) を正とする**。ここには書かない
-- なぜこの形にしたか：[cycles/01-backend-foundation/03-how.md](cycles/01-backend-foundation/03-how.md)。比べたほかの形：[architecture-styles.html](../explanations/architecture-styles.html)・[modular-monolith.html](../explanations/modular-monolith.html)
+- なぜこの形にしたか：[decisions.md](decisions.md) の D-025・[cycles/01-backend-foundation/05-problems.md](cycles/01-backend-foundation/05-problems.md) の #236・最初の形を決めた経緯は [cycles/01-backend-foundation/03-how.md](cycles/01-backend-foundation/03-how.md)。比べたほかの形：[architecture-styles.html](../explanations/architecture-styles.html)・[modular-monolith.html](../explanations/modular-monolith.html)
 
 ## 1. 形（ひとこと）
 
-**DIP（依存性逆転）を使ったレイヤードアーキテクチャ**（Http・Application・Domain・Infrastructure）。会員の側と管理画面で、同じ4層の骨組みにする。書き込みは UseCase と Domain を通し、読み取り（一覧・検索・集計）は QueryService を直接呼ぶ。
+**Controller → Service → Model**（2026-11-18 に人が決めた。#236・D-025）。会員の側と管理画面で、同じ形にする。Controller は受け取って返すだけ、業務のロジックと手順は Service、DB とのやり取り（検索・一覧のクエリの組み立てを含む）は Model。決まりと書き方は [architecture.md](../agents/rules/architecture.md)。
 
 ```text
 画面（frontend/client）──→ 会員の側の API（backend/client）──┐
@@ -20,66 +20,84 @@
 
 ## 2. 業務のまとまり
 
-業務のまとまりは、Auth・Members のような、業務ごとの分け方。各層の中は、このまとまりのフォルダで分け、名前を全部の層でそろえる。
+業務のまとまりは、Auth・Members のような、業務ごとの分け方。Controller・Request・Resource・Service・例外は、このまとまりのフォルダで分け、名前をそろえる。Model は `app/Models/` の直下のまま。
 
 ### 2-1. 会員の側
 
-| まとまり | 中身 | 今のコントローラー（移す元） |
-| --- | --- | --- |
-| `Auth` | 登録の確認・ログイン・トークン | `AuthController`・`EmailVerificationController` |
-| `Members` | 会員・プロフィール・検索・退会 | `UserController`・`ProfileController` |
-| `Matching` | いいね・マッチ・ブロック | `LikeController`・`UserMatchController`・`BlockController` |
-| `Messaging` | トークルーム・メッセージ・Firestore | `TalkRoomController`・`MessageController`・`FirebaseTokenController` |
-| `Billing` | プラン・購入・有料かどうか | `PlanController`・`PurchaseController` |
+| まとまり | 中身 |
+| --- | --- |
+| `Auth` | 新規登録・ログイン・ログアウト・メールの確認・パスワード |
+| `Members` | 自分・会員の検索・プロフィール・退会・保存した検索条件・通報・お知らせ |
+| `Matching` | いいね・届いたいいね・スキップ・マッチ・ブロック |
+| `Messaging` | トークルーム・メッセージ・Firestore のトークン |
+| `Billing` | プラン・購入 |
 
 ### 2-2. 管理画面
 
 まとまりは画面の領域で、`frontend/admin/src/domains/` とそろえる。
 
-| まとまり | 読み取り（QueryService） | 書き込み（UseCase） | Domain |
-| --- | --- | --- | --- |
-| `Dashboard` | `DashboardQueryService` | ― | ― |
-| `Members` | `MemberQueryService` | `SuspendMemberUseCase`・`UnsuspendMemberUseCase` | `Members/MemberSuspension` |
-| `Messages` | `MessageQueryService` | ― | ― |
-| `Sales` | `SalesQueryService` | ― | ― |
-| `Plans` | `PlanQueryService` | `UpdatePlanPriceUseCase` | `Plans/PlanPrice` |
-| `AuditLogs` | `AuditLogQueryService` | `RecordAuditLogUseCase`（見たことの記録。`member.view` など） | `AuditLogs/AuditLog`・`AuditAction` |
-| `Admins` | `AdminQueryService`（`GET /me`） | `LoginAdminUseCase`（`POST /auth/login`。`last_login_at` を書く） | `Admins/Admin/`（`Admin`・`AdminRole`・`Permission`） |
+| まとまり | 中身 |
+| --- | --- |
+| `Admins` | 管理者のログイン・自分 |
+| `Dashboard` | ダッシュボードの集計 |
+| `Members` | 会員の一覧と詳細・停止・強制退会・メモ・会員ごとのやり取りと違反とブロック |
+| `Messages` | メッセージ・トークルーム |
+| `Reports` | 通報の案件 |
+| `Notices` | お知らせ |
+| `Sales` | 売上 |
+| `Plans` | プランと値段 |
+| `AuditLogs` | 監査ログ |
 
-## 3. 移行の地図（今のファイル → 各層）
+## 3. 移行の地図（今のファイル → 新しい置き場）
 
-| 今のファイル | Http | Application | Domain | Infrastructure |
-| --- | --- | --- | --- | --- |
-| `AuthController`・`EmailVerificationController` | `Auth/` の Controller・`AuthenticateMember` | `Auth/LoginUseCase`・`VerifyEmailUseCase` | `Members/Member`・`Auth/MailerInterface`・`Auth/TokenServiceInterface` | `External/Jwt`・`External/Mail` |
-| `UserController`・`ProfileController` | `Members/` | `Members/RegisterMemberUseCase`・`WithdrawMemberUseCase`・`UpdateProfileUseCase` | `Members/Member`・`Members/Profile` | `Repositories/Members`・`QueryServices/Members/MemberSearchQueryService` |
-| `LikeController`・`UserMatchController`・`BlockController` | `Matching/` | `Matching/LikeMemberUseCase`・`BlockMemberUseCase` | `Matching/Like`・`UserMatch`・`Block` | `Repositories/Matching` |
-| `TalkRoomController`・`MessageController`・`FirebaseTokenController` | `Messaging/` | `Messaging/SendMessageUseCase` | `Messaging/TalkRoom`・`Message` | `Repositories/Messaging`・`External/Firestore` |
-| `PlanController`・`PurchaseController` | `Billing/` | `Billing/PurchasePlanUseCase` | `Billing/Plan`・`Purchase`・`Money` | `Repositories/Billing` |
-| `app/Models/*`（会員の側の10個） | ― | ― | ― | `Models/`（Model を移すだけのコミットで。10章） |
-| `app/Mail/VerifyMail.php` | ― | ― | `Auth/MailerInterface` | `External/Mail/` |
-| `app/Support/Logging/` | ― | ― | ― | そのまま `app/Support/Logging/`（Http と Infrastructure だけが使う） |
+案。名詞の切り方とメソッドの名前は、移すチケットで決め直してよい（決めたら、ここを直す）。**太字**は、標準の5つ（`index`・`show`・`store`・`update`・`destroy`）以外のメソッドがあり、隠れた名詞を探して分ける所。
 
-管理画面（`backend/admin`）：
+### 会員の側
 
-| 今のファイル | Http | Application | Infrastructure |
-| --- | --- | --- | --- |
-| `AuthController`（`login`・`me`） | `Admins/` | `Admins/LoginAdminUseCase` | `QueryServices/Admins/AdminQueryService`・`Repositories/Admins` |
-| `DashboardController` | `Dashboard/` | ― | `QueryServices/Dashboard/DashboardQueryService` |
-| `MemberController`（`index`・`show`） | `Members/` | `AuditLogs/RecordAuditLogUseCase`（`show` の見たことの記録） | `QueryServices/Members/MemberQueryService` |
-| `SuspensionController`（`store`・`destroy`） | `Members/` | `Members/SuspendMemberUseCase`・`UnsuspendMemberUseCase` | `Repositories/Members` |
-| `MessageController` | `Messages/` | ― | `QueryServices/Messages/MessageQueryService` |
-| `SalesController`（`purchases`・`monthly`） | `Sales/` | ― | `QueryServices/Sales/SalesQueryService` |
-| `PlanController`（`index`・`update`） | `Plans/` | `Plans/UpdatePlanPriceUseCase` | `QueryServices/Plans/PlanQueryService`・`Repositories/Plans` |
-| `AuditLogController` | `AuditLogs/` | ― | `QueryServices/AuditLogs/AuditLogQueryService` |
-| `Controller.php`（基底） | 移さない | ― | ― |
+| 今のファイル（メソッド） | 新しい Controller | Service |
+| --- | --- | --- |
+| `AuthController`（login・me・logout）・`UserController`（store：新規登録） | `Auth/AuthController`（login・logout・store）・**`me` は `Members/MeController@show`** | `Auth/AuthService`・`Members/MeService` |
+| `EmailVerificationController`（show・store） | `Auth/EmailVerificationController` | `Auth/EmailVerificationService` |
+| `PasswordController`（update）・`PasswordResetController`（store・update） | `Auth/PasswordController`・`Auth/PasswordResetController` | `Auth/PasswordService` |
+| `UserController`（index：検索・destroy：退会） | `Members/MemberController@index`・`Members/MeController@destroy` | `Members/MemberService`（クエリは `User` の `scopeSearch`）・`Members/MeService` |
+| `ProfileController`（show・update） | `Members/ProfileController` | `Members/ProfileService` |
+| `SearchConditionController`（index・store・update・destroy） | `Members/SearchConditionController` | `Members/SearchConditionService` |
+| `ReportController`（store） | `Members/ReportController` | `Members/ReportService` |
+| `NoticeController`（index・**read**） | `Members/NoticeController@index`・**既読は `Members/NoticeReadController@store`**（名詞：既読） | `Members/NoticeService` |
+| `LikeController`（store・index）・`ReceivedLikeController`（index） | `Matching/LikeController`・`Matching/ReceivedLikeController` | `Matching/LikeService` |
+| `SkipController`（store・index・destroy） | `Matching/SkipController` | `Matching/SkipService` |
+| `UserMatchController`（index） | `Matching/MatchController` | `Matching/MatchService` |
+| `BlockController`（store・index・destroy） | `Matching/BlockController` | `Matching/BlockService` |
+| `TalkRoomController`（index）・`MessageController`（index・store） | `Messaging/TalkRoomController`・`Messaging/MessageController` | `Messaging/TalkRoomService`・`Messaging/MessageService` |
+| `FirebaseTokenController`（store） | `Messaging/FirebaseTokenController` | `Messaging/FirebaseTokenService` |
+| `PlanController`（index）・`PurchaseController`（store・index） | `Billing/PlanController`・`Billing/PurchaseController` | `Billing/PlanService`・`Billing/PurchaseService` |
+| `app/Models/*` | 移さない（`app/Models/` のまま） | ― |
+| `app/Mail/VerifyMail.php` | 移さない（Service から送る） | ― |
+| `app/Support/Logging/` | そのまま | ― |
 
-Domain の行き先は 2-2 の表。
+### 管理画面
 
-移す順は、触るチケットが来た順。移し方の決まりは [architecture.md](../agents/rules/architecture.md) の10章。移す前に、その API が「API テストがある」状態（成功1本と、`docs/api/` に書いた失敗ごとに1本）にする。
+管理画面には、まだ Model がない。移すときに、使う表の Model を `backend/admin/app/Models/` に作る。
 
-Model を `app/Infrastructure/Models/` へ移すときは、同じチケットで AGENTS.md の「エディタの補完のファイルを作る」のコマンドに、Model のフォルダの指定（`--dir`）を足す。
+| 今のファイル（メソッド） | 新しい Controller | Service |
+| --- | --- | --- |
+| `AuthController`（login・**me**） | `Admins/AuthController@login`・**`Admins/MeController@show`** | `Admins/AuthService` |
+| `DashboardController`（index） | `Dashboard/DashboardController` | `Dashboard/DashboardService` |
+| `MemberController`（index・show） | `Members/MemberController` | `Members/MemberService` |
+| `SuspensionController`（store・destroy） | `Members/SuspensionController` | `Members/SuspensionService` |
+| `NoticeController`（store・**ban**） | `Notices/NoticeController@store`・**強制退会は `Members/BanController@store`**（名詞：強制退会） | `Notices/NoticeService`・`Members/BanService` |
+| `MemberNoteController`（store） | `Members/MemberNoteController` | `Members/MemberNoteService` |
+| `MemberActivityController`（**talkRooms・violations・blocks・blockRanking**） | **名詞ごとに分ける**：`Members/MemberTalkRoomController@index`・`MemberViolationController@index`・`MemberBlockController@index`・`BlockRankingController@index` | `Members/MemberActivityService` |
+| `MessageController`（index）・`TalkRoomController`（show） | `Messages/MessageController`・`Messages/TalkRoomController` | `Messages/MessageService` |
+| `ReportCaseController`（index・show・update） | `Reports/ReportCaseController` | `Reports/ReportCaseService` |
+| `SalesController`（**purchases・monthly**） | **`Sales/PurchaseController@index`・`Sales/MonthlySalesController@index`** | `Sales/SalesService` |
+| `PlanController`（index・update） | `Plans/PlanController` | `Plans/PlanService` |
+| `AuditLogController`（index） | `AuditLogs/AuditLogController` | `AuditLogs/AuditLogService` |
+| `Controller.php`（基底） | 移さない | ― |
 
-**見本のファイル**：各層の最初の見本は「いいねする」（`LikeMemberUseCase` まわり）。移したら、ここにパスを書く（まだない）。
+移す順は、画面・機能ごと。最初はホーム（#237：`ProfileController`）。そのあとは、機能を足すとき・不具合を直すときに、触る所を移す。移し方の決まりは [architecture.md](../agents/rules/architecture.md) の10章。移す前に、その API が「API テストがある」状態（成功1本と、`docs/api/` に書いた失敗ごとに1本）にする。
+
+**見本のファイル**：最初の見本はホームのプロフィール（#237）。移したら、ここにパスを書く（まだない）。
 
 ## 4. 表の書き込みの持ち主
 
@@ -111,12 +129,14 @@ Model を `app/Infrastructure/Models/` へ移すときは、同じチケット�
 
 | きっかけ | 見直す方向 |
 | --- | --- |
-| 1つのまとまりで UseCase が20を超えた | まとまりを小さく分ける |
+| 1つの Service が読みにくくなった（public のメソッドが Controller のアクションより多い・300行を超えた・`private` の手順が入り組んだ） | 隠れた名詞を探して Service を分ける。それでも重いなら、操作ごとのクラス（前の形の UseCase）や、業務の決まりだけのクラス（Domain）を、そのまとまりだけに足す |
+| 1つの Model のスコープとクエリが増え、Model が読みにくくなった（`User` が最初になりやすい） | 検索や集計のクエリだけを、別のクラス（検索のクエリのクラス）に出す |
+| Controller・Service・Model のどれに書くかで、レビューで同じ議論がくり返された | `architecture.md` の判断の順（1章）と表を直す |
+| 1つのまとまりで Service が10を超えた | まとまりを小さく分ける |
 | 1つの変更で、3つ以上のまとまりを触ることが続く | まとまりの境目を引き直す。まとまりの間をイベントでつなぐ |
 | チームが3つ以上になり、同じフォルダを取り合う | モジュラーモノリスへ（[modular-monolith.html](../explanations/modular-monolith.html)） |
-| 検索や一覧の p95 が 500ms を超えた | QueryService の SQL とインデックス → 読み取り専用の DB → 検索エンジン |
-| 詰め替えが重荷になった（Domain がほぼ表と同じ形） | そのまとまりだけ、読み取りの道に寄せる |
-| 2つのアプリで、同じ業務の決まり（停止・値段）がずれて不具合が出た | 共有の Domain のパッケージ（`packages/`）に切り出す |
+| 検索や一覧の p95 が 500ms を超えた | Model のクエリとインデックス → 読み取り専用の DB → 検索エンジン |
+| 2つのアプリで、同じ業務の決まり（停止・値段）がずれて不具合が出た | 共有のパッケージ（`packages/`）に、その決まりだけを切り出す |
 
 ## 7. 参考にした資料
 
@@ -133,7 +153,7 @@ Model を `app/Infrastructure/Models/` へ移すときは、同じチケット�
 
 | 資料 | 何に使ったか | 読んだか |
 | --- | --- | --- |
-| [DIP を用いたレイヤードアーキテクチャの記事（StyleEdge の技術ブログ・2023-11-17）](https://techblog.styleedge.co.jp/entry/2023/11/17/074959) | 4層の名前と置き場（`Application`・`Domains`・`Http`・`Infrastructure`）・Eloquent を Infrastructure だけで使う・エンティティの生成用と再構成用のファクトリメソッド・QueryService は必要なときだけ。会員の側の形のもとにした | 読んだ（2026-11-15） |
+| [DIP を用いたレイヤードアーキテクチャの記事（StyleEdge の技術ブログ・2023-11-17）](https://techblog.styleedge.co.jp/entry/2023/11/17/074959) | 4層の名前と置き場（`Application`・`Domains`・`Http`・`Infrastructure`）・Eloquent を Infrastructure だけで使う・エンティティの生成用と再構成用のファクトリメソッド・QueryService は必要なときだけ。会員の側の形のもとにした | 読んだ（2026-11-15）。第1版の形で、第2版（#236）では使っていない |
 | [Pest の Architecture Testing](https://pestphp.com/docs/arch-testing) | `arch()` で依存の向きを確かめる書き方 | 読んでいない（書き方は AI の知識。使う前に確かめる） |
 | [The Clean Architecture（Robert C. Martin）](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html) | 依存は内側へだけ、という考え方 | 読んでいない（考え方の出どころとして） |
 | [Hexagonal Architecture（Alistair Cockburn）](https://alistair.cockburn.us/hexagonal-architecture/) | ポートとアダプター（外との境目に差し替え口を作る） | 読んでいない（考え方の出どころとして） |

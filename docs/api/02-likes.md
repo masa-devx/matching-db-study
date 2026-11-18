@@ -174,7 +174,7 @@ M3（いいねとマッチに気づく）。要件は FR-LIKE-010〜013・FR-SEA
 | `POST /api/me/skips` | 相手をスキップする | 作る（`SkipController::store`） | 作る |
 | `GET /api/me/skips` | スキップした相手の一覧 | 作る（`index`） | 作る |
 | `DELETE /api/me/skips/{public_id}` | スキップを元に戻す | 作る（`destroy`） | 作る |
-| `POST /api/me/likes`（02） | 送り返すいいねを、1日10回の数に入れない | 上限の確かめの前に、相手からのいいねがあるかを読む（2本増える） | いいねを送る UseCase の中で判断する |
+| `POST /api/me/likes`（02） | 送り返すいいねを、1日10回の数に入れない | 上限の確かめの前に、相手からのいいねがあるかを読む（2本増える） | いいねを送る Service（`LikeService`）の中で判断する |
 | `GET /api/users`（04） | スキップした相手を除く | `whereNotIn('id', $skipIds)`（スキップした相手の ID を PHP に持ってくる。1本増える） | `not exists`（本数は増えない） |
 
 ### `GET /api/me/received-likes`

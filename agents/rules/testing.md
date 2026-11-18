@@ -21,7 +21,7 @@ paths:
 - 管理画面（`backend/admin`）も、Pest と、本物の PostgreSQL で動く（#105）。テスト用の DB は `matching_admin_test`（会員の側の `matching_test` とは別。2つを同時に流しても、ぶつからない）。管理画面はマイグレーションを持たないので、表は、会員の側のマイグレーション（`backend/client/database/migrations`）で作る（`backend/admin/tests/TestCase.php`）。部品は `backend/admin/tests/Support/functions.php`：`createAdmin()`（役割を引数で）・`createMember()`・`actingAsAdmin()`。会員の側の同じ名前の関数とは、別のもの（管理画面は Model を持たないので、表に直接入れる）
 | E2E | 03b（React を足す）で決める | 03b で決める | 03b で決める | 主要フロー・認可・状態遷移 |
 
-- 単体の置き場所は、実装のパスと対応づける（例: `app/Domain/Matching/Like/LikeQuota.php` → `tests/Unit/Domain/Matching/Like/LikeQuotaTest.php`・`app/Application/UseCases/Matching/LikeMemberUseCase.php` → `tests/Unit/Application/UseCases/Matching/LikeMemberUseCaseTest.php`）
+- 単体の置き場所は、実装のパスと対応づける（例: `app/Models/User.php` の `isPaidAt()` → `tests/Unit/Models/UserTest.php`）。Service は DB を使うので、単体ではなく API テスト（`Feature`）で、本物の PostgreSQL に対して確かめる
 - 各テストの組（`Unit`・`Feature`・`Arch`）は、`phpunit.xml` の `<testsuites>` に並べる。並べていないフォルダのテストは流れない
 - テストの部品（データを作る関数・ログインした状態を作る関数）は `tests/Support/` に置く。API テストに Model の名前空間を書かない（`architecture.md` の10章）
 - E2Eは実行前にシードデータの投入とアプリ起動が要る（後述）
@@ -164,7 +164,7 @@ await expect(createInvoice(input)).rejects.toThrow(InvoiceValidationError);
   1. 直すのは、ほかの変更（移す・性能）と別のコミットにする
   2. 直す前に、「分かっている不具合：…」として今の動きを確かめているテストを、要件どおりの期待値に変え、落ちることを先に見せる
   3. 書き換えたテストの名前を、PR に並べる
-- UseCase の単体テストの偽物（Repository・外のサービス）は、いつも成功を返すだけの作りにしない。メモリの上で本当に保存・検索する実装にする。偽物のトランザクションは「中にいる」印を持ち、偽物の外への書き込みは、トランザクションの中で呼ばれたら失敗する
+- 外のサービス（Firestore・メール）を偽物に差し替えるときは、いつも成功を返すだけの作りにしない。送った中身を覚えておき、テストで確かめられるようにする。偽物の外への書き込みは、トランザクションの中で呼ばれたら失敗する（`architecture.md` の5章：外への書き込みはコミットのあと）
 - プランで決めた期待結果を、実装を通すために書き換えない。変える必要があれば停止して報告する
 
 ## テストの独立性（並列実行対応）

@@ -11,154 +11,134 @@ paths:
 
 改訂版（`refactored-repo`）で、置き場・責務・依存の向きを決めるときの決まりと、書き方。会員の側（`backend/client`）と管理画面（`backend/admin`）の両方に当てはめる。
 
-- 全体の地図（業務のまとまり（Auth・Members のような、業務ごとの分け方）の一覧・どのアプリがどの表を書くか・今のファイルの移行の地図・やり直しのきっかけ）は [docs/backend.md](../../docs/backend.md)
-- なぜこの形にしたかは [docs/cycles/01-backend-foundation/03-how.md](../../docs/cycles/01-backend-foundation/03-how.md)
-- レガシー版（Fat Controller・テストなし）の書き方は、`legacy-repo` の同じ名前のファイル。改訂版では使わない
+- 形は **Controller → Service → Model**（2026-11-18 に人が決めた。#236。前の形は DIP を使った4層（Http・Application・Domain・Infrastructure）。変えた理由は `docs/decisions.md` の D-025）
+- 狙い：まず、Controller に詰まったロジックと DB の処理を出して、**どこにどんな処理があるかを追える**ようにする。完成した形に一気に移すのではなく、リファクタしながらコードを読み、次の改善を見つける。Service や Model が太ったら、そのときに見直す（`docs/backend.md` の「やり直しのきっかけ」）
+- 全体の地図（業務のまとまり（Auth・Members のような、業務ごとの分け方）の一覧・どのアプリがどの表を書くか・今のファイルの移行の地図）は [docs/backend.md](../../docs/backend.md)
+- レガシー版（Fat Controller・テストなし）の書き方は、`legacy-repo` の同じ名前のファイル。改訂版の新しいコードでは使わない
 - 画面（`frontend/`）には、9章の共通の原則だけを当てはめる。画面の置き場は [docs/frontend.md](../../docs/frontend.md)
 
 ## 1. 迷ったときの判断の順
 
 新しいコードを書く前に、上から順に問う。
 
-1. **業務の決まりか？**（「無料の男性は1日10回まで」「お互いにいいねしたらマッチ」）→ Domain
-2. **1つの操作の手順か？**（確かめる → 保存する → 外へ知らせる）→ Application の UseCase
-3. **HTTP の形か？**（入力の形・状態コード・JSON の項目）→ Http
-4. **DB・外のサービス・Laravel の都合か？**（SQL・Eloquent・Firestore・JWT・トランザクションの張り方）→ Infrastructure
-5. **読み取り（一覧・検索・集計）だけか？** → Infrastructure の QueryService（Domain を通さない）
-6. どの業務のまとまりにも属さない基盤（SQL のログ・リクエスト ID）→ `app/Support/`。使ってよいのは Http と Infrastructure だけ（2章）
+1. **HTTP の形か？**（入力の形・状態コード・JSON の項目・トークン）→ Http（Controller・Request・Resource・Middleware）
+2. **業務のロジックか？**（「無料の男性は1日10回まで」「お互いにいいねしたらマッチ」・確かめる → 保存する → 外へ知らせる の手順・トランザクション・役割の確かめと監査ログ）→ Service
+3. **DB とのやり取りか？**（検索・一覧・集計のクエリの組み立て・リレーション・型の変換・その1行だけで答えが決まる判定）→ Model
+4. どの業務のまとまりにも属さない基盤（SQL のログ・リクエスト ID）→ `app/Support/`
 
-## 2. 層と依存の向き
-
-**DIP（依存性逆転）を使ったレイヤードアーキテクチャ。** 矢印はすべて Domain に向く。Domain はだれにも依存しない。
+## 2. 依存の向き
 
 ```text
-Http ──→ Application ──→ Domain ←── Infrastructure
-  ├───────────────────→ Domain（例外・値オブジェクト・enum）
-  └──→ Infrastructure の QueryService（読み取りだけ）
-Providers：interface と実装をつなぐ（全部を知ってよい唯一の場所）
+Controller ──→ Service ──→ Model
+   │              └──→ ほかの Service・例外
+   ├──→ Request（入力の形）
+   └──→ Resource（出力の形。Service が返した Model から、返してよい項目を選ぶ）
+Middleware：トークンを読み、ログインした会員の ID を Request に載せる
 ```
 
-| 層 | 受け持ち | 使ってよい相手 | 使ってはいけない相手 | Laravel |
-| --- | --- | --- | --- | --- |
-| Http | 外との入出力 | Application・Domain の例外と型・Infrastructure の QueryService（と、その読み取りの DTO）・`App\Support` | Infrastructure の QueryService 以外（Repository・Model・External・Transaction・Clock） | 使ってよい |
-| Application | 1つの操作の手順・トランザクションの区切り | Domain | Http・Infrastructure・`App\Support`・`App\Models` | **使わない** |
-| Domain | 業務の決まり | なし（PHP の標準だけ） | ほかの全部の層・`App\Support`・`App\Models` | **使わない** |
-| Infrastructure | 約束の実装・DB・外のサービス | Domain・Application の interface と Dto・`App\Support`（QueryService は Domain と Application を使わない。ID は int、性別などは string で受け取る） | Http・Application の UseCase | 使ってよい |
+| 置き場 | 受け持ち | 使ってよい | 使ってはいけない |
+| --- | --- | --- | --- |
+| Controller | 受け取る → Service を呼ぶ → 返す | Request・Resource・Service・例外・`App\Support` | Model・DB（`DB::`・`Illuminate\Database`）・JWT・`app()`・`resolve()` |
+| Request | 入力の形だけを確かめる | Laravel の検証 | Model・DB・JWT |
+| Resource | 返してよい項目だけを並べる | 受け取った Model の値 | DB・JWT・新しいクエリ（リレーションを新しく読まない。N+1） |
+| Middleware | トークンを読む（ここだけ） | JWT・`App\Support` | Model・DB |
+| Service | 業務のロジック・手順・トランザクション | Model・ほかの Service・例外・Laravel の機能（`DB::transaction()`・`now()`・`config()`）・`App\Support` | Http（Request・Resource・`Illuminate\Http`）・`request()`・`auth()`・`session()`・`response()`・`abort()` |
+| Model | DB とのやり取り（クエリの組み立て・リレーション・型・1行の判定） | ほかの Model・Eloquent | Service・Http・`request()`・`auth()`。Observer・モデルのイベント（保存したときの裏の動きが、Service から追えなくなる） |
+| `App\Support` | 基盤 | Laravel の機能 | Http・Service・Model |
 
-- 「Laravel を使わない」には、ファサード（`DB::`・`Log::`・`Cache::`）・ヘルパー（`now()`・`config()`・`env()`・`collect()`・`abort()`）・Carbon・Eloquent・`Illuminate\` のクラスをすべて含む
-- ログ（`App\Support\Logging`）を出すのは Http と Infrastructure だけ。業務の出来事を残したいときは、Infrastructure の実装（Repository・外への書き込み）の中で出す
 - この表は `tests/Arch/LayersTest.php` で機械で確かめる（8章）。破るときは、先にこのファイルを直す
+- Service は HTTP を知らない。だから、同じ Service をコマンド・キュー・テストからも呼べる
 
 ## 3. ディレクトリと名前
 
-各層の中は**業務のまとまり**のフォルダで分け、**名前を全部の層でそろえる**。Domain の中は、さらに集約でフォルダを分ける。まとまりの一覧は [docs/backend.md](../../docs/backend.md) の2章だけに書く（ここにはコピーしない）。
+各置き場の中は**業務のまとまり**のフォルダで分け、名前をそろえる（`Members` の Controller・Service・例外は、どれも `Members/` の下）。まとまりの一覧は [docs/backend.md](../../docs/backend.md) の2章だけに書く。
 
 ```text
 app/
 ├── Http/
-│   ├── Controllers/<まとまり>/〜Controller.php
+│   ├── Controllers/<まとまり>/〜Controller.php   古いコントローラーは直下（10章）
 │   ├── Requests/<まとまり>/〜Request.php
 │   ├── Resources/<まとまり>/〜Resource.php
 │   └── Middleware/
-├── Application/
-│   ├── UseCases/<まとまり>/〜UseCase.php
-│   ├── Dtos/<まとまり>/〜Input.php・〜Output.php
-│   └── Transaction/TransactionManagerInterface.php
-├── Domain/
-│   ├── Shared/ClockInterface.php
-│   ├── <まとまり>/<集約>/      エンティティ・値オブジェクト・enum・〜RepositoryInterface・〜Exception
-│   ├── <まとまり>/〜Interface.php  集約を持たないまとまり（Auth など）の、外のサービスの約束だけは直下に置いてよい
-│   └── <まとまり>/Services/    ドメインサービス
-├── Infrastructure/
-│   ├── Models/
-│   ├── Repositories/<まとまり>/Eloquent〜Repository.php
-│   ├── QueryServices/<まとまり>/〜QueryService.php・読み取りの DTO（〜Summary・〜Detail・〜Criteria）
-│   ├── External/<サービス>/
-│   ├── Transaction/LaravelTransactionManager.php
-│   └── Clock/SystemClock.php
-├── Providers/BindingServiceProvider.php
-└── Support/                    どのまとまりにも属さない基盤（Http と Infrastructure だけが使う）
+├── Services/<まとまり>/〜Service.php
+├── Exceptions/<まとまり>/〜Exception.php         業務の決まりに反したときの例外
+├── Models/〜.php                                 Laravel の標準の置き場のまま（移さない）
+└── Support/                                      基盤（Logging など）
 ```
 
-- Eloquent の Model は `app/Infrastructure/Models/` に置く（DB を扱うので Infrastructure。2026-11-15 に決めた）。まだ移していない Model は `app/Models/` に残り、8章の例外の一覧に並べる
+### Controller の分け方
 
-| もの | 名前 | 例 |
+Laravel と Rails の公式の考え方に合わせる。**Controller は、URL の名詞（リソース）1つに1つ**。
+
+- メソッドは `index`（一覧）・`show`（1件）・`store`（作る）・`update`（直す）・`destroy`（消す）の5つまで
+- この5つ以外のメソッドが欲しくなったら、**隠れている名詞を探して、Controller を分ける**（Laravel：「Controller は焦点を絞っておく。標準の操作以外のメソッドがいつも要るなら、2つの小さい Controller に分ける」。Rails：「独自のアクションをたくさん足しているなら、別のリソースが隠れていないかを考える」）
+- 1人に1つしかないもの（「自分」）は、`index` のない名詞にする（`GET /me` → `MeController@show`。Laravel のシングルトンのリソース）
+- URL の形（状態を名詞にする `POST /members/{id}/suspension`・一度きりの動作は動詞のパス `POST /auth/login`）は、`docs/cycles/01-backend-foundation/03-how.md` の「CRUD ではない操作の書き方」に従う。Controller の名前は、その名詞にそろえる（`SuspensionController`）
+- 例外：ログインと新規登録は `AuthController` にまとめる（人が決めた）。足してよいのはログイン・ログアウト・新規登録まで。パスワードの再設定・メールの確認は、別の名詞（`PasswordResetController` など）にする
+
+| 現場でよくある、詰め込んだ `UserController` | 隠れていた名詞 | 分けた先 |
 | --- | --- | --- |
-| Controller | `<名詞>Controller`。メソッドは `index`・`show`・`store`・`update`・`destroy` | `LikeController::store` |
-| Request | `<動詞><名詞>Request`。書き込みは `toInput()` で Input を、読み取りは `toCriteria()` で Criteria を返す | `StoreLikeRequest`・`SearchMembersRequest` |
-| Resource | `<名詞>Resource` | `LikeResultResource` |
-| UseCase | `<動詞><名詞>UseCase`。公開するメソッドは `execute()` だけ | `LikeMemberUseCase` |
-| Dto | UseCase の名前から `UseCase` を除いて `Input`・`Output` | `LikeMemberInput` |
-| interface | `〜Interface` | `LikeRepositoryInterface`・`ChatSyncInterface` |
-| Repository の実装 | `Eloquent〜Repository` | `EloquentLikeRepository` |
-| QueryService | `<名詞>QueryService`。メソッドは `search`・`list`・`find`・`summarize` など読む動詞 | `MemberSearchQueryService::search` |
-| 読み取りの DTO | `<名詞>Summary`（一覧の1行）・`<名詞>Detail`（詳細）・`<名詞>Criteria`（条件） | `MemberSummary`・`MemberSearchCriteria` |
-| 外のサービスの実装 | `<仕組み><役割>` | `FirestoreChatSync`・`JwtTokenService` |
-| 業務の例外 | `〜Exception` | `PaidPlanRequiredException` |
-| エンティティの作り方 | 新しく作る `create()`（確かめる）・DB から作り直す `reconstruct()`（確かめを省く） | `Like::create()` |
+| ログイン・新規登録 | ログインの状態・会員 | `Auth/AuthController` |
+| いいね | いいね | `Matching/LikeController@store` |
+| ブロック・通報 | ブロック・通報 | `Matching/BlockController`・`Members/ReportController` |
+| 会員の検索 | 会員（の一覧） | `Members/MemberController@index` |
+| プロフィールを見る・直す | プロフィール | `Members/ProfileController@show`・`update` |
 
-- 1ファイル1クラス。クラスはすべて `final`（継承させる理由があるときだけ外す）。値を運ぶだけのものは `final readonly`
-- `declare(strict_types=1);` と型は `quality-types.md` に従う
-- Model の名前は Laravel の標準のまま（表の単数形。`User`・`Like`）。Domain のエンティティと同じ名前になるときは、使う側で `use ... as UserModel` のように別名を付ける
+### Service の分け方
 
-## 4. 層ごとの書き方
+- 名詞（業務のまとまり）ごとに1クラス（`ProfileService`・`LikeService`）。`final` にし、名前は `Service` で終わる
+- **public のメソッドは、Controller から呼ぶ操作**（`show`・`update` など。Controller のメソッドとそろえる）。**private のメソッドは、その中の手順**（`findMember`・`assertOwner` など）
+- メソッドの数の上限は決めない。太ったら見直す（`docs/backend.md` の「やり直しのきっかけ」）
 
-例は「いいねする」（`POST /api/me/likes`）。各層の見本は、移したら [docs/backend.md](../../docs/backend.md) の「見本のファイル」に書く。
+## 4. 書き方
 
-> **この見本は書き方（層・名前・依存の向き）の見本。** ロック・日付の区切り・有料かどうか・応答の項目など、振る舞いの正しさは要件（`docs/requirements/`）と `docs/api/` を正とし、見本を写さない。見本と要件が違えば、要件に合わせる。
+### Controller・Request・Resource
 
-### 4-1. Http
-
-Controller は**受け取る → 呼ぶ → 返す**だけ。判断・SQL・トランザクションを書かない。
+Controller は**受け取る → 呼ぶ → 返す**だけ。`if` で業務の判断をしない。Model を直接使わない。
 
 ```php
-// app/Http/Controllers/Matching/LikeController.php
-final class LikeController extends Controller
+// app/Http/Controllers/Members/ProfileController.php
+final class ProfileController extends Controller
 {
-    public function store(StoreLikeRequest $request, LikeMemberUseCase $useCase): JsonResponse
-    {
-        $output = $useCase->execute($request->toInput());
+    public function __construct(private readonly ProfileService $profiles) {}
 
-        return (new LikeResultResource($output))->response()->setStatusCode(201);
+    public function update(UpdateProfileRequest $request, string $publicId): ProfileResource
+    {
+        $profile = $this->profiles->update(
+            memberId: (int) $request->attributes->get('member_id'),   // Middleware が載せた、ログインした会員
+            publicId: $publicId,
+            input: $request->validated(),
+        );
+
+        return new ProfileResource($profile);
     }
 }
 ```
 
-Request は**形だけ**を確かめ、Input に詰める。「相手がいるか」「回数を超えていないか」は業務の決まりなので Domain で確かめる。
+Request は**形だけ**を確かめる。「自分のプロフィールか」「回数を超えていないか」は業務の決まりなので Service で確かめる。
 
 ```php
-// app/Http/Requests/Matching/StoreLikeRequest.php
-final class StoreLikeRequest extends FormRequest
+// app/Http/Requests/Members/UpdateProfileRequest.php
+final class UpdateProfileRequest extends FormRequest
 {
     /** @return array<string, list<string>> */
     public function rules(): array
     {
-        return ['user_id' => ['required', 'uuid']];
-    }
-
-    public function toInput(): LikeMemberInput
-    {
-        return new LikeMemberInput(
-            memberId: new MemberId((int) $this->attributes->get('member_id')),
-            targetPublicId: $this->string('user_id')->toString(),
-        );
+        return ['nickname' => ['sometimes', 'string', 'min:1', 'max:20']];
     }
 }
 ```
 
-Resource は**返してよい項目だけ**を並べる。Model を丸ごと返さない。中で新しくリレーションを読まない（N+1）。
+Resource は**返してよい項目だけ**を並べる。Model を丸ごと返さない（パスワードのハッシュや確認用の文字が出る）。
 
 ```php
-// app/Http/Resources/Matching/LikeResultResource.php
-final class LikeResultResource extends JsonResource
+// app/Http/Resources/Members/ProfileResource.php
+final class ProfileResource extends JsonResource
 {
     /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {
-        /** @var LikeMemberOutput $output */
-        $output = $this->resource;
-
-        return ['matched' => $output->matched, 'talk_room_id' => $output->talkRoomPublicId];
+        return ['nickname' => $this->resource->nickname, 'prefecture' => $this->resource->prefecture];
     }
 }
 ```
@@ -169,8 +149,7 @@ final class LikeResultResource extends JsonResource
 // app/Http/Middleware/AuthenticateMember.php
 public function handle(Request $request, Closure $next): Response
 {
-    // $this->tokens は Domain/Auth/TokenServiceInterface（実装は Infrastructure/External/Jwt）。Http は External を直接使わない
-    $memberId = $this->tokens->memberIdFrom($request->bearerToken());   // 読めなければ null
+    $memberId = $this->memberIdFrom($request->bearerToken());   // JWT を読む。読めなければ null
     if ($memberId === null) {
         return response()->json(['message' => 'ログインしてください'], 401);
     }
@@ -180,308 +159,123 @@ public function handle(Request $request, Closure $next): Response
 }
 ```
 
-### 4-2. Application
+### Service
 
-UseCase は**手順だけ**を書く。業務の判断（「10回を超えたか」「お互いにいいねしたか」）は Domain が決めて返す。UseCase は、その**結果で手順を分ける if だけ**を書いてよい（例：マッチしたならルームを作る）。条件の中身（性別・回数・期限の比較）を UseCase に書かない。Laravel を使わない。
-
-```php
-// app/Application/Dtos/Matching/LikeMemberInput.php
-final readonly class LikeMemberInput
-{
-    public function __construct(public MemberId $memberId, public string $targetPublicId) {}
-}
-
-// app/Application/Dtos/Matching/LikeMemberOutput.php
-final readonly class LikeMemberOutput
-{
-    public function __construct(public bool $matched, public ?string $talkRoomPublicId) {}
-}
-```
+業務のロジックと手順を書く。Model のクエリを呼び、判断し、保存する。
 
 ```php
-// app/Application/UseCases/Matching/LikeMemberUseCase.php
-final class LikeMemberUseCase
+// app/Services/Members/ProfileService.php
+final class ProfileService
 {
-    public function __construct(
-        private MemberRepositoryInterface $members,
-        private LikeRepositoryInterface $likes,
-        private UserMatchRepositoryInterface $matches,
-        private TalkRoomRepositoryInterface $talkRooms,
-        private MatchingService $matching,
-        private ChatSyncInterface $chatSync,
-        private TransactionManagerInterface $transaction,
-        private ClockInterface $clock,
-    ) {}
-
-    public function execute(LikeMemberInput $input): LikeMemberOutput
+    /** @param  array<string, mixed>  $input */
+    public function update(int $memberId, string $publicId, array $input): Profile
     {
-        $me = $this->members->findById($input->memberId);
-        $target = $this->members->findByPublicId($input->targetPublicId);   // いなければ MemberNotFoundException
-        $now = $this->clock->now();
+        $member = $this->findMember($publicId);
+        $this->assertOwner($member, $memberId);
 
-        LikeQuota::assertNotExceeded($me, $this->likes->countSentOn($me->id, $now));
+        $member->profile->update($input);
 
-        $room = $this->transaction->run(function () use ($me, $target, $now): ?TalkRoom {
-            $this->likes->save(Like::create($me->id, $target->id, $now));
-            if (! $this->matching->isMutual($me->id, $target->id)) {
-                return null;
-            }
-            $match = UserMatch::create($me->id, $target->id, $now);
-            $this->matches->save($match);
-            $room = TalkRoom::openFor($match);
-            $this->talkRooms->save($room);
-
-            return $room;
-        });
-
-        if ($room !== null) {
-            $this->chatSync->openRoom($room);   // 外への書き込みはコミットのあと（6章）
-        }
-
-        return new LikeMemberOutput(matched: $room !== null, talkRoomPublicId: $room?->publicId);
-    }
-}
-```
-
-### 4-3. Domain
-
-ふつうの PHP だけで書く。値オブジェクトは作るときに確かめ、あとから変えない。
-
-```php
-// app/Domain/Members/Member/MemberId.php
-final readonly class MemberId
-{
-    public function __construct(public int $value)
-    {
-        if ($value <= 0) {
-            throw new InvalidArgumentException('会員の ID は 1 以上');
-        }
+        return $member->profile;
     }
 
-    public function equals(self $other): bool
+    private function findMember(string $publicId): User
     {
-        return $this->value === $other->value;
-    }
-}
-
-// app/Domain/Members/Member/Gender.php
-enum Gender: string
-{
-    case Male = 'male';
-    case Female = 'female';
-}
-```
-
-エンティティは、新しく作る `create()` と、DB から作り直す `reconstruct()` を分ける。コンストラクタは `private`。
-
-```php
-// app/Domain/Matching/Like/Like.php
-final class Like
-{
-    private function __construct(
-        public readonly ?int $id,
-        public readonly MemberId $from,
-        public readonly MemberId $to,
-        public readonly DateTimeImmutable $likedAt,
-    ) {}
-
-    public static function create(MemberId $from, MemberId $to, DateTimeImmutable $now): self
-    {
-        return new self(null, $from, $to, $now);   // 新しく作るときの決まりはここで確かめる
+        return User::query()->with('profile')->where('public_id', $publicId)->firstOrFail();   // いなければ 404
     }
 
-    public static function reconstruct(int $id, MemberId $from, MemberId $to, DateTimeImmutable $likedAt): self
+    private function assertOwner(User $member, int $memberId): void
     {
-        return new self($id, $from, $to, $likedAt);   // DB の値は正しい前提で、確かめを省く
-    }
-}
-```
-
-業務の決まりは1か所に。同じ判定を2か所に書かない。
-
-```php
-// app/Domain/Matching/Like/LikeQuota.php
-final class LikeQuota
-{
-    public const FREE_MALE_DAILY_LIMIT = 10;   // 要件（FR-PAID-008）で決まった値。運営が画面から変える値ではないので、設定の表にしない
-
-    public static function assertNotExceeded(Member $member, int $sentToday): void
-    {
-        if ($member->gender === Gender::Male && ! $member->isPaid && $sentToday >= self::FREE_MALE_DAILY_LIMIT) {
-            throw new PaidPlanRequiredException();
+        if ($member->id !== $memberId) {
+            throw new ProfileNotOwnedException();   // bootstrap/app.php で 403 に変える（7章）
         }
     }
 }
 ```
 
-Repository の interface は、業務の側が「何が要るか」を、業務の言葉で決める。SQL や Eloquent の言葉（`where`・`query`）を出さない。表ごとではなく、集約ごとに作る。
+### Model
+
+DB とのやり取りを書く。**検索・一覧のクエリの組み立ても Model に置く**（人が決めた）。Service は、組み立てたクエリを呼んで、結果を使う。
 
 ```php
-// app/Domain/Matching/Like/LikeRepositoryInterface.php
-interface LikeRepositoryInterface
+// app/Models/User.php
+class User extends Model
 {
-    public function save(Like $like): void;
-
-    public function exists(MemberId $from, MemberId $to): bool;
-
-    public function countSentOn(MemberId $from, DateTimeImmutable $day): int;
-}
-```
-
-1つのエンティティに置くと不自然な決まりは、ドメインサービスに置く。
-
-```php
-// app/Domain/Matching/Services/MatchingService.php
-final class MatchingService
-{
-    public function __construct(private LikeRepositoryInterface $likes) {}
-
-    public function isMutual(MemberId $me, MemberId $target): bool
+    public function profile(): HasOne
     {
-        return $this->likes->exists(from: $target, to: $me);
+        return $this->hasOne(Profile::class);
+    }
+
+    /** @return array<string, string> */
+    protected function casts(): array
+    {
+        return ['paid_until' => 'immutable_datetime', 'suspended_at' => 'immutable_datetime'];
+    }
+
+    // その1行だけで答えが決まる判定は Model に1つだけ置き、全員がこれを呼ぶ（判定が Controller ごとにずれない）
+    public function isPaidAt(CarbonImmutable $now): bool
+    {
+        return $this->paid_until !== null && $this->paid_until->greaterThan($now);
+    }
+
+    // よく使う絞り込み（ローカルスコープ）
+    public function scopeActive(Builder $query): void
+    {
+        $query->whereNull('deleted_at')->whereNull('suspended_at');
+    }
+
+    /**
+     * 会員の検索のクエリ。条件の組み立てはここだけに書く
+     *
+     * @param  array{age_min?: int, age_max?: int, prefecture?: string}  $conditions
+     */
+    public function scopeSearch(Builder $query, array $conditions, CarbonImmutable $today): void
+    {
+        $query->active();
+        if (isset($conditions['prefecture'])) {
+            $query->whereRelation('profile', 'prefecture', $conditions['prefecture']);
+        }
+        // 年齢は、誕生日の範囲に直して比べる（列に関数をかけるとインデックスが使えない）
     }
 }
 ```
 
-外のサービスの約束も、使う Domain のフォルダに置く。
+| Model に書く | Model に書かない（Service に書く） |
+| --- | --- |
+| リレーション・型の変換（`casts()`） | メールを送る・Firestore に書く（外への書き込み） |
+| その1行だけで答えが決まる判定（`isPaidAt()`・`isSuspended()`） | いくつもの表への書き込みと、その順番（いいね → マッチ → トークルーム） |
+| 検索・一覧・集計のクエリの組み立て（スコープ） | トランザクション |
+| | ログインしている人を見る（`auth()`）・Request を読む |
+
+## 5. トランザクション・日時・外への書き込み
+
+- トランザクションは Service が `DB::transaction()` で張る。Controller・Model では張らない
+- 読んでから書く処理で、同時に2回来ると壊れるもの（停止・購入・回数の上限）は、`lockForUpdate()`（行のロック）をかけて読む
+- 日時は `now()`（`CarbonImmutable`・UTC）。API テストでは `travelTo()` で止める
+- 外への書き込み（Firestore・メール・将来の決済と AI）は、**トランザクションの外、コミットのあと**で行う（DB が巻き戻っても、外には残るため）
 
 ```php
-// app/Domain/Messaging/TalkRoom/ChatSyncInterface.php
-interface ChatSyncInterface
-{
-    public function openRoom(TalkRoom $room): void;
-}
+$room = DB::transaction(fn (): TalkRoom => $this->openRoom($match));   // DB だけ
+$this->firestore->openRoom($room);                                     // コミットのあとで、外へ
 ```
 
-### 4-4. Infrastructure
+## 6. ログ
 
-Eloquent が出てくるのはここだけ。Eloquent の Model と Domain のエンティティの詰め替えも、ここで行う。**Model を Repository の外へ返さない。** DB から作り直すときは、エンティティの `reconstruct()` を使う（`new` しない）。
-
-- UNIQUE の違反など、DB が断ったことのうち業務の意味があるもの（「もういいねしている」）は、Repository が Domain の例外に変えて投げる。`QueryException` を上へ出さない
-- Model の Factory は `database/factories/` のまま。Model の名前空間が `App\Infrastructure\Models` でも見つかるように、`AppServiceProvider` で `Factory::guessFactoryNamesUsing()` を1か所だけ設定する（Model ごとに `newFactory()` を書かない）
-
-```php
-// app/Infrastructure/Repositories/Members/EloquentMemberRepository.php
-final class EloquentMemberRepository implements MemberRepositoryInterface
-{
-    public function findByPublicId(string $publicId): Member
-    {
-        $row = User::query()->with('profile')->where('public_id', $publicId)->first()
-            ?? throw new MemberNotFoundException();
-
-        return Member::reconstruct(
-            id: new MemberId($row->id),
-            publicId: $row->public_id,
-            gender: Gender::from($row->profile->gender),
-            isPaid: (bool) $row->is_paid,
-        );
-    }
-}
-```
-
-読み取りの QueryService は、画面の形の DTO を返す（Model を返さない。Resource がリレーションを読みに行き、N+1 になるため）。DTO は同じフォルダに置き、Http から使ってよい。見つからないときは `null` を返し、Controller が 404 にする（7章）。JOIN・`with()`・項目の選び方・並び・ページをここで決める。**出してはいけない人（退会・ブロック）の条件も、ここに1か所で書く。**
-
-```php
-// app/Infrastructure/QueryServices/Members/MemberSearchCriteria.php
-final readonly class MemberSearchCriteria
-{
-    public function __construct(public string $gender, public int $limit) {}   // Domain の Gender を使わず string
-}
-
-// app/Infrastructure/QueryServices/Members/MemberSearchQueryService.php
-final class MemberSearchQueryService
-{
-    /** @return list<MemberSummary> */
-    public function search(int $memberId, MemberSearchCriteria $criteria): array   // Domain の型を使わない（8章）
-    {
-        return User::query()
-            ->join('profiles', 'profiles.user_id', '=', 'users.id')
-            ->whereNull('users.deleted_at')
-            ->whereNotExists(fn ($q) => $q->from('blocks')
-                ->whereColumn('blocks.blocked_id', 'users.id')
-                ->where('blocks.blocker_id', $memberId))
-            ->where('profiles.gender', $criteria->gender)
-            ->orderByDesc('users.last_login_at')
-            ->limit($criteria->limit)
-            ->get(['users.public_id', 'profiles.nickname', 'profiles.birthday'])
-            ->map(fn ($row) => new MemberSummary($row->public_id, $row->nickname, $row->birthday))
-            ->all();
-    }
-}
-```
-
-トランザクションと日時の実装。
-
-```php
-// app/Infrastructure/Transaction/LaravelTransactionManager.php
-final class LaravelTransactionManager implements TransactionManagerInterface
-{
-    public function run(callable $callback): mixed
-    {
-        return DB::transaction($callback);
-    }
-}
-
-// app/Infrastructure/Clock/SystemClock.php
-final class SystemClock implements ClockInterface
-{
-    public function now(): DateTimeImmutable
-    {
-        return CarbonImmutable::now('UTC');   // DateTimeImmutable を継ぐ。テストの travelTo() で止まる
-    }
-}
-```
-
-### 4-5. Providers
-
-interface と実装（Repository・外のサービス・トランザクション・時計）をつなぐのは `BindingServiceProvider` だけ。ほかのことはここに書かない。
-
-```php
-// app/Providers/BindingServiceProvider.php
-final class BindingServiceProvider extends ServiceProvider
-{
-    /** @var array<class-string, class-string> */
-    public array $bindings = [
-        LikeRepositoryInterface::class => EloquentLikeRepository::class,
-        ChatSyncInterface::class => FirestoreChatSync::class,
-        TransactionManagerInterface::class => LaravelTransactionManager::class,
-        ClockInterface::class => SystemClock::class,
-    ];
-}
-```
-
-## 5. 書き込みの道と読み取りの道
-
-| 道 | 流れ | 使うとき |
-| --- | --- | --- |
-| 書き込み | Controller → Request（`toInput()`）→ UseCase → Domain の決まり → Repository の interface → Output → Resource | 状態を変える。業務の決まりを守る |
-| 読み取り | Controller → Request（`toCriteria()`）→ QueryService → 読み取りの DTO → Resource | 一覧・詳細・検索・集計 |
-
-- 会員の側：QueryService は必要なときだけ作る（検索・重い一覧）。簡単な読み取りは、UseCase から Repository の `find〜` を使ってよい
-- 管理画面：読み取りはすべて QueryService（まとまりごとに1つ）。Controller から直接呼ぶ
-- QueryService は書き込まない。書き込みは必ず UseCase を通す（使ってよい部品はアーキテクチャのテストで確かめ、`save()`・`update()`・`delete()` を呼んでいないかはレビューで見る。8章）
-
-## 6. トランザクション・日時・外への書き込み
-
-- トランザクションは UseCase が `TransactionManagerInterface::run()` で張る。Controller・Repository・QueryService では張らない
-- 読んでから書く処理で、同時に2回来ると壊れるもの（停止・購入・回数の上限）は、Repository に `〜ForUpdate()`（行のロック）を作って使う
-- 日時は `ClockInterface::now()` から取る（`DateTimeImmutable`・UTC）。UseCase の単体テストでは固定した時刻の偽物に差し替え、API テストでは `travelTo()`（`$this->travelTo()` と同じ）で止める（`SystemClock` は Carbon の時刻を返すので、止めた時刻が届く）
-- 外への書き込み（Firestore・メール・将来の決済と AI）は、**`run()` の外、コミットのあと**で行う。トランザクションの中で外へ書かない（DB が巻き戻っても、外には残るため）
+- ログ（`App\Support\Logging`）は、Http と Service から出す。Model からは出さない
+- 出し方は `agents/rules/logging.md`
 
 ## 7. エラー
 
-- 業務の決まりに反したら、Domain の例外（`〜Exception`）を投げる。Domain と Application は状態コードを知らない
+- 業務の決まりに反したら、Service が `app/Exceptions/<まとまり>/〜Exception` を投げる。Service は状態コードを知らない（`abort()` を使わない）
 - 例外を状態コードとメッセージに変えるのは、各アプリの `bootstrap/app.php` の1か所だけ
 - 業務の例外を足したら、`render` と `dontReport` の両方に足す。API テストで、下の表の行ごとに状態コードとメッセージを確かめる
 
 ```php
 // bootstrap/app.php
 ->withExceptions(function (Exceptions $exceptions): void {
-    $exceptions->render(fn (PaidPlanRequiredException $e) => response()->json(['message' => '有料会員になると使えます'], 403));
-    $exceptions->render(fn (MemberNotFoundException $e) => response()->json(['message' => '会員が見つかりません'], 404));
+    $exceptions->render(fn (ProfileNotOwnedException $e) => response()->json(['message' => '自分のプロフィールだけを直せます'], 403));
 
     // 業務の例外は、決まりどおりに断っただけなので、エラーのログに出さない（logging.md の「ノイズを増やさない」）
-    $exceptions->dontReport([PaidPlanRequiredException::class, MemberNotFoundException::class]);
+    $exceptions->dontReport([ProfileNotOwnedException::class]);
 })
 ```
 
@@ -489,257 +283,29 @@ final class BindingServiceProvider extends ServiceProvider
 | --- | --- | --- |
 | トークンがない・壊れている | Middleware | 401 |
 | 入力の形が違う | Request | 422（Laravel の形のまま） |
-| 役割が足りない（管理画面） | Domain（`PermissionDeniedException`） | 403 |
-| 業務の決まりに反する | Domain の例外 | 403・404・409 |
-| 読み取りで見つからない | Controller（QueryService が返した `null` を見て、Laravel の標準の `NotFoundHttpException` を投げる） | 404 |
+| 役割が足りない（管理画面） | Service（`PermissionDeniedException`） | 403 |
+| 業務の決まりに反する | Service の例外 | 403・404・409 |
+| 見つからない | Service（`firstOrFail()`。Laravel が 404 に変える） | 404 |
 | DB・外のサービスが落ちた | どこでも握りつぶさない（`logging.md`） | 500 |
 
 ## 8. アーキテクチャのテスト
 
-2章（依存の向き）と、3章の名前の一部（末尾の名前・`final`）と、`strict_types` を、Pest の `arch()` で確かめる。
+2章（依存の向き）と、3章の名前の一部（`final`・`Service` で終わる）と、`strict_types` を、Pest の `arch()` で確かめる。
 
-- 置き場：`tests/Arch/LayersTest.php`。`phpunit.xml` のテストの組に `Arch`（`tests/Arch`）を足す。CI でほかのテストと一緒に流れる
-- 正本は会員の側（`backend/client/tests/Arch/`）。管理画面（`backend/admin/tests/Arch/`）には、同じファイルをコピーする。違うのは、ファイルの上の「このアプリだけのもの」の3つの一覧（`LEGACY_CONTROLLERS`・`LEGACY_MODELS`・`OUTSIDE_LAYERS`）だけ。印（`// ==== ここから下は、会員の側…`）より下は、2つのファイルで同じにする。管理画面の `tests/Arch/SameRulesAsClientTest.php` が、印より下を比べ、違えば落ちる（#106。人が (a) を選んだ。片方だけ直して、もう片方に穴が残るのを防ぐ）。会員の側だけを直したときも気づけるよう、管理画面の CI は `backend/client/tests/Arch/**` が変わったときにも動く
-- テストで確かめられないこと（UseCase の中で、役割の確かめ（`Admin::assertCan()`）と監査ログを書き忘れること（API テストで、見るだけの管理者は 403・監査ログの行がある、を確かめる）・QueryService が `->save()`・`->update()`・`->delete()` を呼ばない・UseCase の if が判断の中身を持たない・文字列でクラス名や関数名を書く形（`call_user_func('now')` など）・`Firebase\JWT` 以外でトークンを読む形（`$request->bearerToken()`）・ほかのクラスを通した間接の依存）は、レビューで見る（`pr-review`）
-
-```php
-// tests/Arch/LayersTest.php（中身は、このファイルと同じにしておく）
-// アーキテクチャのテスト（agents/rules/architecture.md の8章）。層の依存の向き・名前・final・strict_types を確かめる。
-// 新しい層（App\Domain・App\Application・App\Infrastructure）にファイルがまだないあいだは、当てはまるものがなく、どれも通る。
-// 移したファイルが、決まりを破ったときに落ちる。足すとき・直すときは、わざと違反を置いて、落ちるのを見る
-
-// ==== このアプリだけのもの（会員の側と管理画面で、違うのはこの3つの一覧だけ）====
-
-// まだ移していない古いファイル。この2つの一覧が、そのまま移行の残り。移したら消す。
-// ignoring に渡すのは古いコントローラーだけ。ignoring は、渡した名前で始まる「使われる側」の依存も消すので、
-// App\Models を渡すと、新しいコードが App\Models を使っても落ちなくなる
-const LEGACY_CONTROLLERS = [
-    'App\Http\Controllers\AuthController',
-    'App\Http\Controllers\BlockController',
-    'App\Http\Controllers\EmailVerificationController',
-    'App\Http\Controllers\FirebaseTokenController',
-    'App\Http\Controllers\LikeController',
-    'App\Http\Controllers\MessageController',
-    'App\Http\Controllers\NoticeController',
-    'App\Http\Controllers\PasswordController',
-    'App\Http\Controllers\PasswordResetController',
-    'App\Http\Controllers\PlanController',
-    'App\Http\Controllers\ProfileController',
-    'App\Http\Controllers\PurchaseController',
-    'App\Http\Controllers\ReceivedLikeController',
-    'App\Http\Controllers\ReportController',
-    'App\Http\Controllers\SearchConditionController',
-    'App\Http\Controllers\SkipController',
-    'App\Http\Controllers\TalkRoomController',
-    'App\Http\Controllers\UserController',
-    'App\Http\Controllers\UserMatchController',
-];
-const LEGACY_MODELS = 'App\Models';   // 移行の残り（app/Models）。ignoring には渡さない
-
-// 設計の図（3章）にない、古いフォルダと、全部を知ってよい Providers。Domain と Application は、どちらも使わない
-const OUTSIDE_LAYERS = ['App\Mail', 'App\Providers'];
-
-// ==== ここから下は、会員の側（backend/client/tests/Arch/LayersTest.php。正本）と管理画面（backend/admin/tests/Arch/LayersTest.php）で同じ。片方を直したら、もう片方も直す（管理画面の SameRulesAsClientTest が、違えば落ちる）====
-
-// Domain と Application で使わない、Laravel のヘルパー関数。名前の始まりで比べるので、'app' は app_path() なども止める
-const LARAVEL_HELPERS = [
-    'now', 'today', 'config', 'env', 'app', 'resolve', 'collect', 'abort', 'response', 'request', 'logger', 'logs', 'info',
-    'auth', 'session', 'cache', 'event', 'dispatch', 'report', 'rescue', 'retry', 'validator', '__', 'trans',
-];
-
-// arch() の比べ方は「名前の始まり」。期待は、無名関数の中に書く
-// （arch('名前')->expect(…) と鎖でつなぐ書き方は、Larastan が「ないメソッド」と指摘する）
-
-arch('Domain はほかの層・Laravel・Carbon・基盤を使わない', function (): void {
-    expect('App\Domain')
-        ->not->toUse(['App\Http', 'App\Application', 'App\Infrastructure', 'App\Models', 'App\Support', ...OUTSIDE_LAYERS, 'Illuminate', 'Carbon']);
-});
-
-arch('Application は Http・Infrastructure・Laravel・Carbon・基盤を使わない', function (): void {
-    expect('App\Application')
-        ->not->toUse(['App\Http', 'App\Infrastructure', 'App\Models', 'App\Support', ...OUTSIDE_LAYERS, 'Illuminate', 'Carbon']);
-});
-
-// 層の側から「使わない」と書く。expect() に関数の一覧・toBeUsedIn() に層の一覧、と両方に配列を渡す書き方は、
-// 違反があっても通ってしまう（#106 で、Domain に now()・Application に config() を置いて確かめた）
-arch('Domain は Laravel のヘルパー関数を使わない', function (): void {
-    expect('App\Domain')
-        ->not->toUse(LARAVEL_HELPERS);
-});
-
-arch('Application は Laravel のヘルパー関数を使わない', function (): void {
-    expect('App\Application')
-        ->not->toUse(LARAVEL_HELPERS);
-});
-
-// ファサードの別名（\DB::・\Log::・\Cache:: など。use を書かずに呼べる）は、名前が Illuminate で始まらないので、
-// arch() では落ちない。別名を「使わない」一覧に足すと、名前の始まりで比べるので、'Log' が LogicException に、
-// 'Date' が DateTimeImmutable に当たる。ファイルの文字を読んで、別名と完全に一致するものだけを探す。
-// $skipFilesIn を渡すと、そのフォルダの直下のファイルは見ない（app/Http/Controllers の直下は、古いコントローラー）
-/**
- * @param  list<string>  $aliases
- * @return list<string>
- */
-function archFindFacadeAliases(string $root, array $aliases, ?string $skipFilesIn = null): array
-{
-    if (! is_dir($root)) {
-        return [];
-    }
-    $pattern = implode('|', array_map(static fn (string $alias): string => preg_quote($alias, '/'), $aliases));
-    $found = [];
-    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS)) as $file) {
-        if (! $file instanceof SplFileInfo || $file->getExtension() !== 'php') {
-            continue;
-        }
-        if ($skipFilesIn !== null && $file->getPath() === $skipFilesIn) {
-            continue;
-        }
-        $source = (string) file_get_contents($file->getPathname());
-        $name = 'app'.substr($file->getPathname(), strlen(dirname(__DIR__, 2).'/app'));
-
-        // ① \DB:: のように、先頭に \ を付けて呼ぶ形（\App\…\DB のような、名前空間つきの名前は当てない）
-        preg_match_all('/(?<![\w\\\\])\\\\('.$pattern.')\b(?!\\\\)/', $source, $calls);
-        foreach ($calls[0] as $call) {
-            $found[] = $name.'：'.$call;
-        }
-
-        // ② use で読み込む形。use DB;・use DB as Database;・use Log, DB; のどれも、1つずつに分けて、名前を比べる
-        preg_match_all('/^\s*use\s+(?!function\b|const\b)([^;(]+);/m', $source, $uses);
-        foreach ($uses[1] as $statement) {
-            foreach (explode(',', $statement) as $part) {
-                $imported = ltrim(trim((string) preg_replace('/\s+as\s+\w+\s*$/i', '', trim($part))), '\\');
-                if (in_array($imported, $aliases, true)) {
-                    $found[] = $name.'：use '.trim($part);
-                }
-            }
-        }
-    }
-
-    return $found;
-}
-
-test('Domain と Application は、ファサードの別名（\DB:: など）を使わない', function (): void {
-    $aliases = array_keys(Facade::defaultAliases()->all());
-    $app = dirname(__DIR__, 2).'/app';
-
-    expect([...archFindFacadeAliases($app.'/Domain', $aliases), ...archFindFacadeAliases($app.'/Application', $aliases)])->toBe([]);
-});
-
-// Http の層（Controller・Request・Resource・Middleware）は、SQL・トランザクションを書かない（4-1）。
-// これで、新しいコードが書き込むには、UseCase（役割の確かめと監査ログがある所）を通すしかなくなる。
-// 対象を Controller だけにすると、DB の処理を Request や Resource に移すだけで避けられる（#234 のレビューで確かめた）。
-// Illuminate\Database は名前の始まりで比べるので、DB の例外の型（ModelNotFoundException など）も止まる。
-// これは意図どおり：DB の例外は、UseCase か例外のハンドラーで Domain の例外に変える（Http が DB の作りを知らない）。
-// UseCase の中で役割の確かめを書き忘れることは、このテストでは見られない（API テストで、見るだけの管理者は 403 を確かめる）
-arch('新しい Http の層は、DB を直接使わない', function (): void {
-    expect('App\Http')
-        ->not->toUse(['Illuminate\Support\Facades\DB', 'Illuminate\Database'])
-        ->ignoring(LEGACY_CONTROLLERS);
-});
-
-// トークンを読むのは Middleware だけ（4-1）。$request->bearerToken() で読む形は、このテストでは見られない（レビューで見る）。
-// 名前空間は1つずつ確かめる。expect() に名前空間を配列で渡すと、not->toUse() は違反があっても通ってしまう
-// （#234 で、Request にトークンを読む処理を置いて確かめた。ヘルパー関数を配列で渡したときと同じ落とし穴）
-arch('トークンを読むのは Middleware だけ（Controller・Request・Resource は読まない）', function (): void {
-    foreach (['App\Http\Controllers', 'App\Http\Requests', 'App\Http\Resources'] as $layer) {
-        expect($layer)
-            ->not->toUse('Firebase\JWT')
-            ->ignoring(LEGACY_CONTROLLERS);
-    }
-});
-
-// app('db')・resolve('db') のように、名前を渡して中身を取り出すと、クラスの名前が出てこないので、上の決まりをすり抜ける
-// （#234 のレビューで確かめた）。使うものは、引数（コンストラクタやメソッドの型）で受け取る。response() などは止めない
-arch('新しい Controller は、app()・resolve() で中身を取り出さない', function (): void {
-    expect('App\Http\Controllers')
-        ->not->toUse(['app', 'resolve'])
-        ->ignoring(LEGACY_CONTROLLERS);
-});
-
-test('新しい Http の層は、DB のファサードの別名（\DB::・use DB;）も使わない', function (): void {
-    // app/Http/Controllers の直下は古いコントローラー（上の LEGACY_CONTROLLERS）なので見ない。新しい Controller は、業務のまとまりのフォルダに置く
-    $http = dirname(__DIR__, 2).'/app/Http';
-    expect(archFindFacadeAliases($http, ['DB', 'Schema'], skipFilesIn: $http.'/Controllers'))->toBe([]);
-});
-
-arch('Http が使ってよい Infrastructure は QueryService だけ', function (): void {
-    expect('App\Http')
-        ->not->toUse(['App\Infrastructure\Models', 'App\Infrastructure\Repositories', 'App\Infrastructure\External', 'App\Infrastructure\Transaction', 'App\Infrastructure\Clock', LEGACY_MODELS])
-        ->ignoring(LEGACY_CONTROLLERS);
-});
-
-// ignoring は、名前の始まりで比べる。直下に UserControllerV2 のような名前のクラスを置くと、上のテストと
-// strict_types のテストから、黙って外れる。直下にあってよいのは、基底の Controller と、古い一覧のものだけ
-test('app/Http/Controllers の直下には、基底の Controller と、古いコントローラーだけがある', function (): void {
-    $files = array_map(
-        static fn (string $path): string => 'App\Http\Controllers\\'.basename($path, '.php'),
-        glob(dirname(__DIR__, 2).'/app/Http/Controllers/*.php') ?: [],
-    );
-    sort($files);
-    $allowed = [...LEGACY_CONTROLLERS, 'App\Http\Controllers\Controller'];
-    sort($allowed);
-
-    expect($files)->toBe($allowed);
-});
-
-arch('Infrastructure は UseCase と Http を使わない', function (): void {
-    expect('App\Infrastructure')
-        ->not->toUse(['App\Application\UseCases', 'App\Http']);
-});
-
-arch('QueryService は Application・Repository・Domain を使わない', function (): void {
-    expect('App\Infrastructure\QueryServices')
-        ->not->toUse(['App\Application', 'App\Infrastructure\Repositories', 'App\Domain']);   // ID は int で受け取る
-});
-
-arch('Support（基盤）は、層と Model を使わない', function (): void {
-    expect('App\Support')
-        ->not->toUse(['App\Http', 'App\Application', 'App\Domain', 'App\Infrastructure', 'App\Models', ...OUTSIDE_LAYERS]);
-});
-
-arch('Domain の interface は Interface で終わる', function (): void {
-    expect('App\Domain')
-        ->interfaces()
-        ->toHaveSuffix('Interface');
-});
-
-// 1つのテストに、期待は1つ。classes() の絞り込みは、鎖の2つ目以降の期待には効かないため
-arch('UseCase は final', function (): void {
-    expect('App\Application\UseCases')
-        ->classes()
-        ->toBeFinal();
-});
-
-arch('UseCase は UseCase で終わる', function (): void {
-    expect('App\Application\UseCases')
-        ->classes()
-        ->toHaveSuffix('UseCase');
-});
-
-arch('QueryService のフォルダのクラス（QueryService と読み取りの DTO）は final', function (): void {
-    expect('App\Infrastructure\QueryServices')
-        ->classes()
-        ->toBeFinal();
-});
-
-arch('新しい層のファイルは strict_types', function (): void {
-    expect(['App\Http', 'App\Application', 'App\Domain', 'App\Infrastructure', 'App\Support'])
-        ->toUseStrictTypes()
-        ->ignoring(LEGACY_CONTROLLERS);
-});
-```
-
-- 足すとき・直すときは、わざと違反を作って落ちるのを見る（Domain に `use Illuminate\Support\Facades\DB;`・`now()`、新しい Controller に `use App\Models\User;`）。当てはまるファイルがないあいだは、どのテストも通るので、通っただけでは、効いているかが分からない
-- #106 で確かめたこと（2026-11-18。違反を1つずつ置いた。20種類。PHP の標準のクラス（`LogicException`・`DateTimeImmutable`・`JsonSerializable`）を使う Domain は通ることも見た）：依存の向き・`'Carbon'`・`ignoring(LEGACY_CONTROLLERS)`・`interfaces()`・`classes()`・`toUseStrictTypes()` は、上の書き方で落ちる
-- `arch()` の比べ方は「名前の始まり」。そのために、書き方を変えた所が3つある
-  - ヘルパー関数：`expect(関数の一覧)->not->toBeUsedIn(層の一覧)` では落ちなかったので、層ごとに `not->toUse(関数の一覧)` と書く
-  - 名前空間の配列：`expect([名前空間の一覧])->not->toUse(…)` も、違反があっても通った（#234）。名前空間は1つずつ `expect()` に渡す（`foreach` で回す）。`toUseStrictTypes()` は、配列でも落ちることを確かめてある
-  - ファサードの別名（`\DB::`）：「使わない」一覧に `Log`・`Date` を足すと、PHP の標準の `LogicException`・`DateTimeImmutable` に当たる。ファイルの文字を読んで、完全に一致するものを探すテストにした。`use` で読み込む形は、`use DB as Database;`・`use Log, DB;` も当たるように、文を1つずつに分けて、名前を比べる（最初に書いた正規表現は、この2つを見逃した。2回目のレビューで、実際に置いて見つかった）
-  - 古いコントローラー：`ignoring` に渡した名前で始まる新しいクラス（`UserControllerV2`）は、検査から外れる。直下にあるファイルを、一覧と完全に一致で比べるテストを足した。直下に新しいコントローラーを足すと、このテストが落ちる（足す場所は、業務のまとまりのフォルダ。10章）
-- 期待は、`arch('名前', function (): void { expect(…)->…; })` と、無名関数の中に書く。`arch('名前')->expect(…)` と鎖でつなぐ書き方は、Pest が実行時に足すメソッドなので、Larastan が「ないメソッド」と指摘する（テストのフォルダも検査の対象。検査から外さずに、書き方の側を合わせた）
-- `app/` の下に、新しいフォルダ（層でないもの）を足したら、`OUTSIDE_LAYERS` にも足す（足し忘れると、Domain と Application から使えてしまう）
-- 新しい Http の層（Controller・Request・Resource・Middleware）が DB を直接使う（`Illuminate\Support\Facades\DB`・`Illuminate\Database`・`\DB::`・`use DB;`）こと・Middleware 以外がトークンを読む（`Firebase\JWT`）こと・新しい Controller が `app()`・`resolve()` で中身を取り出すことも止める（4-1。#106 の管理画面の分と、そのレビュー（#234）で足した。それまでは、Model と Repository だけを止めていて、`DB::table()->update()` で直接書く Controller・Request で DB を使う形・`app('db')` で DB を取る形が通っていた）。これで、新しいコードが書き込むには、UseCase を通すしかなくなる。`Illuminate\Database` は名前の始まりで比べるので、DB の例外の型も止まる（意図どおり。DB の例外は、UseCase か例外のハンドラーで変える）
-- 管理画面の比べるテスト（`SameRulesAsClientTest.php`）は、印より上に決まり（`arch(`・`test(` など）が書かれていないことも確かめる（印より上は比べる範囲の外なので、そこに書くと、片方だけの決まりが通ってしまう。#234）
+- 置き場：`tests/Arch/LayersTest.php`（中身はファイルを読む。ここにはコピーしない）。`phpunit.xml` のテストの組 `Arch` で、CI でほかのテストと一緒に流れる
+- 正本は会員の側（`backend/client/tests/Arch/`）。管理画面（`backend/admin/tests/Arch/`）には、同じファイルをコピーする。違うのは、ファイルの上の「このアプリだけのもの」（古いコントローラーの一覧 `LEGACY_CONTROLLERS`）だけ。印（`// ==== ここから下は、会員の側…`）より下は、2つのファイルで同じにする。管理画面の `tests/Arch/SameRulesAsClientTest.php` が、印より下を比べ、違えば落ちる。印より上に決まり（`arch(`・`test(` など）が書かれていないことも確かめる。管理画面の CI は `backend/client/tests/Arch/**` が変わったときにも動く
+- 足すとき・直すときは、わざと違反を作って落ちるのを見る（新しい Controller に `use App\Models\User;`、Service に `use Illuminate\Http\Request;`）。当てはまるファイルがないあいだは、どのテストも通るので、通っただけでは、効いているかが分からない
+- テストで確かめられないことは、レビューで見る（`pr-review`）
+  - Controller に、業務の判断（`if`）が残っていないか（使っているクラスは正しくても、中身は機械で見られない）
+  - Service の中で、役割の確かめ（管理画面）と監査ログを書き忘れていないか（API テストで、見るだけの管理者は 403・監査ログの行がある、を確かめる）
+  - `$request->bearerToken()` でトークンを読む形・文字列でクラス名や関数名を書く形（`call_user_func('now')` など）・ほかのクラスを通した間接の依存
+- `arch()` の比べ方は「名前の始まり」。そのために、書き方を変えた所がある（#106・#234 で、違反を置いて確かめた）
+  - 名前空間の配列：`expect([名前空間の一覧])->not->toUse(…)` は、違反があっても通る。名前空間は1つずつ `expect()` に渡す（`foreach` で回す）。`toUseStrictTypes()` は、配列でも落ちる
+  - ヘルパー関数：`expect(関数の一覧)->not->toBeUsedIn(層の一覧)` では落ちない。置き場ごとに `not->toUse(関数の一覧)` と書く
+  - ファサードの別名（`\DB::`・`use DB;`）は、名前が `Illuminate` で始まらないので落ちない。ファイルの文字を読んで、完全に一致するものを探すテストにした
+  - 古いコントローラー：`ignoring` に渡した名前で始まる新しいクラス（`UserControllerV2`）は、検査から外れる。直下にあるファイルを、一覧と完全に一致で比べるテストを置いた
+  - ないクラス：`use` したクラスが実在しないと、依存として数えない（#236 で、Model のない管理画面に `use App\Models\User;` を置いて確かめた。実在する Model なら落ちる）。動かないコードなので、実際の穴にはならない
+- 期待は、`arch('名前', function (): void { expect(…)->…; })` と、無名関数の中に書く（鎖でつなぐ書き方は、Larastan が「ないメソッド」と指摘する）
 
 ## 9. 共通の原則（画面にも当てはめる）
 
@@ -751,20 +317,19 @@ arch('新しい層のファイルは strict_types', function (): void {
 
 ### 過剰設計の禁止
 
-- 要件にない汎用化・設定項目・抽象化を足さない。interface は、Repository と外のサービスと、トランザクション・日時にだけ作る。それ以外の1か所でしか使わないクラスに interface を作らない（乱数・ID の生成などが要るようになったら、この一覧に足してから作る）
-- 起こりえない入力への防御を足さない。形の確かめは Request、業務の確かめは Domain
+- 要件にない汎用化・設定項目・抽象化を足さない。interface は、外のサービス（Firestore・メール・将来の決済）を差し替えてテストしたいときだけ作る
+- 起こりえない入力への防御を足さない。形の確かめは Request、業務の確かめは Service
 - 凝った書き方より、読んですぐ分かる書き方を選ぶ
 
 ### 1ファイル1責務
 
-- ファイルの担当を一文で言えること。「いいねの回数の上限を判定する」は合格、「いいねまわりの処理いろいろ」は失格
-- UseCase が 100行を超えたら、手順か決まりのどちらかが混ざっている。決まりを Domain へ出す
+- ファイルの担当を一文で言えること。「プロフィールを見る・直す」は合格、「会員まわりの処理いろいろ」は失格
+- Controller のメソッドが10行を超えたら、判断か DB の処理が混ざっている。Service へ出す
 
 ### 副作用の分離
 
-- 業務の判断・計算は Domain の純粋な関数とエンティティに集める
-- DB・外のサービス・時刻は Infrastructure に寄せ、interface 越しに使う。環境変数（`config()`）を読むのも Infrastructure と Http だけ
-- 狙いは、業務の決まりを DB なしで速くテストできる形に保つこと
+- 外への書き込み（メール・Firestore）は Service の中で、トランザクションのあとに、目に見える1行として書く。Model のイベントや Observer に隠さない
+- 環境変数は `config()` で読む（`env()` は `config/` の中だけ）
 
 ## 10. まだ移していない古いコード
 
@@ -775,13 +340,14 @@ arch('新しい層のファイルは strict_types', function (): void {
   - 新しい URL に移すとき（今の URL は変えずに残す）：新しい URL のテストは、今の URL に対する、今の動きを確かめるテストをコピーして作る。違ってよい点は、移すチケットの表に並べたものだけ（手順は `testing.md` の「新しい URL に移したときのテスト」）
   - 安全の穴を直すとき：別のコミットにし、先にテストの期待値を要件どおりに変えて、落ちることを見せる（`testing.md` の「安全の穴を直すときのテスト」）
 - そのために、API テストは中の作りに頼らない
-  - DB は表の名前で確かめる（`assertDatabaseHas('likes', [...])`・`assertDatabaseCount('likes', 0)`）。テストに Model の名前空間（`App\Models\…`）を書かない
+  - DB は表の名前で確かめる（`assertDatabaseHas('likes', [...])`・`assertDatabaseCount('likes', 0)`）
   - データは `tests/Support/` の作る関数（例：`createMember()`・`createLike()`）で作る。Model の Factory を呼ぶのは、この関数の中だけ
-  - 時刻は `travelTo()`（`$this->travelTo()` と同じ）で止める。ログインは、本物のトークンを作って送る（`actingAsMember()`）。部品の一覧は `testing.md` の「テストの部品」
+  - 時刻は `travelTo()` で止める。ログインは、本物のトークンを作って送る（`actingAsMember()`）。部品の一覧は `testing.md` の「テストの部品」
   - 外への書き込み（Firestore）は、移す前と後で同じ方法で確かめる（Emulator の中身を読む）
-- Model を `app/Models` から `app/Infrastructure/Models` へ移すのは、それだけのコミットにする。そのコミットでは `tests/Support/` の `use` の書き換えだけを許す
-- 新しく書くコードは、必ずこの形で書く。古いコントローラー（`app/Http/Controllers/` の直下）に機能を足さない
-- 古いコードの中で見つけた問題は、移すときに直さず、改善のチケットにする（測った問題の一覧は各一歩の解説の 9-2）
+- 新しく書くコードは、必ずこの形で書く。古いコントローラー（`app/Http/Controllers/` の直下）に機能を足さない。移したら、古いファイルを消し、アーキテクチャのテストの `LEGACY_CONTROLLERS` からも消す
+- 移すたびに、**次の改善の候補**（移して気づいたこと。例：「検索の条件が増えるたびに `scopeSearch` が長くなる」）を、そのサイクルの `06-walkthrough.md` に1行残す。振り返りと、太ったときの見直しの材料にする
+- 古いコードの中で見つけた問題は、移すときに直さず、改善か不具合のチケットにする（測った問題の一覧は各一歩の解説の 9-2）
+- そのあとは、機能を足すとき・不具合を直すときに、触る所をこの形に移す
 
 ## 11. やってはいけない書き方
 
@@ -790,76 +356,65 @@ arch('新しい層のファイルは strict_types', function (): void {
 if ($profile->gender === 'male' && ! $user->is_paid) {
     $today = Like::where('from_user_id', $id)->whereDate('created_at', now()->toDateString())->count();
 }
-// ✅ 判断は Domain、数えるのは Repository、つなぐのは UseCase
-LikeQuota::assertNotExceeded($me, $this->likes->countSentOn($me->id, $this->clock->now()));
+// ✅ Controller は Service を呼ぶだけ。判断は Service、数えるクエリは Model
+$result = $this->likes->store($memberId, $request->validated());
 
-// ❌ Application や Domain で Laravel を使う
-$now = now();
-DB::transaction(fn () => ...);
-// ✅ interface 越し
-$now = $this->clock->now();
-$this->transaction->run(fn () => ...);
+// ❌ Service が HTTP を知っている（コマンドやテストから呼べない）
+public function update(Request $request): JsonResponse { abort(403); }
+// ✅ 値を受け取り、Model を返す。断るときは業務の例外
+public function update(int $memberId, string $publicId, array $input): Profile { throw new ProfileNotOwnedException(); }
 
-// ❌ Repository が業務の判断をする（「10回なら」は業務の決まり）
-public function canLikeToday(int $memberId): bool { return $this->count($memberId) < 10; }
-// ✅ Repository は数えるだけ
-public function countSentOn(MemberId $from, DateTimeImmutable $day): int;
+// ❌ 有料かどうかを、あちこちで書く（期限を見ない所ができる）
+if ($user->is_paid) { ... }
+// ✅ Model の判定を1つだけ置き、全員が呼ぶ
+if ($user->isPaidAt(now())) { ... }
 
-// ❌ Eloquent の Model を Repository の外へ返す（Resource でリレーションを読み、N+1 になる）
-public function findByPublicId(string $publicId): User;
-// ✅ Domain のエンティティに詰め替えて返す
-public function findByPublicId(string $publicId): Member;
+// ❌ Model を丸ごと返す（パスワードのハッシュ・確認用の文字まで出る）
+return $user;
+// ✅ Resource で、返してよい項目だけを選ぶ
+return new ProfileResource($user->profile);
+
+// ❌ 保存したときに、裏でメールを送る（Service を読んでも見えない）
+protected static function booted(): void { static::created(fn (User $u) => Mail::to($u)->send(...)); }
+// ✅ Service の中で、コミットのあとに書く
+$user = DB::transaction(fn (): User => User::create($input));
+Mail::to($user)->send(new VerifyMail($user));
 
 // ❌ トランザクションの中で外へ書く
-$this->transaction->run(function () use ($room) { $this->talkRooms->save($room); $this->chatSync->openRoom($room); });
+DB::transaction(function () use ($room) { $room->save(); $this->firestore->openRoom($room); });
 // ✅ コミットのあと
-$this->transaction->run(fn () => $this->talkRooms->save($room));
-$this->chatSync->openRoom($room);
-
-// ❌ Domain が状態コードを知っている
-abort(403, '有料会員になると使えます');
-// ✅ Domain の例外を投げ、bootstrap/app.php で 403 に変える
-throw new PaidPlanRequiredException();
+DB::transaction(fn () => $room->save());
+$this->firestore->openRoom($room);
 ```
 
 ## 管理画面での当てはめ
 
-骨組みと依存の向きは同じ。違いは使い方だけ。
+形と依存の向きは同じ。違いは使い方だけ。
 
-- 読み取り（API の9割）は、Controller から QueryService を直接呼ぶ
-- 書き込みは UseCase を通す。運営の操作（停止・解除・値段の変更）は、必ず役割を確かめ（`Admin::assertCan()`）、同じトランザクションで監査ログを保存する
-- 例外：ログイン（`LoginAdminUseCase`。役割はまだ分からない）と、見たことの記録（`RecordAuditLogUseCase`。それ自体が監査ログ）は、役割を確かめない
-- 管理画面の Domain は「運営の権限と監査」。まとまりと集約の一覧は [docs/backend.md](../../docs/backend.md) の 2-2
-- 「見たこと」の監査ログ（会員の詳細を開いた・`member.view`）も書き込みなので、Controller が QueryService で読んだあとに `RecordAuditLogUseCase` を呼んで書く。QueryService の中で書かない
-- 管理画面は会員の側のコードを読み込まない。書いてよい表と列は [docs/backend.md](../../docs/backend.md) の表に従う
+- 管理画面には、まだ Model がない（古いコントローラーは全部 `DB::` で書いている）。移すときに、使う表の Model を `backend/admin/app/Models/` に作る（会員の側の Model は読み込まない。表の作りは `backend/client` のマイグレーションが正本）
+- 書き込み（停止・解除・値段の変更・お知らせ・メモ）は、必ず Service で役割を確かめ、**同じトランザクションで監査ログを保存する**
+- 例外：ログイン（役割はまだ分からない）と、見たことの記録（`member.view`。それ自体が監査ログ）は、役割を確かめない
+- 管理画面が書いてよい表と列は [docs/backend.md](../../docs/backend.md) の4章に従う
 
 ```php
-// backend/admin/app/Domain/Admins/Admin/AdminRole.php
-enum AdminRole: string
+// backend/admin/app/Models/Admin.php
+public function canWrite(): bool
 {
-    case Owner = 'owner';
-    case Viewer = 'viewer';
-
-    public function allows(Permission $permission): bool
-    {
-        return match ($this) {
-            self::Owner => true,
-            self::Viewer => false,
-        };
-    }
+    return $this->role === 'owner';   // 見るだけの人（viewer）は false
 }
 
-// backend/admin/app/Application/UseCases/Members/SuspendMemberUseCase.php
-public function execute(SuspendMemberInput $input): void
+// backend/admin/app/Services/Members/SuspensionService.php
+public function store(int $adminId, string $memberPublicId, string $reason): void
 {
-    $admin = $this->admins->findById($input->adminId);
-    $admin->assertCan(Permission::SuspendMember);   // 見るだけの人なら PermissionDeniedException → 403
-    $now = $this->clock->now();
+    $admin = Admin::query()->findOrFail($adminId);
+    if (! $admin->canWrite()) {
+        throw new PermissionDeniedException();   // 403
+    }
 
-    $this->transaction->run(function () use ($input, $admin, $now): void {
-        $suspended = $this->suspensions->findByPublicIdForUpdate($input->memberPublicId)->suspend($input->reason, $now);
-        $this->suspensions->save($suspended);
-        $this->auditLogs->save(AuditLog::create($admin->id, AuditAction::SuspendMember, 'users', $suspended->memberId, ['reason' => $input->reason], $now));
+    DB::transaction(function () use ($admin, $memberPublicId, $reason): void {
+        $member = User::query()->where('public_id', $memberPublicId)->lockForUpdate()->firstOrFail();
+        $member->update(['suspended_at' => now(), 'suspended_reason' => $reason]);
+        AuditLog::record($admin, 'member.suspend', $member, ['reason' => $reason]);   // 同じトランザクションで
     });
 }
 ```

@@ -1,17 +1,16 @@
 <?php
 
 declare(strict_types=1);
-use Illuminate\Support\Facades\Facade;
 
-// アーキテクチャのテスト（agents/rules/architecture.md の8章）。層の依存の向き・名前・final・strict_types を確かめる。
-// 新しい層（App\Domain・App\Application・App\Infrastructure）にファイルがまだないあいだは、当てはまるものがなく、どれも通る。
-// 移したファイルが、決まりを破ったときに落ちる。足すとき・直すときは、わざと違反を置いて、落ちるのを見る
+// アーキテクチャのテスト（agents/rules/architecture.md の8章）。依存の向き（Controller → Service → Model）・名前・final・strict_types を確かめる。
+// 新しい置き場（App\Services・App\Exceptions・業務のまとまりのフォルダの Controller）にファイルがまだないあいだは、
+// 当てはまるものがなく、どれも通る。移したファイルが、決まりを破ったときに落ちる。足すとき・直すときは、わざと違反を置いて、落ちるのを見る
 
-// ==== このアプリだけのもの（会員の側と管理画面で、違うのはこの3つの一覧だけ）====
+// ==== このアプリだけのもの（会員の側と管理画面で、違うのはこの一覧だけ）====
 
-// まだ移していない古いファイル。この一覧が、そのまま移行の残り。移したら消す。
-// ignoring に渡すのは古いコントローラーだけ。ignoring は、渡した名前で始まる「使われる側」の依存も消すので、
-// App\Models を渡すと、新しいコードが App\Models を使っても落ちなくなる
+// まだ移していない古いコントローラー（app/Http/Controllers の直下）。管理画面には、まだ Model がない（全部 DB:: で書いている）。
+// 移すときに、使う表の Model を app/Models に作る（architecture.md の「管理画面での当てはめ」）。この一覧が、そのまま移行の残り。移したら消す。
+// ignoring は、渡した名前で始まる「使われる側」の依存も消すので、古いコントローラーの名前だけを渡す
 const LEGACY_CONTROLLERS = [
     'App\Http\Controllers\AuditLogController',
     'App\Http\Controllers\AuthController',
@@ -27,49 +26,58 @@ const LEGACY_CONTROLLERS = [
     'App\Http\Controllers\SuspensionController',
     'App\Http\Controllers\TalkRoomController',
 ];
-// 管理画面には Model がない（全部 DB:: で書いている）。新しい Model は App\Infrastructure\Models に置く（app/Models には作らない）。
-// app/Models に作っても Http から使えないよう、会員の側と同じく止める
-const LEGACY_MODELS = 'App\Models';
-
-// 設計の図（3章）にない、全部を知ってよい Providers。Domain と Application は使わない（管理画面に App\Mail はない）
-const OUTSIDE_LAYERS = ['App\Providers'];
 
 // ==== ここから下は、会員の側（backend/client/tests/Arch/LayersTest.php。正本）と管理画面（backend/admin/tests/Arch/LayersTest.php）で同じ。片方を直したら、もう片方も直す（管理画面の SameRulesAsClientTest が、違えば落ちる）====
 
-// Domain と Application で使わない、Laravel のヘルパー関数。名前の始まりで比べるので、'app' は app_path() なども止める
-const LARAVEL_HELPERS = [
-    'now', 'today', 'config', 'env', 'app', 'resolve', 'collect', 'abort', 'response', 'request', 'logger', 'logs', 'info',
-    'auth', 'session', 'cache', 'event', 'dispatch', 'report', 'rescue', 'retry', 'validator', '__', 'trans',
-];
-
 // arch() の比べ方は「名前の始まり」。期待は、無名関数の中に書く
-// （arch('名前')->expect(…) と鎖でつなぐ書き方は、Larastan が「ないメソッド」と指摘する）
+// （arch('名前')->expect(…) と鎖でつなぐ書き方は、Larastan が「ないメソッド」と指摘する）。
+// 名前空間は1つずつ expect() に渡す。expect() に名前空間を配列で渡すと、not->toUse() は違反があっても通ってしまう
+// （#234 で、Request にトークンを読む処理を置いて確かめた）
 
-arch('Domain はほかの層・Laravel・Carbon・基盤を使わない', function (): void {
-    expect('App\Domain')
-        ->not->toUse(['App\Http', 'App\Application', 'App\Infrastructure', 'App\Models', 'App\Support', ...OUTSIDE_LAYERS, 'Illuminate', 'Carbon']);
+// ---- Http（Controller・Request・Resource・Middleware）----
+
+// Controller は「受け取る → Service を呼ぶ → 返す」だけ。Model・DB を直接使わず、トークンも読まない（2章）。
+// Illuminate\Database は名前の始まりで比べるので、DB の例外の型（ModelNotFoundException など）も止まる。
+// これは意図どおり：見つからないときは、Service の firstOrFail() が投げ、Laravel が 404 に変える（Controller で受け止めない）
+arch('新しい Controller は、Model・DB・トークンを直接使わない', function (): void {
+    expect('App\Http\Controllers')
+        ->not->toUse(['App\Models', 'Illuminate\Support\Facades\DB', 'Illuminate\Database', 'Firebase\JWT'])
+        ->ignoring(LEGACY_CONTROLLERS);
 });
 
-arch('Application は Http・Infrastructure・Laravel・Carbon・基盤を使わない', function (): void {
-    expect('App\Application')
-        ->not->toUse(['App\Http', 'App\Infrastructure', 'App\Models', 'App\Support', ...OUTSIDE_LAYERS, 'Illuminate', 'Carbon']);
+// app('db')・resolve(User::class) のように、名前を渡して中身を取り出すと、クラスの名前が出てこないので、上の決まりをすり抜ける
+// （#234 のレビューで確かめた）。使うものは、引数（コンストラクタやメソッドの型）で受け取る。response() などは止めない
+arch('新しい Controller は、app()・resolve() で中身を取り出さない', function (): void {
+    expect('App\Http\Controllers')
+        ->not->toUse(['app', 'resolve'])
+        ->ignoring(LEGACY_CONTROLLERS);
 });
 
-// 層の側から「使わない」と書く。expect() に関数の一覧・toBeUsedIn() に層の一覧、と両方に配列を渡す書き方は、
-// 違反があっても通ってしまう（#106 で、Domain に now()・Application に config() を置いて確かめた）
-arch('Domain は Laravel のヘルパー関数を使わない', function (): void {
-    expect('App\Domain')
-        ->not->toUse(LARAVEL_HELPERS);
+// 対象を Controller だけにすると、DB の処理を Request に移すだけで避けられる（#234 のレビューで確かめた）
+arch('Request と Middleware は、Model・DB を使わない', function (): void {
+    foreach (['App\Http\Requests', 'App\Http\Middleware'] as $layer) {
+        expect($layer)
+            ->not->toUse(['App\Models', 'Illuminate\Support\Facades\DB', 'Illuminate\Database']);
+    }
 });
 
-arch('Application は Laravel のヘルパー関数を使わない', function (): void {
-    expect('App\Application')
-        ->not->toUse(LARAVEL_HELPERS);
+// Resource は、Service が返した Model から、返してよい項目を選ぶ（Model の型は使ってよい）。新しくクエリを書かない
+arch('Resource は、DB を使わない', function (): void {
+    expect('App\Http\Resources')
+        ->not->toUse(['Illuminate\Support\Facades\DB', 'Illuminate\Database\Query', 'Illuminate\Database\Eloquent\Builder']);
 });
 
-// ファサードの別名（\DB::・\Log::・\Cache:: など。use を書かずに呼べる）は、名前が Illuminate で始まらないので、
-// arch() では落ちない。別名を「使わない」一覧に足すと、名前の始まりで比べるので、'Log' が LogicException に、
-// 'Date' が DateTimeImmutable に当たる。ファイルの文字を読んで、別名と完全に一致するものだけを探す。
+// トークンを読むのは Middleware だけ。$request->bearerToken() で読む形は、このテストでは見られない（レビューで見る）
+arch('トークンを読むのは Middleware だけ（Request・Resource は読まない）', function (): void {
+    foreach (['App\Http\Requests', 'App\Http\Resources'] as $layer) {
+        expect($layer)
+            ->not->toUse('Firebase\JWT');
+    }
+});
+
+// ファサードの別名（\DB:: など。use を書かずに呼べる）は、名前が Illuminate で始まらないので、arch() では落ちない。
+// 別名を「使わない」一覧に足すと、名前の始まりで比べるので、'Log' が LogicException に当たる。
+// ファイルの文字を読んで、別名と完全に一致するものだけを探す。
 // $skipFilesIn を渡すと、そのフォルダの直下のファイルは見ない（app/Http/Controllers の直下は、古いコントローラー）
 /**
  * @param  list<string>  $aliases
@@ -113,54 +121,10 @@ function archFindFacadeAliases(string $root, array $aliases, ?string $skipFilesI
     return $found;
 }
 
-test('Domain と Application は、ファサードの別名（\DB:: など）を使わない', function (): void {
-    $aliases = array_keys(Facade::defaultAliases()->all());
-    $app = dirname(__DIR__, 2).'/app';
-
-    expect([...archFindFacadeAliases($app.'/Domain', $aliases), ...archFindFacadeAliases($app.'/Application', $aliases)])->toBe([]);
-});
-
-// Http の層（Controller・Request・Resource・Middleware）は、SQL・トランザクションを書かない（4-1）。
-// これで、新しいコードが書き込むには、UseCase（役割の確かめと監査ログがある所）を通すしかなくなる。
-// 対象を Controller だけにすると、DB の処理を Request や Resource に移すだけで避けられる（#234 のレビューで確かめた）。
-// Illuminate\Database は名前の始まりで比べるので、DB の例外の型（ModelNotFoundException など）も止まる。
-// これは意図どおり：DB の例外は、UseCase か例外のハンドラーで Domain の例外に変える（Http が DB の作りを知らない）。
-// UseCase の中で役割の確かめを書き忘れることは、このテストでは見られない（API テストで、見るだけの管理者は 403 を確かめる）
-arch('新しい Http の層は、DB を直接使わない', function (): void {
-    expect('App\Http')
-        ->not->toUse(['Illuminate\Support\Facades\DB', 'Illuminate\Database'])
-        ->ignoring(LEGACY_CONTROLLERS);
-});
-
-// トークンを読むのは Middleware だけ（4-1）。$request->bearerToken() で読む形は、このテストでは見られない（レビューで見る）。
-// 名前空間は1つずつ確かめる。expect() に名前空間を配列で渡すと、not->toUse() は違反があっても通ってしまう
-// （#234 で、Request にトークンを読む処理を置いて確かめた。ヘルパー関数を配列で渡したときと同じ落とし穴）
-arch('トークンを読むのは Middleware だけ（Controller・Request・Resource は読まない）', function (): void {
-    foreach (['App\Http\Controllers', 'App\Http\Requests', 'App\Http\Resources'] as $layer) {
-        expect($layer)
-            ->not->toUse('Firebase\JWT')
-            ->ignoring(LEGACY_CONTROLLERS);
-    }
-});
-
-// app('db')・resolve('db') のように、名前を渡して中身を取り出すと、クラスの名前が出てこないので、上の決まりをすり抜ける
-// （#234 のレビューで確かめた）。使うものは、引数（コンストラクタやメソッドの型）で受け取る。response() などは止めない
-arch('新しい Controller は、app()・resolve() で中身を取り出さない', function (): void {
-    expect('App\Http\Controllers')
-        ->not->toUse(['app', 'resolve'])
-        ->ignoring(LEGACY_CONTROLLERS);
-});
-
 test('新しい Http の層は、DB のファサードの別名（\DB::・use DB;）も使わない', function (): void {
     // app/Http/Controllers の直下は古いコントローラー（上の LEGACY_CONTROLLERS）なので見ない。新しい Controller は、業務のまとまりのフォルダに置く
     $http = dirname(__DIR__, 2).'/app/Http';
     expect(archFindFacadeAliases($http, ['DB', 'Schema'], skipFilesIn: $http.'/Controllers'))->toBe([]);
-});
-
-arch('Http が使ってよい Infrastructure は QueryService だけ', function (): void {
-    expect('App\Http')
-        ->not->toUse(['App\Infrastructure\Models', 'App\Infrastructure\Repositories', 'App\Infrastructure\External', 'App\Infrastructure\Transaction', 'App\Infrastructure\Clock', LEGACY_MODELS])
-        ->ignoring(LEGACY_CONTROLLERS);
 });
 
 // ignoring は、名前の始まりで比べる。直下に UserControllerV2 のような名前のクラスを置くと、上のテストと
@@ -177,48 +141,51 @@ test('app/Http/Controllers の直下には、基底の Controller と、古い�
     expect($files)->toBe($allowed);
 });
 
-arch('Infrastructure は UseCase と Http を使わない', function (): void {
-    expect('App\Infrastructure')
-        ->not->toUse(['App\Application\UseCases', 'App\Http']);
+// ---- Service ----
+
+// Service は HTTP を知らない（同じ Service を、コマンド・キュー・テストからも呼べるようにする。2章）。
+// ログインしている人や入力は、Controller から値で受け取る。断るときは業務の例外を投げる（abort() で状態コードを決めない）
+arch('Service は、Http を使わない', function (): void {
+    expect('App\Services')
+        ->not->toUse(['App\Http', 'Illuminate\Http', 'Illuminate\Routing', 'request', 'auth', 'session', 'response', 'redirect', 'abort']);
 });
 
-arch('QueryService は Application・Repository・Domain を使わない', function (): void {
-    expect('App\Infrastructure\QueryServices')
-        ->not->toUse(['App\Application', 'App\Infrastructure\Repositories', 'App\Domain']);   // ID は int で受け取る
+arch('Service は final', function (): void {
+    expect('App\Services')
+        ->classes()
+        ->toBeFinal();
 });
 
-arch('Support（基盤）は、層と Model を使わない', function (): void {
+arch('Service は Service で終わる', function (): void {
+    expect('App\Services')
+        ->classes()
+        ->toHaveSuffix('Service');
+});
+
+// ---- Model ----
+
+// Model は DB とのやり取りだけ（2章）。Service と Http を使わない。
+// Observer（ObservedBy）を使うと、保存したときの裏の動きが、Service を読んでも見えなくなる。
+// booted() の中の static::created() などは、このテストでは見られない（レビューで見る）
+arch('Model は、Service・Http・Observer を使わない', function (): void {
+    expect('App\Models')
+        ->not->toUse(['App\Services', 'App\Http', 'Illuminate\Http', 'Illuminate\Database\Eloquent\Attributes\ObservedBy', 'request', 'auth', 'session']);
+});
+
+// ---- 例外・基盤 ----
+
+arch('業務の例外は、Http を使わない（状態コードは bootstrap/app.php で決める）', function (): void {
+    expect('App\Exceptions')
+        ->not->toUse(['App\Http', 'Illuminate\Http', 'abort', 'response']);
+});
+
+arch('Support（基盤）は、Http・Service・Model を使わない', function (): void {
     expect('App\Support')
-        ->not->toUse(['App\Http', 'App\Application', 'App\Domain', 'App\Infrastructure', 'App\Models', ...OUTSIDE_LAYERS]);
+        ->not->toUse(['App\Http', 'App\Services', 'App\Models']);
 });
 
-arch('Domain の interface は Interface で終わる', function (): void {
-    expect('App\Domain')
-        ->interfaces()
-        ->toHaveSuffix('Interface');
-});
-
-// 1つのテストに、期待は1つ。classes() の絞り込みは、鎖の2つ目以降の期待には効かないため
-arch('UseCase は final', function (): void {
-    expect('App\Application\UseCases')
-        ->classes()
-        ->toBeFinal();
-});
-
-arch('UseCase は UseCase で終わる', function (): void {
-    expect('App\Application\UseCases')
-        ->classes()
-        ->toHaveSuffix('UseCase');
-});
-
-arch('QueryService のフォルダのクラス（QueryService と読み取りの DTO）は final', function (): void {
-    expect('App\Infrastructure\QueryServices')
-        ->classes()
-        ->toBeFinal();
-});
-
-arch('新しい層のファイルは strict_types', function (): void {
-    expect(['App\Http', 'App\Application', 'App\Domain', 'App\Infrastructure', 'App\Support'])
+arch('新しいコードのファイルは strict_types', function (): void {
+    expect(['App\Http', 'App\Services', 'App\Exceptions', 'App\Support'])
         ->toUseStrictTypes()
         ->ignoring(LEGACY_CONTROLLERS);
 });
