@@ -73,3 +73,4 @@ API の正本。作る前に設計を書き、確かめてもらってから実�
 | [M7](m7-reports.md) | `POST /api/me/reports`（会員の側）・`GET /api/report-cases`・`GET /api/report-cases/{publicId}`・`PUT /api/report-cases/{publicId}`（管理画面） | 通報する・案件の一覧・案件の中身・状態を変える（M7・A7） | 実装済み（レガシー版） |
 | [M7](m7-reports.md) | `POST /api/members/{publicId}/notices`・`POST /api/members/{publicId}/ban`（管理画面）・`GET /api/me/notices`・`POST /api/me/notices/{publicId}/read`（会員の側） | 運営からのお知らせ・強制退会（A7。#213） | 実装済み（レガシー版） |
 | [12](12-admin.md) | `GET /api/talk-rooms/{publicId}`・`POST /api/members/{publicId}/notes`・`GET /api/members` と `GET /api/audit-logs` の絞り込み（管理画面） | やり取りを続けて読む・対応のメモ・絞り込み（#216・#218・#221） | 実装済み（レガシー版） |
+| [12](12-admin.md) | `GET /api/members/{publicId}/talk-rooms`・`…/violations`・`…/blocks`・`GET /api/block-ranking`（管理画面） | 会員ごとの、やり取り・違反・ブロックと、ブロックの多い会員（#227） | 実装済み（レガシー版） |
