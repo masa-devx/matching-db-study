@@ -74,12 +74,12 @@ arch('Application は Laravel のヘルパー関数を使わない', function ()
 // ファサードの別名（\DB::・\Log::・\Cache:: など。use を書かずに呼べる）は、名前が Illuminate で始まらないので、
 // arch() では落ちない。別名を「使わない」一覧に足すと、名前の始まりで比べるので、'Log' が LogicException に、
 // 'Date' が DateTimeImmutable に当たる。ファイルの文字を読んで、別名と完全に一致するものだけを探す。
-// $skipTopLevel が true なら、$root の直下のファイルは見ない（app/Http/Controllers の直下は、古いコントローラー）
+// $skipFilesIn を渡すと、そのフォルダの直下のファイルは見ない（app/Http/Controllers の直下は、古いコントローラー）
 /**
  * @param  list<string>  $aliases
  * @return list<string>
  */
-function archFindFacadeAliases(string $root, array $aliases, bool $skipTopLevel = false): array
+function archFindFacadeAliases(string $root, array $aliases, ?string $skipFilesIn = null): array
 {
     if (! is_dir($root)) {
         return [];
@@ -90,7 +90,7 @@ function archFindFacadeAliases(string $root, array $aliases, bool $skipTopLevel 
         if (! $file instanceof SplFileInfo || $file->getExtension() !== 'php') {
             continue;
         }
-        if ($skipTopLevel && $file->getPath() === $root) {
+        if ($skipFilesIn !== null && $file->getPath() === $skipFilesIn) {
             continue;
         }
         $source = (string) file_get_contents($file->getPathname());
@@ -124,18 +124,41 @@ test('Domain と Application は、ファサードの別名（\DB:: など）を
     expect([...archFindFacadeAliases($app.'/Domain', $aliases), ...archFindFacadeAliases($app.'/Application', $aliases)])->toBe([]);
 });
 
-// Controller は「受け取る → 呼ぶ → 返す」だけ。SQL・トランザクションを書かず、トークンも読まない（4-1）。
-// これで、新しい Controller が書き込むには、UseCase（役割の確かめと監査ログがある所）を通すしかなくなる。
+// Http の層（Controller・Request・Resource・Middleware）は、SQL・トランザクションを書かない（4-1）。
+// これで、新しいコードが書き込むには、UseCase（役割の確かめと監査ログがある所）を通すしかなくなる。
+// 対象を Controller だけにすると、DB の処理を Request や Resource に移すだけで避けられる（#234 のレビューで確かめた）。
+// Illuminate\Database は名前の始まりで比べるので、DB の例外の型（ModelNotFoundException など）も止まる。
+// これは意図どおり：DB の例外は、UseCase か例外のハンドラーで Domain の例外に変える（Http が DB の作りを知らない）。
 // UseCase の中で役割の確かめを書き忘れることは、このテストでは見られない（API テストで、見るだけの管理者は 403 を確かめる）
-arch('新しい Controller は、DB を直接使わず、トークンも読まない', function (): void {
-    expect('App\Http\Controllers')
-        ->not->toUse(['Illuminate\Support\Facades\DB', 'Illuminate\Database', 'Firebase\JWT'])
+arch('新しい Http の層は、DB を直接使わない', function (): void {
+    expect('App\Http')
+        ->not->toUse(['Illuminate\Support\Facades\DB', 'Illuminate\Database'])
         ->ignoring(LEGACY_CONTROLLERS);
 });
 
-test('新しい Controller は、DB のファサードの別名（\DB::・use DB;）も使わない', function (): void {
-    // 直下は古いコントローラー（上の LEGACY_CONTROLLERS）なので見ない。新しい Controller は、業務のまとまりのフォルダに置く
-    expect(archFindFacadeAliases(dirname(__DIR__, 2).'/app/Http/Controllers', ['DB', 'Schema'], skipTopLevel: true))->toBe([]);
+// トークンを読むのは Middleware だけ（4-1）。$request->bearerToken() で読む形は、このテストでは見られない（レビューで見る）。
+// 名前空間は1つずつ確かめる。expect() に名前空間を配列で渡すと、not->toUse() は違反があっても通ってしまう
+// （#234 で、Request にトークンを読む処理を置いて確かめた。ヘルパー関数を配列で渡したときと同じ落とし穴）
+arch('トークンを読むのは Middleware だけ（Controller・Request・Resource は読まない）', function (): void {
+    foreach (['App\Http\Controllers', 'App\Http\Requests', 'App\Http\Resources'] as $layer) {
+        expect($layer)
+            ->not->toUse('Firebase\JWT')
+            ->ignoring(LEGACY_CONTROLLERS);
+    }
+});
+
+// app('db')・resolve('db') のように、名前を渡して中身を取り出すと、クラスの名前が出てこないので、上の決まりをすり抜ける
+// （#234 のレビューで確かめた）。使うものは、引数（コンストラクタやメソッドの型）で受け取る。response() などは止めない
+arch('新しい Controller は、app()・resolve() で中身を取り出さない', function (): void {
+    expect('App\Http\Controllers')
+        ->not->toUse(['app', 'resolve'])
+        ->ignoring(LEGACY_CONTROLLERS);
+});
+
+test('新しい Http の層は、DB のファサードの別名（\DB::・use DB;）も使わない', function (): void {
+    // app/Http/Controllers の直下は古いコントローラー（上の LEGACY_CONTROLLERS）なので見ない。新しい Controller は、業務のまとまりのフォルダに置く
+    $http = dirname(__DIR__, 2).'/app/Http';
+    expect(archFindFacadeAliases($http, ['DB', 'Schema'], skipFilesIn: $http.'/Controllers'))->toBe([]);
 });
 
 arch('Http が使ってよい Infrastructure は QueryService だけ', function (): void {
