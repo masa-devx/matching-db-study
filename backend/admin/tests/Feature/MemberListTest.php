@@ -45,7 +45,8 @@ test('FR-ADMIN-012 ログインしていなければ、会員の一覧は 401', 
     // 会員がいても、中身を返さずに 401 になることを確かめるために、1人作っておく
     createMember();
 
+    // 応答は、理由の文（message）だけ。別の名前で、会員の中身を返していないことも、これで分かる
     getJson('/api/members')
         ->assertUnauthorized()
-        ->assertJsonMissingPath('data');
+        ->assertExactJson(['message' => 'ログインしてください']);
 });

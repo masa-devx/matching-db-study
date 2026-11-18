@@ -93,17 +93,22 @@ test('createMember() は、購入・停止の履歴・いいね・マッチ・�
     }
 });
 
-test('部品に、決まっていない役割・性別・空のニックネームを渡すと、例外で止まる', function (): void {
-    expect(fn () => createAdmin('editor'))->toThrow(InvalidArgumentException::class)
-        ->and(fn () => createMember(gender: 'x'))->toThrow(InvalidArgumentException::class)
-        ->and(fn () => createMember(nickname: ' '))->toThrow(InvalidArgumentException::class)
+// 止まる前に、行を入れていないことも確かめる（確かめが、行を入れたあとにあると、ここで落ちる）
+test('部品に、決まっていない値を渡すと、行を入れる前に、例外で止まる', function (Closure $call): void {
+    expect($call)->toThrow(InvalidArgumentException::class)
         ->and(DB::table('admins')->count())->toBe(0)
-        ->and(DB::table('users')->count())->toBe(0);
-});
+        ->and(DB::table('users')->count())->toBe(0)
+        ->and(DB::table('profiles')->count())->toBe(0);
+})->with([
+    '決まっていない役割' => [fn () => createAdmin('editor')],
+    '決まっていない性別' => [fn () => createMember(gender: 'x')],
+    '空白だけのニックネーム' => [fn () => createMember(nickname: ' ')],
+]);
 
 // 管理画面の部品は、表に直接入れる（会員の側の Factory を使えない）。表の作りは、会員の側のマイグレーションが決めるので、
 // 列が増えた・減った・名前が変わったときに、部品が古い形の行を作り続けても、だれも気づけない。
-// 部品が入れる3つの表の列を、ここに書いておく。会員の側のマイグレーションが変わると、このテストが落ちる。
+// 部品が入れる3つの表の列の名前を、ここに書いておく。会員の側のマイグレーションで、列が増えた・減った・名前が変わったら、
+// このテストが落ちる。見るのは、列の名前だけ（型・空を許すか・既定の値が変わっても、落ちない）。
 // 落ちたら、tests/Support/functions.php（createAdmin・createMember）を見直してから、この一覧を直す
 test('部品が行を入れる表（users・profiles・admins）の列は、部品を書いたときのまま', function (): void {
     $columns = fn (string $table): array => collect(DB::getSchemaBuilder()->getColumnListing($table))->sort()->values()->all();
