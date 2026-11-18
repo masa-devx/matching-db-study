@@ -9,6 +9,7 @@ use Illuminate\Foundation\Testing\TestCase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use InvalidArgumentException;
 
 use function Pest\Laravel\withHeader;
 
@@ -21,18 +22,24 @@ use function Pest\Laravel\withHeader;
  */
 
 /**
- * 管理者を1人作る。パスワードは 'password'。
+ * 管理者を1人作る。パスワードは 'password'。名前の既定は「テスト管理者」。
  * 作らないもの：監査ログ（admin_audit_logs）。
+ * 役割が owner・viewer 以外なら、例外で止まる。
  *
- * @param  'owner'|'viewer'  $role  owner は、すべてできる。viewer は、見るだけ
+ * @param  string  $role  owner（すべてできる）か viewer（見るだけ）。型の注記ではなく、関数の中で確かめる（変数で渡されても止めるため）
  */
 function createAdmin(string $role = 'owner', ?string $name = null): TestAdmin
 {
+    // 表（admins.role）には、止める制約がない。決まっていない役割のまま入ると、テストが、ありえない管理者で通ってしまう
+    if (! in_array($role, ['owner', 'viewer'], true)) {
+        throw new InvalidArgumentException("createAdmin() の役割は owner か viewer。渡された値：{$role}");
+    }
+
     $email = 'admin-'.Str::lower(Str::random(10)).'@admin.example.test';
     $id = DB::table('admins')->insertGetId([
         'email' => $email,
         'password' => Hash::make('password'),
-        'name' => $name ?? ($role === 'owner' ? '運営 太郎' : '閲覧 花子'),
+        'name' => $name ?? 'テスト管理者',
         'role' => $role,
         'created_at' => now(),
         'updated_at' => now(),
@@ -43,9 +50,13 @@ function createAdmin(string $role = 'owner', ?string $name = null): TestAdmin
 
 /**
  * 会員（users とプロフィール）を1人作る。メールアドレスは確認済み・無料・利用中。
- * 作らないもの：購入の行（purchases）・停止の履歴（suspensions）・いいね・マッチ・メッセージ。
+ * 作らないもの：購入の行（purchases）・停止の履歴（suspensions）・いいね（likes）・マッチ（user_matches）・メッセージ（messages）。
+ * 返り値の email は、作ったときのメールアドレス（退会した会員でも、書き換える前のもの）。
+ * 性別が male・female 以外・ニックネームが空の文字なら、例外で止まる。
+ * 行の形（退会のときのメールアドレスの書き換え など）は、会員の側の部品とは別に、ここにも書いてある。
+ * 表の列が増えた・減ったときは、tests/Feature/Support/SupportFunctionsTest.php の「列の一覧」のテストが落ちるので、ここを見直す。
  *
- * @param  'male'|'female'  $gender
+ * @param  string  $gender  male か female。関数の中で確かめる
  * @param  bool  $paid  有料会員（is_paid が true。期限は今から30日。purchases の行は作らない）
  * @param  bool  $withdrawn  退会した（deleted_at を入れ、メールアドレスを書き換える。会員の側の退会の API と同じ形）
  * @param  bool  $suspended  利用を止めた（users.suspended_at を入れる。停止の履歴と監査ログは作らない）
@@ -57,6 +68,14 @@ function createMember(
     bool $suspended = false,
     ?string $nickname = null,
 ): TestMember {
+    // 表（profiles.gender・nickname）には、止める制約がない。決まっていない値・空の名前を、部品の入り口で止める
+    if (! in_array($gender, ['male', 'female'], true)) {
+        throw new InvalidArgumentException("createMember() の性別は male か female。渡された値：{$gender}");
+    }
+    if ($nickname !== null && trim($nickname) === '') {
+        throw new InvalidArgumentException('createMember() のニックネームに、空の文字は渡せない（既定の名前にするなら、null）');
+    }
+
     $email = 'member-'.Str::lower(Str::random(10)).'@example.test';
     $id = DB::table('users')->insertGetId([
         'email' => $withdrawn ? $email.'#deleted#'.now()->getTimestamp() : $email,
@@ -84,7 +103,7 @@ function createMember(
     // public_id は DB の既定の値（uuidv7()）で入るので、読み直す
     $publicId = (string) DB::table('users')->where('id', $id)->value('public_id');
 
-    return new TestMember($id, $publicId, $email, $nickname);
+    return new TestMember($id, $publicId, $email, $nickname, $gender);
 }
 
 /**

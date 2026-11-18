@@ -39,7 +39,11 @@ abstract class TestCase extends BaseTestCase
         if ($path === false) {
             throw new RuntimeException('会員の側のマイグレーション（backend/client/database/migrations）が見つからない。表を作れない');
         }
-        // migrate:fresh が読む置き場に、会員の側のマイグレーションを足す
+        // migrate:fresh が読む置き場に、会員の側のマイグレーションを足す。
+        // Laravel の中の作り（'migrator' という名前で解決されること・RefreshDatabase が migrator を通ること）に頼っている。
+        // 効かなくなったら、tests/Feature/Support/SupportFunctionsTest.php の「表は、会員の側のマイグレーションで
+        // 作られている」が落ちる（このテストが、この仕組みを見張っている）。
+        // テストを並列で流すとき・テストの中で migrate を呼ぶときに足りるかは、確かめていない
         $app->afterResolving('migrator', static function (Migrator $migrator) use ($path): void {
             $migrator->path($path);
         });

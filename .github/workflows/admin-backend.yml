@@ -10,6 +10,8 @@ on:
       - "backend/admin/**"
       - "backend/client/database/migrations/**"
       - ".github/workflows/admin-backend.yml"
+      # 会員の側（backend.yml）にある compose.yaml は、入れていない。テストは、下のサービスの PostgreSQL を使い、
+      # compose.yaml も docker/db/init も読まないので、そこが変わっても、結果は変わらない
   push:
     branches: [legacy-repo, refactored-repo, "legacy/**", "refactor/**", "feature/**", "fix/**", "hotfix/**", "chore/**"]
     paths:
