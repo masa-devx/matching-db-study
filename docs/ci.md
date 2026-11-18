@@ -12,6 +12,8 @@ PR を出したとき・ブランチに push したときに、GitHub の上で�
 
 3つは別々のジョブにして、どれが落ちたかを PR の画面で分かるようにする。
 
+管理画面の API（`backend/admin/`）には、別のワークフロー（`.github/workflows/admin-backend.yml`）がある。ジョブは同じ3つ（整形の確かめ・静的解析・テスト。コマンドは `backend/admin/` で流す）。テストは、#105 で足した：テスト用の DB は `matching_admin_test`、表は、会員の側のマイグレーション（`backend/client/database/migrations`）で作る。そのため、`backend/admin/**` のほかに、`backend/client/database/migrations/**` が変わったときも動かす。
+
 文書には、別のワークフロー（`.github/workflows/docs.yml`。`refactored-repo` とそこから切ったブランチで動く）がある。
 
 | ジョブ | コマンド（リポジトリのルートで） | 落ちる条件 |

@@ -171,3 +171,150 @@ flowchart LR
 ### 説明の練習
 
 （これから。人が説明したら、ここと `docs/onboarding/quiz-log.md` に残す）
+
+## PR #232（#105 管理画面の API テストの土台と CI）
+
+アプリのコード（`backend/admin/app`）は変えていない。管理画面のテストを、会員の側と同じ土台（Pest・本物の PostgreSQL・違う DB なら止める・部品）にした。
+
+### ディレクトリの設計
+
+```text
+backend/admin/
+├── composer.json・composer.lock   ← Pest を足した（会員の側と同じ版）
+├── phpunit.xml                    ← DB を、SQLite のメモリ DB から、PostgreSQL の matching_admin_test に
+└── tests/
+    ├── TestCase.php               ← 違う DB なら止める。会員の側のマイグレーションの置き場を足す
+    ├── Pest.php                   ← 足した。Feature に、TestCase と RefreshDatabase を付ける
+    ├── Support/                   ← 足した。テストの部品
+    │   ├── functions.php          （createAdmin・createMember・actingAsAdmin・adminToken）
+    │   ├── TestAdmin.php          （createAdmin の返り値）
+    │   └── TestMember.php         （createMember の返り値）
+    └── Feature/
+        ├── HealthTest.php         ← 足した。土台が、アプリを立ち上げられること
+        ├── MemberListTest.php     ← 足した。見本の API テスト（会員の一覧）
+        └── Support/SupportFunctionsTest.php   ← 足した。部品のテスト
+docker/db/init/02-create-admin-test-db.sql   ← 足した。matching_admin_test を作る
+.github/workflows/admin-backend.yml          ← テストの仕事を足した
+```
+
+- 置き場の理由：会員の側（`backend/client/tests/`）と、同じ並びにした（`agents/rules/testing.md`）。片方を知っていれば、もう片方も読める
+- **表の作り（マイグレーション）は、管理画面に置かない。** 正本は `backend/client/database/migrations` の1か所で、テストのときに、そこを指して表を作る（`03-how.md` の案 A）
+- ほかに置ける場所と、置かなかった理由
+  - マイグレーションを管理画面にコピーする（案 C）：管理画面だけで閉じるが、正本が2つになり、ずれる
+  - 会員の側と同じ DB（`matching_test`）を使う（案 B）：準備は少ないが、2つのテストを同時に流すと、表の作り直しがぶつかる
+  - 部品を、2つのアプリで共有する：管理画面は、会員の側のコードを読み込まない決まり（12 の解説）。なので、同じ名前の部品が2つある
+
+### クラスの責務
+
+| クラス・ファイル | 知っていること | すること | しないこと |
+| --- | --- | --- | --- |
+| `Tests\TestCase` | テスト用の DB の名前（`matching_admin_test`）・会員の側のマイグレーションの置き場 | 違う DB なら、表を触る前に止める。マイグレーションの読み込み先を足す | 表を作る・巻き戻す（`RefreshDatabase` の仕事） |
+| `tests/Support/functions.php` | 表の列と、行の形（退会のときのメールアドレスの書き換え など）・管理者の JWT の中身 | 管理者・会員の行を入れる。ログインした状態にする | 購入・停止の履歴・いいね・マッチ・メッセージ・監査ログを作る。API を呼ぶ |
+| `TestAdmin`・`TestMember` | 作った行の、テストで使う値（ID・役割・`public_id`・メールアドレス・性別） | 値を運ぶだけ（`readonly`） | DB を読む・書く |
+
+### メソッドの表
+
+| 関数 | 入力 | 戻り値 | 副作用 | 失敗のしかた | 呼ぶ所 |
+| --- | --- | --- | --- | --- | --- |
+| `createAdmin()` | 役割（既定は `owner`）・名前（既定は「テスト管理者」） | `TestAdmin` | `admins` に1行 | 役割が `owner`・`viewer` 以外なら `InvalidArgumentException`（行を入れる前） | テスト |
+| `createMember()` | 性別・有料・退会・停止・ニックネーム | `TestMember` | `users` に1行・`profiles` に1行 | 性別が `male`・`female` 以外・ニックネームが空の文字なら `InvalidArgumentException`（行を入れる前） | テスト |
+| `actingAsAdmin()` | `TestAdmin` | テストの入口（`->getJson(…)` と続ける） | `Authorization` ヘッダーを付ける | ― | テスト |
+| `adminToken()` | `TestAdmin` | JWT の文字 | なし | 鍵が空・短いと、ライブラリが例外を出す（`Provided key is too short`） | `actingAsAdmin()`。期限切れを試すテストは、使わずに自分で作る |
+| `TestCase::createApplication()` | ― | アプリ | マイグレーションの読み込み先を足す | DB が `pgsql`・`matching_admin_test` でなければ `RuntimeException`。会員の側のマイグレーションの置き場がなければ `RuntimeException` | テストごとに、Laravel が呼ぶ |
+
+大事な所の抜き出し（3か所）。
+
+① 違う DB なら、表を触る前に止める。会員の側のテスト用（`matching_test`）でも止める。
+
+```php
+if ($connection !== 'pgsql' || $database !== 'matching_admin_test') {
+    throw new RuntimeException("管理画面のテストは、テスト用の DB（pgsql・matching_admin_test）だけで動かす。…");
+}
+```
+
+② 表は、会員の側のマイグレーションで作る。`migrate:fresh` が読む置き場に、足す。
+
+```php
+$app->afterResolving('migrator', static function (Migrator $migrator) use ($path): void {
+    $migrator->path($path);   // $path は backend/client/database/migrations
+});
+```
+
+③ 部品は、表に直接入れる（管理画面は Model を持たない）。決まっていない値は、入れる前に止める。
+
+```php
+if (! in_array($role, ['owner', 'viewer'], true)) {
+    throw new InvalidArgumentException("createAdmin() の役割は owner か viewer。渡された値：{$role}");
+}
+$id = DB::table('admins')->insertGetId([/* … */]);
+```
+
+### 呼び出しの流れ
+
+見本のテスト（会員の一覧）を1本流したとき。
+
+```mermaid
+sequenceDiagram
+  participant P as pest
+  participant C as TestCase
+  participant R as RefreshDatabase
+  participant D as matching_admin_test
+  participant T as MemberListTest
+  participant A as 管理画面の API
+  P->>C: createApplication
+  C->>C: DB の名前を確かめる（違えば、ここで止まる）
+  C->>C: 会員の側のマイグレーションの置き場を足す
+  P->>R: 表を作る（プロセスの中で、最初の1回だけ）
+  R->>D: migrate:fresh（会員の側のマイグレーション。表 30）
+  R->>D: begin
+  T->>D: createMember と createAdmin（insert into users / profiles / admins）
+  T->>A: GET /api/members（Authorization に管理者の JWT）
+  A->>D: select（件数・会員・1人ごとにプロフィールなど）
+  A-->>T: 200 と total・data
+  R->>D: rollback（テストごとに、入れた行を消す）
+```
+
+### 名前
+
+| 名前 | 理由 | ほかの候補と、選ばなかった理由 |
+| --- | --- | --- |
+| `matching_admin_test` | 会員の側の `matching_test` に、だれのテストかを足した | `matching_test_admin`：`matching_test` で始まるので、名前の始まりで比べる確かめがあると、取りちがえる |
+| `createAdmin()`・`createMember()`・`actingAsAdmin()` | 会員の側の部品（`createMember()`・`actingAsMember()`）と、言い方をそろえた | `makeAdmin()`：Laravel の Factory では、`make` は「DB に入れない」の意味 |
+| `adminToken()` | 会員の側の `memberToken()` と対 | `jwt()`：だれのトークンかが、名前から分からない |
+| `TestAdmin`・`TestMember` | テストで作ったもの、と分かる。アプリの Model ではない | `Admin`・`Member`：あとで作る Domain のクラスと、名前がぶつかる |
+
+### 依存の向き
+
+```mermaid
+flowchart LR
+  FT[Feature のテスト] --> S[tests/Support の部品]
+  FT --> API[管理画面の API]
+  S --> DB[(matching_admin_test)]
+  API --> DB
+  TC[TestCase] -->|置き場をパスで知っている| MIG[backend/client/database/migrations]
+  S -.->|使わない| CL[backend/client のコード]
+```
+
+管理画面のテストが、会員の側について知っているのは、マイグレーションの置き場のパスだけ（PHP のクラスは、読み込まない）。置き場を動かすと、`TestCase` の1行を直す。
+
+### レガシー版との違い
+
+| | レガシー版（`legacy-repo`） | この PR のあと |
+| --- | --- | --- |
+| テストの DB | SQLite のメモリ DB。マイグレーションがないので、表のない DB で走る | PostgreSQL の `matching_admin_test`。表は、会員の側のマイグレーションで 30 |
+| テストの道具 | PHPUnit だけ | Pest（会員の側と同じ版） |
+| テスト | 0本 | 18本（土台 1・見本 3・部品 14） |
+| CI | 整形と静的解析だけ | テストも流れる |
+
+### 作る途中で分かったこと
+
+| 分かったこと | どうやって分かったか | 直し方 |
+| --- | --- | --- |
+| ライブラリを入れるとき、範囲を絞らないと、Laravel 本体まで上がる | 入れたあとの差分を見た | Pest と PHPUnit だけを指定して入れ直した。一緒に上がった1つ（`symfony/polyfill-php85`）も、レビューのあとに戻した |
+| `$this->getJson()` は、Larastan が指摘する | Larastan を流した | 会員の側と同じく、`Pest\Laravel\getJson` の関数で呼ぶ |
+| 部品に、決まっていない役割や性別が、そのまま入る | レビュー。表に、止める制約がない | 部品の入り口で止める |
+| 表に直接入れる部品は、会員の側の表が変わっても、気づけない | レビュー | 部品が行を入れる表の、列の名前の一覧を、テストに書いた |
+
+### 説明の練習
+
+（これから。人が説明したら、ここと `docs/onboarding/quiz-log.md` に残す）

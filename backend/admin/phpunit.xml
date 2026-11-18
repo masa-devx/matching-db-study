@@ -23,9 +23,17 @@
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>
-        <env name="DB_CONNECTION" value="sqlite"/>
-        <env name="DB_DATABASE" value=":memory:"/>
-        <env name="DB_URL" value=""/>
+        <!-- テストは本物の PostgreSQL のテスト用 DB で動かす（D-010）。管理画面のテスト用は matching_admin_test
+             （会員の側の matching_test とは別。2つのテストを同時に流しても、ぶつからないようにする）。
+             Laravel は環境変数を $_SERVER から先に読み、Docker の環境変数（matching_dev）は $_SERVER に入っている。
+             <env> は $_ENV と getenv() しか変えないので、<server> でも書き、どちらも force="true" にする。
+             片方でも欠けると、テストが開発用の DB を作り直す（tests/TestCase.php が、その前に止める） -->
+        <server name="DB_CONNECTION" value="pgsql" force="true"/>
+        <server name="DB_DATABASE" value="matching_admin_test" force="true"/>
+        <server name="DB_URL" value="" force="true"/>
+        <env name="DB_CONNECTION" value="pgsql" force="true"/>
+        <env name="DB_DATABASE" value="matching_admin_test" force="true"/>
+        <env name="DB_URL" value="" force="true"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
