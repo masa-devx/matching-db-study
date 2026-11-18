@@ -38,6 +38,34 @@ class DashboardController extends Controller
                 ->sum('plans.price'),
         ];
 
+        // A5（#224）：今日やること。数えるだけで、8本増える。有料の区分の決め方は、会員の一覧からコピーした
+        $todo = [
+            'open_cases' => DB::table('report_cases')->where('status', 'open')->count(),
+            'in_progress_cases' => DB::table('report_cases')->where('status', 'in_progress')->count(),
+            'expiring_paid' => DB::table('users')->where('is_paid', true)
+                ->where('paid_until', '>=', now())->where('paid_until', '<', now()->addDays(7))->count(),
+            'expired_paid' => DB::table('users')->where('is_paid', true)->where('paid_until', '<', now())->count(),
+            'unverified' => DB::table('users')->whereNull('email_verified_at')->whereNull('deleted_at')->count(),
+        ];
+        // 期限の中の有料会員（上のカードの paid_members は、is_paid だけで数えたまま）
+        $cards['paid_active'] = DB::table('users')->where('is_paid', true)->where('paid_until', '>=', now())->count();
+
+        // A5（#224）：前の期間との比べ。昨日の登録・先月の売上（1か月ぶん）・前の30日（60〜31日前）の合計
+        $compare = [
+            'registered_yesterday' => DB::table('users')->whereDate('created_at', now()->subDay()->toDateString())->count(),
+            'sales_last_month' => (int) DB::table('purchases')
+                ->join('plans', 'plans.id', '=', 'purchases.plan_id')
+                ->where('purchases.created_at', '>=', now()->subMonthNoOverflow()->startOfMonth())
+                ->where('purchases.created_at', '<', now()->startOfMonth())
+                ->sum('plans.price'),
+            'registrations_prev30' => DB::table('users')
+                ->where('created_at', '>=', now()->subDays(60))->where('created_at', '<', now()->subDays(30))->count(),
+            'matches_prev30' => DB::table('user_matches')
+                ->where('created_at', '>=', now()->subDays(60))->where('created_at', '<', now()->subDays(30))->count(),
+            'messages_prev30' => DB::table('messages')
+                ->where('created_at', '>=', now()->subDays(60))->where('created_at', '<', now()->subDays(30))->count(),
+        ];
+
         $days = [];
         foreach (range(29, 0) as $i) {
             $d = now()->subDays($i)->toDateString();
@@ -58,6 +86,6 @@ class DashboardController extends Controller
             ->orderBy('month')
             ->get();
 
-        return response()->json(['cards' => $cards, 'days' => $days, 'months' => $months]);
+        return response()->json(['cards' => $cards, 'todo' => $todo, 'compare' => $compare, 'days' => $days, 'months' => $months]);
     }
 }
