@@ -96,6 +96,7 @@ agents/ の目次。作業内容に合うルールを読み、スキルで進め
 | PM とビジネス側の役で、仕分け・なぜ作るか・何を作るか・振り返り・ロードマップ | [pm](skills/pm/SKILL.md) |
 | リーダーの役で、どう作るか・設計のレビュー・チケットの分け方・理解度チェック | [tech-lead](skills/tech-lead/SKILL.md) |
 | 10種類のチケットを作り、ボードの項目を付ける | [ticket](skills/ticket/SKILL.md) |
+| 実装の前に、直す課題を人が理解する（現場での見え方・原因・人が先に答える） | [understand-problem](skills/understand-problem/SKILL.md) |
 | チケット1つを設計どおりに実装し、PR を作る | [implement](skills/implement/SKILL.md) |
 | PR のディレクトリとメソッドの設計を解説し、説明の練習をする | [code-walkthrough](skills/code-walkthrough/SKILL.md) |
 | PR をいろいろな角度のレビュー役に見せ、PR にコメントを残す | [pr-review](skills/pr-review/SKILL.md) |

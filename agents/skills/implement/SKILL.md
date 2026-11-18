@@ -7,6 +7,11 @@ description: 改訂版（refactored-repo）で、Ready のチケット1つを、
 
 目的：決めた設計とチケットの範囲だけを、レビューできる形の PR にする。設計を変えたくなったら、実装を止めてリーダーの役で相談する。
 
+## 0. 課題を理解したか確かめる
+
+- 今のサイクルの `05-problems.md` に、このチケットの節があるかを見る。なければ、先に `understand-problem` を回す。人が「なぜ起きるか・どう直すか・どう確かめるか」を答えるまで、実装に入らない（2026-11-18 に人が決めた）
+- 人が決めた直し方が `03-how.md` と違うときは、`05-problems.md` の「決めたこと」に従う
+
 ## 1. 読む
 
 - チケットの本文（`gh issue view <番号>`）・今のサイクルの `03-how.md`・関係する要件（`docs/requirements/`）と `docs/api/`
@@ -41,15 +46,16 @@ AGENTS.md の「主要コマンド」で、次を流して結果をそのまま�
 
 ## 6. PR を作る
 
+- コミットの前に止まる（AGENTS.md の「コミットの前に」）。変えたファイルごとに「何を・なぜ」の表と `git diff --stat` を見せ、人が全文の差分を見て OK と言うまで、`git add`（`-N` を除く）・`git commit`・`git push` をしない。レビューの指摘の直し・解説の追記も、同じように止まる
 - 本文は `.github/pull_request_template.md` の見出しを埋める（何を・なぜ・ディレクトリとクラス・流れる SQL・テスト・前と後の数字・リリースと戻し方・見てほしいところ）。文は `agents/rules/writing.md` の書き方と言葉で書く
 - 文書（`docs/`・`agents/`・`.github/`・AGENTS.md）を触ったら、`python3 -I agents/tools/check-words.py` を流す
-- コミット・push・PR の作成は、人に確かめてから行う。行き先は `refactored-repo`
+- PR の作成も、人の OK のあとに行う。行き先は `refactored-repo`
 - PR を作ったらボードの Status を In review にする
 - 続けて `code-walkthrough`（解説）と `pr-review`（レビュー）に進むことを伝える
 
 ## 終わりの条件
 
-- PR ができ、テスト・静的検査が通り、測った数字が PR にある
+- 人が課題を理解した記録（`05-problems.md`）があり、人が差分を見て OK と言い、PR ができ、テスト・静的検査が通り、測った数字が PR にある
 
 ## エラー時
 
