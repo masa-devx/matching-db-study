@@ -7,6 +7,7 @@ const PATHS: Record<string, string> = {
   yen: 'M6 4l6 8 6-8M12 12v8M7 13h10M7 17h10',
   log: 'M6 3h9l3 3v15H6zM9 9h6M9 13h6M9 17h4',
   flag: 'M5 21V4M5 4h11l-2 4 2 4H5',
+  search: 'M11 4a7 7 0 1 1 0 14 7 7 0 0 1 0-14zm9 16-4.35-4.35',
 }
 
 export default function Icon({ name }: { name: string }) {

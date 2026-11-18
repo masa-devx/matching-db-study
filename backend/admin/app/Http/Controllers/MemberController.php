@@ -48,6 +48,20 @@ class MemberController extends Controller
             $query->whereNotNull('banned_at');
         }
 
+        // A1（#224）：有料の区分で絞る。区分の決め方（期限の中・あと7日・期限が過ぎた）を、ここと、下の行を作る所と、
+        // ダッシュボードの3か所に書いた。is_paid は、期限が過ぎても true のまま（会員の側が、戻していない）なので、
+        // 管理画面では、期限（paid_until）も見て分ける。どの列にもインデックスはない
+        $plan = (string) $request->input('plan', '');
+        if ($plan === 'free') {
+            $query->where('is_paid', false);
+        } elseif ($plan === 'paid') {
+            $query->where('is_paid', true)->where('paid_until', '>=', now());
+        } elseif ($plan === 'expiring') {
+            $query->where('is_paid', true)->where('paid_until', '>=', now())->where('paid_until', '<', now()->addDays(7));
+        } elseif ($plan === 'expired') {
+            $query->where('is_paid', true)->where('paid_until', '<', now());
+        }
+
         // A1（#218）：絞り込みを増やした。条件を1つ足すたびに、ここに if を1つ書き足した。
         // プロフィールの条件（性別・年齢・都道府県）は、条件ごとに、profiles を読む副問い合わせを1つずつ足す
         // （3つ選ぶと、profiles を3回読む。profiles.user_id にインデックスはない）
@@ -108,6 +122,12 @@ class MemberController extends Controller
             // 年齢の計算を、ここにも書く（年の引き算なので、誕生日の前だと1歳多い）
             $user->age = $profile?->birthday ? (int) date('Y') - (int) substr((string) $profile->birthday, 0, 4) : null;
             $user->purchases = DB::table('purchases')->where('user_id', $user->id)->count();
+            // A1（#224）：有料の区分と、いちばん新しい購入のプランの名前。1人ごとに、もう2本（これで1人5本）
+            $user->paid_state = ! $user->is_paid ? 'free'
+                : ($user->paid_until === null || $user->paid_until < now()->toDateTimeString() ? 'expired'
+                    : ($user->paid_until < now()->addDays(7)->toDateTimeString() ? 'expiring' : 'paid'));
+            $planId = DB::table('purchases')->where('user_id', $user->id)->orderBy('created_at', 'desc')->value('plan_id');
+            $user->plan = $planId ? DB::table('plans')->where('id', $planId)->value('name') : null;
             $data[] = $user;   // users の行をそのまま（password も入る）
         }
 
