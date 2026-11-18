@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\MemberActivityController;
 use App\Http\Controllers\MemberController;
 use App\Http\Controllers\MemberNoteController;
 use App\Http\Controllers\MessageController;
@@ -56,3 +57,9 @@ Route::post('/members/{publicId}/notes', [MemberNoteController::class, 'store'])
 
 // A2 トークルームのやり取りを、続けて読む（#221）
 Route::get('/talk-rooms/{publicId}', [TalkRoomController::class, 'show']);
+
+// A1・A7 会員ごとの、やり取り・違反・ブロックと、ブロックの多い会員（#227）
+Route::get('/members/{publicId}/talk-rooms', [MemberActivityController::class, 'talkRooms']);
+Route::get('/members/{publicId}/violations', [MemberActivityController::class, 'violations']);
+Route::get('/members/{publicId}/blocks', [MemberActivityController::class, 'blocks']);
+Route::get('/block-ranking', [MemberActivityController::class, 'blockRanking']);

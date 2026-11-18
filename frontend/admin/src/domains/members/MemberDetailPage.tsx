@@ -21,6 +21,7 @@ import {
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { useNotice } from '../../Notice'
+import { BlocksTab, RoomsTab, ViolationsTab } from './MemberActivityTabs'
 import { PaidBadge, paidStateOf } from './paid'
 import { toDate } from '../../date'
 
@@ -216,6 +217,20 @@ export default function MemberDetailPage() {
           <Tabs.Tab value="paid" rightSection={<PaidBadge state={paidState} small />}>
             有料
           </Tabs.Tab>
+          <Tabs.Tab value="rooms">やり取り</Tabs.Tab>
+          <Tabs.Tab
+            value="violations"
+            rightSection={
+              (m.banned_at || m.suspended_at) && (
+                <Badge size="sm" color="red" circle>
+                  !
+                </Badge>
+              )
+            }
+          >
+            違反
+          </Tabs.Tab>
+          <Tabs.Tab value="blocks">ブロック</Tabs.Tab>
           <Tabs.Tab
             value="record"
             rightSection={
@@ -400,6 +415,19 @@ export default function MemberDetailPage() {
               )}
             </Card>
           </Stack>
+        </Tabs.Panel>
+
+        {/* A1・A7（#227）：やり取り・違反・ブロック。タブを開いたときに、それぞれの API を読む */}
+        <Tabs.Panel value="rooms">
+          <RoomsTab publicId={publicId} />
+        </Tabs.Panel>
+
+        <Tabs.Panel value="violations">
+          <ViolationsTab publicId={publicId} member={m} />
+        </Tabs.Panel>
+
+        <Tabs.Panel value="blocks">
+          <BlocksTab publicId={publicId} />
         </Tabs.Panel>
 
         <Tabs.Panel value="record">
