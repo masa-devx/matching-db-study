@@ -113,7 +113,22 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 2. 最初の範囲（[background.md](agents/background.md) の「最初の範囲」）は、`legacy-repo` で**レガシーコードとして作り切る**（Fat Controller・テストなし）。子 Issue 1つにブランチ1つ（`legacy/<子 Issue の番号>-<名前>`）と PR 1つ（`legacy-repo` へ）。順番は DB → API → フロント。**API の子 Issue では、先に [docs/api/](docs/api/README.md) のその一歩のファイルに設計（入力・応答・失敗・流れる SQL の目安）を書き、確かめてもらってから実装する**。PR の行き先が既定のブランチでないので、マージのあとに子 Issue を手で閉じ、子がすべて閉じたら親を閉じる。機能ができたら [explain-change](agents/skills/explain-change/SKILL.md) で 9-1・9-2（レガシー版と、測った問題）を記録する
 3. 作り切ったら、測った問題ごとに改善の親 Issue（`.github/ISSUE_TEMPLATE/parent.md` の「改善のときだけ」を書く）と子 Issue（最初は必ず「今の動きを確かめるテスト」）を issue-plan で立て、`refactored-repo` で直す。ブランチは `refactor/<子 Issue の番号>-<名前>`。**今の動きを確かめるテストを足す（要件 ID に対応させる）→ 直す → もう一度測る** の順に進め、explain-change で 9-3・9-4 を記録し、[docs/decisions.md](docs/decisions.md) に1行足す。00（環境）・05b は、レガシー版と改善版に分けなくてよい（画面も 03b からレガシー版と改善版に分ける。[docs/frontend.md](docs/frontend.md)）
 4. 区切りごとに、[review](agents/skills/review/SKILL.md) の手順で見直す（実装の会話を持たないサブエージェントに、差分と確かめたいことを渡す）
-5. コミット・push・Issue・PR の作成は、頼まれたときだけ行う
+5. コミット・push・Issue・PR の作成は、頼まれたときだけ行う。コミットの前には、下の「コミットの前に」で止まる
+
+### コミットの前に（2026-11-18 から）
+
+コミットの前に、人が差分を見て判断する。AI は、ファイルを書き換えたら、そこで止まる。
+
+1. 見せるもの
+   - 変えたファイルごとの表（ファイル・何を・なぜ）
+   - `git diff --stat`
+   - 全文の見方：`! git diff`（VS Code のソース管理でも見られる）。新しいファイルは、`git add -N <ファイル>` で `git diff` に出るようにしてから止まる
+   - 確かめた結果（テスト・静的検査）と、確かめていないこと
+2. 人が OK と言うまで、`git add`（`-N` を除く）・`git commit`・`git push`・PR の作成・取り込みをしない
+3. OK は、そのとき見せた差分にだけ当てはまる。そのあとに変えたもの（レビューの直し・解説の追記を含む）は、また見せる
+4. 機械でも止める：`.claude/settings.json` の `permissions.ask` で、`git commit` と `git push` は毎回、許可の確認が出る
+
+改善の段階（`refactored-repo`）では、チケットを実装する前に、人が直す課題を理解する（`understand-problem`。docs/process.md の4章）
 
 ### 依頼の範囲
 

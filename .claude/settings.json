@@ -12,6 +12,10 @@
       "Bash(docker compose run --rm app ./vendor/bin/phpstan analyse:*)",
       "Bash(docker compose run --rm app ./vendor/bin/pint --test:*)"
     ],
+    "ask": [
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
+    ],
     "deny": [
       "Read(./.env)",
       "Read(./.env.local)",
