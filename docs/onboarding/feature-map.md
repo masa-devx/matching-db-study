@@ -2,7 +2,7 @@
 
 機能ごとに、画面・API・コントローラー・表をつなぐ。読みながら埋める（推測で埋めない。コードとルートで確かめた行だけ書く）。
 
-- 読む表・書く表は、コードから読み取り、2026-11-16 に流れる SQL で確かめた（2026-11-16 にあった 38本すべて）。2026-11-17 に 04b（保存した検索条件）の4本と、M1（パスワードを変える）の1本、M3（届いたいいね・スキップ）の4本が増えて 47本、M2（パスワードの再設定。#196）の2本が増えて 49本、M7・A7（通報。#202・#203）の4本が増えて 53本、A7（お知らせ・強制退会。#213）の4本が増えて 57本、A1（対応のメモ。#216）の1本が増えて 58本、A2（やり取りを読む。#221）の1本が増えて 59本になった。この4本は、curl で実際に呼んで確かめた（`docs/api/04b-saved-searches.md` の「レガシー版で起きること」）。書き込みの API も、トランザクションの中で本当に流してから取り消した（メールと Firestore は偽物に差し替えた）。確かめた結果と SQL の本数は、末尾の「SQL で確かめた結果」
+- 読む表・書く表は、コードから読み取り、2026-11-16 に流れる SQL で確かめた（2026-11-16 にあった 38本すべて）。2026-11-17 に 04b（保存した検索条件）の4本と、M1（パスワードを変える）の1本、M3（届いたいいね・スキップ）の4本が増えて 47本、M2（パスワードの再設定。#196）の2本が増えて 49本、M7・A7（通報。#202・#203）の4本が増えて 53本、A7（お知らせ・強制退会。#213）の4本が増えて 57本、A1（対応のメモ。#216）の1本が増えて 58本、A2（やり取りを読む。#221）の1本が増えて 59本、A1・A7（会員ごとの、やり取り・違反・ブロック。#227）の4本が増えて 63本になった。この4本は、curl で実際に呼んで確かめた（`docs/api/04b-saved-searches.md` の「レガシー版で起きること」）。書き込みの API も、トランザクションの中で本当に流してから取り消した（メールと Firestore は偽物に差し替えた）。確かめた結果と SQL の本数は、末尾の「SQL で確かめた結果」
 - 行の番号は、会員の側は `backend/client/app/Http/Controllers/` のファイルの行（2026-11-16 に `refactored-repo` で読んだ）。移すとずれるので、テストの材料に使うときはメソッドの名前を正にする
 - **形の違う ID（`abc` など。UUID でない文字）は、どの API でも 500** になる。`public_id` は uuid の列なので、比べると PostgreSQL がエラー（22P02）を返す。下の表で「いない会員は 500」「いない相手でも 204」と書いたのは、形の正しい UUID のとき
 - 要件 ID と、返る状態コードの一覧は、ここには書かない。その API を移すチケットで、その API の分だけ書く（PR #132 のレビュー S14）
@@ -52,7 +52,7 @@
 | 保存した検索条件を直す | `SearchConditionsPage` | `PUT /api/me/search-conditions/{publicId}` | `SearchConditionController::update`（L81） | `search_conditions` | `search_conditions` | 04b。**安全の穴**（#156）：持ち主を確かめない（他人の条件を直せる）。送られた項目を全部入れるので、`user_id` を送ると他人の条件を自分のものにできる。有料かどうかの確かめがない（無料の男性が身長を足せる）。ない ID は 500。#162 から、画面は名前だけ・条件だけの2通りで呼ぶ |
 | 保存した検索条件を消す | `SearchConditionsPage` | `DELETE /api/me/search-conditions/{publicId}` | `SearchConditionController::destroy`（L99） | ― | `search_conditions` | 04b。**安全の穴**（#156）：持ち主を確かめない（他人の条件を消せる）。ない ID でも 204 |
 
-## 管理画面（`backend/admin`・21本）
+## 管理画面（`backend/admin`・25本）
 
 全体：会員の側と同じく、ルートにミドルウェアはなく、各コントローラーの中で管理者の JWT を読む。表は `DB::table()` で直接読む（Model を使わない・会員の側のコードを読み込まない）。画面は `frontend/admin/src/`。行の番号は `backend/admin/app/Http/Controllers/` のファイルの行。
 
@@ -79,6 +79,10 @@
 | 会員にお知らせを送る | `domains/members/MemberDetailPage`・`domains/reports/ReportCaseDetailPage`（「注意した」で済みにするとき） | `POST /api/members/{publicId}/notices` | `NoticeController::store`（L24） | `admins`・`users`・`report_cases` | `notices`・`admin_audit_logs` | A7（#213）。`owner` だけ。種類・題・本文を確かめない（題なしは 500）。案件を済みにする API とは別に呼ぶので、片方だけ成功することがある |
 | 会員を強制退会にする | `domains/members/MemberDetailPage` | `POST /api/members/{publicId}/ban` | `NoticeController::ban`（L72） | `admins`・`users` | `users`（`banned_at`・`banned_reason`・`deleted_at`）・`admin_audit_logs` | A7（#213）。`owner` だけ。前に配ったトークンは止めない。もう強制退会の会員にも、もう一度できる（上書き）。戻す操作はない |
 | 会員の対応のメモを足す | `domains/members/MemberDetailPage` | `POST /api/members/{publicId}/notes` | `MemberNoteController::store`（L21） | `users` | `member_notes` | A1（#216）。**役割を確かめない**（`viewer` も、API を直接呼べば書ける）。本文を確かめない（なしは 500・10万文字も入る）。監査ログに残さない |
+| 会員のやり取りの一覧 | `domains/members/MemberActivityTabs`（`RoomsTab`） | `GET /api/members/{publicId}/talk-rooms` | `MemberActivityController::talkRooms`（L22） | `users`・`talk_room_members`・`talk_rooms`・`profiles`・`messages` | ― | A1（#227）。1ルームごとに7本（100ルームで 702本・1.08秒）。`talk_room_members` を会員から探すインデックスがない。読んだことを、監査ログに残さない |
+| 会員の違反 | `domains/members/MemberActivityTabs`（`ViolationsTab`） | `GET /api/members/{publicId}/violations` | `MemberActivityController::violations`（L66） | `users`・`report_cases`・`reports`・`profiles` | ― | A1（#227）。通報された案件と、その会員が通報した記録。全部を一度に返す。注意・停止・強制退会は、会員の詳細の API が返したものを、画面で合わせる |
+| 会員のブロック | `domains/members/MemberActivityTabs`（`BlocksTab`） | `GET /api/members/{publicId}/blocks` | `MemberActivityController::blocks`（L112） | `users`・`blocks`・`profiles`・`user_matches` | ― | A7（#227）。1行ごとに4本（55行で 168本）。ブロックされた相手は、`blocked_id` から探すインデックスがなく、3万件を全部読む |
+| ブロックの多い会員 | `domains/blocks/BlockRankingPage` | `GET /api/block-ranking` | `MemberActivityController::blockRanking`（L139） | `blocks`・`users`・`profiles`・`reports`・`report_cases` | ― | A7（#227）。開くたびに 3万件を数える。1人ごとに4本（50人で 201本） |
 
 ## SQL で確かめた結果（2026-11-16）
 
