@@ -9,6 +9,9 @@ on:
     paths:
       - "backend/admin/**"
       - "backend/client/database/migrations/**"
+      # アーキテクチャのテストは、会員の側のファイル（正本）と同じかを比べる（tests/Arch/SameRulesAsClientTest.php）。
+      # 会員の側だけを直したときにも、ずれに気づけるよう、ここが変わったときも動かす
+      - "backend/client/tests/Arch/**"
       - ".github/workflows/admin-backend.yml"
       # 会員の側（backend.yml）にある compose.yaml は、入れていない。テストは、下のサービスの PostgreSQL を使い、
       # compose.yaml も docker/db/init も読まないので、そこが変わっても、結果は変わらない
@@ -17,6 +20,7 @@ on:
     paths:
       - "backend/admin/**"
       - "backend/client/database/migrations/**"
+      - "backend/client/tests/Arch/**"
       - ".github/workflows/admin-backend.yml"
 
 # 同じブランチで続けて push したら、前の実行は止める
