@@ -572,10 +572,8 @@ arch('Application は Laravel のヘルパー関数を使わない', function ()
 // 上のテストでは落ちない。別名を「使わない」一覧に足すと、名前の始まりで比べるので、'Log' が LogicException に、
 // 'Date' が DateTimeImmutable に当たる。ファイルの文字を読んで、別名と完全に一致するものだけを探す
 test('Domain と Application は、ファサードの別名（\DB:: など）を使わない', function (): void {
-    $aliases = implode('|', array_map(
-        static fn (string $alias): string => preg_quote($alias, '/'),
-        array_keys(Facade::defaultAliases()->all()),
-    ));
+    $aliases = array_keys(Facade::defaultAliases()->all());
+    $pattern = implode('|', array_map(static fn (string $alias): string => preg_quote($alias, '/'), $aliases));
     $found = [];
     foreach (['Domain', 'Application'] as $layer) {
         $root = dirname(__DIR__, 2).'/app/'.$layer;
@@ -587,9 +585,23 @@ test('Domain と Application は、ファサードの別名（\DB:: など）を
                 continue;
             }
             $source = (string) file_get_contents($file->getPathname());
-            // \DB:: のように先頭に \ を付けて呼ぶ形と、use DB; と読み込む形
-            if (preg_match('/(?<![\w\\\\])\\\\('.$aliases.')\b(?!\\\\)|^\s*use\s+('.$aliases.')\s*;/m', $source, $m) === 1) {
-                $found[] = 'app/'.$layer.substr($file->getPathname(), strlen($root)).'：'.trim($m[0]);
+            $name = 'app/'.$layer.substr($file->getPathname(), strlen($root));
+
+            // ① \DB:: のように、先頭に \ を付けて呼ぶ形（\App\…\DB のような、名前空間つきの名前は当てない）
+            preg_match_all('/(?<![\w\\\\])\\\\('.$pattern.')\b(?!\\\\)/', $source, $calls);
+            foreach ($calls[0] as $call) {
+                $found[] = $name.'：'.$call;
+            }
+
+            // ② use で読み込む形。use DB;・use DB as Database;・use Log, DB; のどれも、1つずつに分けて、名前を比べる
+            preg_match_all('/^\s*use\s+(?!function\b|const\b)([^;(]+);/m', $source, $uses);
+            foreach ($uses[1] as $statement) {
+                foreach (explode(',', $statement) as $part) {
+                    $imported = ltrim(trim((string) preg_replace('/\s+as\s+\w+\s*$/i', '', trim($part))), '\\');
+                    if (in_array($imported, $aliases, true)) {
+                        $found[] = $name.'：use '.trim($part);
+                    }
+                }
             }
         }
     }
@@ -665,10 +677,10 @@ arch('新しい層のファイルは strict_types', function (): void {
 ```
 
 - 足すとき・直すときは、わざと違反を作って落ちるのを見る（Domain に `use Illuminate\Support\Facades\DB;`・`now()`、新しい Controller に `use App\Models\User;`）。当てはまるファイルがないあいだは、どのテストも通るので、通っただけでは、効いているかが分からない
-- #106 で確かめたこと（2026-11-18。違反を1つずつ置いた。18種類。PHP の標準のクラス（`LogicException`・`DateTimeImmutable`・`JsonSerializable`）を使う Domain は通ることも見た）：依存の向き・`'Carbon'`・`ignoring(LEGACY_CONTROLLERS)`・`interfaces()`・`classes()`・`toUseStrictTypes()` は、上の書き方で落ちる
+- #106 で確かめたこと（2026-11-18。違反を1つずつ置いた。20種類。PHP の標準のクラス（`LogicException`・`DateTimeImmutable`・`JsonSerializable`）を使う Domain は通ることも見た）：依存の向き・`'Carbon'`・`ignoring(LEGACY_CONTROLLERS)`・`interfaces()`・`classes()`・`toUseStrictTypes()` は、上の書き方で落ちる
 - `arch()` の比べ方は「名前の始まり」。そのために、書き方を変えた所が3つある
   - ヘルパー関数：`expect(関数の一覧)->not->toBeUsedIn(層の一覧)` では落ちなかったので、層ごとに `not->toUse(関数の一覧)` と書く
-  - ファサードの別名（`\DB::`）：「使わない」一覧に `Log`・`Date` を足すと、PHP の標準の `LogicException`・`DateTimeImmutable` に当たる。ファイルの文字を読んで、完全に一致するものを探すテストにした
+  - ファサードの別名（`\DB::`）：「使わない」一覧に `Log`・`Date` を足すと、PHP の標準の `LogicException`・`DateTimeImmutable` に当たる。ファイルの文字を読んで、完全に一致するものを探すテストにした。`use` で読み込む形は、`use DB as Database;`・`use Log, DB;` も当たるように、文を1つずつに分けて、名前を比べる（最初に書いた正規表現は、この2つを見逃した。2回目のレビューで、実際に置いて見つかった）
   - 古いコントローラー：`ignoring` に渡した名前で始まる新しいクラス（`UserControllerV2`）は、検査から外れる。直下にあるファイルを、一覧と完全に一致で比べるテストを足した。直下に新しいコントローラーを足すと、このテストが落ちる（足す場所は、業務のまとまりのフォルダ。10章）
 - 期待は、`arch('名前', function (): void { expect(…)->…; })` と、無名関数の中に書く。`arch('名前')->expect(…)` と鎖でつなぐ書き方は、Pest が実行時に足すメソッドなので、Larastan が「ないメソッド」と指摘する（テストのフォルダも検査の対象。検査から外さずに、書き方の側を合わせた）
 - `app/` の下に、新しいフォルダ（層でないもの）を足したら、`OUTSIDE_LAYERS` にも足す（足し忘れると、Domain と Application から使えてしまう）

@@ -71,10 +71,8 @@ arch('Application は Laravel のヘルパー関数を使わない', function ()
 // 上のテストでは落ちない。別名を「使わない」一覧に足すと、名前の始まりで比べるので、'Log' が LogicException に、
 // 'Date' が DateTimeImmutable に当たる。ファイルの文字を読んで、別名と完全に一致するものだけを探す
 test('Domain と Application は、ファサードの別名（\DB:: など）を使わない', function (): void {
-    $aliases = implode('|', array_map(
-        static fn (string $alias): string => preg_quote($alias, '/'),
-        array_keys(Facade::defaultAliases()->all()),
-    ));
+    $aliases = array_keys(Facade::defaultAliases()->all());
+    $pattern = implode('|', array_map(static fn (string $alias): string => preg_quote($alias, '/'), $aliases));
     $found = [];
     foreach (['Domain', 'Application'] as $layer) {
         $root = dirname(__DIR__, 2).'/app/'.$layer;
@@ -86,9 +84,23 @@ test('Domain と Application は、ファサードの別名（\DB:: など）を
                 continue;
             }
             $source = (string) file_get_contents($file->getPathname());
-            // \DB:: のように先頭に \ を付けて呼ぶ形と、use DB; と読み込む形
-            if (preg_match('/(?<![\w\\\\])\\\\('.$aliases.')\b(?!\\\\)|^\s*use\s+('.$aliases.')\s*;/m', $source, $m) === 1) {
-                $found[] = 'app/'.$layer.substr($file->getPathname(), strlen($root)).'：'.trim($m[0]);
+            $name = 'app/'.$layer.substr($file->getPathname(), strlen($root));
+
+            // ① \DB:: のように、先頭に \ を付けて呼ぶ形（\App\…\DB のような、名前空間つきの名前は当てない）
+            preg_match_all('/(?<![\w\\\\])\\\\('.$pattern.')\b(?!\\\\)/', $source, $calls);
+            foreach ($calls[0] as $call) {
+                $found[] = $name.'：'.$call;
+            }
+
+            // ② use で読み込む形。use DB;・use DB as Database;・use Log, DB; のどれも、1つずつに分けて、名前を比べる
+            preg_match_all('/^\s*use\s+(?!function\b|const\b)([^;(]+);/m', $source, $uses);
+            foreach ($uses[1] as $statement) {
+                foreach (explode(',', $statement) as $part) {
+                    $imported = ltrim(trim((string) preg_replace('/\s+as\s+\w+\s*$/i', '', trim($part))), '\\');
+                    if (in_array($imported, $aliases, true)) {
+                        $found[] = $name.'：use '.trim($part);
+                    }
+                }
             }
         }
     }
