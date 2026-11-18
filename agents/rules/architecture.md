@@ -513,61 +513,81 @@ const LEGACY_CONTROLLERS = [
 ];
 const LEGACY_MODELS = 'App\Models';   // 移行の残り（app/Models）。ignoring には渡さない
 
-$laravelHelpers = ['now', 'today', 'config', 'env', 'app', 'collect', 'abort', 'response', 'request', 'logger', 'info'];
+const LARAVEL_HELPERS = ['now', 'today', 'config', 'env', 'app', 'collect', 'abort', 'response', 'request', 'logger', 'info'];
 
-arch('Domain はほかの層・Laravel・Carbon・基盤を使わない')
-    ->expect('App\Domain')
-    ->not->toUse(['App\Http', 'App\Application', 'App\Infrastructure', 'App\Models', 'App\Support', 'Illuminate', 'Carbon']);
+arch('Domain はほかの層・Laravel・Carbon・基盤を使わない', function (): void {
+    expect('App\Domain')
+        ->not->toUse(['App\Http', 'App\Application', 'App\Infrastructure', 'App\Models', 'App\Support', 'Illuminate', 'Carbon']);
+});
 
-arch('Application は Http・Infrastructure・Laravel・Carbon・基盤を使わない')
-    ->expect('App\Application')
-    ->not->toUse(['App\Http', 'App\Infrastructure', 'App\Models', 'App\Support', 'Illuminate', 'Carbon']);
+arch('Application は Http・Infrastructure・Laravel・Carbon・基盤を使わない', function (): void {
+    expect('App\Application')
+        ->not->toUse(['App\Http', 'App\Infrastructure', 'App\Models', 'App\Support', 'Illuminate', 'Carbon']);
+});
 
-arch('Domain と Application は Laravel のヘルパー関数を使わない')
-    ->expect($laravelHelpers)
-    ->not->toBeUsedIn(['App\Domain', 'App\Application']);
+// 層の側から「使わない」と書く。expect() に関数の一覧・toBeUsedIn() に層の一覧、と両方に配列を渡す書き方は、
+// 違反があっても通ってしまう（#106 で、Domain に now()・Application に config() を置いて確かめた）
+arch('Domain は Laravel のヘルパー関数を使わない', function (): void {
+    expect('App\Domain')
+        ->not->toUse(LARAVEL_HELPERS);
+});
 
-arch('Http が使ってよい Infrastructure は QueryService だけ')
-    ->expect('App\Http')
-    ->not->toUse(['App\Infrastructure\Models', 'App\Infrastructure\Repositories', 'App\Infrastructure\External', 'App\Infrastructure\Transaction', 'App\Infrastructure\Clock', LEGACY_MODELS])
-    ->ignoring(LEGACY_CONTROLLERS);
+arch('Application は Laravel のヘルパー関数を使わない', function (): void {
+    expect('App\Application')
+        ->not->toUse(LARAVEL_HELPERS);
+});
 
-arch('Infrastructure は UseCase と Http を使わない')
-    ->expect('App\Infrastructure')
-    ->not->toUse(['App\Application\UseCases', 'App\Http']);
+arch('Http が使ってよい Infrastructure は QueryService だけ', function (): void {
+    expect('App\Http')
+        ->not->toUse(['App\Infrastructure\Models', 'App\Infrastructure\Repositories', 'App\Infrastructure\External', 'App\Infrastructure\Transaction', 'App\Infrastructure\Clock', LEGACY_MODELS])
+        ->ignoring(LEGACY_CONTROLLERS);
+});
 
-arch('QueryService は Application・Repository・Domain を使わない')
-    ->expect('App\Infrastructure\QueryServices')
-    ->not->toUse(['App\Application', 'App\Infrastructure\Repositories', 'App\Domain']);   // ID は int で受け取る
+arch('Infrastructure は UseCase と Http を使わない', function (): void {
+    expect('App\Infrastructure')
+        ->not->toUse(['App\Application\UseCases', 'App\Http']);
+});
 
-arch('Domain の interface は Interface で終わる')
-    ->expect('App\Domain')
-    ->interfaces()
-    ->toHaveSuffix('Interface');
+arch('QueryService は Application・Repository・Domain を使わない', function (): void {
+    expect('App\Infrastructure\QueryServices')
+        ->not->toUse(['App\Application', 'App\Infrastructure\Repositories', 'App\Domain']);   // ID は int で受け取る
+});
 
-// 1つの arch() に1つの期待。鎖の2つ目以降には classes() の絞り込みが効かないため
-arch('UseCase は final')
-    ->expect('App\Application\UseCases')
-    ->classes()
-    ->toBeFinal();
+arch('Domain の interface は Interface で終わる', function (): void {
+    expect('App\Domain')
+        ->interfaces()
+        ->toHaveSuffix('Interface');
+        
+        // 1つの arch() に1つの期待。鎖の2つ目以降には classes() の絞り込みが効かないため
+});
+arch('UseCase は final', function (): void {
+    expect('App\Application\UseCases')
+        ->classes()
+        ->toBeFinal();
+});
 
-arch('UseCase は UseCase で終わる')
-    ->expect('App\Application\UseCases')
-    ->classes()
-    ->toHaveSuffix('UseCase');
+arch('UseCase は UseCase で終わる', function (): void {
+    expect('App\Application\UseCases')
+        ->classes()
+        ->toHaveSuffix('UseCase');
+});
 
-arch('QueryService のフォルダのクラス（QueryService と読み取りの DTO）は final')
-    ->expect('App\Infrastructure\QueryServices')
-    ->classes()
-    ->toBeFinal();
+arch('QueryService のフォルダのクラス（QueryService と読み取りの DTO）は final', function (): void {
+    expect('App\Infrastructure\QueryServices')
+        ->classes()
+        ->toBeFinal();
+});
 
-arch('新しい層のファイルは strict_types')
-    ->expect(['App\Http', 'App\Application', 'App\Domain', 'App\Infrastructure', 'App\Support'])
-    ->toUseStrictTypes()
-    ->ignoring(LEGACY_CONTROLLERS);
+arch('新しい層のファイルは strict_types', function (): void {
+    expect(['App\Http', 'App\Application', 'App\Domain', 'App\Infrastructure', 'App\Support'])
+        ->toUseStrictTypes()
+        ->ignoring(LEGACY_CONTROLLERS);
+});
 ```
 
-- 書いたら、わざと違反を作って落ちるのを見る（Domain に `use Illuminate\Support\Facades\DB;`・`now()`、新しい Controller に `use App\Models\User;`）。`toBeUsedIn`・`ignoring` の動きは、入れるチケットで確かめ、違えばこのファイルを直す
+- 足すとき・直すときは、わざと違反を作って落ちるのを見る（Domain に `use Illuminate\Support\Facades\DB;`・`now()`、新しい Controller に `use App\Models\User;`）。当てはまるファイルがないあいだは、どのテストも通るので、通っただけでは、効いているかが分からない
+- #106 で確かめたこと（2026-11-18。10種類の違反を1つずつ置いた）：`'Carbon'`・`ignoring(LEGACY_CONTROLLERS)`・`interfaces()`・`classes()`・`toUseStrictTypes()` は、上の書き方で落ちる。ヘルパー関数だけは、`expect(関数の一覧)->not->toBeUsedIn(層の一覧)` では落ちなかったので、層ごとに `not->toUse(関数の一覧)` と書く形に直した
+- 期待は、`arch('名前', function (): void { expect(…)->…; })` と、無名関数の中に書く。`arch('名前')->expect(…)` と鎖でつなぐ書き方は、Pest が実行時に足すメソッドなので、Larastan が「ないメソッド」と指摘する（テストのフォルダも検査の対象。検査から外さずに、書き方の側を合わせた。#106）
 - 古いコントローラーは `LEGACY_CONTROLLERS` に並べる。Model を全部 `app/Infrastructure/Models` へ移したら `LEGACY_MODELS` を消す。基底の `App\Http\Controllers\Controller` は移す対象ではないので、一覧に入れない
 
 ## 9. 共通の原則（画面にも当てはめる）
