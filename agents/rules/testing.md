@@ -18,12 +18,13 @@ paths:
 | 結合（API テスト） | Pest（テスト用の PostgreSQL に対して実行） | `backend/client/tests/Feature/`・`backend/admin/tests/Feature/` | `docker compose run --rm app ./vendor/bin/pest tests/Feature`（管理画面は `admin-app`） | DB や API をまたぐ制御・API の振る舞い |
 | アーキテクチャ | Pest の `arch()`（`pestphp/pest-plugin-arch`） | `backend/client/tests/Arch/`（正本）・`backend/admin/tests/Arch/`（コピー。決まりの部分が正本と同じかを `SameRulesAsClientTest.php` が比べる） | `docker compose run --rm app ./vendor/bin/pest tests/Arch`（管理画面は `admin-app`） | 層の依存の向きと名前（`architecture.md` の8章） |
 
-- 管理画面（`backend/admin`）も、Pest と、本物の PostgreSQL で動く（#105）。テスト用の DB は `matching_admin_test`（会員の側の `matching_test` とは別。2つを同時に流しても、ぶつからない）。管理画面はマイグレーションを持たないので、表は、会員の側のマイグレーション（`backend/client/database/migrations`）で作る（`backend/admin/tests/TestCase.php`）。部品は `backend/admin/tests/Support/functions.php`：`createAdmin()`（役割を引数で）・`createMember()`・`actingAsAdmin()`。会員の側の同じ名前の関数とは、別のもの（管理画面は Model を持たないので、表に直接入れる）
+- 管理画面（`backend/admin`）も、Pest と、本物の PostgreSQL で動く（#105）。テスト用の DB は `matching_admin_test`（会員の側の `matching_test` とは別。2つを同時に流しても、ぶつからない）。管理画面はマイグレーションを持たないので、表は、会員の側のマイグレーション（`backend/client/database/migrations`）で作る（`backend/admin/tests/TestCase.php`。この仕組みは `tests/Feature/TestEnvironmentTest.php` で確かめる）。ダミーデータは `backend/admin/tests/DummyData/`：`DummyAdmin`（`create()`（役割を引数で）・`actingAs()`）・`DummyMember`（`create()`）。会員の側の同じ名前のクラスとは、別のもの（管理画面は Model を持たないので、表に直接入れる）
 | E2E | 03b（React を足す）で決める | 03b で決める | 03b で決める | 主要フロー・認可・状態遷移 |
 
 - 単体の置き場所は、実装のパスと対応づける（例: `app/Models/User.php` の `isPaidAt()` → `tests/Unit/Models/UserTest.php`）。Service は DB を使うので、単体ではなく API テスト（`Feature`）で、本物の PostgreSQL に対して確かめる
 - 各テストの組（`Unit`・`Feature`・`Arch`）は、`phpunit.xml` の `<testsuites>` に並べる。並べていないフォルダのテストは流れない
-- テストの部品（データを作る関数・ログインした状態を作る関数）は `tests/Support/` に置く。API テストに Model の名前空間を書かない（`architecture.md` の10章）
+- API テストは、`tests/Feature/<業務のまとまり>/` に置く（例：`tests/Feature/Profile/ShowTest.php`）。まとまりは `app/` と同じ名前（`docs/backend.md` の2章）。どのまとまりにも入らないもの（`HealthTest.php`）は `tests/Feature/` の直下
+- テストのダミーデータ（会員・いいねなどの行と、ログインした状態を作るクラス）は `tests/DummyData/` に置く。ダミーデータのテストは書かない（シードと同じく、データを用意するだけのもの。2026-11-19 に人が決めた）。API テストに Model の名前空間を書かない（`architecture.md` の10章）
 - E2Eは実行前にシードデータの投入とアプリ起動が要る（後述）
 
 ## API テストの観点
@@ -55,35 +56,44 @@ API ごとに、下の表から当てはまる観点を選ぶ。「API テスト
 
 深く書く順：お金 → 他人のデータ → 認証 → 書き込み → 読み取り。
 
-### テストの部品（会員の側）
+### テストのダミーデータ（会員の側）
 
-データと、ログインした状態は、`backend/client/tests/Support/functions.php` の関数で作る。テストでは `use function Tests\Support\createMember;` のように読み込む。部品そのもののテストは `tests/Feature/Support/SupportFunctionsTest.php`、部品だけで書いた見本は `tests/Feature/SentLikesListTest.php`。
+データと、ログインした状態は、`backend/client/tests/DummyData/` のクラスで作る。クラスは `Dummy<名詞>`（`final`）で、テストから呼ぶメソッドは `public static`、中の手順は `private static` にする。テストでは `use Tests\DummyData\DummyMember;` と読み込み、`DummyMember::create()` と呼ぶ（クラスは名前から自動で読み込まれるので、`composer.json` に足さなくてよい）。ダミーデータだけで書いた見本は `tests/Feature/Matching/SentLikesListTest.php`。
 
-| 関数 | 作るもの | 作らないもの |
+| メソッド | 作るもの | 作らないもの |
 | --- | --- | --- |
-| `createMember()` | 会員とプロフィール。既定は、メールアドレスを確認した・無料の・女性。引数で、性別・有料・退会・停止を変える | 購入の行（`purchases`）・管理画面の監査ログ |
-| `createLike()` | いいねを1つ | マッチ |
-| `createMatch()` | お互いのいいね・マッチ・トークルームと参加者2人 | Firestore のルーム |
-| `createBlock()` | ブロックを1つ | ― |
-| `actingAsMember()` | その会員のトークンを `Authorization` に付ける。続けて `->getJson(...)` と書く | ― |
-| `memberToken()` | トークンの文字だけ（期限切れを確かめるときに使う） | ― |
+| `DummyMember::create()` | 会員とプロフィール。既定は、メールアドレスを確認した・無料の・女性。引数で、性別・有料・退会・停止・ニックネーム・生年月日・都道府県・身長を変える。`withProfile: false` ならプロフィールを作らない | 購入の行（`purchases`）・管理画面の監査ログ |
+| `DummyMatching::like()` | いいねを1つ | マッチ |
+| `DummyMatching::match()` | お互いのいいね・マッチ・トークルームと参加者2人 | Firestore のルーム |
+| `DummyMatching::block()` | ブロックを1つ | ― |
+| `DummyAuth::actingAs()` | その会員のトークンを `Authorization` に付ける。続けて `->getJson(...)` と書く | ― |
+| `DummyAuth::token()` | トークンの文字だけ（期限切れを確かめるときに使う） | ― |
 
-- 引数と返す値は、`functions.php` の PHPDoc を正とする（この表には書かない）
-- 足りない部品（メッセージ・購入など）は、要るチケットで `functions.php` に足し、`SupportFunctionsTest.php` にテストを1本足す。この表にも1行足す
-- 時刻は `travelTo()`（`Pest\Laravel` の関数。`$this->travelTo()` と同じ）で止める。部品は日時の列に `now()` を入れるので、止めてから呼ぶと、その日時の行ができる
+- 引数と返す値は、`tests/DummyData/` の PHPDoc を正とする（この表には書かない）
+- 足りないもの（メッセージ・購入など）は、要るチケットで `tests/DummyData/` のクラスにメソッドを足すか、クラスを足す。この表にも1行足す
+- 引数が6つを超えて読みにくくなったら、作る役のクラス（ビルダー）に移すかを考える（2026-11-19 に人が決めた）
+- 時刻は `travelTo()`（`Pest\Laravel` の関数。`$this->travelTo()` と同じ）で止める。ダミーデータは日時の列に `now()` を入れるので、止めてから呼ぶと、その日時の行ができる
 
 ```php
 travelTo(Carbon::parse('2026-11-10 12:00:00'));
-createLike($me, $older);                       // created_at は 2026-11-10 12:00:00
+DummyMatching::like($me, $older);              // created_at は 2026-11-10 12:00:00
 travelTo(Carbon::parse('2026-11-11 12:00:00'));
-createLike($me, $newer);
+DummyMatching::like($me, $newer);
 
-actingAsMember($me)->getJson('/api/me/likes')
+DummyAuth::actingAs($me)->getJson('/api/me/likes')
     ->assertOk()
     ->assertJsonPath('0.user_id', $newer->publicId);   // 新しい順
 ```
 
-- トークンの期限だけは、本物の時計で決まる（JWT のライブラリが `time()` を見るため、`travelTo()` は効かない）。`memberToken()` に期限を渡すときは、`time()` をもとに書く（期限切れなら `time() - 60`）
+- トークンの期限だけは、本物の時計で決まる（JWT のライブラリが `time()` を見るため、`travelTo()` は効かない）。`DummyAuth::token()` に期限を渡すときは、`time()` をもとに書く（期限切れなら `time() - 60`）
+
+### テストの書き方
+
+- `describe()` で、前提（だれが・どんな状態で）ごとにまとめる。`it()` の名前は、その前提のもとで何が起きるかを短く書く（例：`describe('ログインしていない人が見る')` の中に `it('200 で見られる')`）
+- `describe()` は分けるためだけに使い、入れ子は1段まで。データはそれぞれの `it()` の中で作る（`beforeEach()` にまとめると、そのテストだけを読んでも、何を用意したかが分からなくなる）
+- 無名関数には戻り値の型 `: void` を書く
+- コメントは2〜3行まで。ファイルの先頭に「どの API の、何のテストか」、要件と違うテストの上に「分かっている不具合：要件は〜。原因は〜」を書く
+- 500 は `assertInternalServerError()` で確かめる（`assertServerError()` は 500〜599 のどれでも通るので、弱くなる）
 
 ## 単体とE2Eの切り分け
 

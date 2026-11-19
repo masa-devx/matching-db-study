@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Tests\Support;
+namespace Tests\DummyData;
 
-/** テストで作った管理者（createAdmin() の返り値）。 */
+/** テストで作った管理者（DummyAdmin::create() の返り値）。 */
 final readonly class TestAdmin
 {
     /**
