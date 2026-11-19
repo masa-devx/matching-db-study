@@ -277,13 +277,15 @@ $this->firestore->openRoom($room);                                     // コミ
 - 業務の決まりに反したら、Service が `app/Exceptions/<まとまり>/〜Exception` を投げる。業務の例外は、みな `App\Exceptions\BusinessException`（親）を継ぐ。Service は状態コードを知らない（`abort()` を使わない）
 - **見つからないときも、業務の例外にする**（`UserNotFoundException`）。`firstOrFail()` を Laravel に任せると、応答が `No query results for model [App\Models\User] 999` になり、Model のクラス名が見えてしまう（`docs/api/01-members.md` の改善版は「会員が見つかりません」）
 - 例外を状態コードとメッセージに変えるのは、各アプリの `bootstrap/app.php` の1か所だけ。業務の例外を足したら、`render` に1行足す。ログに出さない決まり（`dontReport`）は、親の `BusinessException` に1回だけ書く
+- 画面に出るエラーの文は、`lang/ja/errors.php` にだけ書き、`bootstrap/app.php` から `__('errors.<キー>')` で読む。キーは、何が起きたかを英語の小文字と `_` で書く（`user_not_found`）。言語は `config/app.php` で `ja` に決めている（日本語だけのアプリなので、環境変数で変えない。2026-11-19 に人が決めた。文を何十か所にも手で書くと、変えるときに直し漏れが起きるため）
 - API テストで、下の表の行ごとに状態コードとメッセージを確かめる
 
 ```php
 // bootstrap/app.php
 ->withExceptions(function (Exceptions $exceptions): void {
-    $exceptions->render(fn (ProfileNotFoundException $e) => response()->json(['message' => 'プロフィールが見つかりません'], 404));
-    $exceptions->render(fn (PaidPlanRequiredException $e) => response()->json(['message' => '有料会員になると使えます'], 403));
+    // 文は lang/ja/errors.php（'profile_not_found' => 'プロフィールが見つかりません' など）
+    $exceptions->render(fn (ProfileNotFoundException $e) => response()->json(['message' => __('errors.profile_not_found')], 404));
+    $exceptions->render(fn (PaidPlanRequiredException $e) => response()->json(['message' => __('errors.paid_plan_required')], 403));
 
     // 業務の例外は、決まりどおりに断っただけなので、エラーのログに出さない（logging.md の「ノイズを増やさない」）。親の1つだけを書く
     $exceptions->dontReport([BusinessException::class]);
@@ -298,6 +300,37 @@ $this->firestore->openRoom($room);                                     // コミ
 | 業務の決まりに反する | Service の業務の例外 | 403・409 |
 | 見つからない | Service の業務の例外（`〜NotFoundException`） | 404 |
 | DB・外のサービスが落ちた | どこでも握りつぶさない（`logging.md`） | 500 |
+
+### try-catch を書く場面・書かない場面
+
+基本は書かない。思っていなかった失敗（DB が落ちた・コードの誤り）は受け止めずに上へ流し、Laravel に任せる。Laravel が、スタックトレース付きでエラーのログに記録し、500 を返す（本番は `APP_DEBUG=false` で中身を隠す）。2026-11-19 に人が決めた（#241。根拠は Laravel 13.x の公式ドキュメントの Error Handling と Database Transactions）。
+
+- `DB::transaction()` は、中で例外が投げられると自動で戻し（ロールバック）、例外を投げ直す。`DB::rollBack()` を自分で書かない
+- デッドロックでやり直すときは、`DB::transaction(fn () => ..., attempts: 3)` と書く（try-catch は要らない）
+
+書いてよいのは、その失敗に、意味のある別の動きができるときだけ。受け止めるのは、決まった種類の例外だけにする（`\Exception`・`\Throwable` をまとめて受け止めない）。
+
+| 場面 | 書き方 |
+| --- | --- |
+| 予想できる DB のエラーを、業務の例外に変える（同時に2回いいねして、UNIQUE で止まった） | `catch (UniqueConstraintViolationException)` で受け、`AlreadyLikedException`（409）を投げる |
+| 外のサービスの失敗を記録して、続ける（DB に保存したあと、Firestore への書き込みが失敗した） | `catch (決まった例外 $e)` で受け、`report($e)` で記録して続ける。やり直しの仕組みは、外のサービスを移すチケットで決める |
+
+```php
+// ❌ どの失敗も同じ 500 にする（業務の例外の 404 も 500 になる・スタックトレースが消える・Service が HTTP を知る）
+try {
+    $profile->update($input);
+} catch (\Exception $e) {
+    Log::error($e->getMessage());
+    return response()->json(['message' => 'エラーが発生しました'], 500);
+}
+
+// ✅ 意味の分かる失敗だけを受け、業務の例外に変える
+try {
+    Like::create(['from_user_id' => $loginUserId, 'to_user_id' => $targetId]);
+} catch (UniqueConstraintViolationException) {
+    throw new AlreadyLikedException;
+}
+```
 
 ## 8. アーキテクチャのテスト
 

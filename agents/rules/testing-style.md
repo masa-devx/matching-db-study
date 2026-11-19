@@ -72,6 +72,7 @@ describe('ログインしている人が見る', function (): void {
 | 状態コード | `assertOk()`・`assertNotFound()`・`assertUnauthorized()`・`assertForbidden()`・`assertUnprocessable()`・`assertInternalServerError()` | `assertServerError()`（500〜599 のどれでも通るので、弱くなる） |
 | 返す項目 | `assertJsonPath('profile.nickname', 'さき')` | ― |
 | 返してはいけない項目 | `assertJsonMissingPath('email')` | ― |
+| エラーの文 | `assertExactJson(['message' => '会員が見つかりません'])`。文を文字で書く。状態コードだけでなく、文まで見る | `__('errors.user_not_found')` で読む（文を変えてもテストが一緒に変わり、画面の文が変わったことに気づけない）。状態コードだけを見る（URL を間違えたときの「ルートがない」404 と見分けられない） |
 | DB の変化 | `assertDatabaseHas('profiles', [...])`（表の名前で書く） | Model を読む（中の作りに頼る） |
 | ほかの会員の行が変わらない | 書き換えた人のほかに、もう1人作って、その行も `assertDatabaseHas()` で確かめる | 書き換えた人の行だけを見る（全員が変わっても気づけない） |
 
