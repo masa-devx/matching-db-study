@@ -518,3 +518,159 @@ flowchart LR
 
 - 次にやること：「分かっている不具合」のコメントは、前半が要件（あるべき動き）、後半が今そうなる理由、と読む
 
+## PR #242（#241 エラーハンドリングと例外処理の土台）
+
+業務の例外（決まりどおりに断ったこと）を、`bootstrap/app.php` の1か所で状態コードと文に変える土台を作った。最初の例外は「会員が見つからない」の1つ。あわせて、会員の側のコードの名前を `User` にそろえた。
+
+### ディレクトリの設計
+
+```text
+backend/client/
+├── app/Exceptions/
+│   ├── BusinessException.php              業務の例外の親（abstract）
+│   └── UserNotFoundException.php          会員がいない（いくつものまとまりで使うので直下）
+├── bootstrap/app.php                      例外を状態コードと文に変える所（withExceptions）
+├── config/app.php                         言語を ja に決めた
+└── lang/ja/errors.php                     画面に出るエラーの文
+```
+
+| 置いた所 | 理由（決まり） | ほかに置ける所と、置かなかった理由 |
+| --- | --- | --- |
+| `UserNotFoundException` は `app/Exceptions/` の直下 | いくつもの業務のまとまり（プロフィール・いいね・トーク）で使う例外は直下に置く（`architecture.md` の7章。PR #242 のレビューで決めた） | `app/Exceptions/Users/`：`Users` は業務のまとまりの一覧にない。`Exceptions/Profile/`：いいねやトークを移す人が、自分のまとまりに同じ例外をもう1つ作るおそれがある |
+| 状態コードは `bootstrap/app.php` | `architecture.md` の7章（1か所で見る） | 例外のクラスの `render()`：状態コードが例外のファイルごとに散らばる |
+| 文は `lang/ja/errors.php` | Laravel の標準。入力の確かめ（422）の文も同じ仕組みで日本語にできる | 例外のクラスの中・定数のクラス：前者は一覧で見られない。後者は、422 の文と置き場が2種類になる |
+
+### クラスの責務
+
+| クラス・ファイル | 責務 |
+| --- | --- |
+| `BusinessException` | 「決まりどおりに断った」ことを表す親。中身はない。状態コードも文も知らない |
+| `UserNotFoundException` | 「会員がいない」ことだけを表す。文と状態コードは知らない |
+| `bootstrap/app.php` の `withExceptions` | どの例外を、どの状態コードと文に変えるか、どれをログに出さないかを知っている。業務のことは知らない |
+| `lang/ja/errors.php` | 画面に出る文だけを知っている |
+
+### メソッドの表
+
+| 場所 | 入力 | 出力 | 副作用 | 失敗のしかた | 呼ぶ所 |
+| --- | --- | --- | --- | --- | --- |
+| `ProfileService::showProfile` | `$targetPublicId`・`$viewerId` | `array{target: User, roomId: string\|null}` | なし | いない会員：`UserNotFoundException` | `ProfileController::show` |
+| `ProfileService::updateProfile` | `$targetPublicId`・`$input` | `Profile` | `profiles` の1行を書き換える | いない会員：`UserNotFoundException`。プロフィールがない：`RuntimeException`（500。分かっている不具合） | `ProfileController::update` |
+| `render(fn (UserNotFoundException $e) => …)` | 投げられた例外 | 404・`{"message": "会員が見つかりません"}` | なし | ― | Laravel（例外が Controller の外まで来たとき） |
+| `dontReport([BusinessException::class])` | ― | ― | 業務の例外を、エラーのログに書かない | ― | Laravel（例外を記録するとき） |
+
+Service は、見つからなければ例外を投げるだけ（`ProfileService.php`）：
+
+```php
+$target = User::query()->where('public_id', $targetPublicId)->first()
+    ?? throw new UserNotFoundException;
+```
+
+例外を応答に変えるのは、ここだけ（`bootstrap/app.php`）：
+
+```php
+// 業務の例外を、状態コードと文に変えるのはここだけ（architecture.md の7章）。例外を足したら、ここに1行足す。文は lang/ja/errors.php
+$exceptions->render(fn (UserNotFoundException $e) => response()->json(['message' => __('errors.user_not_found')], 404));
+
+// 業務の例外は、決まりどおりに断っただけなので、エラーのログに出さない。親の1つだけを書く
+$exceptions->dontReport([BusinessException::class]);
+```
+
+文は、言葉のファイルにだけ書く（`lang/ja/errors.php`）：
+
+```php
+return [
+    'user_not_found' => '会員が見つかりません',
+];
+```
+
+### 呼び出しの流れ
+
+いない会員を見るとき。
+
+```mermaid
+sequenceDiagram
+    participant B as 画面
+    participant C as ProfileController
+    participant S as ProfileService
+    participant D as PostgreSQL
+    participant H as bootstrap/app.php（withExceptions）
+    participant L as lang/ja/errors.php
+    B->>C: GET /api/users/{user_id}
+    C->>S: showProfile(targetPublicId, viewerId)
+    S->>D: select * from users where public_id = ? limit 1
+    D-->>S: 行がない
+    S-->>H: UserNotFoundException を投げる（Controller も通り抜ける）
+    H->>H: dontReport：エラーのログには書かない
+    H->>L: __('errors.user_not_found')
+    L-->>H: 会員が見つかりません
+    H-->>B: 404 と message
+```
+
+### 名前
+
+| 名前 | ほかの候補 | 選ばなかった理由 |
+| --- | --- | --- |
+| `UserNotFoundException` | `MemberNotFoundException` | 表・Model・URL が `users` なのに `Member` と呼ぶと、同じものか分からなくなる（用語集の「名前の付け方」） |
+| `BusinessException` | `DomainException`（PHP の標準にある） | PHP の `DomainException` は「値が決まった範囲の外」という別の意味で使われる |
+| `errors.user_not_found` | `messages.404` | 状態コードではなく、何が起きたかで名前を付ける（同じ 404 でも、文は違う） |
+
+### 依存の向き
+
+```mermaid
+flowchart LR
+    S[ProfileService] --> E[UserNotFoundException]
+    E --> B[BusinessException]
+    H[bootstrap/app.php] --> E
+    H --> B
+    H --> L[lang/ja/errors.php]
+```
+
+Service は `bootstrap/app.php` を知らない。例外のクラスは、HTTP も文も知らない。逆向きはない（`tests/Arch/LayersTest.php` が、業務の例外が Http を使わないことを確かめる）。このテストは、`app/Exceptions` にファイルがないあいだは、何も確かめずに通っていた。この PR で初めてファイルを置いたので、`UserNotFoundException` にわざと `Illuminate\Http\JsonResponse` を入れて、落ちるのを見てから戻した。
+
+### レガシー版との違い
+
+| | レガシー版 | この PR のあと |
+| --- | --- | --- |
+| 見つからないとき | `firstOrFail()` を Laravel に任せる（404 で、文に Model の名前）。書き換えは null に `fill()` して 500 | Service が `UserNotFoundException` を投げ、`bootstrap/app.php` が 404「会員が見つかりません」に変える |
+| エラーの文の置き場 | Controller ごとに手で書く（401 が30か所・403 が9か所・404 が7か所） | `lang/ja/errors.php`（今は1つ。ほかは、その API を移すときに移す） |
+| 言語 | 環境変数（既定は `en`） | `config/app.php` で `ja` に決めた |
+
+### 直した課題と、現場での意味
+
+課題と、決めたことは `05-problems.md` の「#241」の節。
+
+- だれが困らなくなるか：古い URL を開いた会員（Model の名前ではなく「会員が見つかりません」が出る）と、運営（書き換えの 500 が 404 になり、エラーのログに、本当の不具合だけが残る）
+- どう気づけるようになるか：業務の例外はログに出ないので、エラーのログに出るものは、思っていなかった失敗だけになる
+- 数字：いない会員の PUT が 500 → 404。エラーの文の置き場が、手書きの46か所 → これから移す先の1か所
+
+### 次の改善の候補
+
+| 候補 | 今どうなっているか | 直すとどうなるか | 気づいた所 |
+| --- | --- | --- | --- |
+| 「`public_id` で会員を探し、いなければ `UserNotFoundException`」を1か所にする | `ProfileService` の `showProfile` と `updateProfile` の2か所に書いている | #128 などでほかの Service にも増える。3つ目ができるときに、User のスコープか1つのメソッドにまとめる（退会した会員の扱いを変えるときに、直し漏れが起きない） | PR #242 のレビュー（A3） |
+| `ProfileFactory` の `realText()` を軽い書き方にする | 日本語の長い文を毎回読むので、テストが増えると 128MB を超える。今は `phpunit.xml` でテストのときだけ 512MB にした | 上限を上げずに流せる。試しのデータ（シーダー）の作り方も変わるので、別に決める | PR #242 の直し（テストが48本でメモリが足りなくなった） |
+| 会員の側の見本の `memberId`・`findMember` を、`User` の名前にそろえる | `architecture.md` の 99・118・185〜196・410・415行目 | 見本をコピーしても、member と user が混ざらない。書き換えの操作の引数の名前を決めるときに一緒に直す | PR #242 のレビュー（S5） |
+
+### 説明の練習
+
+リーダーが、運営からの相談の場面で聞いた（2026-11-19）：「エラーのログに、毎日 `UserNotFoundException` が何百件も出ている」。
+
+| 問い | 人の答え | 結果 |
+| --- | --- | --- |
+| なぜ出ないはずか | `render` の行（404 と文を返す）があるから | ずれていた。ログに出さないのは `dontReport` の行。Laravel は、記録する（report）と応答を作る（render）を別々に行う |
+| それでも出るとしたら | `UserNotFoundException` で起きている | 足りない。考えられるのは、`dontReport` の行を消した・`BusinessException` を継がない形にした・どこかで受け止めて自分でログに書いた |
+| 確かめているテスト | 「いない会員を見ても、エラーのログには出さない」 | 合っている |
+| `catch` して `Log::error()` を呼ぶと、ログに出るか | 出ない | ずれていた。出る。`dontReport` が止めるのは Laravel の記録のしくみだけで、`Log::error()` は通らない。止めるのは、7章の「try-catch を書かない場面」（受け止めて、記録して、投げ直すだけの `catch` は書かない） |
+
+- 次にやること：例外の扱いは「記録する（report）」と「応答を作る（render）」の2つに分けて読む。`dontReport` は前者、`render` は後者
+
+レビューの直しのあと、承認の前に、もう1問聞いた（2026-11-19）：「#128 で `ProfileForbiddenException` を足した人が、`render` の1行を書き忘れて PR を出した」。
+
+| 問い | 人の答え | 結果 |
+| --- | --- | --- |
+| CI でどのテストが落ち、何と出るか | `BusinessExceptionsTest` が落ちる。not found のようなエラーが出る | 一部。出るのは、テストに書いた文「`App\Exceptions\ProfileForbiddenException` の render を bootstrap/app.php に書いていない」 |
+| テストがなかったら、本番で何が起きるか | 500 が出ないので、ログに出ない | ずれていた。500 は出る。出ないのはログ。会員の問い合わせで初めて気づく |
+| なぜ、その 500 はログに残らないか | `dontReport([BusinessException::class])` の行があるから | 合っている |
+
+- 次にやること：「応答（何が返るか）」と「記録（ログに残るか）」を、別々に答える
+

@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Tests\DummyData;
 
 /**
- * テストで作った会員（DummyMember::create() の返り値）。
+ * テストで作った会員（DummyUser::create() の返り値）。
  * API テストが Model を知らずに済むよう、テストで使う値だけを持つ。
  */
-final readonly class TestMember
+final readonly class TestUser
 {
     /**
      * @param  int  $id  users.id（中の連番。DB を確かめるときに使う）

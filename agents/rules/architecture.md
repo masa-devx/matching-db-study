@@ -70,6 +70,7 @@ app/
 ├── Clients/<相手>/〜Client.php                   外のサービスの呼び出し（Firestore/FirestoreClient.php など）
 ├── Exceptions/BusinessException.php              業務の例外の親（7章）
 ├── Exceptions/<まとまり>/〜Exception.php
+├── Exceptions/〜Exception.php                     いくつものまとまりで使う例外（UserNotFoundException など）
 ├── Models/〜.php                                 Laravel の標準の置き場のまま（移さない）
 └── Support/                                      基盤（Logging など）
 ```
@@ -160,14 +161,14 @@ final class ProfileResource extends JsonResource
 トークンを読むのは Middleware だけ。Controller ごとに JWT を読まない。トークンが正しくても、退会・停止した会員は通さない（使えるかは Service に聞く）。
 
 ```php
-// app/Http/Middleware/AuthenticateMember.php
+// app/Http/Middleware/AuthenticateUser.php
 public function handle(Request $request, Closure $next): Response
 {
-    $memberId = $this->memberIdFrom($request->bearerToken());   // JWT を読む。読めなければ null
-    if ($memberId === null || ! $this->members->canUseApi($memberId)) {   // MemberAuthService：退会・停止していないか
+    $loginUserId = $this->loginUserIdFrom($request->bearerToken());   // JWT を読む。読めなければ null
+    if ($loginUserId === null || ! $this->users->canUseApi($loginUserId)) {   // UserAuthService：退会・停止していないか
         return response()->json(['message' => 'ログインしてください'], 401);
     }
-    $request->attributes->set('login_user_id', $memberId);
+    $request->attributes->set('login_user_id', $loginUserId);
 
     return $next($request);
 }
@@ -275,15 +276,21 @@ $this->firestore->openRoom($room);                                     // コミ
 ## 7. エラー
 
 - 業務の決まりに反したら、Service が `app/Exceptions/<まとまり>/〜Exception` を投げる。業務の例外は、みな `App\Exceptions\BusinessException`（親）を継ぐ。Service は状態コードを知らない（`abort()` を使わない）
-- **見つからないときも、業務の例外にする**（`MemberNotFoundException`）。`firstOrFail()` を Laravel に任せると、応答が `No query results for model [App\Models\User] 999` になり、Model のクラス名が見えてしまう（`docs/api/01-members.md` の改善版は「会員が見つかりません」）
+- 例外の置き場は、そのまとまりだけで使うなら `app/Exceptions/<まとまり>/`、いくつものまとまりで使うなら `app/Exceptions/` の直下（`UserNotFoundException` は、プロフィール・いいね・トークで使う）。同じ意味の例外を、まとまりごとに作らない（片方の `render` を書き忘れると、その API だけ 500 になる。PR #242 のレビュー）
+- **見つからないときも、業務の例外にする**（`UserNotFoundException`）。`firstOrFail()` を Laravel に任せると、応答が `No query results for model [App\Models\User] 999` になり、Model のクラス名が見えてしまう（`docs/api/01-members.md` の改善版は「会員が見つかりません」）
 - 例外を状態コードとメッセージに変えるのは、各アプリの `bootstrap/app.php` の1か所だけ。業務の例外を足したら、`render` に1行足す。ログに出さない決まり（`dontReport`）は、親の `BusinessException` に1回だけ書く
+- 画面に出るエラーの文は、`lang/ja/errors.php` にだけ書き、`bootstrap/app.php` から `__('errors.<キー>')` で読む（文を何十か所にも手で書くと、変えるときに直し漏れが起きるため。2026-11-19 に人が決めた）
+  - キーは、何が起きたかを英語の小文字と `_` で書く（`user_not_found`）。状態コードでは付けない（同じ 404 でも文は違う）
+  - 言語は `config/app.php` で `ja` に決めている（日本語だけのアプリなので、環境変数で変えない）。管理画面に業務の例外を足すときは、`backend/admin` も言語を `ja` にし、`lang/ja/errors.php` を作る（直し忘れると、キーの文字がそのまま画面に出る）
+- 業務の例外を足したら、`render` の1行と文を書く。書き忘れると、500 になるのにエラーのログにも残らない（`dontReport` が親に付いているため）。文のキーを打ち間違えると、キーの文字が返る。どちらも `tests/Feature/BusinessExceptionsTest.php` が落ちて見つける（`app/Exceptions` の中の業務の例外を全部集め、500 にならず、キーの文字を返さないことを確かめる）
 - API テストで、下の表の行ごとに状態コードとメッセージを確かめる
 
 ```php
 // bootstrap/app.php
 ->withExceptions(function (Exceptions $exceptions): void {
-    $exceptions->render(fn (ProfileNotFoundException $e) => response()->json(['message' => 'プロフィールが見つかりません'], 404));
-    $exceptions->render(fn (PaidPlanRequiredException $e) => response()->json(['message' => '有料会員になると使えます'], 403));
+    // 文は lang/ja/errors.php（'profile_not_found' => 'プロフィールが見つかりません' など）
+    $exceptions->render(fn (ProfileNotFoundException $e) => response()->json(['message' => __('errors.profile_not_found')], 404));
+    $exceptions->render(fn (PaidPlanRequiredException $e) => response()->json(['message' => __('errors.paid_plan_required')], 403));
 
     // 業務の例外は、決まりどおりに断っただけなので、エラーのログに出さない（logging.md の「ノイズを増やさない」）。親の1つだけを書く
     $exceptions->dontReport([BusinessException::class]);
@@ -298,6 +305,44 @@ $this->firestore->openRoom($room);                                     // コミ
 | 業務の決まりに反する | Service の業務の例外 | 403・409 |
 | 見つからない | Service の業務の例外（`〜NotFoundException`） | 404 |
 | DB・外のサービスが落ちた | どこでも握りつぶさない（`logging.md`） | 500 |
+
+### try-catch を書く場面・書かない場面
+
+基本は書かない。思っていなかった失敗（DB が落ちた・コードの誤り）は受け止めずに上へ流し、Laravel に任せる。Laravel が、スタックトレース付きでエラーのログに記録し、500 を返す（本番は `APP_DEBUG=false` で中身を隠す）。2026-11-19 に人が決めた（#241。根拠は Laravel 13.x の公式ドキュメントの Error Handling と Database Transactions）。
+
+- `DB::transaction()` は、中で例外が投げられると自動で戻し（ロールバック）、例外を投げ直す。`DB::rollBack()` を自分で書かない
+- デッドロックでやり直すときは、`DB::transaction(fn () => ..., attempts: 3)` と書く（try-catch は要らない）
+  - `attempts` は、一番外の `DB::transaction` に付ける。入れ子の中（ほかの Service の `transaction` の中から呼ばれたとき）では、やり直さずに `DeadlockException` を投げる（Laravel の `ManagesTransactions`）
+  - やり直すと、中身が最初から流れ直す。そのため、外への書き込み（Firestore・メール）を中に置かない（5章。置くと2回送られる）
+
+書いてよいのは、その失敗に、意味のある別の動きができるときだけ。受け止めるのは、決まった種類の例外だけにする（`\Exception`・`\Throwable` をまとめて受け止めない）。
+
+- 受け止めて、ログに書いて、投げ直すだけの `catch` は書かない。`Log::error()` は `dontReport` を通らないので、業務の例外までエラーのログに出る（記録したいなら `report($e)`。こちらは `dontReport` が効く）
+
+| 場面 | 書き方 |
+| --- | --- |
+| 予想できる DB のエラーを、業務の例外に変える（同時に2回いいねして、UNIQUE で止まった） | `catch (UniqueConstraintViolationException)` で受け、`AlreadyLikedException`（409）を投げる |
+| 外のサービスの失敗を記録して、続ける（DB に保存したあと、Firestore への書き込みが失敗した） | `catch (決まった例外 $e)` で受け、`report($e)` で記録して続ける。やり直しの仕組みは、外のサービスを移すチケットで決める |
+
+```php
+// ❌ どの失敗も同じ 500 にする（業務の例外の 404 も 500 になる・スタックトレースが消える・Service が HTTP を知る）
+try {
+    $profile->update($input);
+} catch (\Exception $e) {
+    Log::error($e->getMessage());
+    return response()->json(['message' => 'エラーが発生しました'], 500);
+}
+
+// ✅ 意味の分かる失敗だけを受け、業務の例外に変える
+try {
+    Like::create(['from_user_id' => $loginUserId, 'to_user_id' => $targetId]);
+} catch (UniqueConstraintViolationException) {
+    throw new AlreadyLikedException;
+}
+```
+
+- PostgreSQL は、トランザクションの中で UNIQUE の違反が起きると、そのトランザクションを中断の状態にし、そのあとの SQL を全部失敗にする（エラーコード 25P02）。上のように受けてすぐ業務の例外を投げるなら、外のトランザクションごと戻るので問題ない。受けたあとに同じトランザクションで SQL を続けるなら、その1文を `DB::transaction()` で包む（セーブポイントになり、失敗した所までだけを戻す。Laravel の `createOrFirst()` と同じ）
+- `UniqueConstraintViolationException` は、その表のどの UNIQUE の違反でも投げられる。上の見本は、その表の UNIQUE が1つのとき（`likes` の `from_user_id`・`to_user_id`）の書き方。UNIQUE が2つ以上ある表では、どの制約の違反かを確かめてから業務の例外に変える
 
 ## 8. アーキテクチャのテスト
 
@@ -358,7 +403,7 @@ $this->firestore->openRoom($room);                                     // コミ
   - 安全の穴を直すとき：別のコミットにし、先にテストの期待値を要件どおりに変えて、落ちることを見せる（`testing.md` の「安全の穴を直すときのテスト」）
 - そのために、API テストは中の作りに頼らない
   - DB は表の名前で確かめる（`assertDatabaseHas('likes', [...])`・`assertDatabaseCount('likes', 0)`）
-  - データは `tests/DummyData/` のクラス（例：`DummyMember::create()`・`DummyMatching::match()`）で作る。Model の Factory を呼ぶのは、このクラスの中だけ
+  - データは `tests/DummyData/` のクラス（例：`DummyUser::create()`・`DummyMatching::match()`）で作る。Model の Factory を呼ぶのは、このクラスの中だけ
   - 時刻は `travelTo()` で止める。ログインは、本物のトークンを作って送る（`DummyAuth::actingAs()`）。ダミーデータの関数の一覧は `testing.md` の「テストのダミーデータ（会員の側）」
   - 外への書き込み（Firestore）は、移す前と後で同じ方法で確かめる（Emulator の中身を読む）
 - 新しく書くコードは、必ずこの形で書く。古いコントローラー（`app/Http/Controllers/` の直下）に機能を足さない
@@ -396,7 +441,7 @@ $profile->update($request->validated());
 // ❌ 見つからないときを Laravel に任せる（Model のクラス名が応答に出る）
 return User::query()->where('public_id', $publicId)->firstOrFail();
 // ✅ 業務の例外にする
-return User::query()->where('public_id', $publicId)->first() ?? throw new MemberNotFoundException();
+return User::query()->where('public_id', $publicId)->first() ?? throw new UserNotFoundException();
 
 // ❌ 保存したときに、裏でメールを送る（Service を読んでも見えない）
 protected static function booted(): void { static::created(fn (User $u) => Mail::to($u)->send(...)); }

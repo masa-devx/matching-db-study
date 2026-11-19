@@ -18,7 +18,7 @@ paths:
 | 結合（API テスト） | Pest（テスト用の PostgreSQL に対して実行） | `backend/client/tests/Feature/`・`backend/admin/tests/Feature/` | `docker compose run --rm app ./vendor/bin/pest tests/Feature`（管理画面は `admin-app`） | DB や API をまたぐ制御・API の振る舞い |
 | アーキテクチャ | Pest の `arch()`（`pestphp/pest-plugin-arch`） | `backend/client/tests/Arch/`（正本）・`backend/admin/tests/Arch/`（コピー。決まりの部分が正本と同じかを `SameRulesAsClientTest.php` が比べる） | `docker compose run --rm app ./vendor/bin/pest tests/Arch`（管理画面は `admin-app`） | 層の依存の向きと名前（`architecture.md` の8章） |
 
-- 管理画面（`backend/admin`）も、Pest と、本物の PostgreSQL で動く（#105）。テスト用の DB は `matching_admin_test`（会員の側の `matching_test` とは別。2つを同時に流しても、ぶつからない）。管理画面はマイグレーションを持たないので、表は、会員の側のマイグレーション（`backend/client/database/migrations`）で作る（`backend/admin/tests/TestCase.php`。この仕組みは `tests/Feature/TestEnvironmentTest.php` で確かめる）。ダミーデータは `backend/admin/tests/DummyData/`：`DummyAdmin`（`create()`（役割を引数で）・`actingAs()`）・`DummyMember`（`create()`）。会員の側の同じ名前のクラスとは、別のもの（管理画面は Model を持たないので、表に直接入れる）
+- 管理画面（`backend/admin`）も、Pest と、本物の PostgreSQL で動く（#105）。テスト用の DB は `matching_admin_test`（会員の側の `matching_test` とは別。2つを同時に流しても、ぶつからない）。管理画面はマイグレーションを持たないので、表は、会員の側のマイグレーション（`backend/client/database/migrations`）で作る（`backend/admin/tests/TestCase.php`。この仕組みは `tests/Feature/TestEnvironmentTest.php` で確かめる）。ダミーデータは `backend/admin/tests/DummyData/`：`DummyAdmin`（`create()`（役割を引数で）・`actingAs()`）・`DummyMember`（`create()`）。会員の側の `DummyUser` とは、別のもの（管理画面は Model を持たないので、表に直接入れる）
 | E2E | 03b（React を足す）で決める | 03b で決める | 03b で決める | 主要フロー・認可・状態遷移 |
 
 - 単体の置き場所は、実装のパスと対応づける（例: `app/Models/User.php` の `isPaidAt()` → `tests/Unit/Models/UserTest.php`）。Service は DB を使うので、単体ではなく API テスト（`Feature`）で、本物の PostgreSQL に対して確かめる
@@ -58,17 +58,17 @@ API ごとに、下の表から当てはまる観点を選ぶ。「API テスト
 
 ### テストのダミーデータ（会員の側）
 
-データと、ログインした状態は、`backend/client/tests/DummyData/` のクラスで作る。クラスは `Dummy<名詞>`（`final`）で、テストから呼ぶメソッドは `public static`、中の手順は `private static` にする。テストでは `use Tests\DummyData\DummyMember;` と読み込み、`DummyMember::create()` と呼ぶ（クラスは名前から自動で読み込まれるので、`composer.json` に足さなくてよい）。ダミーデータだけで書いた見本は `tests/Feature/Profile/ShowTest.php`。
+データと、ログインした状態は、`backend/client/tests/DummyData/` のクラスで作る。クラスは `Dummy<名詞>`（`final`）で、テストから呼ぶメソッドは `public static`、中の手順は `private static` にする。テストでは `use Tests\DummyData\DummyUser;` と読み込み、`DummyUser::create()` と呼ぶ（クラスは名前から自動で読み込まれるので、`composer.json` に足さなくてよい）。ダミーデータだけで書いた見本は `tests/Feature/Profile/ShowTest.php`。
 
 | メソッド | 作るもの | 作らないもの |
 | --- | --- | --- |
-| `DummyMember::create()` | 会員とプロフィール。既定は、メールアドレスを確認した・無料の・女性。引数で、性別・有料・退会・停止・ニックネーム・生年月日・都道府県・身長を変える。`withProfile: false` ならプロフィールを作らない | 購入の行（`purchases`）・管理画面の監査ログ |
+| `DummyUser::create()` | 会員とプロフィール。既定は、メールアドレスを確認した・無料の・女性。引数で、性別・有料・退会・停止・ニックネーム・生年月日・都道府県・身長を変える。`withProfile: false` ならプロフィールを作らない | 購入の行（`purchases`）・管理画面の監査ログ |
 | `DummyMatching::match()` | お互いのいいね・マッチ・トークルームと参加者2人。トークルームの番号を返す | Firestore のルーム |
 | `DummyAuth::actingAs()` | その会員のトークンを `Authorization` に付ける。続けて `->getJson(...)` と書く | ― |
 | `DummyAuth::token()` | トークンの文字だけ（期限切れを確かめるときに使う） | ― |
 | `DummyAuth::withToken()` | 渡したトークンを `Authorization` に付ける（壊れたトークン・期限切れのトークンを送るとき）。続けて `->getJson(...)` と書く | ― |
 | `DummyAuth::tokenSignedWithOtherKey()` | 中身は本物と同じで、ほかの鍵で署名したトークン（署名を確かめているかを見るとき） | ― |
-| `DummyMember::MISSING_PUBLIC_ID` | だれも持っていない `public_id`（UUID の形は正しい）。いない会員の URL に使う | ― |
+| `DummyUser::MISSING_PUBLIC_ID` | だれも持っていない `public_id`（UUID の形は正しい）。いない会員の URL に使う | ― |
 
 - 引数と返す値は、`tests/DummyData/` の PHPDoc を正とする（この表には書かない）
 - 足りないもの（メッセージ・購入など）は、要るチケットで `tests/DummyData/` のクラスにメソッドを足すか、クラスを足す。この表にも1行足す
@@ -77,7 +77,7 @@ API ごとに、下の表から当てはまる観点を選ぶ。「API テスト
 
 ```php
 travelTo(Carbon::parse('2026-11-10 12:00:00'));
-$me = DummyMember::create(paid: true);   // users.created_at は 2026-11-10 12:00:00・有料の期限は 2026-12-10 12:00:00
+$loginUser = DummyUser::create(paid: true);   // users.created_at は 2026-11-10 12:00:00・有料の期限は 2026-12-10 12:00:00
 ```
 
 - トークンの期限だけは、本物の時計で決まる（JWT のライブラリが `time()` を見るため、`travelTo()` は効かない）。`DummyAuth::token()` に期限を渡すときは、`time()` をもとに書く（期限切れなら `time() - 60`）

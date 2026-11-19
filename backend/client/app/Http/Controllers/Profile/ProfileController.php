@@ -19,7 +19,7 @@ final class ProfileController extends Controller
 
     public function show(Request $request, string $targetPublicId): JsonResponse
     {
-        $loginUserId = $request->attributes->get('login_user_id');   // IdentifyMember が載せる。トークンがなければ null
+        $loginUserId = $request->attributes->get('login_user_id');   // IdentifyUser が載せる。トークンがなければ null
         $result = $this->profiles->showProfile($targetPublicId, is_int($loginUserId) ? $loginUserId : null);
 
         // 分かっている不具合：返してよい項目を選ばず、列を全部返す（FR-002）。直すときに Resource を作って移す
