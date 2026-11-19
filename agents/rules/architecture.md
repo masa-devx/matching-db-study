@@ -142,7 +142,7 @@ final class UpdateProfileRequest extends FormRequest
 }
 ```
 
-Resource は**返してよい項目だけ**を並べる。Model を丸ごと返さない（パスワードのハッシュや確認用の文字が出る）。中で新しくクエリを書かない。
+Resource は**返してよい項目だけ**を並べる。Model を丸ごと返さない（パスワードのハッシュや確認用の文字が出る）。中で新しくクエリを書かない。Resource は、返す項目を選ぶときに作る。古いコードを移すあいだ、全部の列をそのまま返すなら作らず、Controller で `response()->json()` を返し、「分かっている不具合」と書く（中身のないファイルを増やさないため。2026-11-19 に人が決めた）。
 
 ```php
 // app/Http/Resources/Profile/ProfileResource.php
