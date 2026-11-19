@@ -17,10 +17,16 @@ final class DummyAuth
 {
     private const int THIRTY_DAYS = 60 * 60 * 24 * 30;
 
-    /** その会員としてログインした状態にする。使い方：DummyAuth::actingAs($me)->getJson('/api/me') */
+    /** その会員としてログインした状態にする。使い方：DummyAuth::actingAs($loginUser)->getJson('/api/me') */
     public static function actingAs(TestMember $member): TestCase
     {
-        return withHeader('Authorization', 'Bearer '.self::token($member));
+        return self::withToken(self::token($member));
+    }
+
+    /** 渡したトークンを Authorization に付ける。壊れたトークンや期限切れのトークンを送るときに使う */
+    public static function withToken(string $token): TestCase
+    {
+        return withHeader('Authorization', "Bearer {$token}");
     }
 
     /**
@@ -29,12 +35,24 @@ final class DummyAuth
      */
     public static function token(TestMember $member, ?int $expiresAt = null): string
     {
-        return JWT::encode([
+        return JWT::encode(self::claims($member, $expiresAt), config()->string('app.key'), 'HS256');
+    }
+
+    /** 中身は本物と同じで、ほかの鍵で署名したトークン（署名を確かめているかを見るときに使う） */
+    public static function tokenSignedWithOtherKey(TestMember $member): string
+    {
+        return JWT::encode(self::claims($member, null), str_repeat('x', 64), 'HS256');
+    }
+
+    /** @return array{sub: int, email: string, nickname: string|null, iat: int, exp: int} */
+    private static function claims(TestMember $member, ?int $expiresAt): array
+    {
+        return [
             'sub' => $member->id,
             'email' => $member->email,
             'nickname' => $member->nickname,
             'iat' => time(),
             'exp' => $expiresAt ?? time() + self::THIRTY_DAYS,
-        ], (string) config('app.key'), 'HS256');
+        ];
     }
 }

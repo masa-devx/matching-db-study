@@ -13,6 +13,9 @@ use App\Models\User;
  */
 final class DummyMember
 {
+    /** だれも持っていない public_id（UUID の形は正しい）。いない会員の URL を作るときに使う */
+    public const string MISSING_PUBLIC_ID = '00000000-0000-0000-0000-000000000000';
+
     /**
      * 会員を1人作る。プロフィールの項目は、渡さなければ Factory がそれらしい値を入れる。
      * $withProfile が false なら、users の行だけを作る。
@@ -49,7 +52,7 @@ final class DummyMember
             'height' => $height === null ? null : (string) $height,   // レガシー版の列は文字
         ]));
 
-        return new TestMember($user->id, $user->public_id, $user->email, $profile->nickname, $profile->gender);
+        return new TestMember($user->id, $user->public_id, $user->email, $profile->nickname, $gender);   // 性別は、渡した値をそのまま入れている
     }
 
     /** 有料なら期限を今から30日にする。停止なら停止の日時と理由を入れる。 */
