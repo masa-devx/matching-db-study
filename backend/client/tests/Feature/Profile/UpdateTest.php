@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\DB;
 use Tests\DummyData\DummyAuth;
 use Tests\DummyData\DummyMember;
 
@@ -16,10 +17,21 @@ describe('自分のプロフィールを書き換える', function (): void {
         $me = DummyMember::create(nickname: 'まえ');
         $someone = DummyMember::create(nickname: 'べつのひと');
 
-        DummyAuth::actingAs($me)->putJson("/api/users/{$me->publicId}", ['nickname' => 'あと'])->assertOk();
+        DummyAuth::actingAs($me)->putJson("/api/users/{$me->publicId}", ['nickname' => 'あと'])
+            ->assertOk()
+            ->assertJsonPath('nickname', 'あと');   // ホームは、この応答をそのままプロフィールとして使う
 
         assertDatabaseHas('profiles', ['user_id' => $me->id, 'nickname' => 'あと']);
         assertDatabaseHas('profiles', ['user_id' => $someone->id, 'nickname' => 'べつのひと']);
+    });
+
+    it('SQL は3本（会員の番号・プロフィール・書き換え）', function (): void {
+        $me = DummyMember::create(nickname: 'まえ');
+        DB::enableQueryLog();
+
+        DummyAuth::actingAs($me)->putJson("/api/users/{$me->publicId}", ['nickname' => 'あと'])->assertOk();
+
+        expect(DB::getQueryLog())->toHaveCount(3);
     });
 
     // 分かっている不具合：要件（FR-006）は 422 で、保存しない。空の文字は Laravel が null に変える
@@ -65,7 +77,7 @@ describe('他人のプロフィールを書き換える', function (): void {
 });
 
 describe('URL の番号がおかしい', function (): void {
-    // 分かっている不具合：404 が望ましい。プロフィールが見つからず、null のまま fill() を呼ぶ
+    // 分かっている不具合：404 が望ましい。プロフィールが見つからず、ProfileService が RuntimeException を投げる
     it('いない会員なら 500', function (): void {
         $me = DummyMember::create();
 
