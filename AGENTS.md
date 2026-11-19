@@ -32,7 +32,7 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 | --- | --- |
 | backend/・frontend/ | 層（API と画面）で分け、その中を使う人で分ける：`client`（会員）・`admin`（管理画面。12）。#93 で `backend/`・`frontend/`・`admin/` から移した |
 | backend/client/ | Laravel（API）。今はレガシー版の形（`app/Models`・`app/Http/Controllers`・`database/migrations`）。改訂版の置き場は [architecture.md](agents/rules/architecture.md) の3章（Controller → Service → Model）で、画面・機能ごとに移す |
-| backend/client/tests/ | Pest のテスト。`Unit/`（ロジック）・`Feature/`（DB と API をまたぐもの）・`Arch/`（層の依存の向き）・`DummyData/`（テストのダミーデータ：会員・いいね・トークンを作るクラス）。`Feature/` の中は業務のまとまり（`Profile/`・`Matching/` など）で分ける。種類と置き場は [testing.md](agents/rules/testing.md) |
+| backend/client/tests/ | Pest のテスト。`Unit/`（ロジック）・`Feature/`（DB と API をまたぐもの）・`Arch/`（層の依存の向き）・`DummyData/`（テストのダミーデータ：会員・いいね・トークンを作るクラス）・`Endpoints.php`（テストで呼ぶ API の URL を作るクラス。URL の文字はここにだけ書く）。`Feature/` の中は業務のまとまり（`Profile/`・`Matching/` など）で分ける。種類と置き場は [testing.md](agents/rules/testing.md) |
 | frontend/client/ | React（03b から）。テストは `src/**/*.test.tsx` |
 | backend/admin/ | 管理画面（12）の API（Laravel）。会員の側のコードは読み込まない。表は会員の側と共通で、表の作り（マイグレーション）は管理画面の表も含めて `backend/client/` にまとめる |
 | frontend/admin/ | 管理画面（12）の画面（React・Mantine） |

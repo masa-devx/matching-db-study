@@ -66,6 +66,9 @@ API ごとに、下の表から当てはまる観点を選ぶ。「API テスト
 | `DummyMatching::match()` | お互いのいいね・マッチ・トークルームと参加者2人。トークルームの番号を返す | Firestore のルーム |
 | `DummyAuth::actingAs()` | その会員のトークンを `Authorization` に付ける。続けて `->getJson(...)` と書く | ― |
 | `DummyAuth::token()` | トークンの文字だけ（期限切れを確かめるときに使う） | ― |
+| `DummyAuth::withToken()` | 渡したトークンを `Authorization` に付ける（壊れたトークン・期限切れのトークンを送るとき）。続けて `->getJson(...)` と書く | ― |
+| `DummyAuth::tokenSignedWithOtherKey()` | 中身は本物と同じで、ほかの鍵で署名したトークン（署名を確かめているかを見るとき） | ― |
+| `DummyMember::MISSING_PUBLIC_ID` | だれも持っていない `public_id`（UUID の形は正しい）。いない会員の URL に使う | ― |
 
 - 引数と返す値は、`tests/DummyData/` の PHPDoc を正とする（この表には書かない）
 - 足りないもの（メッセージ・購入など）は、要るチケットで `tests/DummyData/` のクラスにメソッドを足すか、クラスを足す。この表にも1行足す
