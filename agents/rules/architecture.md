@@ -90,13 +90,14 @@ Laravel と Rails の公式の考え方に合わせる。**Controller は、URL 
 | いいね | いいね | `Matching/LikeController@store` |
 | ブロック・通報 | ブロック・通報 | `Matching/BlockController`・`Members/ReportController` |
 | 会員の検索 | 会員（の一覧） | `Members/MemberController@index` |
-| 自分のプロフィールを見る・直す | 自分 | `Members/MeController@show`・`update` |
+| 自分のプロフィールを見る・直す | 自分 | `Profile/MeController@show`・`update` |
 
 ### Service の分け方
 
 - **業務のまとまりの中で、近い名詞（同じ表や同じ画面を扱うもの）をまとめて1クラス**にする（人が決めた。`LikeService` が、送ったいいねと届いたいいねを受け持つ）。1つの Service を、いくつかの Controller から呼んでよい
 - `final` にし、名前は `Service` で終わる。`app/Services/` には Service のクラスだけを置く（戻り値は Model か配列。配列は PHPDoc で形を書く）
-- **public のメソッドは操作の名前**（動詞から始める：`search`・`showMine`・`updateMine`・`send`・`listReceived`・`suspend`）。Controller のメソッドの名前（`index`・`store`）にそろえない（いくつかの Controller から呼ぶと、ぶつかるため）。**private のメソッドは、その中の手順**（`findMember`・`assertNotBlocked` など）
+- **public のメソッドは操作の名前**（動詞から始める：`search`・`showProfile`・`updateProfile`・`send`・`listReceived`・`suspend`）。Controller のメソッドの名前（`index`・`store`）にそろえない（いくつかの Controller から呼ぶと、ぶつかるため）。**private のメソッドは、その中の手順**（`findMember`・`assertNotBlocked` など）
+- 名前には「何ができるか」を書き、「だれが呼べるか」（ログインしているか・本人か・役割）は入れない（`updateMine` ではなく `updateProfile`）。だれが呼べるかは、Middleware とメソッドの中の条件で決める。認証の作りが変わっても、名前を変えずに済むため（2026-11-19 に人が決めた。PR #240）
 - メソッドの数の上限は決めない。太ったら見直す（`docs/backend.md` の「やり直しのきっかけ」）
 
 ## 4. 書き方
@@ -106,15 +107,15 @@ Laravel と Rails の公式の考え方に合わせる。**Controller は、URL 
 Controller は**受け取る → 呼ぶ → 返す**だけ。`if` で業務の判断をしない。Model を直接使わない。
 
 ```php
-// app/Http/Controllers/Members/MeController.php（PATCH /me。自分のプロフィールを直す）
+// app/Http/Controllers/Profile/MeController.php（PATCH /me。自分のプロフィールを直す）
 final class MeController extends Controller
 {
     public function __construct(private readonly ProfileService $profiles) {}
 
     public function update(UpdateProfileRequest $request): ProfileResource
     {
-        $profile = $this->profiles->updateMine(
-            memberId: (int) $request->attributes->get('member_id'),   // Middleware が載せた、ログインした会員（読む所を1つにまとめるかは、移すときに考える）
+        $profile = $this->profiles->updateProfile(
+            memberId: (int) $request->attributes->get('login_user_id'),   // Middleware が載せた、ログインした会員（読む所を1つにまとめるかは、移すときに考える）
             input: $request->validated(),
         );
 
@@ -131,7 +132,7 @@ Request は**形だけ**を確かめる。「相手がいるか」「回数を�
 - Model の `$fillable` に、役割・停止・有料の期限・確認用の文字の列を入れない
 
 ```php
-// app/Http/Requests/Members/UpdateProfileRequest.php
+// app/Http/Requests/Profile/UpdateProfileRequest.php
 final class UpdateProfileRequest extends FormRequest
 {
     /** @return array<string, list<string>> */
@@ -142,10 +143,10 @@ final class UpdateProfileRequest extends FormRequest
 }
 ```
 
-Resource は**返してよい項目だけ**を並べる。Model を丸ごと返さない（パスワードのハッシュや確認用の文字が出る）。中で新しくクエリを書かない。
+Resource は**返してよい項目だけ**を並べる。Model を丸ごと返さない（パスワードのハッシュや確認用の文字が出る）。中で新しくクエリを書かない。Resource は、返す項目を選ぶときに作る。古いコードを移すあいだ、全部の列をそのまま返すなら作らず、Controller で `response()->json()` を返し、「分かっている不具合」と書く（中身のないファイルを増やさないため。2026-11-19 に人が決めた）。
 
 ```php
-// app/Http/Resources/Members/ProfileResource.php
+// app/Http/Resources/Profile/ProfileResource.php
 final class ProfileResource extends JsonResource
 {
     /** @return array<string, mixed> */
@@ -166,7 +167,7 @@ public function handle(Request $request, Closure $next): Response
     if ($memberId === null || ! $this->members->canUseApi($memberId)) {   // MemberAuthService：退会・停止していないか
         return response()->json(['message' => 'ログインしてください'], 401);
     }
-    $request->attributes->set('member_id', $memberId);
+    $request->attributes->set('login_user_id', $memberId);
 
     return $next($request);
 }
@@ -177,11 +178,11 @@ public function handle(Request $request, Closure $next): Response
 業務のロジックと手順を書く。Model のクエリを呼び、判断し、保存する。
 
 ```php
-// app/Services/Members/ProfileService.php
+// app/Services/Profile/ProfileService.php
 final class ProfileService
 {
     /** @param  array<string, mixed>  $input  Request の validated() */
-    public function updateMine(int $memberId, array $input): Profile
+    public function updateProfile(int $memberId, array $input): Profile
     {
         $profile = $this->findProfile($memberId);
         $profile->update($input);
@@ -357,8 +358,8 @@ $this->firestore->openRoom($room);                                     // コミ
   - 安全の穴を直すとき：別のコミットにし、先にテストの期待値を要件どおりに変えて、落ちることを見せる（`testing.md` の「安全の穴を直すときのテスト」）
 - そのために、API テストは中の作りに頼らない
   - DB は表の名前で確かめる（`assertDatabaseHas('likes', [...])`・`assertDatabaseCount('likes', 0)`）
-  - データは `tests/Support/` の作る関数（例：`createMember()`・`createLike()`）で作る。Model の Factory を呼ぶのは、この関数の中だけ
-  - 時刻は `travelTo()` で止める。ログインは、本物のトークンを作って送る（`actingAsMember()`）。部品の一覧は `testing.md` の「テストの部品」
+  - データは `tests/DummyData/` のクラス（例：`DummyMember::create()`・`DummyMatching::match()`）で作る。Model の Factory を呼ぶのは、このクラスの中だけ
+  - 時刻は `travelTo()` で止める。ログインは、本物のトークンを作って送る（`DummyAuth::actingAs()`）。ダミーデータの関数の一覧は `testing.md` の「テストのダミーデータ（会員の側）」
   - 外への書き込み（Firestore）は、移す前と後で同じ方法で確かめる（Emulator の中身を読む）
 - 新しく書くコードは、必ずこの形で書く。古いコントローラー（`app/Http/Controllers/` の直下）に機能を足さない
 - 移すたびに、**次の改善の候補**（移して気づいたこと。例：「検索の条件が増えるたびに `scopeSearch` が長くなる」）を、そのサイクルの `06-walkthrough.md` に1行残す。振り返りと、太ったときの見直しの材料にする
@@ -376,9 +377,9 @@ if ($profile->gender === 'male' && ! $user->is_paid) {
 $result = $this->likes->send($memberId, $request->validated());
 
 // ❌ Service が HTTP を知っている（コマンドやテストから呼べない）
-public function updateMine(Request $request): JsonResponse { abort_if($x, 403); }
+public function updateProfile(Request $request): JsonResponse { abort_if($x, 403); }
 // ✅ 値を受け取り、Model を返す。断るときは業務の例外
-public function updateMine(int $memberId, array $input): Profile { throw new ProfileNotFoundException(); }
+public function updateProfile(int $memberId, array $input): Profile { throw new ProfileNotFoundException(); }
 
 // ❌ 有料かどうかを、あちこちで書く（期限を見ない所ができる）
 if ($user->is_paid) { ... }

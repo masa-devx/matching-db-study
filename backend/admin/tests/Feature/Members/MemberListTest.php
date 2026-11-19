@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-use function Pest\Laravel\getJson;
-use function Tests\Support\actingAsAdmin;
-use function Tests\Support\createAdmin;
-use function Tests\Support\createMember;
+use Tests\DummyData\DummyAdmin;
+use Tests\DummyData\DummyMember;
 
-// 見本：部品（createAdmin・createMember・actingAsAdmin）だけで書いた、管理画面の API テスト。
-// 今のレガシー版の動きを、そのまま確かめる（直すのは、あとのチケット）。要件は docs/requirements/admin.md
+use function Pest\Laravel\getJson;
+
+// GET /api/members：会員の一覧。今のレガシー版の動きを確かめるテスト（要件は docs/requirements/admin.md）。
+// ダミーデータ（DummyAdmin・DummyMember）だけで書いた、管理画面の API テストの見本
 
 test('FR-ADMIN-004 会員の一覧に、会員と全部の件数が出る（見るだけの管理者でも）', function (): void {
-    $sakura = createMember(nickname: 'さくら');
-    $withdrawn = createMember(withdrawn: true, nickname: 'やめた人');
-    $suspended = createMember(suspended: true, nickname: '止めた人');
+    $sakura = DummyMember::create(nickname: 'さくら');
+    $withdrawn = DummyMember::create(withdrawn: true, nickname: 'やめた人');
+    $suspended = DummyMember::create(suspended: true, nickname: '止めた人');
 
-    $response = actingAsAdmin(createAdmin('viewer'))->getJson('/api/members')
+    $response = DummyAdmin::actingAs(DummyAdmin::create('viewer'))->getJson('/api/members')
         ->assertOk()
         ->assertJsonPath('total', 3);
 
@@ -31,11 +31,11 @@ test('FR-ADMIN-004 会員の一覧に、会員と全部の件数が出る（見�
 });
 
 test('FR-ADMIN-004 状態（退会）で絞ると、退会した会員だけが出る', function (): void {
-    createMember();
-    createMember(suspended: true);
-    $withdrawn = createMember(withdrawn: true);
+    DummyMember::create();
+    DummyMember::create(suspended: true);
+    $withdrawn = DummyMember::create(withdrawn: true);
 
-    actingAsAdmin(createAdmin())->getJson('/api/members?status=withdrawn')
+    DummyAdmin::actingAs(DummyAdmin::create())->getJson('/api/members?status=withdrawn')
         ->assertOk()
         ->assertJsonPath('total', 1)
         ->assertJsonPath('data.0.public_id', $withdrawn->publicId);
@@ -43,7 +43,7 @@ test('FR-ADMIN-004 状態（退会）で絞ると、退会した会員だけが�
 
 test('FR-ADMIN-012 ログインしていなければ、会員の一覧は 401', function (): void {
     // 会員がいても、中身を返さずに 401 になることを確かめるために、1人作っておく
-    createMember();
+    DummyMember::create();
 
     // 応答は、理由の文（message）だけ。別の名前で、会員の中身を返していないことも、これで分かる
     getJson('/api/members')

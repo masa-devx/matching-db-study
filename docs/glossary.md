@@ -78,3 +78,17 @@ URL のパスの引数（`{<名詞>_id}`）と JSON のキーに使う名前。�
 | 監査ログ | `audit_log_id` | `admin_audit_logs` の ID（まだ `public_id` がない。1件を指す API を足すときに足す） | 1件を指す API は、まだない |
 | 保存した検索条件 | `search_condition_id` | `search_conditions.public_id` | 今の URL のルートでは `{publicId}` |
 
+### コードの中の、会員の番号の名前
+
+会員は、番号を2つ持つ：`users.id`（DB の中の番号。外に出さない）と `users.public_id`（UUID。URL・JSON に出す）。PHP の中では、名前に「だれの」と「どちらの番号か」を入れる（2026-11-19 に人が決めた。`user_id` だけでは、表の列（中身は `users.id`）か URL（中身は UUID）かが分からず、読み違えたため）。
+
+| 名前 | 中身 | 使う所 |
+| --- | --- | --- |
+| `$targetPublicId` | URL で指した会員の `users.public_id` | Controller と Service の引数 |
+| `$targetId` | URL で指した会員の `users.id` | Service の中 |
+| `login_user_id` | ログインしている人の `users.id` | Middleware が `$request->attributes` に載せるキー |
+| `$loginUserId` | 同じ。`login_user_id` から取り出した値 | Controller（HTTP の側） |
+| `$viewerId` | その操作で見る人の `users.id`。Controller から `$loginUserId` を受け取る | Service の引数（業務の側。Service は HTTP を知らないので、「ログイン」ではなく操作の中の役で呼ぶ。コマンドから呼ぶときも同じ名前で通じる） |
+
+- 表の列の `user_id`（`profiles.user_id`・`talk_room_members.user_id` など）の中身は `users.id`。URL・JSON の `user_id`（中身は UUID）とは別
+

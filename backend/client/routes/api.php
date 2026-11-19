@@ -12,7 +12,7 @@ use App\Http\Controllers\NoticeController;
 use App\Http\Controllers\PasswordController;
 use App\Http\Controllers\PasswordResetController;
 use App\Http\Controllers\PlanController;
-use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\Profile\ProfileController;
 use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\ReceivedLikeController;
 use App\Http\Controllers\ReportController;
@@ -34,8 +34,8 @@ Route::get('/health', function () {
 });
 
 // 01 会員とプロフィール（docs/api/01-members.md）。#46 で、パスを UUID（public_id）にし、/profile を外した
-Route::get('/users/{publicId}', [ProfileController::class, 'show']);
-Route::put('/users/{publicId}', [ProfileController::class, 'update']);
+Route::get('/users/{user_id}', [ProfileController::class, 'show'])->middleware('member.identify');   // トークンがあれば、会員の番号を載せる
+Route::put('/users/{user_id}', [ProfileController::class, 'update']);
 
 // 01b 登録とメールアドレスの確認（docs/api/01b-auth.md）。レガシー版は、だれでも使える
 Route::post('/users', [UserController::class, 'store']);

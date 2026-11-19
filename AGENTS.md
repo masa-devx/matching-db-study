@@ -32,7 +32,7 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 | --- | --- |
 | backend/・frontend/ | 層（API と画面）で分け、その中を使う人で分ける：`client`（会員）・`admin`（管理画面。12）。#93 で `backend/`・`frontend/`・`admin/` から移した |
 | backend/client/ | Laravel（API）。今はレガシー版の形（`app/Models`・`app/Http/Controllers`・`database/migrations`）。改訂版の置き場は [architecture.md](agents/rules/architecture.md) の3章（Controller → Service → Model）で、画面・機能ごとに移す |
-| backend/client/tests/ | Pest のテスト。`Unit/`（ロジック）・`Feature/`（DB と API をまたぐもの）・`Arch/`（層の依存の向き）・`Support/`（テストの部品）。種類と置き場は [testing.md](agents/rules/testing.md) |
+| backend/client/tests/ | Pest のテスト。`Unit/`（ロジック）・`Feature/`（DB と API をまたぐもの）・`Arch/`（層の依存の向き）・`DummyData/`（テストのダミーデータ：会員・いいね・トークンを作るクラス）・`Endpoints.php`（テストで呼ぶ API の URL を作るクラス。URL の文字はここにだけ書く）。`Feature/` の中は業務のまとまり（`Profile/`・`Matching/` など）で分ける。種類と置き場は [testing.md](agents/rules/testing.md) |
 | frontend/client/ | React（03b から）。テストは `src/**/*.test.tsx` |
 | backend/admin/ | 管理画面（12）の API（Laravel）。会員の側のコードは読み込まない。表は会員の側と共通で、表の作り（マイグレーション）は管理画面の表も含めて `backend/client/` にまとめる |
 | frontend/admin/ | 管理画面（12）の画面（React・Mantine） |
@@ -76,7 +76,7 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 | 試しの通報を入れる（M7・A7。#201） | リポジトリのルート | `docker compose exec app php artisan db:seed --class=ReportsSeeder`（案件 300：まだ 200・対応中 40・済み 60。通報 約3000件で、3割ほどはメッセージを指す。1つ目の案件は 50人から 50件、2つ目は同じ1人から 10件。`search00001` は、通報した側にもされた側にも入れない。流し直すと、`search00001` が通報したもの以外を消して入れ直す。約0.2秒） | 先に「試しのメッセージを入れる（05）」を流す・`migrate` 済み | テスト用の DB に入れる・`DatabaseSeeder` から呼ぶ（04 と同じ理由） |
 | 試しの管理者を入れる（12） | リポジトリのルート | `docker compose exec app php artisan db:seed --class=AdminsSeeder`（`owner@admin.example.test`（すべてできる）・`viewer@admin.example.test`（見るだけ）。パスワードは `password`。表の作りは `backend/client` にまとめているので、シーダーもここ。流し直すと入れ直す） | `migrate` 済み | テスト用の DB に入れる・`DatabaseSeeder` から呼ぶ |
 | DB に入る | リポジトリのルート | `docker compose exec db psql -U postgres -d matching_dev`（テスト用は `-d matching_test`） | db が起動している | ― |
-| ブランチを切り替えたあと | リポジトリのルート | `docker compose restart app`。`legacy-repo` 系と `refactored-repo` 系を行き来したときは、続けて `docker compose run --rm app composer dump-autoload`（読み込みの一覧 `vendor/composer/` は git に入らず、前のブランチのまま残る。`refactored-repo` にだけある `tests/Support/functions.php` を指したまま `legacy-repo` に移ると、API が全部 500 になる） | ― | 切り替え先に `backend/client/` がないと、動いているサーバーのフォルダが一度消えて、API がエラーを返し続けるため |
+| ブランチを切り替えたあと | リポジトリのルート | `docker compose restart app`。`legacy-repo` 系と `refactored-repo` 系を行き来したときは、続けて `docker compose run --rm app composer dump-autoload`（読み込みの一覧 `vendor/composer/` は git に入らず、前のブランチのまま残る。`refactored-repo` にだけある `tests/DummyData/` のファイルを指したまま `legacy-repo` に移ると、API が全部 500 になる） | ― | 切り替え先に `backend/client/` がないと、動いているサーバーのフォルダが一度消えて、API がエラーを返し続けるため |
 | CI | GitHub（PR と push で自動） | `.github/workflows/backend.yml`（会員の側）・`admin-backend.yml`（管理画面）。中身と決まりは [docs/ci.md](docs/ci.md)。結果は `gh pr checks <番号>` で見る | ― | CI の設定を緩めて通す（レベルを下げる・対象から外す） |
 | エディタの補完のファイルを作る | リポジトリのルート | `docker compose run --rm app php artisan ide-helper:models --nowrite`（`backend/client/_ide_helper_models.php` に書き出す。git には入らない） | db が起動している（列を DB から読む） | `--write`（Model のファイルに `@property` を書き込む。長くなり、マイグレーションとずれるため。quality-types.md） |
 | 文書の言葉を確かめる | リポジトリのルート | `python3 -I agents/tools/check-words.py`（使わないと決めた言い方が `docs/`・`agents/`・`.claude/agents/`・`.github/`・AGENTS.md に入っていないかを見る。CI でも流れる） | python3 | 見つかった言葉を「」で囲んで通す（古い言い方を説明のために引くときだけ囲む） |
@@ -95,7 +95,7 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 | 作業 | 読むルール |
 | --- | --- |
 | 実装・設計の変更 | [architecture.md](agents/rules/architecture.md) |
-| 振る舞いの変更・テストの追加 | [testing.md](agents/rules/testing.md) |
+| 振る舞いの変更・テストの追加 | [testing.md](agents/rules/testing.md)・[testing-style.md](agents/rules/testing-style.md)（書き方） |
 | 構造化ログの実装・変更 | [logging.md](agents/rules/logging.md) |
 | PHP のコードを書く・変える | [quality-types.md](agents/rules/quality-types.md) |
 | DB・マイグレーションの作成・変更 | [database.md](agents/rules/database.md) |

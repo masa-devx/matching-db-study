@@ -41,7 +41,7 @@ abstract class TestCase extends BaseTestCase
         }
         // migrate:fresh が読む置き場に、会員の側のマイグレーションを足す。
         // Laravel の中の作り（'migrator' という名前で解決されること・RefreshDatabase が migrator を通ること）に頼っている。
-        // 効かなくなったら、tests/Feature/Support/SupportFunctionsTest.php の「表は、会員の側のマイグレーションで
+        // 効かなくなったら、tests/Feature/TestEnvironmentTest.php の「表は、会員の側のマイグレーションで
         // 作られている」が落ちる（このテストが、この仕組みを見張っている）。
         // テストを並列で流すとき・テストの中で migrate を呼ぶときに足りるかは、確かめていない
         $app->afterResolving('migrator', static function (Migrator $migrator) use ($path): void {
