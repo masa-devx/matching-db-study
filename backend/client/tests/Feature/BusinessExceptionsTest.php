@@ -7,7 +7,7 @@ use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Http\Request;
 
 // 業務の例外を足したときに、bootstrap/app.php の render と lang/ja/errors.php の文を書き忘れていないかを確かめる。
-// 書き忘れると、500 になるのにエラーのログにも残らない（dontReport の対象のため。architecture.md の7章）
+// 書き忘れると、500 になるのにエラーのログにも残らない（dontReport の対象のため。architecture-backend.md の7章）
 
 /** @return list<class-string<BusinessException>> app/Exceptions の中の、BusinessException を継ぐクラス（abstract を除く） */
 function businessExceptionClasses(): array

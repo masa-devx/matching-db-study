@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-// アーキテクチャのテスト（agents/rules/architecture.md の8章）。依存の向き（Controller → Service → Model）・名前・final・strict_types を確かめる。
+// アーキテクチャのテスト（agents/rules/architecture-backend.md の8章）。依存の向き（Controller → Service → Model）・名前・final・strict_types を確かめる。
 // 新しい置き場（App\Services・App\Exceptions・業務のまとまりのフォルダの Controller）にファイルがまだないあいだは、
 // 当てはまるものがなく、どれも通る。移したファイルが、決まりを破ったときに落ちる。足すとき・直すときは、わざと違反を置いて、落ちるのを見る
 
@@ -83,7 +83,7 @@ arch('Request と Middleware は、Model・DB を使わない', function (): voi
 });
 
 // Resource は、Service が返した Model から、返してよい項目を選ぶ（Model の型は使ってよい）。新しくクエリを書かない。
-// Model の型を使ってよいので、User::query() やリレーションの ->count() は、このテストでは見られない（レビューで見る。architecture.md の8章）
+// Model の型を使ってよいので、User::query() やリレーションの ->count() は、このテストでは見られない（レビューで見る。architecture-backend.md の8章）
 arch('Resource は、DB を使わない', function (): void {
     expect('App\Http\Resources')
         ->not->toUse(['Illuminate\Support\Facades\DB', 'Illuminate\Support\Facades\Schema', 'Illuminate\Database\Query', 'Illuminate\Database\Eloquent\Builder']);
@@ -149,7 +149,7 @@ test('新しい Http の層は、DB のファサードの別名（\DB::・use DB
     expect(archFindFacadeAliases($http, ['DB', 'Schema', 'App'], skipFilesIn: $http.'/Controllers'))->toBe([]);
 });
 
-// 標準の5つ以外のメソッドが欲しくなったら、隠れている名詞を探して Controller を分ける（architecture.md の3章）。
+// 標準の5つ以外のメソッドが欲しくなったら、隠れている名詞を探して Controller を分ける（architecture-backend.md の3章）。
 // 1つの操作だけの Controller は __invoke でもよい。ログインと新規登録をまとめた Auth\AuthController だけ、login・logout も許す
 test('新しい Controller の public のメソッドは、index・show・store・update・destroy（と __invoke）だけ', function (): void {
     $extra = [];
@@ -221,7 +221,7 @@ arch('Service は Service で終わる', function (): void {
 
 // Model は DB とのやり取りだけ（2章）。Service・Client・Http・ログを使わない。
 // Observer（ObservedBy）を使うと、保存したときの裏の動きが、Service を読んでも見えなくなる。
-// booted() の中の static::created()・$dispatchesEvents・Provider での observe() は、このテストでは見られない（レビューで見る。architecture.md の8章）
+// booted() の中の static::created()・$dispatchesEvents・Provider での observe() は、このテストでは見られない（レビューで見る。architecture-backend.md の8章）
 arch('Model は、Service・Client・Http・ログ・Observer を使わない', function (): void {
     expect('App\Models')
         ->not->toUse(['App\Services', 'App\Clients', 'App\Support\Logging', 'Illuminate\Database\Eloquent\Attributes\ObservedBy', ...HTTP_THINGS]);

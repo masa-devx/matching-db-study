@@ -24,7 +24,7 @@ PR ごとに1節。形は process.md の6章。
 
 ## PR #231（#106 アーキテクチャのテスト。会員の側）
 
-アプリのコードは変えていない。層の決まり（`agents/rules/architecture.md` の2章・3章）を、機械で確かめるテストを足した。クラスもメソッドも足していないので、「クラスの責務」「メソッドの表」は、テストごとの表に読み替える。
+アプリのコードは変えていない。層の決まり（`agents/rules/architecture-backend.md` の2章・3章）を、機械で確かめるテストを足した。クラスもメソッドも足していないので、「クラスの責務」「メソッドの表」は、テストごとの表に読み替える。
 
 ### ディレクトリの設計
 
@@ -37,7 +37,7 @@ backend/client/tests/
 └── Support/             （前から。テストの部品。#104）
 ```
 
-- 置き場の理由：`architecture.md` の8章が、`tests/Arch/LayersTest.php` と決めている。`phpunit.xml` の `Arch` の組（`tests/Arch`）は、前からあった
+- 置き場の理由：`architecture-backend.md` の8章が、`tests/Arch/LayersTest.php` と決めている。`phpunit.xml` の `Arch` の組（`tests/Arch`）は、前からあった
 - ほかに置ける場所と、置かなかった理由
   - `tests/Unit`：DB を使わないので、置けなくはない。ただ、Unit は「業務の決まり（Domain）を、値を渡して確かめる」場所にしたい。層の決まりは、アプリの振る舞いではなく、コードの形の確かめなので、分けた
   - Larastan の独自のルール：書けるが、ルールを PHP のクラスで書くことになり、読むのも直すのも重い。Pest は、もう入っている
@@ -153,7 +153,7 @@ flowchart LR
 
 | | レガシー版 | この PR のあと |
 | --- | --- | --- |
-| 層の決まり | ない（Controller に、JWT の読み出し・DB の読み書き・判断を、全部書く） | 文書（`architecture.md`）と、テスト 15本 |
+| 層の決まり | ない（Controller に、JWT の読み出し・DB の読み書き・判断を、全部書く） | 文書（`architecture-backend.md`）と、テスト 15本 |
 | 古いコントローラー | 19個（2026-11-17〜18 に、通報・お知らせなどで増えた） | 19個のまま。一覧（`LEGACY_CONTROLLERS`）に並び、移した分だけ、一覧から消す |
 | 新しいコントローラーを足す場所 | `app/Http/Controllers` の直下 | 直下には足せない（テストが落ちる）。業務のまとまりのフォルダに足す |
 
@@ -321,7 +321,7 @@ flowchart LR
 
 ## PR #239（#236 設計の決まりを Controller → Service → Model に）
 
-コードは変えていない（決まりとアーキテクチャのテストだけ）。解説の本体は `agents/rules/architecture.md` の4章（見本）と、`docs/backend.md` の3章（移行の地図）。
+コードは変えていない（決まりとアーキテクチャのテストだけ）。解説の本体は `agents/rules/architecture-backend.md` の4章（見本）と、`docs/backend.md` の3章（移行の地図）。
 
 ### 説明の練習
 
@@ -353,7 +353,7 @@ backend/client/
     └── Feature/Profile/ShowTest.php・UpdateTest.php    今の動きを確かめる API テスト
 ```
 
-| 置いた所 | 理由（`architecture.md`） | ほかに置ける所と、置かなかった理由 |
+| 置いた所 | 理由（`architecture-backend.md`） | ほかに置ける所と、置かなかった理由 |
 | --- | --- | --- |
 | `Profile/` のフォルダ | 3章：置き場の中を業務のまとまりで分ける。プロフィールは `Profile`（`docs/backend.md` の2章） | `Members/`：会員の検索・通報なども入り、何のまとまりか分かりにくい（人が決めた） |
 | `IdentifyMember`（Middleware） | 4章：トークンを読むのは Middleware だけ | Controller で読む（レガシー版の形。29か所のコピーと同じ形が、もう1つ増える）・Service で読む（Service は HTTP を知らない） |
@@ -439,7 +439,7 @@ sequenceDiagram
 | `$targetPublicId`・`$targetId` | `$publicId`・`$memberId` | 「だれの」「どちらの番号か」が分からず、読み違えた（用語集の「コードの中の、会員の番号の名前」） |
 | `login_user_id`・`$loginUserId` | `member_id`・`viewer_id` | `member_id` は用語集では管理画面の UUID。`viewer_id` は、書き換えの API で使うと意味が合わない |
 | `$viewerId`（Service） | `$loginUserId` | Service は HTTP を知らない。コマンドから呼ぶときも「見る人」なら通じる |
-| `showProfile`・`updateProfile` | `showFor`・`update`・`updateMyProfile`・`updateTargetProfile` | 名前には「何ができるか」を書き、「だれが呼べるか」（ログインしているか・本人か）は入れない。それは Middleware とメソッドの中の条件で決める（`architecture.md` の3章。人が決めた）。`update` は Controller と同じ名前になる（3章） |
+| `showProfile`・`updateProfile` | `showFor`・`update`・`updateMyProfile`・`updateTargetProfile` | 名前には「何ができるか」を書き、「だれが呼べるか」（ログインしているか・本人か）は入れない。それは Middleware とメソッドの中の条件で決める（`architecture-backend.md` の3章。人が決めた）。`update` は Controller と同じ名前になる（3章） |
 | `IdentifyMember` | `AuthenticateMember` | 認証（通さない）はしない。だれかを見分けるだけ。`AuthenticateMember` は、401 を返す Middleware の名前に取っておく |
 
 ### 依存の向き
@@ -486,12 +486,12 @@ flowchart LR
 | 候補 | 今どうなっているか | 直すとどうなるか | 気づいた所 |
 | --- | --- | --- | --- |
 | トークルームを探す SQL を1本にする | `ProfileService::findSharedRoomId` が、自分のルームの一覧 → 相手もいるルーム → ルームの番号、の3本を流す | `talk_room_members` を2回つなぐ（JOIN）1本で探せる。ログインして見ると5本が3本になる | 前と後の SQL の本数を測ったとき |
-| 2人のルームを探す条件を、Model のスコープにする | `whereIn('talk_room_id', …)->where('user_id', …)` を Service に直接書いている。`architecture.md` の4章（条件が2つ以上なら Model のスコープ）から外れている。トークルームの機能を直すときに移す（PR #240 のレビューで、人が決めた） | トークの API でも同じ条件を使うので、`TalkRoomMember` の1か所にまとめられる | Service に移したとき |
-| 返す項目を選ぶ（FR-002） | `toArray()` で、メールアドレスなども全部返す | Resource を作り、返してよい項目だけにする（`architecture.md` の Resource の決まり） | 今の動きを確かめるテスト |
+| 2人のルームを探す条件を、Model のスコープにする | `whereIn('talk_room_id', …)->where('user_id', …)` を Service に直接書いている。`architecture-backend.md` の4章（条件が2つ以上なら Model のスコープ）から外れている。トークルームの機能を直すときに移す（PR #240 のレビューで、人が決めた） | トークの API でも同じ条件を使うので、`TalkRoomMember` の1か所にまとめられる | Service に移したとき |
+| 返す項目を選ぶ（FR-002） | `toArray()` で、メールアドレスなども全部返す | Resource を作り、返してよい項目だけにする（`architecture-backend.md` の Resource の決まり） | 今の動きを確かめるテスト |
 | 入力を確かめる（FR-010・FR-006） | `$request->all()` を、そのまま `fill()` に渡す | Form Request の `validated()` だけを渡す。空のニックネームは 422 | 今の動きを確かめるテスト |
 | 他人のプロフィールを書き換えられないようにする（FR-AUTH-022） | PUT のルートに、ログインを求める Middleware がない | ログインを求め、URL の会員が自分でなければ 403 | 今の動きを確かめるテスト・Bruno |
 | 壊れたトークンを 401 にする | `IdentifyMember` が、JWT の例外のまま 500 を返す | 例外を受けて 401 を返す。トークンを読むコード（17のコントローラーに29か所）も、Middleware にまとめる | Middleware を作ったとき |
-| 見つからないときの応答をそろえる | GET は Laravel の 404（文に Model の名前が出る）、PUT は 500 | どちらも、決まった形の 404 にする（`architecture.md` の7章） | 今の動きを確かめるテスト |
+| 見つからないときの応答をそろえる | GET は Laravel の 404（文に Model の名前が出る）、PUT は 500 | どちらも、決まった形の 404 にする（`architecture-backend.md` の7章） | 今の動きを確かめるテスト |
 
 ### 説明の練習
 
@@ -536,8 +536,8 @@ backend/client/
 
 | 置いた所 | 理由（決まり） | ほかに置ける所と、置かなかった理由 |
 | --- | --- | --- |
-| `UserNotFoundException` は `app/Exceptions/` の直下 | いくつもの業務のまとまり（プロフィール・いいね・トーク）で使う例外は直下に置く（`architecture.md` の7章。PR #242 のレビューで決めた） | `app/Exceptions/Users/`：`Users` は業務のまとまりの一覧にない。`Exceptions/Profile/`：いいねやトークを移す人が、自分のまとまりに同じ例外をもう1つ作るおそれがある |
-| 状態コードは `bootstrap/app.php` | `architecture.md` の7章（1か所で見る） | 例外のクラスの `render()`：状態コードが例外のファイルごとに散らばる |
+| `UserNotFoundException` は `app/Exceptions/` の直下 | いくつもの業務のまとまり（プロフィール・いいね・トーク）で使う例外は直下に置く（`architecture-backend.md` の7章。PR #242 のレビューで決めた） | `app/Exceptions/Users/`：`Users` は業務のまとまりの一覧にない。`Exceptions/Profile/`：いいねやトークを移す人が、自分のまとまりに同じ例外をもう1つ作るおそれがある |
+| 状態コードは `bootstrap/app.php` | `architecture-backend.md` の7章（1か所で見る） | 例外のクラスの `render()`：状態コードが例外のファイルごとに散らばる |
 | 文は `lang/ja/errors.php` | Laravel の標準。入力の確かめ（422）の文も同じ仕組みで日本語にできる | 例外のクラスの中・定数のクラス：前者は一覧で見られない。後者は、422 の文と置き場が2種類になる |
 
 ### クラスの責務
@@ -568,7 +568,7 @@ $target = User::query()->where('public_id', $targetPublicId)->first()
 例外を応答に変えるのは、ここだけ（`bootstrap/app.php`）：
 
 ```php
-// 業務の例外を、状態コードと文に変えるのはここだけ（architecture.md の7章）。例外を足したら、ここに1行足す。文は lang/ja/errors.php
+// 業務の例外を、状態コードと文に変えるのはここだけ（architecture-backend.md の7章）。例外を足したら、ここに1行足す。文は lang/ja/errors.php
 $exceptions->render(fn (UserNotFoundException $e) => response()->json(['message' => __('errors.user_not_found')], 404));
 
 // 業務の例外は、決まりどおりに断っただけなので、エラーのログに出さない。親の1つだけを書く
@@ -649,7 +649,7 @@ Service は `bootstrap/app.php` を知らない。例外のクラスは、HTTP �
 | --- | --- | --- | --- |
 | 「`public_id` で会員を探し、いなければ `UserNotFoundException`」を1か所にする | `ProfileService` の `showProfile` と `updateProfile` の2か所に書いている | #128 などでほかの Service にも増える。3つ目ができるときに、User のスコープか1つのメソッドにまとめる（退会した会員の扱いを変えるときに、直し漏れが起きない） | PR #242 のレビュー（A3） |
 | `ProfileFactory` の `realText()` を軽い書き方にする | 日本語の長い文を毎回読むので、テストが増えると 128MB を超える。今は `phpunit.xml` でテストのときだけ 512MB にした | 上限を上げずに流せる。試しのデータ（シーダー）の作り方も変わるので、別に決める | PR #242 の直し（テストが48本でメモリが足りなくなった） |
-| 会員の側の見本の `memberId`・`findMember` を、`User` の名前にそろえる | `architecture.md` の 99・118・185〜196・410・415行目 | 見本をコピーしても、member と user が混ざらない。書き換えの操作の引数の名前を決めるときに一緒に直す | PR #242 のレビュー（S5） |
+| 会員の側の見本の `memberId`・`findMember` を、`User` の名前にそろえる | `architecture-backend.md` の 99・118・185〜196・410・415行目 | 見本をコピーしても、member と user が混ざらない。書き換えの操作の引数の名前を決めるときに一緒に直す | PR #242 のレビュー（S5） |
 
 ### 説明の練習
 

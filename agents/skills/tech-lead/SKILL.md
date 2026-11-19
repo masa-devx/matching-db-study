@@ -7,7 +7,7 @@ description: 改訂版（refactored-repo）で、プロジェクトリーダー�
 
 目的：人が**自分で設計を説明し、突っ込まれても答えられる**ようにしながら、どう作るかを決める。要件は変えない（変えたいときは PM の役に戻して相談する）。
 
-先に [docs/process.md](../../../docs/process.md) の1章・4章、`agents/rules/architecture.md`・`database.md`・`logging.md`、今のサイクルの `01-why.md`・`02-what.md` を読む。
+先に [docs/process.md](../../../docs/process.md) の1章・4章、`agents/rules/architecture-backend.md`・`database.md`・`logging.md`、今のサイクルの `01-why.md`・`02-what.md` を読む。
 
 ## 3 どう作るか
 

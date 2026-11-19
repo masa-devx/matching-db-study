@@ -1,7 +1,8 @@
 # 画面の作り方（レガシー版と改善版）
 
-状態：確定（細かい道具と置き場所は 03b で決める）
-決定：[decisions.md](decisions.md) の D-004（React＋TypeScript＋Vite）・D-006（OpenAPI は使わない）・D-014（認証）・D-018（画面も分ける）
+状態：確定（改善版の形は #112・#113 で決めた。E2E の道具はまだ決めていない）
+決まり：改善版の画面の受け持ち・import の決まり・書き方・状態の置き場・テストは [architecture-frontend.md](../agents/rules/architecture-frontend.md) を正とする。この文書は、形を選んだ理由と、今のファイルをどこへ移すかの地図
+決定：[decisions.md](decisions.md) の D-004（React＋TypeScript＋Vite）・D-006（OpenAPI は使わない）・D-014（認証）・D-018（画面も分ける）・D-026（改善版の置き場）
 
 画面も、DB と同じく「レガシー版で作る → 測る → 直す → もう一度測る」で進める。03b から、画面の子 Issue も `legacy-repo` と `refactored-repo` に分ける。05b（Context から Zustand）は、それ自体が前と後の比べなので分けない。
 
@@ -30,12 +31,12 @@ export default function SearchPage() {
 
 | 項目 | レガシー版（legacy-repo） | 改善版（refactored-repo） | 測る・確かめること |
 | --- | --- | --- | --- |
-| コンポーネント設計 | 1画面に1つの大きな部品 | container（データを取る・持つ）と presenter（props で見せるだけ）に分ける | 1つの部品の行の数。presenter を、API なしでテストできるか |
+| コンポーネント設計 | 1画面に1つの大きな部品 | container（hook とつなぎ、presenter に渡す）・hook（取る・持つ）・presenter（props で見せるだけ）に分ける | 1つの部品の行の数。presenter を、API なしでテストできるか |
 | API との通信 | 部品の中の `useEffect` で、そのつど `fetch`。URL とトークンの読み出しを、あちこちに書く | API を呼ぶところを1か所にまとめる（送り先・`401`・失敗・読み込み中）。検索の連打は `AbortController` で止める | 連打したとき、古い結果があとから上書きするか |
 | 状態管理 | なんでも `useState` と Context に置く | どの状態をどこに置くかを分ける。05b で Zustand に移す | 描き直しの回数（React Profiler） |
 | 画面の表示速度 | 考えない | 04 の検索の一覧で直す（長い一覧・画像・バンドルの大きさ） | Lighthouse の LCP・INP・CLS。`vite build` の大きさ |
 | テスト | なし | Vitest＋Testing Library（presenter と、API を呼ぶところ）。直す前に、今の動きを確かめるテストを足す | テストが、要件 ID の受け入れ条件に対応しているか |
-| 開発効率 | ひな形の ESLint のまま。型は `any` でよい | ESLint・Prettier・型の検査を CI に入れる。API がまだないときの仮の応答 | CI で止まるか |
+| 開発効率 | ひな形のまま。型は `any` でよい | Biome（lint と整形）・型の検査・テストを CI に入れる。API がまだないときの仮の応答 | CI で止まるか |
 
 ## 認証（D-014）
 
@@ -44,8 +45,153 @@ export default function SearchPage() {
 | トークンの置き場所 | ログインの応答の JWT を sessionStorage に置き、`Authorization: Bearer` で送る | HttpOnly の Cookie（画面からは読めない）。`fetch` に `credentials: 'include'` |
 | 確かめること | XSS があると、トークンを持ち出せる | 同じ XSS でも、トークンを持ち出せない |
 
-## 03b で決めること
+## 改善版の考え方
 
-- `frontend/client/` の中の置き場所（ページ・部品・API を呼ぶところ）
-- E2E の道具（[testing.md](../agents/rules/testing.md)）
-- 画面の CI（[ci.md](ci.md)）
+クリーンアーキテクチャの2つの考え方を採る。
+
+- **依存の向き**：見せる部品から API の呼び出しへ、一方向にだけ依存する。API を呼ぶ側の作りを変えても、見せる部品は直さない
+- **境界で形を変える**：API の形（snake_case・生年月日など）は、API を呼ぶファイルの中で1回だけ画面の形に変える。このように外の形が中へ入り込まないようにする所を、腐敗防止層と呼ぶ
+
+ただし、層を全部の機能に作ることはしない。機能ごとのフォルダ（`features/`）の中に、効く所にだけ作る。理由は次のとおり。
+
+- 業務の決まり（課金・マッチの成立・ブロック）は、正本がバックエンドにある。画面にあるのは、見せ方の決まり・入力の確かめ・手順の状態くらいで、層を全部作ると、呼んで返すだけのファイルが増える
+- マッチングアプリでは、見た目と流れ（UI・UX）の変更と、新しい機能の追加がいちばん多い。見せる部品だけを直せること・フォルダを1つ足せば機能が増やせることを優先する
+
+| クリーンアーキテクチャの層 | 置き場 | いつ作るか |
+| --- | --- | --- |
+| 型と見せ方の決まり（記事の Domain） | `types.ts`・`rules.ts` | 型・決まりがあるときだけ |
+| Repository（型の約束） | `repository.ts` の `XxxRepository`（TS の `interface`） | データの出どころが2つあるとき、またはテストで外を偽物にしたいときだけ。今はメッセージだけ |
+| Repository の実装 | `repositories/restXxxRepository.ts`・`repositories/firestoreXxxRepository.ts` | 約束を作った機能だけ |
+| UseCase（手順と状態） | `hooks/` | いつも。React から外した純粋な関数に分けるのは、手順が込み入る所（購入・登録の手順など）だけ |
+| API を呼ぶ＋形を変える | `api.ts`（変える関数は `toXxx`） | API を呼ぶ機能。Repository を作った機能では、Repository の実装がこの受け持ちも持つ |
+| Infra（通信） | `shared/api/client.ts` | 1つだけ |
+| View | `pages/`（container）・`components/`（presenter） | いつも（小さな機能でも、2つのフォルダを作る） |
+
+言葉（container・presenter・Repository）の意味は、[architecture-frontend.md](../agents/rules/architecture-frontend.md) の2章。
+
+## 改善版の置き場（会員の画面）
+
+← の右は、今のファイル（どこから移すか）。
+
+```text
+frontend/client/src/
+├── main.tsx                       起動するだけ
+├── app/                           組み立て。ルートと、どの画面にどの Repository の実装を渡すかを決めるのはここだけ
+│   ├── App.tsx                    Provider を重ねる（ログインした自分・トースト）            ← App.tsx の上半分
+│   ├── router.tsx                 ルートの表（パス・画面の題・どのタブを選ぶか）              ← App.tsx の Routes・TITLES・TabBar の UNDER_HOME
+│   ├── RequireAuth.tsx            ログインの守り（1か所）。開こうとした画面を覚えて戻す       ← 15画面の守り
+│   └── AppShell.tsx               四角の枠と下のタブ・スクロールする枠を渡す                  ← App.tsx の下半分・components/TabBar
+│
+├── features/                      機能ごと。名前は要件（docs/requirements/）のまとまりにそろえる
+│   ├── auth/                      ログイン・登録・メールの確認・パスワードの再設定・パスワードの変更・ログアウト
+│   │                              ← LoginPage・RegisterPage・VerifyPage・ForgotPasswordPage・ResetPasswordPage・components/VerifyBanner・SettingsPage の一部
+│   ├── profile/                   自分のプロフィール（ホーム）・相手のプロフィール           ← HomePage・UserPage
+│   ├── search/                    検索と一覧・検索の条件・保存した検索条件                    ← SearchPage・SearchConditionsPage
+│   ├── likes/                     届いたいいね・送ったいいね・いいねとスキップ・マッチの演出  ← LikesPage・SentLikesPage・components/MatchCelebration
+│   ├── messages/                  トークの一覧・トーク画面・Repository の実装2つ・読んだ数   ← MessagesPage・TalkPage・MessagesFsPage・TalkFsPage・ReadCounter・firebase.ts の下半分
+│   ├── blocks/                    ブロックの一覧・ブロックする                                ← BlocksPage
+│   ├── reports/                   通報                                                      ← components/ReportDialog
+│   ├── plans/                     プラン・購入・使える機能の決まり・誘導・有料の印            ← PlansPage・PurchasePage・components/UpsellDialog
+│   ├── settings/                  設定・案内・退会                                          ← SettingsPage・InfoPage
+│   └── notices/                   運営からのお知らせ                                        ← NoticesPage・components/NoticeBanner
+│
+├── shared/                        どの機能にも属さないもの（features を import しない）
+│   ├── api/
+│   │   ├── client.ts              fetch の包み：送り先・Cookie・401・失敗の形・中止
+│   │   └── ApiError.ts            失敗の型（状態コード・code・メッセージ・入力の誤り）
+│   ├── session/                   ログインした自分（Me の型・/api/me を読む・読み直す・useSession）← App.tsx・各画面の /api/me
+│   ├── firebase/app.ts            Emulator への接続（最初の1回だけ）                         ← firebase.ts の上半分
+│   ├── ui/                        見せるだけの部品                                          ← components/ の残り（Button・Avatar・Icon・EmptyState・Skeleton・ConfirmDialog・Toast）
+│   │   ├── AsyncView.tsx          読み込み中・失敗・空・中身を出し分ける（新しく作る）
+│   │   └── InfiniteList.tsx       下まで来たら1回だけ知らせる（新しく作る）
+│   ├── lib/
+│   │   ├── date.ts                年齢の計算（1か所）
+│   │   └── array.ts               uniqueBy（重なりを除く）
+│   └── constants/                 都道府県の名前・プロフィールの選択肢・地方の区切り         ← SearchConditionsPage・HomePage
+│
+└── styles/
+    ├── tokens.css                 色・余白・文字の変数（docs/design.md）
+    └── index.css                  全体の土台                                                 ← index.css・App.css を分ける
+```
+
+### いくつもの画面で使うものの持ち主
+
+| もの | 今使っている画面 | 持ち主と、出すもの |
+| --- | --- | --- |
+| ブロックする | トーク・相手のプロフィール・通報 | `blocks/` が hook を `index.ts` から出す |
+| いいね・スキップ・マッチの演出 | 検索・相手のプロフィール・いいね | `likes/` が hook と演出の部品を出す |
+| 誘導のダイアログ・有料の印 | ほぼ全部の画面 | `plans/` が出す。ダイアログは container が受け取って渡す |
+| 通報のダイアログ | トーク・相手のプロフィール | `reports/` が出す。container が受け取って渡す |
+| 会員のカード | 検索・いいね・ブロックの一覧 | `profile/` が presenter を出す |
+| 未読の数・届いたいいねの数 | 下のタブ | `messages/`・`likes/` が hook と読み直す関数を出す。読むのは `TabBar` の中だけ |
+| 読んだ数の表示（`ReadCounter`） | Firestore 版のトークとその一覧 | `messages/components/`（数えるのは Firestore の Repository の実装） |
+| Firebase へのログイン（`signInFirebase`） | Firestore 版のトーク | Firestore の Repository の実装が、最初に使うときに1回だけ。`client.ts` を通す |
+
+- 退会は `settings/` に置く。`blocks/` は退会を受け持たない（#121 の範囲から外す）
+
+### 1つの機能の中（例：`features/search/`）
+
+```text
+features/search/
+├── index.ts                       外に見せるものだけ（SearchPage など）。ほかの機能は、ここからしか import しない
+├── pages/
+│   └── SearchPage.tsx             container
+├── components/                    presenter
+│   ├── SearchView.tsx
+│   └── SearchForm.tsx
+├── hooks/
+│   ├── useSearchConditions.ts     条件を URL に読み書きする（クエリがないときだけ、最後の条件に戻す）
+│   └── useSearchMembers.ts        取る・足す・重なりを除く・古い応答を捨てる・状態を持つ
+├── api.ts                         API を呼び、API の形（MemberCardResponse）を画面の形（MemberCard）に変える
+├── types.ts                       画面の型（SearchConditions・MemberCard）
+├── rules.ts                       画面の決まり（年齢の下 ≤ 上など）。純粋な関数
+└── *.test.ts(x)                   テストは隣に置く
+```
+
+ファイルが少ない機能（`blocks/` など）も、`pages/` と `components/` は作る。`hooks/`・`api.ts`・`types.ts`・`rules.ts` は、要るときだけ作る。
+
+### データの出どころが2つある機能（`features/messages/`）
+
+```text
+features/messages/
+├── index.ts
+├── pages/MessagesPage.tsx・TalkPage.tsx        1つずつ（今は Laravel 版と Firestore 版で2つずつ）
+├── components/RoomList.tsx・Talk.tsx・Bubble.tsx・Composer.tsx・ReadCounter.tsx
+├── hooks/useRooms.ts・useTalk.ts               Repository を受け取って使う
+├── repository.ts                                MessageRepository（型の約束）
+├── repositories/
+│   ├── restMessageRepository.ts                 Laravel：ポーリング。client.ts を呼び、形を変える（api.ts は作らない）
+│   └── firestoreMessageRepository.ts            Firestore：onSnapshot。読んだ数もここで数える。Firebase へのログインもここ
+├── types.ts・rules.ts                           Message・Room・送れる文字数
+└── *.test.ts(x)
+```
+
+- どちらの実装を渡すかは `app/router.tsx` が決める。Firestore の画面は `lazy()` で分けて読む
+- 約束の形と、2つの版の違いの変え方は、[architecture-frontend.md](../agents/rules/architecture-frontend.md) の6章
+
+## 管理画面（`frontend/admin`）への当てはめ
+
+- 同じ形にする（`app/`・`features/`・`shared/`）。`src/domains/` は `src/features/` に名前を変える。記事の層の名前（Domain）とフォルダの名前を分け、機能ごとのフォルダだと分かるようにするため。今ある機能は、members・messages・sales・audit-logs・dashboard・reports・blocks の7つ。ログインと役割のために `auth/` を足す
+- 書き方の決まりは [architecture-frontend.md](../agents/rules/architecture-frontend.md) の11章
+
+## 足すきっかけ
+
+最初から全部を作らない。下のどれかが起きたら足し、`docs/decisions.md` に1行足して、この文書と決まりのファイルを直す。
+
+| 起きたこと | 足すもの |
+| --- | --- |
+| 同じ部品・決まりを、2つ目の機能が使いたくなった | 持ち主の機能の `index.ts` から出す。3つ目が使う見せるだけの部品は `shared/ui` へ移す（API を呼ぶ部品は移さない） |
+| データの出どころが2つになった・テストで外を偽物にしたい | その機能にだけ `repository.ts` と `repositories/` を作る |
+| 同じ取り方（中止・重なり・続きの読み込み）を3つの hook に書いた | `shared/` に共通の hook を作る |
+| 画面をまたいで同じデータを何度も取り直して遅い | そのデータだけ store に置く（それでも足りなければ、TanStack Query を使わない決めを見直す） |
+| 部品が 150行を超えた | presenter を分ける・hook に出す |
+| 手順が込み入り、hook のテストが書きにくい | その手順だけ、React から外した純粋な関数にする |
+| 機能どうしの import が互いに向き合い始めた | `shared/` に移すか、`app/` でつなぐ。増えたら dependency-cruiser を考える |
+| A/B テスト・機能のフラグが要件に出てきた | フラグを読む所を1か所に作り、container で presenter を出し分ける |
+
+## まだ決めていないこと
+
+- E2E の道具（[testing.md](../agents/rules/testing.md)）。移す前の今の動きを確かめるテストは、画面の単位で `fetch` を偽物にして書く（architecture-frontend.md の7章）
+- 画面の CI（[ci.md](ci.md)。#114 で入れる）
+- 有料で断るときの 403 に `code` を付けること（要件は `code: paid_required` を決めているが、API は返していない）。「使える機能を `/api/me` で返す」チケットに入れる
+- 検索のフリーワードを URL に入れたとき、アクセスのログに残してよいか
