@@ -70,6 +70,7 @@ app/
 ├── Clients/<相手>/〜Client.php                   外のサービスの呼び出し（Firestore/FirestoreClient.php など）
 ├── Exceptions/BusinessException.php              業務の例外の親（7章）
 ├── Exceptions/<まとまり>/〜Exception.php
+├── Exceptions/〜Exception.php                     いくつものまとまりで使う例外（UserNotFoundException など）
 ├── Models/〜.php                                 Laravel の標準の置き場のまま（移さない）
 └── Support/                                      基盤（Logging など）
 ```
@@ -275,9 +276,13 @@ $this->firestore->openRoom($room);                                     // コミ
 ## 7. エラー
 
 - 業務の決まりに反したら、Service が `app/Exceptions/<まとまり>/〜Exception` を投げる。業務の例外は、みな `App\Exceptions\BusinessException`（親）を継ぐ。Service は状態コードを知らない（`abort()` を使わない）
+- 例外の置き場は、そのまとまりだけで使うなら `app/Exceptions/<まとまり>/`、いくつものまとまりで使うなら `app/Exceptions/` の直下（`UserNotFoundException` は、プロフィール・いいね・トークで使う）。同じ意味の例外を、まとまりごとに作らない（片方の `render` を書き忘れると、その API だけ 500 になる。PR #242 のレビュー）
 - **見つからないときも、業務の例外にする**（`UserNotFoundException`）。`firstOrFail()` を Laravel に任せると、応答が `No query results for model [App\Models\User] 999` になり、Model のクラス名が見えてしまう（`docs/api/01-members.md` の改善版は「会員が見つかりません」）
 - 例外を状態コードとメッセージに変えるのは、各アプリの `bootstrap/app.php` の1か所だけ。業務の例外を足したら、`render` に1行足す。ログに出さない決まり（`dontReport`）は、親の `BusinessException` に1回だけ書く
-- 画面に出るエラーの文は、`lang/ja/errors.php` にだけ書き、`bootstrap/app.php` から `__('errors.<キー>')` で読む。キーは、何が起きたかを英語の小文字と `_` で書く（`user_not_found`）。言語は `config/app.php` で `ja` に決めている（日本語だけのアプリなので、環境変数で変えない。2026-11-19 に人が決めた。文を何十か所にも手で書くと、変えるときに直し漏れが起きるため）
+- 画面に出るエラーの文は、`lang/ja/errors.php` にだけ書き、`bootstrap/app.php` から `__('errors.<キー>')` で読む（文を何十か所にも手で書くと、変えるときに直し漏れが起きるため。2026-11-19 に人が決めた）
+  - キーは、何が起きたかを英語の小文字と `_` で書く（`user_not_found`）。状態コードでは付けない（同じ 404 でも文は違う）
+  - 言語は `config/app.php` で `ja` に決めている（日本語だけのアプリなので、環境変数で変えない）。管理画面に業務の例外を足すときは、`backend/admin` も言語を `ja` にし、`lang/ja/errors.php` を作る（直し忘れると、キーの文字がそのまま画面に出る）
+- 業務の例外を足したら、`render` の1行と文を書く。書き忘れると、500 になるのにエラーのログにも残らない（`dontReport` が親に付いているため）。文のキーを打ち間違えると、キーの文字が返る。どちらも `tests/Feature/BusinessExceptionsTest.php` が落ちて見つける（`app/Exceptions` の中の業務の例外を全部集め、500 にならず、キーの文字を返さないことを確かめる）
 - API テストで、下の表の行ごとに状態コードとメッセージを確かめる
 
 ```php
@@ -307,8 +312,12 @@ $this->firestore->openRoom($room);                                     // コミ
 
 - `DB::transaction()` は、中で例外が投げられると自動で戻し（ロールバック）、例外を投げ直す。`DB::rollBack()` を自分で書かない
 - デッドロックでやり直すときは、`DB::transaction(fn () => ..., attempts: 3)` と書く（try-catch は要らない）
+  - `attempts` は、一番外の `DB::transaction` に付ける。入れ子の中（ほかの Service の `transaction` の中から呼ばれたとき）では、やり直さずに `DeadlockException` を投げる（Laravel の `ManagesTransactions`）
+  - やり直すと、中身が最初から流れ直す。そのため、外への書き込み（Firestore・メール）を中に置かない（5章。置くと2回送られる）
 
 書いてよいのは、その失敗に、意味のある別の動きができるときだけ。受け止めるのは、決まった種類の例外だけにする（`\Exception`・`\Throwable` をまとめて受け止めない）。
+
+- 受け止めて、ログに書いて、投げ直すだけの `catch` は書かない。`Log::error()` は `dontReport` を通らないので、業務の例外までエラーのログに出る（記録したいなら `report($e)`。こちらは `dontReport` が効く）
 
 | 場面 | 書き方 |
 | --- | --- |
@@ -331,6 +340,9 @@ try {
     throw new AlreadyLikedException;
 }
 ```
+
+- PostgreSQL は、トランザクションの中で UNIQUE の違反が起きると、そのトランザクションを中断の状態にし、そのあとの SQL を全部失敗にする（エラーコード 25P02）。上のように受けてすぐ業務の例外を投げるなら、外のトランザクションごと戻るので問題ない。受けたあとに同じトランザクションで SQL を続けるなら、その1文を `DB::transaction()` で包む（セーブポイントになり、失敗した所までだけを戻す。Laravel の `createOrFirst()` と同じ）
+- `UniqueConstraintViolationException` は、その表のどの UNIQUE の違反でも投げられる。上の見本は、その表の UNIQUE が1つのとき（`likes` の `from_user_id`・`to_user_id`）の書き方。UNIQUE が2つ以上ある表では、どの制約の違反かを確かめてから業務の例外に変える
 
 ## 8. アーキテクチャのテスト
 
