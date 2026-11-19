@@ -160,14 +160,14 @@ final class ProfileResource extends JsonResource
 トークンを読むのは Middleware だけ。Controller ごとに JWT を読まない。トークンが正しくても、退会・停止した会員は通さない（使えるかは Service に聞く）。
 
 ```php
-// app/Http/Middleware/AuthenticateMember.php
+// app/Http/Middleware/AuthenticateUser.php
 public function handle(Request $request, Closure $next): Response
 {
-    $memberId = $this->memberIdFrom($request->bearerToken());   // JWT を読む。読めなければ null
-    if ($memberId === null || ! $this->members->canUseApi($memberId)) {   // MemberAuthService：退会・停止していないか
+    $loginUserId = $this->loginUserIdFrom($request->bearerToken());   // JWT を読む。読めなければ null
+    if ($loginUserId === null || ! $this->users->canUseApi($loginUserId)) {   // UserAuthService：退会・停止していないか
         return response()->json(['message' => 'ログインしてください'], 401);
     }
-    $request->attributes->set('login_user_id', $memberId);
+    $request->attributes->set('login_user_id', $loginUserId);
 
     return $next($request);
 }
@@ -275,7 +275,7 @@ $this->firestore->openRoom($room);                                     // コミ
 ## 7. エラー
 
 - 業務の決まりに反したら、Service が `app/Exceptions/<まとまり>/〜Exception` を投げる。業務の例外は、みな `App\Exceptions\BusinessException`（親）を継ぐ。Service は状態コードを知らない（`abort()` を使わない）
-- **見つからないときも、業務の例外にする**（`MemberNotFoundException`）。`firstOrFail()` を Laravel に任せると、応答が `No query results for model [App\Models\User] 999` になり、Model のクラス名が見えてしまう（`docs/api/01-members.md` の改善版は「会員が見つかりません」）
+- **見つからないときも、業務の例外にする**（`UserNotFoundException`）。`firstOrFail()` を Laravel に任せると、応答が `No query results for model [App\Models\User] 999` になり、Model のクラス名が見えてしまう（`docs/api/01-members.md` の改善版は「会員が見つかりません」）
 - 例外を状態コードとメッセージに変えるのは、各アプリの `bootstrap/app.php` の1か所だけ。業務の例外を足したら、`render` に1行足す。ログに出さない決まり（`dontReport`）は、親の `BusinessException` に1回だけ書く
 - API テストで、下の表の行ごとに状態コードとメッセージを確かめる
 
@@ -358,7 +358,7 @@ $this->firestore->openRoom($room);                                     // コミ
   - 安全の穴を直すとき：別のコミットにし、先にテストの期待値を要件どおりに変えて、落ちることを見せる（`testing.md` の「安全の穴を直すときのテスト」）
 - そのために、API テストは中の作りに頼らない
   - DB は表の名前で確かめる（`assertDatabaseHas('likes', [...])`・`assertDatabaseCount('likes', 0)`）
-  - データは `tests/DummyData/` のクラス（例：`DummyMember::create()`・`DummyMatching::match()`）で作る。Model の Factory を呼ぶのは、このクラスの中だけ
+  - データは `tests/DummyData/` のクラス（例：`DummyUser::create()`・`DummyMatching::match()`）で作る。Model の Factory を呼ぶのは、このクラスの中だけ
   - 時刻は `travelTo()` で止める。ログインは、本物のトークンを作って送る（`DummyAuth::actingAs()`）。ダミーデータの関数の一覧は `testing.md` の「テストのダミーデータ（会員の側）」
   - 外への書き込み（Firestore）は、移す前と後で同じ方法で確かめる（Emulator の中身を読む）
 - 新しく書くコードは、必ずこの形で書く。古いコントローラー（`app/Http/Controllers/` の直下）に機能を足さない
@@ -396,7 +396,7 @@ $profile->update($request->validated());
 // ❌ 見つからないときを Laravel に任せる（Model のクラス名が応答に出る）
 return User::query()->where('public_id', $publicId)->firstOrFail();
 // ✅ 業務の例外にする
-return User::query()->where('public_id', $publicId)->first() ?? throw new MemberNotFoundException();
+return User::query()->where('public_id', $publicId)->first() ?? throw new UserNotFoundException();
 
 // ❌ 保存したときに、裏でメールを送る（Service を読んでも見えない）
 protected static function booted(): void { static::created(fn (User $u) => Mail::to($u)->send(...)); }

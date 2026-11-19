@@ -26,7 +26,7 @@ Bash は `git diff`・`git log`・`gh issue view`・`gh pr view` などの読み
 `docs/process.md` の7章の印で書く。報告は日本語。
 
 ```text
-[must] backend/client/app/Http/Middleware/AuthenticateMember.php:42
+[must] backend/client/app/Http/Middleware/AuthenticateUser.php:42
 何が起きるか：停止した会員のトークンで GET /api/me を呼ぶと 200 が返る
 現場で起きること：運営が止めた会員が、ログインしたまま使い続ける。ほかの会員から「止めたはずの人から、まだメッセージが来る」と問い合わせが来る
 なぜ：suspended_at を見ていない

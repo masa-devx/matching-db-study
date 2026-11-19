@@ -15,7 +15,7 @@ Pest のテストを、あとから読んだ人が「どの API の、どんな�
 | API テスト | `tests/Feature/<業務のまとまり>/<操作>Test.php`。まとまりは `app/` と同じ名前（`docs/backend.md` の2章） | `tests/Feature/Profile/ShowTest.php`（相手のプロフィールを見る） |
 | どのまとまりにも入らないもの | `tests/Feature/` の直下 | `HealthTest.php`・`TestEnvironmentTest.php` |
 | DB を使わないロジック | `tests/Unit/`。`app/` と同じフォルダの形にする | `tests/Unit/Models/UserTest.php` |
-| ダミーデータ | `tests/DummyData/Dummy<名詞>.php` | `DummyMember::create()` |
+| ダミーデータ | `tests/DummyData/Dummy<名詞>.php` | `DummyUser::create()` |
 | テストで呼ぶ API の URL | `tests/Endpoints.php` の1つのクラスに、API ごとにメソッドを1つ。名前は「何の API か」で、業務のまとまりごとに見出しで区切る。URL の文字は、ここにだけ書く。`route()` で作らない（ルートの URL を変えてもテストが落ちず、画面が壊れても気づけないため。2026-11-19 に人が決めた） | `Endpoints::profile($target->publicId)` |
 
 - なぜ：業務の名前で分けると、URL やクラスを移しても、テストの置き場が変わらない
@@ -28,7 +28,7 @@ Pest のテストを、あとから読んだ人が「どの API の、どんな�
 declare(strict_types=1);
 
 use Tests\DummyData\DummyAuth;
-use Tests\DummyData\DummyMember;
+use Tests\DummyData\DummyUser;
 use Tests\Endpoints;
 
 // GET /api/users/{user_id}：相手のプロフィールを見る。今の動きを確かめるテスト。
@@ -36,8 +36,8 @@ use Tests\Endpoints;
 
 describe('ログインしている人が見る', function (): void {
     it('マッチしていない相手なら、room_id は null', function (): void {
-        $loginUser = DummyMember::create(gender: 'male');
-        $target = DummyMember::create();
+        $loginUser = DummyUser::create(gender: 'male');
+        $target = DummyUser::create();
 
         DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile($target->publicId))
             ->assertOk()

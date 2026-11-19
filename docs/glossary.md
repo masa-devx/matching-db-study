@@ -9,13 +9,14 @@
 - 画面の言葉が業務の言葉と違うときは、下の表の「画面」に書く（画面の言葉は、利用者に分かりやすいほうを選んでよい）
 - 管理画面の業務のまとまり（Dashboard・Members のような、業務ごとの分け方）の一覧は、`docs/backend.md` の 2-2 を正とする（ここには並べない）
 - ルール・議事録などの文で使う言葉（今の動きを確かめるテスト・分かっている不具合 など）は、`agents/rules/writing.md` を正とする
+- 会員の側のコードでは、会員を `User` と呼ぶ（表・Model・URL が `users` なので、それに合わせる。2026-11-19 に人が決めた。`Member` と混ざって、同じものか分からなくなったため）。管理画面のコードは、運営から見た呼び方の `Member` のまま。業務のまとまりの名前（`Members` のフォルダ）は、別に決める
 - 新しい言葉を使うときは、先にこの表に1行足す。API の書き方の決まり（URL・JSON のキー・ID）は `agents/rules/api-design.md`（#125 で作る）
 
 ## 会員の側
 
 | 言葉 | 意味 | 画面 | API（URL・JSON） | コード（業務のまとまり・クラス） | 表・列 | 注意 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 会員 | 登録した人 | ― | 自分は `/me`、相手は `/users/{user_id}`。JSON は `user_id` | `Members`・`Member` | `users` | 会員の側の API は `users`、管理画面は `members`（下の「管理画面」） |
+| 会員 | 登録した人 | ― | 自分は `/me`、相手は `/users/{user_id}`。JSON は `user_id` | 業務のまとまりは `Members`。クラスは `User`（`UserNotFoundException`・`IdentifyUser`・テストの `DummyUser`） | `users` | 会員の側の API は `users`、管理画面は `members`（下の「管理画面」）。会員の側のコードは `User`、管理画面のコードは `Member` |
 | プロフィール | 会員の公開する情報（ニックネーム・性別・生年月日・都道府県・身長・自己紹介・プロフィール画像と、#153 で足した6項目：体型・お仕事・年収・タバコ・お酒・結婚歴） | 自己紹介 など | `profile` | `Profile` | `profiles` | |
 | プロフィール画像 | プロフィールに出す画像。デモ用の画像のパスを持つ | ― | `image` | ― | `profiles.image` | 前の `product.md` の `avatar_path` は、実際の列とずれていた |
 | 登録 | 会員になること | 登録 | `POST /users`（名前は仮） | `Auth` | `users`・`profiles` | |
