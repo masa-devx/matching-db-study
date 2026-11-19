@@ -58,14 +58,12 @@ API ごとに、下の表から当てはまる観点を選ぶ。「API テスト
 
 ### テストのダミーデータ（会員の側）
 
-データと、ログインした状態は、`backend/client/tests/DummyData/` のクラスで作る。クラスは `Dummy<名詞>`（`final`）で、テストから呼ぶメソッドは `public static`、中の手順は `private static` にする。テストでは `use Tests\DummyData\DummyMember;` と読み込み、`DummyMember::create()` と呼ぶ（クラスは名前から自動で読み込まれるので、`composer.json` に足さなくてよい）。ダミーデータだけで書いた見本は `tests/Feature/Matching/SentLikesListTest.php`。
+データと、ログインした状態は、`backend/client/tests/DummyData/` のクラスで作る。クラスは `Dummy<名詞>`（`final`）で、テストから呼ぶメソッドは `public static`、中の手順は `private static` にする。テストでは `use Tests\DummyData\DummyMember;` と読み込み、`DummyMember::create()` と呼ぶ（クラスは名前から自動で読み込まれるので、`composer.json` に足さなくてよい）。ダミーデータだけで書いた見本は `tests/Feature/Profile/ShowTest.php`。
 
 | メソッド | 作るもの | 作らないもの |
 | --- | --- | --- |
 | `DummyMember::create()` | 会員とプロフィール。既定は、メールアドレスを確認した・無料の・女性。引数で、性別・有料・退会・停止・ニックネーム・生年月日・都道府県・身長を変える。`withProfile: false` ならプロフィールを作らない | 購入の行（`purchases`）・管理画面の監査ログ |
-| `DummyMatching::like()` | いいねを1つ | マッチ |
-| `DummyMatching::match()` | お互いのいいね・マッチ・トークルームと参加者2人 | Firestore のルーム |
-| `DummyMatching::block()` | ブロックを1つ | ― |
+| `DummyMatching::match()` | お互いのいいね・マッチ・トークルームと参加者2人。トークルームの番号を返す | Firestore のルーム |
 | `DummyAuth::actingAs()` | その会員のトークンを `Authorization` に付ける。続けて `->getJson(...)` と書く | ― |
 | `DummyAuth::token()` | トークンの文字だけ（期限切れを確かめるときに使う） | ― |
 
@@ -76,13 +74,7 @@ API ごとに、下の表から当てはまる観点を選ぶ。「API テスト
 
 ```php
 travelTo(Carbon::parse('2026-11-10 12:00:00'));
-DummyMatching::like($me, $older);              // created_at は 2026-11-10 12:00:00
-travelTo(Carbon::parse('2026-11-11 12:00:00'));
-DummyMatching::like($me, $newer);
-
-DummyAuth::actingAs($me)->getJson('/api/me/likes')
-    ->assertOk()
-    ->assertJsonPath('0.user_id', $newer->publicId);   // 新しい順
+$me = DummyMember::create(paid: true);   // users.created_at は 2026-11-10 12:00:00・有料の期限は 2026-12-10 12:00:00
 ```
 
 - トークンの期限だけは、本物の時計で決まる（JWT のライブラリが `time()` を見るため、`travelTo()` は効かない）。`DummyAuth::token()` に期限を渡すときは、`time()` をもとに書く（期限切れなら `time() - 60`）

@@ -54,11 +54,11 @@ describe('ログインしている人が見る', function (): void {
     it('マッチしている相手なら、room_id に2人のトークルームの番号が入る', function (): void {
         $me = DummyMember::create(gender: 'male');
         $other = DummyMember::create();
-        $match = DummyMatching::match($me, $other);
+        $roomId = DummyMatching::match($me, $other);
 
         DummyAuth::actingAs($me)->getJson("/api/users/{$other->publicId}")
             ->assertOk()
-            ->assertJsonPath('room_id', $match->talkRoomPublicId);
+            ->assertJsonPath('room_id', $roomId);
     });
 });
 
