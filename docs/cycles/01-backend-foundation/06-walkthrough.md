@@ -664,3 +664,13 @@ Service は `bootstrap/app.php` を知らない。例外のクラスは、HTTP �
 
 - 次にやること：例外の扱いは「記録する（report）」と「応答を作る（render）」の2つに分けて読む。`dontReport` は前者、`render` は後者
 
+レビューの直しのあと、承認の前に、もう1問聞いた（2026-11-19）：「#128 で `ProfileForbiddenException` を足した人が、`render` の1行を書き忘れて PR を出した」。
+
+| 問い | 人の答え | 結果 |
+| --- | --- | --- |
+| CI でどのテストが落ち、何と出るか | `BusinessExceptionsTest` が落ちる。not found のようなエラーが出る | 一部。出るのは、テストに書いた文「`App\Exceptions\ProfileForbiddenException` の render を bootstrap/app.php に書いていない」 |
+| テストがなかったら、本番で何が起きるか | 500 が出ないので、ログに出ない | ずれていた。500 は出る。出ないのはログ。会員の問い合わせで初めて気づく |
+| なぜ、その 500 はログに残らないか | `dontReport([BusinessException::class])` の行があるから | 合っている |
+
+- 次にやること：「応答（何が返るか）」と「記録（ログに残るか）」を、別々に答える
+
