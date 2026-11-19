@@ -96,7 +96,8 @@ Laravel と Rails の公式の考え方に合わせる。**Controller は、URL 
 
 - **業務のまとまりの中で、近い名詞（同じ表や同じ画面を扱うもの）をまとめて1クラス**にする（人が決めた。`LikeService` が、送ったいいねと届いたいいねを受け持つ）。1つの Service を、いくつかの Controller から呼んでよい
 - `final` にし、名前は `Service` で終わる。`app/Services/` には Service のクラスだけを置く（戻り値は Model か配列。配列は PHPDoc で形を書く）
-- **public のメソッドは操作の名前**（動詞から始める：`search`・`showMine`・`updateMine`・`send`・`listReceived`・`suspend`）。Controller のメソッドの名前（`index`・`store`）にそろえない（いくつかの Controller から呼ぶと、ぶつかるため）。**private のメソッドは、その中の手順**（`findMember`・`assertNotBlocked` など）
+- **public のメソッドは操作の名前**（動詞から始める：`search`・`showProfile`・`updateProfile`・`send`・`listReceived`・`suspend`）。Controller のメソッドの名前（`index`・`store`）にそろえない（いくつかの Controller から呼ぶと、ぶつかるため）。**private のメソッドは、その中の手順**（`findMember`・`assertNotBlocked` など）
+- 名前には「何ができるか」を書き、「だれが呼べるか」（ログインしているか・本人か・役割）は入れない（`updateMine` ではなく `updateProfile`）。だれが呼べるかは、Middleware とメソッドの中の条件で決める。認証の作りが変わっても、名前を変えずに済むため（2026-11-19 に人が決めた。PR #240）
 - メソッドの数の上限は決めない。太ったら見直す（`docs/backend.md` の「やり直しのきっかけ」）
 
 ## 4. 書き方
@@ -113,7 +114,7 @@ final class MeController extends Controller
 
     public function update(UpdateProfileRequest $request): ProfileResource
     {
-        $profile = $this->profiles->updateMine(
+        $profile = $this->profiles->updateProfile(
             memberId: (int) $request->attributes->get('login_user_id'),   // Middleware が載せた、ログインした会員（読む所を1つにまとめるかは、移すときに考える）
             input: $request->validated(),
         );
@@ -181,7 +182,7 @@ public function handle(Request $request, Closure $next): Response
 final class ProfileService
 {
     /** @param  array<string, mixed>  $input  Request の validated() */
-    public function updateMine(int $memberId, array $input): Profile
+    public function updateProfile(int $memberId, array $input): Profile
     {
         $profile = $this->findProfile($memberId);
         $profile->update($input);
@@ -376,9 +377,9 @@ if ($profile->gender === 'male' && ! $user->is_paid) {
 $result = $this->likes->send($memberId, $request->validated());
 
 // ❌ Service が HTTP を知っている（コマンドやテストから呼べない）
-public function updateMine(Request $request): JsonResponse { abort_if($x, 403); }
+public function updateProfile(Request $request): JsonResponse { abort_if($x, 403); }
 // ✅ 値を受け取り、Model を返す。断るときは業務の例外
-public function updateMine(int $memberId, array $input): Profile { throw new ProfileNotFoundException(); }
+public function updateProfile(int $memberId, array $input): Profile { throw new ProfileNotFoundException(); }
 
 // ❌ 有料かどうかを、あちこちで書く（期限を見ない所ができる）
 if ($user->is_paid) { ... }
