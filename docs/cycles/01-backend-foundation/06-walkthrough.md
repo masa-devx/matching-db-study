@@ -371,8 +371,8 @@ backend/client/
 
 | メソッド | 入力 | 戻り値 | 副作用 | 失敗のしかた | 呼ぶ所 |
 | --- | --- | --- | --- | --- | --- |
-| `ProfileService::showFor` | `$targetPublicId`（UUID）・`$viewerId`（`users.id` か null） | `array{target: User, roomId: string\|null}` | なし（読むだけ） | いない会員：`firstOrFail()` の例外 → 404（文に Model の名前が出る）。UUID の形でない：PostgreSQL のエラー → 500 | `ProfileController::show` |
-| `ProfileService::update` | `$targetPublicId`・`$input`（送られた項目の全部） | 書き換えた `Profile` | `profiles` の1行を書き換える | いない会員・プロフィールがない：`RuntimeException` → 500 | `ProfileController::update` |
+| `ProfileService::showProfile` | `$targetPublicId`（UUID）・`$viewerId`（`users.id` か null） | `array{target: User, roomId: string\|null}` | なし（読むだけ） | いない会員：`firstOrFail()` の例外 → 404（文に Model の名前が出る）。UUID の形でない：PostgreSQL のエラー → 500 | `ProfileController::show` |
+| `ProfileService::updateProfile` | `$targetPublicId`・`$input`（送られた項目の全部） | 書き換えた `Profile` | `profiles` の1行を書き換える | いない会員・プロフィールがない：`RuntimeException` → 500 | `ProfileController::update` |
 | `ProfileController::show` | `Request`・`$targetPublicId` | JSON（`users` の列・`profile`・`room_id`） | なし | Service の例外がそのまま上がる | ルート `GET /api/users/{user_id}` |
 | `ProfileController::update` | `Request`・`$targetPublicId` | JSON（`profiles` の列） | Service と同じ | 同上 | ルート `PUT /api/users/{user_id}` |
 | `IdentifyMember::handle` | `Request`・次の処理 | 次の処理の応答 | `login_user_id` を載せる | 壊れた・期限の切れたトークン：JWT の例外 → 500 | ルートの `->middleware('member.identify')` |
@@ -402,7 +402,7 @@ HTTP の側の名前（`$loginUserId`）から、業務の側の名前（`$viewe
 
 ```php
 $loginUserId = $request->attributes->get('login_user_id');   // IdentifyMember が載せる。トークンがなければ null
-$result = $this->profiles->showFor($targetPublicId, is_int($loginUserId) ? $loginUserId : null);
+$result = $this->profiles->showProfile($targetPublicId, is_int($loginUserId) ? $loginUserId : null);
 ```
 
 ### 呼び出しの流れ
@@ -419,7 +419,7 @@ sequenceDiagram
     B->>M: GET /api/users/{user_id}（Bearer トークン）
     M->>M: JWT を読み、sub を login_user_id に載せる
     M->>C: show(request, targetPublicId)
-    C->>S: showFor(targetPublicId, viewerId)
+    C->>S: showProfile(targetPublicId, viewerId)
     S->>D: ① select users where public_id = ?
     S->>D: ② select profiles where user_id = ?
     S->>D: ③ select talk_room_id from talk_room_members where user_id = 見る人
@@ -439,7 +439,7 @@ sequenceDiagram
 | `$targetPublicId`・`$targetId` | `$publicId`・`$memberId` | 「だれの」「どちらの番号か」が分からず、読み違えた（用語集の「コードの中の、会員の番号の名前」） |
 | `login_user_id`・`$loginUserId` | `member_id`・`viewer_id` | `member_id` は用語集では管理画面の UUID。`viewer_id` は、書き換えの API で使うと意味が合わない |
 | `$viewerId`（Service） | `$loginUserId` | Service は HTTP を知らない。コマンドから呼ぶときも「見る人」なら通じる |
-| `showFor` | `show`・`showMine` | Controller の名前とそろえない（3章）。`Mine` は自分のものだけ。相手のものも見るので `For`（だれに向けて見せるか） |
+| `showProfile`・`updateProfile` | `showFor`・`update`・`updateMyProfile`・`updateTargetProfile` | 名前には「何ができるか」を書き、「だれが呼べるか」（ログインしているか・本人か）は入れない。それは Middleware とメソッドの中の条件で決める（`architecture.md` の3章。人が決めた）。`update` は Controller と同じ名前になる（3章） |
 | `IdentifyMember` | `AuthenticateMember` | 認証（通さない）はしない。だれかを見分けるだけ。`AuthenticateMember` は、401 を返す Middleware の名前に取っておく |
 
 ### 依存の向き
@@ -486,7 +486,7 @@ flowchart LR
 | 候補 | 今どうなっているか | 直すとどうなるか | 気づいた所 |
 | --- | --- | --- | --- |
 | トークルームを探す SQL を1本にする | `ProfileService::findSharedRoomId` が、自分のルームの一覧 → 相手もいるルーム → ルームの番号、の3本を流す | `talk_room_members` を2回つなぐ（JOIN）1本で探せる。ログインして見ると5本が3本になる | 前と後の SQL の本数を測ったとき |
-| 2人のルームを探す条件を、Model のスコープにする | `whereIn('talk_room_id', …)->where('user_id', …)` を Service に直接書いている | トークの API でも同じ条件を使うので、`TalkRoomMember` の1か所にまとめられる | Service に移したとき |
+| 2人のルームを探す条件を、Model のスコープにする | `whereIn('talk_room_id', …)->where('user_id', …)` を Service に直接書いている。`architecture.md` の4章（条件が2つ以上なら Model のスコープ）から外れている。トークルームの機能を直すときに移す（PR #240 のレビューで、人が決めた） | トークの API でも同じ条件を使うので、`TalkRoomMember` の1か所にまとめられる | Service に移したとき |
 | 返す項目を選ぶ（FR-002） | `toArray()` で、メールアドレスなども全部返す | Resource を作り、返してよい項目だけにする（`architecture.md` の Resource の決まり） | 今の動きを確かめるテスト |
 | 入力を確かめる（FR-010・FR-006） | `$request->all()` を、そのまま `fill()` に渡す | Form Request の `validated()` だけを渡す。空のニックネームは 422 | 今の動きを確かめるテスト |
 | 他人のプロフィールを書き換えられないようにする（FR-AUTH-022） | PUT のルートに、ログインを求める Middleware がない | ログインを求め、URL の会員が自分でなければ 403 | 今の動きを確かめるテスト・Bruno |

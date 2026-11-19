@@ -20,7 +20,7 @@ final class ProfileController extends Controller
     public function show(Request $request, string $targetPublicId): JsonResponse
     {
         $loginUserId = $request->attributes->get('login_user_id');   // IdentifyMember が載せる。トークンがなければ null
-        $result = $this->profiles->showFor($targetPublicId, is_int($loginUserId) ? $loginUserId : null);
+        $result = $this->profiles->showProfile($targetPublicId, is_int($loginUserId) ? $loginUserId : null);
 
         // 分かっている不具合：返してよい項目を選ばず、列を全部返す（FR-002）。直すときに Resource を作って移す
         return response()->json([...$result['target']->toArray(), 'room_id' => $result['roomId']]);
@@ -29,6 +29,6 @@ final class ProfileController extends Controller
     public function update(Request $request, string $targetPublicId): JsonResponse
     {
         // 分かっている不具合：確かめていない入力を全部渡し（FR-010）、列を全部返す（validated() と Resource は直すときに）
-        return response()->json($this->profiles->update($targetPublicId, $request->all()));
+        return response()->json($this->profiles->updateProfile($targetPublicId, $request->all()));
     }
 }

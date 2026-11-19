@@ -22,7 +22,7 @@ final class ProfileService
      *
      * @return array{target: User, roomId: string|null}
      */
-    public function showFor(string $targetPublicId, ?int $viewerId): array
+    public function showProfile(string $targetPublicId, ?int $viewerId): array
     {
         // 分かっている不具合：見つからないときを Laravel に任せていて、応答に Model の名前が出る（architecture.md の7章）
         $target = User::query()->where('public_id', $targetPublicId)->firstOrFail();
@@ -40,7 +40,7 @@ final class ProfileService
      *
      * @param  array<string, mixed>  $input
      */
-    public function update(string $targetPublicId, array $input): Profile
+    public function updateProfile(string $targetPublicId, array $input): Profile
     {
         $targetId = User::query()->where('public_id', $targetPublicId)->value('id');
         // 分かっている不具合：見つからないときは 404 が望ましい。今の動き（500）のままにしている

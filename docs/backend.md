@@ -61,7 +61,7 @@
 | `EmailVerificationController`（show・store） | `Auth/EmailVerificationController` | `Auth/EmailVerificationService` |
 | `PasswordController`（update）・`PasswordResetController`（store・update） | `Auth/PasswordController`・`Auth/PasswordResetController` | `Auth/PasswordService` |
 | `UserController`（index：検索・destroy：退会） | `Members/MemberController@index`・`Profile/MeController@destroy` | `Members/MemberService`（`search`。クエリは `User` の `scopeSearch`）・`Profile/MeService`（`withdraw`） |
-| `ProfileController`（show：相手のプロフィール・update：自分のプロフィール） | `Profile/ProfileController@show`・**自分のは `Profile/MeController@update`**（新しい URL は `PATCH /me`。`03-how.md` の281行目） | `Profile/ProfileService`（`showFor`・`updateMine`） |
+| `ProfileController`（show：相手のプロフィール・update：自分のプロフィール） | `Profile/ProfileController@show`・**自分のは `Profile/MeController@update`**（新しい URL は `PATCH /me`。`03-how.md` の281行目） | `Profile/ProfileService`（`showProfile`・`updateProfile`） |
 | `SearchConditionController`（index・store・update・destroy） | `Members/SearchConditionController` | `Members/SearchConditionService` |
 | `ReportController`（store） | `Members/ReportController` | `Members/ReportService` |
 | `NoticeController`（index・**read**） | `Members/NoticeController@index`・**既読は `Members/NoticeReadController@store`**（名詞：既読） | `Members/NoticeService` |
