@@ -528,7 +528,7 @@ flowchart LR
 backend/client/
 ├── app/Exceptions/
 │   ├── BusinessException.php              業務の例外の親（abstract）
-│   └── Users/UserNotFoundException.php    会員がいない
+│   └── UserNotFoundException.php          会員がいない（いくつものまとまりで使うので直下）
 ├── bootstrap/app.php                      例外を状態コードと文に変える所（withExceptions）
 ├── config/app.php                         言語を ja に決めた
 └── lang/ja/errors.php                     画面に出るエラーの文
@@ -536,7 +536,7 @@ backend/client/
 
 | 置いた所 | 理由（決まり） | ほかに置ける所と、置かなかった理由 |
 | --- | --- | --- |
-| `app/Exceptions/<まとまり>/` | `architecture.md` の3章（例外も業務のまとまりで分ける） | `app/Services/Users/` の中：Service の置き場には Service のクラスだけを置く決まり |
+| `UserNotFoundException` は `app/Exceptions/` の直下 | いくつもの業務のまとまり（プロフィール・いいね・トーク）で使う例外は直下に置く（`architecture.md` の7章。PR #242 のレビューで決めた） | `app/Exceptions/Users/`：`Users` は業務のまとまりの一覧にない。`Exceptions/Profile/`：いいねやトークを移す人が、自分のまとまりに同じ例外をもう1つ作るおそれがある |
 | 状態コードは `bootstrap/app.php` | `architecture.md` の7章（1か所で見る） | 例外のクラスの `render()`：状態コードが例外のファイルごとに散らばる |
 | 文は `lang/ja/errors.php` | Laravel の標準。入力の確かめ（422）の文も同じ仕組みで日本語にできる | 例外のクラスの中・定数のクラス：前者は一覧で見られない。後者は、422 の文と置き場が2種類になる |
 
@@ -642,6 +642,14 @@ Service は `bootstrap/app.php` を知らない。例外のクラスは、HTTP �
 - だれが困らなくなるか：古い URL を開いた会員（Model の名前ではなく「会員が見つかりません」が出る）と、運営（書き換えの 500 が 404 になり、エラーのログに、本当の不具合だけが残る）
 - どう気づけるようになるか：業務の例外はログに出ないので、エラーのログに出るものは、思っていなかった失敗だけになる
 - 数字：いない会員の PUT が 500 → 404。エラーの文の置き場が、手書きの46か所 → これから移す先の1か所
+
+### 次の改善の候補
+
+| 候補 | 今どうなっているか | 直すとどうなるか | 気づいた所 |
+| --- | --- | --- | --- |
+| 「`public_id` で会員を探し、いなければ `UserNotFoundException`」を1か所にする | `ProfileService` の `showProfile` と `updateProfile` の2か所に書いている | #128 などでほかの Service にも増える。3つ目ができるときに、User のスコープか1つのメソッドにまとめる（退会した会員の扱いを変えるときに、直し漏れが起きない） | PR #242 のレビュー（A3） |
+| `ProfileFactory` の `realText()` を軽い書き方にする | 日本語の長い文を毎回読むので、テストが増えると 128MB を超える。今は `phpunit.xml` でテストのときだけ 512MB にした | 上限を上げずに流せる。試しのデータ（シーダー）の作り方も変わるので、別に決める | PR #242 の直し（テストが48本でメモリが足りなくなった） |
+| 会員の側の見本の `memberId`・`findMember` を、`User` の名前にそろえる | `architecture.md` の 99・118・185〜196・410・415行目 | 見本をコピーしても、member と user が混ざらない。書き換えの操作の引数の名前を決めるときに一緒に直す | PR #242 のレビュー（S5） |
 
 ### 説明の練習
 

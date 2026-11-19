@@ -121,4 +121,5 @@
 - エラーの文は `lang/ja/errors.php` にだけ書く（案B）。言語は `config/app.php` で `ja` に決める（(a)。環境変数で変えない）
 - try-catch は、基本は書かない。意味のある別の動きができるときだけ書く（`architecture.md` の7章に足した）
 - テストでは、エラーの文を文字で書く（`testing-style.md` に足した）
+- PR #242 のレビューで決めたこと：いくつものまとまりで使う例外は `app/Exceptions/` の直下に置く。業務の例外の `render` と文の書き忘れは、テスト（`BusinessExceptionsTest.php`）で見つける。FR-004 を「見る・書き換える」に広げる
 
