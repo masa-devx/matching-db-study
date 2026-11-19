@@ -114,7 +114,7 @@ final class MeController extends Controller
     public function update(UpdateProfileRequest $request): ProfileResource
     {
         $profile = $this->profiles->updateMine(
-            memberId: (int) $request->attributes->get('member_id'),   // Middleware が載せた、ログインした会員（読む所を1つにまとめるかは、移すときに考える）
+            memberId: (int) $request->attributes->get('login_user_id'),   // Middleware が載せた、ログインした会員（読む所を1つにまとめるかは、移すときに考える）
             input: $request->validated(),
         );
 
@@ -166,7 +166,7 @@ public function handle(Request $request, Closure $next): Response
     if ($memberId === null || ! $this->members->canUseApi($memberId)) {   // MemberAuthService：退会・停止していないか
         return response()->json(['message' => 'ログインしてください'], 401);
     }
-    $request->attributes->set('member_id', $memberId);
+    $request->attributes->set('login_user_id', $memberId);
 
     return $next($request);
 }
