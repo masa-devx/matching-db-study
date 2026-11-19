@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Profile;
 
+use App\Exceptions\Users\UserNotFoundException;
 use App\Models\Profile;
 use App\Models\TalkRoom;
 use App\Models\TalkRoomMember;
@@ -24,8 +25,8 @@ final class ProfileService
      */
     public function showProfile(string $targetPublicId, ?int $viewerId): array
     {
-        // 分かっている不具合：見つからないときを Laravel に任せていて、応答に Model の名前が出る（architecture.md の7章）
-        $target = User::query()->where('public_id', $targetPublicId)->firstOrFail();
+        $target = User::query()->where('public_id', $targetPublicId)->first()
+            ?? throw new UserNotFoundException;
         $target->load('profile');
 
         return [
@@ -42,8 +43,9 @@ final class ProfileService
      */
     public function updateProfile(string $targetPublicId, array $input): Profile
     {
-        $targetId = User::query()->where('public_id', $targetPublicId)->value('id');
-        // 分かっている不具合：見つからないときは 404 が望ましい。今の動き（500）のままにしている
+        $targetId = User::query()->where('public_id', $targetPublicId)->value('id')
+            ?? throw new UserNotFoundException;
+        // 分かっている不具合：会員はいるがプロフィールがないときは、404 が望ましい。今の動き（500）のままにしている
         $profile = Profile::query()->where('user_id', $targetId)->first()
             ?? throw new RuntimeException('プロフィールが見つからない');
         $profile->update($input);

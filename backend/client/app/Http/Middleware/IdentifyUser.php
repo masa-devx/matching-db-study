@@ -14,7 +14,7 @@ use Symfony\Component\HttpFoundation\Response;
  * トークンがあれば、ログインしている会員の番号（users.id）をリクエストに載せる。なくても通す。
  * ログインがなくても使える API（相手のプロフィールを見る）で使う。載せた番号は $request->attributes の login_user_id。
  */
-final class IdentifyMember
+final class IdentifyUser
 {
     public function handle(Request $request, Closure $next): Response
     {

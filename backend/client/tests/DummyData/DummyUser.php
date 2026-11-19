@@ -11,7 +11,7 @@ use App\Models\User;
  * テストの会員（users とプロフィール）を作る。Model と Factory を使うのは tests/DummyData/ の中だけ。
  * 既定は、メールアドレスを確認した・無料の・女性。購入の行と監査ログは作らない。
  */
-final class DummyMember
+final class DummyUser
 {
     /** だれも持っていない public_id（UUID の形は正しい）。いない会員の URL を作るときに使う */
     public const string MISSING_PUBLIC_ID = '00000000-0000-0000-0000-000000000000';
@@ -32,7 +32,7 @@ final class DummyMember
         ?string $prefecture = null,
         ?int $height = null,
         bool $withProfile = true,
-    ): TestMember {
+    ): TestUser {
         $user = self::createUser($paid, $suspended);
         if ($withdrawn) {
             self::withdraw($user);
@@ -40,7 +40,7 @@ final class DummyMember
         $user->refresh();   // public_id は DB が入れるので、読み直す
 
         if (! $withProfile) {
-            return new TestMember($user->id, $user->public_id, $user->email, nickname: null, gender: null);
+            return new TestUser($user->id, $user->public_id, $user->email, nickname: null, gender: null);
         }
 
         $profile = Profile::factory()->create(self::onlyGiven([
@@ -52,7 +52,7 @@ final class DummyMember
             'height' => $height === null ? null : (string) $height,   // レガシー版の列は文字
         ]));
 
-        return new TestMember($user->id, $user->public_id, $user->email, $profile->nickname, $gender);   // 性別は、渡した値をそのまま入れている
+        return new TestUser($user->id, $user->public_id, $user->email, $profile->nickname, $gender);   // 性別は、渡した値をそのまま入れている
     }
 
     /** 有料なら期限を今から30日にする。停止なら停止の日時と理由を入れる。 */
