@@ -83,7 +83,8 @@ return [
     |
     */
 
-    'locale' => env('APP_LOCALE', 'en'),
+    // このアプリは日本語だけなので、環境変数で変えない（画面に出る文は lang/ja/ に置く。2026-11-19 に人が決めた）
+    'locale' => 'ja',
 
     'fallback_locale' => env('APP_FALLBACK_LOCALE', 'en'),
 

@@ -27,8 +27,8 @@ return Application::configure(basePath: dirname(__DIR__))
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
 
-        // 業務の例外を、状態コードと文に変えるのはここだけ（architecture.md の7章）。例外を足したら、ここに1行足す
-        $exceptions->render(fn (UserNotFoundException $e) => response()->json(['message' => '会員が見つかりません'], 404));
+        // 業務の例外を、状態コードと文に変えるのはここだけ（architecture.md の7章）。例外を足したら、ここに1行足す。文は lang/ja/errors.php
+        $exceptions->render(fn (UserNotFoundException $e) => response()->json(['message' => __('errors.user_not_found')], 404));
 
         // 業務の例外は、決まりどおりに断っただけなので、エラーのログに出さない。親の1つだけを書く
         $exceptions->dontReport([BusinessException::class]);
