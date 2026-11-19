@@ -12,7 +12,7 @@
 | --- | --- |
 | 起きていること | 管理画面のコントローラーは 13個・1,305行。同じ処理がコピーされている：トークンを読む処理 23か所・役割（owner）の確かめ 5か所・監査ログの書き込み 6か所。DB を直接呼ぶ行が 147行。層の決まりを確かめるテストは 0本（会員の側は 15本） |
 | 現場ならどう見えるか | 書き込みの API のうち、「停止を解く」（`SuspensionController::destroy`）と「対応のメモを書く」（`MemberNoteController::store`）は、役割の確かめも監査ログもない（見るだけの管理者でも `204`・`201`）。運営から「ある会員の停止が解かれていた。だれが解いたか調べてほしい」と頼まれても、監査ログに記録がなく、答えられない。気づくのは、問題が起きたあと |
-| 原因のある所 | `backend/admin/app/Http/Controllers/SuspensionController.php` の `destroy`（`store` をコピーして作り、役割の確かめと監査ログを落とした。コメントにも「写し忘れている」）。決まりは `agents/rules/architecture.md` の「管理画面での当てはめ」に書いてあるが、確かめる仕組みが管理画面にない |
+| 原因のある所 | `backend/admin/app/Http/Controllers/SuspensionController.php` の `destroy`（`store` をコピーして作り、役割の確かめと監査ログを落とした。コメントにも「写し忘れている」）。決まりは `agents/rules/architecture-backend.md` の「管理画面での当てはめ」に書いてあるが、確かめる仕組みが管理画面にない |
 | 似た課題 | 会員の側のコントローラー 19個も、同じくトークンを読む処理をコピーしている（会員の側のテストは入れた） |
 
 ### 人の答え
@@ -40,7 +40,7 @@
 | 見せること | 中身 |
 | --- | --- |
 | 起きていること | Controller の中にロジックと DB の処理が全部ある。会員の側は Controller 20個・1611行、管理画面は14個・1319行（2026-11-18 に数えた）。いちばん長いメソッドは `UserController::index`（会員の検索）の142行、管理画面の `MemberController::index` の117行。DB を直接使う所は `LikeController` に21か所、管理画面の `MemberActivityController` に28か所 |
-| 決まりはあったのに | `architecture.md`（865行。4層）は 11-15 からあったが、見本の実物がなく、新しい形のコードは1行もなかった |
+| 決まりはあったのに | `architecture-backend.md`（865行。4層）は 11-15 からあったが、見本の実物がなく、新しい形のコードは1行もなかった |
 | 現場ならどう見えるか | 新しく入った人が「検索の年齢の条件はどこ？」と聞かれ、142行のメソッドを上から読む。1か所を直すと、別の所が壊れないか不安になる。検索が遅くなっても、SQL がどこで組み立てられているかを探すところから始まる |
 | 原因のある所 | `backend/client/app/Http/Controllers/UserController.php` の `index`・`LikeController.php` の `store`・`backend/admin/app/Http/Controllers/MemberController.php` の `index` |
 | 似た課題 | 画面の側も同じ形（`frontend/client/src/HomePage.tsx`）。エピック #112 で扱う |
@@ -84,10 +84,10 @@
 ### 決めたこと
 
 - ① トークンは、新しい Middleware（`IdentifyMember`）で読む。トークンがあれば読み、なくても通す。壊れたトークンの 500 は今のまま（分かっている不具合）
-- ② 応答は、今と同じく全部の列を返す。Resource は作らない（返す項目を選ぶときに作る。`architecture.md` に1行足した）
+- ② 応答は、今と同じく全部の列を返す。Resource は作らない（返す項目を選ぶときに作る。`architecture-backend.md` に1行足した）
 - ③ 書き換えの入力は `all()` のまま。`validated()` は、直すチケットで入れる
 - PR #240 のレビューで決めたこと
-  - Service のメソッドの名前は「何ができるか」にする（`showProfile`・`updateProfile`）。「だれが呼べるか」は名前に入れない（`architecture.md` の3章に足した）
+  - Service のメソッドの名前は「何ができるか」にする（`showProfile`・`updateProfile`）。「だれが呼べるか」は名前に入れない（`architecture-backend.md` の3章に足した）
   - 移す前と違う動き（3つ）は、コードを変えずに PR に書く
   - 消した `SentLikesListTest.php`・`SupportFunctionsTest.php` は、消したままにする。その API を移すチケットで、今の動きを確かめるテストを書く
   - トークルームとマッチングのまわりの改善は、その機能を直すときに一緒に行う
@@ -119,7 +119,7 @@
 - 管理画面には、まだ作らない（Service がなく、投げる所がない）
 - 会員の側のコードでは、会員を `User` と呼ぶ（案A。`MemberNotFoundException` → `UserNotFoundException` など）
 - エラーの文は `lang/ja/errors.php` にだけ書く（案B）。言語は `config/app.php` で `ja` に決める（(a)。環境変数で変えない）
-- try-catch は、基本は書かない。意味のある別の動きができるときだけ書く（`architecture.md` の7章に足した）
+- try-catch は、基本は書かない。意味のある別の動きができるときだけ書く（`architecture-backend.md` の7章に足した）
 - テストでは、エラーの文を文字で書く（`testing-style.md` に足した）
 - PR #242 のレビューで決めたこと：いくつものまとまりで使う例外は `app/Exceptions/` の直下に置く。業務の例外の `render` と文の書き忘れは、テスト（`BusinessExceptionsTest.php`）で見つける。FR-004 を「見る・書き換える」に広げる
 

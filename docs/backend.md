@@ -3,12 +3,12 @@
 会員の側（`backend/client`）と管理画面（`backend/admin`）の、全体の地図。エンジニアリーダーとメンバーのエンジニアが、どこに何があり、どこへ移していくかを掴むために読む。
 
 - 状態：第2版（2026-11-18。#236 で、4層から Controller → Service → Model に変えた）。今のコードはレガシー版のまま（Fat Controller）。下の形へは、画面・機能ごとに少しずつ移す
-- **層・依存の向き・ディレクトリ・名前・書き方（サンプルコード）・エラー・トランザクション・アーキテクチャのテストの決まりは [agents/rules/architecture.md](../agents/rules/architecture.md) を正とする**。ここには書かない
+- **層・依存の向き・ディレクトリ・名前・書き方（サンプルコード）・エラー・トランザクション・アーキテクチャのテストの決まりは [agents/rules/architecture-backend.md](../agents/rules/architecture-backend.md) を正とする**。ここには書かない
 - なぜこの形にしたか：[decisions.md](decisions.md) の D-025・[cycles/01-backend-foundation/05-problems.md](cycles/01-backend-foundation/05-problems.md) の #236・最初の形を決めた経緯は [cycles/01-backend-foundation/03-how.md](cycles/01-backend-foundation/03-how.md)。比べたほかの形：[architecture-styles.html](../explanations/architecture-styles.html)・[modular-monolith.html](../explanations/modular-monolith.html)
 
 ## 1. 形（ひとこと）
 
-**Controller → Service → Model**（2026-11-18 に人が決めた。#236・D-025）。会員の側と管理画面で、同じ形にする。Controller は受け取って返すだけ、業務のロジックと手順は Service、DB とのやり取り（検索・一覧のクエリの組み立てを含む）は Model。決まりと書き方は [architecture.md](../agents/rules/architecture.md)。
+**Controller → Service → Model**（2026-11-18 に人が決めた。#236・D-025）。会員の側と管理画面で、同じ形にする。Controller は受け取って返すだけ、業務のロジックと手順は Service、DB とのやり取り（検索・一覧のクエリの組み立てを含む）は Model。決まりと書き方は [architecture-backend.md](../agents/rules/architecture-backend.md)。
 
 ```text
 画面（frontend/client）──→ 会員の側の API（backend/client）──┐
@@ -51,7 +51,7 @@
 
 ## 3. 移行の地図（今のファイル → 新しい置き場）
 
-案。名詞の切り方とメソッドの名前は、移すチケットで決め直してよい（決めたら、ここを直す）。Service は、まとまりの中の近い名詞（同じ表や同じ画面を扱うもの）をまとめて1つにし、いくつかの Controller から呼ぶ（`architecture.md` の3章）。新しい URL の名詞は #127 で決める。**太字**は、標準の5つ（`index`・`show`・`store`・`update`・`destroy`）以外のメソッドがあり、隠れた名詞を探して分ける所。
+案。名詞の切り方とメソッドの名前は、移すチケットで決め直してよい（決めたら、ここを直す）。Service は、まとまりの中の近い名詞（同じ表や同じ画面を扱うもの）をまとめて1つにし、いくつかの Controller から呼ぶ（`architecture-backend.md` の3章）。新しい URL の名詞は #127 で決める。**太字**は、標準の5つ（`index`・`show`・`store`・`update`・`destroy`）以外のメソッドがあり、隠れた名詞を探して分ける所。
 
 ### 会員の側
 
@@ -96,7 +96,7 @@
 | `AuditLogController`（index） | `AuditLogs/AuditLogController` | `AuditLogs/AuditLogService` |
 | `Controller.php`（基底） | 移さない | ― |
 
-移す順は、画面・機能ごと。最初はホーム（#237：`ProfileController`）。そのあとは、機能を足すとき・不具合を直すときに、触る所を移す。移し方の決まりは [architecture.md](../agents/rules/architecture.md) の10章。移す前に、その API が「API テストがある」状態（成功1本と、`docs/api/` に書いた失敗ごとに1本）にする。
+移す順は、画面・機能ごと。最初はホーム（#237：`ProfileController`）。そのあとは、機能を足すとき・不具合を直すときに、触る所を移す。移し方の決まりは [architecture-backend.md](../agents/rules/architecture-backend.md) の10章。移す前に、その API が「API テストがある」状態（成功1本と、`docs/api/` に書いた失敗ごとに1本）にする。
 
 **見本のファイル**：最初の見本はホームのプロフィール（#237。今の URL のまま中を移す）。移したら、ここにパスを書く（まだない）。
 
@@ -122,7 +122,7 @@
 | 会員の側 | `matching_test` | 自分のマイグレーション |
 | 管理画面 | `matching_admin_test` | `backend/client` のマイグレーションを指して作る |
 
-テストの置き場と書き方は [architecture.md](../agents/rules/architecture.md) の8章と `agents/rules/testing.md`。
+テストの置き場と書き方は [architecture-backend.md](../agents/rules/architecture-backend.md) の8章と `agents/rules/testing.md`。
 
 ## 6. やり直しのきっかけ
 
@@ -132,7 +132,7 @@
 | --- | --- |
 | 1つの Service が読みにくくなった（public のメソッドが増えて、どれを呼べばよいか迷う・300行を超えた・`private` の手順が入り組んだ） | 隠れた名詞を探して Service を分ける。それでも重いなら、そのときに形を見直す（チケットにする。決めたら `decisions.md` に1行） |
 | 1つの Model のスコープとクエリが増え、Model が読みにくくなった（`User` が最初になりやすい） | 検索や集計のクエリだけを、別のクラス（検索のクエリのクラス）に出す |
-| Controller・Service・Model のどれに書くかで、レビューで同じ議論がくり返された | `architecture.md` の判断の順（1章）と表を直す |
+| Controller・Service・Model のどれに書くかで、レビューで同じ議論がくり返された | `architecture-backend.md` の判断の順（1章）と表を直す |
 | 1つのまとまりで Service が10を超えた | まとまりを小さく分ける |
 | 1つの変更で、3つ以上のまとまりを触ることが続く | まとまりの境目を引き直す。まとまりの間をイベントでつなぐ |
 | チームが3つ以上になり、同じフォルダを取り合う | モジュラーモノリスへ（[modular-monolith.html](../explanations/modular-monolith.html)） |
@@ -146,7 +146,7 @@
 | 資料 | 中身 |
 | --- | --- |
 | [../explanations/architecture-styles.html](../explanations/architecture-styles.html) | アーキテクチャの地図：MVC・レイヤード・ヘキサゴナル・オニオン・クリーン・DDD・モジュラーモノリス・垂直スライスを、メリット・向く場面・将来の変更で比べた |
-| [../explanations/layered-design.html](../explanations/layered-design.html) | 決める途中で作った詳細設計の解説（第3版のまま残した参考の版）。図・サンプルコード・メリットとデメリット。正本は architecture.md と、このファイル |
+| [../explanations/layered-design.html](../explanations/layered-design.html) | 決める途中で作った詳細設計の解説（第3版のまま残した参考の版）。図・サンプルコード・メリットとデメリット。正本は architecture-backend.md と、このファイル |
 | [../explanations/modular-monolith.html](../explanations/modular-monolith.html) | レイヤードからモジュラーモノリスへ移るときのディレクトリと順番・フレームワークや言語を替えるときの備え |
 | [cycles/01-backend-foundation/03-how.md](cycles/01-backend-foundation/03-how.md) | 決めたことと、比べて採らなかった案（議事録） |
 

@@ -16,7 +16,7 @@ paths:
 | --- | --- | --- | --- | --- |
 | 単体 | Pest・Vitest（画面） | `backend/client/tests/Unit/`・`backend/admin/tests/Unit/`（`app/` の構造を再現）・`frontend/client/src/**/*.test.tsx` | `docker compose run --rm app ./vendor/bin/pest tests/Unit`（画面は 03b で決める） | ロジックの境界値・異常系 |
 | 結合（API テスト） | Pest（テスト用の PostgreSQL に対して実行） | `backend/client/tests/Feature/`・`backend/admin/tests/Feature/` | `docker compose run --rm app ./vendor/bin/pest tests/Feature`（管理画面は `admin-app`） | DB や API をまたぐ制御・API の振る舞い |
-| アーキテクチャ | Pest の `arch()`（`pestphp/pest-plugin-arch`） | `backend/client/tests/Arch/`（正本）・`backend/admin/tests/Arch/`（コピー。決まりの部分が正本と同じかを `SameRulesAsClientTest.php` が比べる） | `docker compose run --rm app ./vendor/bin/pest tests/Arch`（管理画面は `admin-app`） | 層の依存の向きと名前（`architecture.md` の8章） |
+| アーキテクチャ | Pest の `arch()`（`pestphp/pest-plugin-arch`） | `backend/client/tests/Arch/`（正本）・`backend/admin/tests/Arch/`（コピー。決まりの部分が正本と同じかを `SameRulesAsClientTest.php` が比べる） | `docker compose run --rm app ./vendor/bin/pest tests/Arch`（管理画面は `admin-app`） | 層の依存の向きと名前（`architecture-backend.md` の8章） |
 
 - 管理画面（`backend/admin`）も、Pest と、本物の PostgreSQL で動く（#105）。テスト用の DB は `matching_admin_test`（会員の側の `matching_test` とは別。2つを同時に流しても、ぶつからない）。管理画面はマイグレーションを持たないので、表は、会員の側のマイグレーション（`backend/client/database/migrations`）で作る（`backend/admin/tests/TestCase.php`。この仕組みは `tests/Feature/TestEnvironmentTest.php` で確かめる）。ダミーデータは `backend/admin/tests/DummyData/`：`DummyAdmin`（`create()`（役割を引数で）・`actingAs()`）・`DummyMember`（`create()`）。会員の側の `DummyUser` とは、別のもの（管理画面は Model を持たないので、表に直接入れる）
 | E2E | 03b（React を足す）で決める | 03b で決める | 03b で決める | 主要フロー・認可・状態遷移 |
@@ -24,7 +24,7 @@ paths:
 - 単体の置き場所は、実装のパスと対応づける（例: `app/Models/User.php` の `isPaidAt()` → `tests/Unit/Models/UserTest.php`）。Service は DB を使うので、単体ではなく API テスト（`Feature`）で、本物の PostgreSQL に対して確かめる
 - 各テストの組（`Unit`・`Feature`・`Arch`）は、`phpunit.xml` の `<testsuites>` に並べる。並べていないフォルダのテストは流れない
 - API テストは、`tests/Feature/<業務のまとまり>/` に置く（例：`tests/Feature/Profile/ShowTest.php`）。まとまりは `app/` と同じ名前（`docs/backend.md` の2章）。どのまとまりにも入らないもの（`HealthTest.php`）は `tests/Feature/` の直下
-- テストのダミーデータ（会員・いいねなどの行と、ログインした状態を作るクラス）は `tests/DummyData/` に置く。ダミーデータのテストは書かない（シードと同じく、データを用意するだけのもの。2026-11-19 に人が決めた）。API テストに Model の名前空間を書かない（`architecture.md` の10章）
+- テストのダミーデータ（会員・いいねなどの行と、ログインした状態を作るクラス）は `tests/DummyData/` に置く。ダミーデータのテストは書かない（シードと同じく、データを用意するだけのもの。2026-11-19 に人が決めた）。API テストに Model の名前空間を書かない（`architecture-backend.md` の10章）
 - E2Eは実行前にシードデータの投入とアプリ起動が要る（後述）
 
 ## API テストの観点
@@ -41,7 +41,7 @@ API テスト（API を呼び、状態コード・応答・DB の変化を確か
 
 ### 観点
 
-API ごとに、下の表から当てはまる観点を選ぶ。「API テストがある」と言える最低の本数は、`architecture.md` の10章（成功が1本と、`docs/api/` に書いた失敗ごとに1本）。
+API ごとに、下の表から当てはまる観点を選ぶ。「API テストがある」と言える最低の本数は、`architecture-backend.md` の10章（成功が1本と、`docs/api/` に書いた失敗ごとに1本）。
 
 | 観点 | 確かめること |
 | --- | --- |
@@ -165,7 +165,7 @@ await expect(createInvoice(input)).rejects.toThrow(InvoiceValidationError);
   1. 直すのは、ほかの変更（移す・性能）と別のコミットにする
   2. 直す前に、「分かっている不具合：…」として今の動きを確かめているテストを、要件どおりの期待値に変え、落ちることを先に見せる
   3. 書き換えたテストの名前を、PR に並べる
-- 外のサービス（Firestore・メール。`app/Clients/` の Client）を偽物に差し替えるときは、いつも成功を返すだけの作りにしない。送った中身を覚えておき、テストで確かめられるようにする。偽物の外への書き込みは、トランザクションの中で呼ばれたら失敗する（`architecture.md` の5章：外への書き込みはコミットのあと）
+- 外のサービス（Firestore・メール。`app/Clients/` の Client）を偽物に差し替えるときは、いつも成功を返すだけの作りにしない。送った中身を覚えておき、テストで確かめられるようにする。偽物の外への書き込みは、トランザクションの中で呼ばれたら失敗する（`architecture-backend.md` の5章：外への書き込みはコミットのあと）
 - プランで決めた期待結果を、実装を通すために書き換えない。変える必要があれば停止して報告する
 
 ## テストの独立性（並列実行対応）

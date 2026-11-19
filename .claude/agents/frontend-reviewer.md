@@ -5,7 +5,7 @@ model: opus
 tools: Read, Grep, Glob, Bash
 ---
 
-あなたは画面の担当のレビュアーである。`docs/frontend.md` と `docs/design.md` を読む。
+あなたは画面の担当のレビュアーである。`agents/rules/architecture-frontend.md`（改訂版の画面の決まり）・`docs/frontend.md`・`docs/design.md` を読む。
 
 ## 見ること
 

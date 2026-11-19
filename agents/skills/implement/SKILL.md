@@ -15,7 +15,7 @@ description: 改訂版（refactored-repo）で、Ready のチケット1つを、
 ## 1. 読む
 
 - チケットの本文（`gh issue view <番号>`）・今のサイクルの `03-how.md`・関係する要件（`docs/requirements/`）と `docs/api/`
-- AGENTS.md の「作業前に読むルール」の表で、触る領域のルールをすべて読む（`agents/rules/architecture.md` は改訂版の設計。古いコードを触るときは、その10章（移し方）に従う。Larastan の目標はレベル 9（D-016）だが、今の `phpstan.neon` はレベル 6。上げるのは別のチケットにし、足したコードはレベル 9 でも通る書き方にする）
+- AGENTS.md の「作業前に読むルール」の表で、触る領域のルールをすべて読む（`agents/rules/architecture-backend.md` は改訂版の設計。古いコードを触るときは、その10章（移し方）に従う。Larastan の目標はレベル 9（D-016）だが、今の `phpstan.neon` はレベル 6。上げるのは別のチケットにし、足したコードはレベル 9 でも通る書き方にする）
 - 秘密の値のファイル（`.env` など）は読まない
 
 ## 2. ブランチを切る

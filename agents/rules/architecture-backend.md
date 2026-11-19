@@ -4,10 +4,9 @@ paths:
   - "backend/*/routes/**"
   - "backend/*/bootstrap/app.php"
   - "backend/*/tests/**"
-  - "frontend/*/src/**"
 ---
 
-# architecture（改訂版）
+# architecture-backend（改訂版のバックエンド）
 
 改訂版（`refactored-repo`）で、置き場・責務・依存の向きを決めるときの決まりと、書き方。会員の側（`backend/client`）と管理画面（`backend/admin`）の両方に当てはめる。
 
@@ -15,7 +14,7 @@ paths:
 - 狙い：まず、Controller に詰まったロジックと DB の処理を出して、**どこにどんな処理があるかを追える**ようにする。完成した形に一気に移すのではなく、リファクタしながらコードを読み、次の改善を見つける。Service や Model が太ったら、そのときに見直す（`docs/backend.md` の「やり直しのきっかけ」）
 - 全体の地図（業務のまとまり（Auth・Members のような、業務ごとの分け方）の一覧・どのアプリがどの表を書くか・今のファイルの移行の地図）は [docs/backend.md](../../docs/backend.md)
 - レガシー版（Fat Controller・テストなし）の書き方は、`legacy-repo` の同じ名前のファイル。改訂版の新しいコードでは使わない
-- 画面（`frontend/`）には、9章の共通の原則だけを当てはめる。画面の置き場は [docs/frontend.md](../../docs/frontend.md)
+- 画面（`frontend/`）の決まりは [architecture-frontend.md](architecture-frontend.md)。このファイルは画面には当てはめない
 
 ## 1. 迷ったときの判断の順
 
@@ -368,7 +367,9 @@ try {
   - ないクラス：`use` したクラスが実在しないと、依存として数えない（#236 で、Model のない管理画面に `use App\Models\User;` を置いて確かめた。実在する Model なら落ちる）。動かないコードなので、実際の穴にはならない
 - 期待は、`arch('名前', function (): void { expect(…)->…; })` と、無名関数の中に書く（鎖でつなぐ書き方は、Larastan が「ないメソッド」と指摘する）
 
-## 9. 共通の原則（画面にも当てはめる）
+## 9. 共通の原則
+
+画面にも同じ考え方の原則があり、画面の言葉で [architecture-frontend.md](architecture-frontend.md) に書いている。
 
 ### SSoT（1つの事実は1か所に）
 

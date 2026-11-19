@@ -61,7 +61,7 @@
 
 比べた資料：`explanations/architecture-styles.html`
 
-> **2026-11-18 に見直した（#236・D-025）**：形を「Controller → Service → Model」に変えた。下の「会員の側の形」「管理画面の形」（どちらも DIP を用いた4層）は、そのときまでの決定として残す。今の決まりは `agents/rules/architecture.md`、見直した理由は `05-problems.md` の #236。
+> **2026-11-18 に見直した（#236・D-025）**：形を「Controller → Service → Model」に変えた。下の「会員の側の形」「管理画面の形」（どちらも DIP を用いた4層）は、そのときまでの決定として残す。今の決まりは `agents/rules/architecture-backend.md`、見直した理由は `05-problems.md` の #236。
 >
 > 下の表は**取り消した最初の案**（議事録として残す）。
 
@@ -70,12 +70,12 @@
 | 会員の側（`backend/client`） | レイヤードアーキテクチャ（3層：プレゼンテーション・ビジネスロジック・データアクセス） | 当時の規模は中くらい。いろいろな現場で取り入れられていて、入ってきた人がすぐ読める |
 | 管理画面（`backend/admin`） | モジュール（機能・画面ごとの縦切り） | 機能や画面ごとに何があるかが分かればよい |
 
-- 人はほかのプロジェクトで「interface 層」（入口の層）を取り入れていた。入口（HTTP・コマンド・キュー・Webhook）を `app/Interfaces/` にまとめる案（B）と、Laravel の標準の置き場のままの案（A）を比べた（`explanations/layered-design.html`。決まりを `agents/rules/architecture.md` にまとめたあと、第3版のまま参考として残した）
+- 人はほかのプロジェクトで「interface 層」（入口の層）を取り入れていた。入口（HTTP・コマンド・キュー・Webhook）を `app/Interfaces/` にまとめる案（B）と、Laravel の標準の置き場のままの案（A）を比べた（`explanations/layered-design.html`。決まりを `agents/rules/architecture-backend.md` にまとめたあと、第3版のまま参考として残した）
 - 決めた依存の向きは、アーキテクチャのテスト（Pest の `arch()`）で確かめる。このサイクルの範囲に入れる
 
 ### 会員の側の形（2026-11-15 に決めた）
 
-参考：DIP（依存性逆転）を使ったレイヤードアーキテクチャ（`Http`・`Application`・`Domain`・`Infrastructure`）。比べた資料は `explanations/architecture-styles.html`・`modular-monolith.html`。決まりと書き方は `agents/rules/architecture.md`、全体の地図は `docs/backend.md`。
+参考：DIP（依存性逆転）を使ったレイヤードアーキテクチャ（`Http`・`Application`・`Domain`・`Infrastructure`）。比べた資料は `explanations/architecture-styles.html`・`modular-monolith.html`。決まりと書き方は `agents/rules/architecture-backend.md`、全体の地図は `docs/backend.md`。
 
 ```text
 app/
@@ -141,7 +141,7 @@ app/
 
 - 新しい URL のテストは、今の URL に対する、今の動きを確かめるテストをコピーして作る
 - 違ってよい点（`data` で包む・状態コード（形の違う ID は 404 など）・出さない項目）は、移すチケットの表に並べる。表にないものは、期待値を変えない
-- `architecture.md` の10章の「移すコミットではテストが変わらない」は、同じ URL のまま中を移すときに当てはまる。新しい URL に移すときは、上のとおり、今の動きを確かめるテストをコピーして、振る舞いが同じことを確かめる
+- `architecture-backend.md` の10章の「移すコミットではテストが変わらない」は、同じ URL のまま中を移すときに当てはまる。新しい URL に移すときは、上のとおり、今の動きを確かめるテストをコピーして、振る舞いが同じことを確かめる
 - 今の URL に対する、今の動きを確かめるテストは、今の振る舞いのまま期待値を書く（例：形の違う ID は 500 のまま）
 
 **安全の穴を直すときのテスト**（PR #132 のレビュー M4）
@@ -150,7 +150,7 @@ app/
 2. 直す前に、「分かっている不具合」として今の動きを確かめているテストを要件どおりの期待値に変え、落ちることを先に見せる
 3. 書き換えたテストの名前を、PR に並べる
 
-上の2つ（移したときのテスト・穴を直すときのテスト）は、#104（API テストの土台）で、`agents/rules/testing.md` と `agents/rules/architecture.md` の10章（「移すコミットではテストが変わらない」の書き分け）に書き足した。これからは `testing.md` を正とし、上の文は決めたときの記録として残す（直さない）
+上の2つ（移したときのテスト・穴を直すときのテスト）は、#104（API テストの土台）で、`agents/rules/testing.md` と `agents/rules/architecture-backend.md` の10章（「移すコミットではテストが変わらない」の書き分け）に書き足した。これからは `testing.md` を正とし、上の文は決めたときの記録として残す（直さない）
 
 ### バージョン（URL には出さない）
 
@@ -206,7 +206,7 @@ API のルートは、すべて `routes/api.php` から読み込む。`routes/we
 | ルートの名前 | `<まとまり>.<リソース>.<操作>`（例：`matching.likes.store`）。まとまりとリソースは小文字で、2語なら `-` でつなぐ（`audit-logs.index`）。今の URL は `legacy.` で始める |
 | OpenAPI | `tags` をまとまりの名前にそろえる（`paths` のファイルも、まとまりごとに分ける） |
 | ID の形 | 下の「パスの引数と PATCH」のとおり、引数の名前ごとに `Route::pattern` で1か所で縛る。形の違う ID は 404（今は 500） |
-| ルートモデルバインディング | 使わない（Controller に Eloquent の Model が入り、`architecture.md` の「Http は Model を使わない」とぶつかる） |
+| ルートモデルバインディング | 使わない（Controller に Eloquent の Model が入り、`architecture-backend.md` の「Http は Model を使わない」とぶつかる） |
 | 管理画面 | 別のアプリのまま、同じ分け方にする。将来ホストを分けるときは `Route::domain()` で書ける |
 
 合わせて直す設定（最初に新しい URL を作るチケットで）：

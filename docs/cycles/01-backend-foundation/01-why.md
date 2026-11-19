@@ -19,7 +19,7 @@
 ## 今どれくらい起きているか
 
 - API テストで確かめている振る舞い：24本中 0本（health を除く）
-- 置き場の決まり（`agents/rules/architecture.md`）はあるが、今のコードはレガシー版の形（Fat Controller）のまま
+- 置き場の決まり（`agents/rules/architecture-backend.md`）はあるが、今のコードはレガシー版の形（Fat Controller）のまま
 
 ## 作らないとどうなるか
 

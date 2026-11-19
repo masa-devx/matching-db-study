@@ -163,7 +163,7 @@ describe('URL の番号がおかしい', function (): void {
     });
 
     it('いない会員を見ても、エラーのログには出さない', function (): void {
-        Exceptions::fake();   // 決まりどおりに断っただけなので、エラーとして記録しない（architecture.md の7章）
+        Exceptions::fake();   // 決まりどおりに断っただけなので、エラーとして記録しない（architecture-backend.md の7章）
 
         getJson(Endpoints::profile(DummyUser::MISSING_PUBLIC_ID))->assertNotFound();
 
