@@ -18,6 +18,16 @@ describe('ログインしていない人が見る', function (): void {
 
         getJson("/api/users/{$other->publicId}")->assertOk();
     });
+
+    it('マッチしている2人の片方を見ても、room_id は null', function (): void {
+        $someone = DummyMember::create(gender: 'male');
+        $other = DummyMember::create();
+        DummyMatching::match($someone, $other);
+
+        getJson("/api/users/{$other->publicId}")
+            ->assertOk()
+            ->assertJsonPath('room_id', null);
+    });
 });
 
 describe('ログインしている人が見る', function (): void {
