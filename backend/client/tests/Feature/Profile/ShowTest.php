@@ -8,7 +8,7 @@ use Tests\DummyData\DummyMember;
 
 use function Pest\Laravel\getJson;
 
-// GET /api/users/{publicId}：相手のプロフィールを見る。今の動きを確かめるテスト。
+// GET /api/users/{user_id}：相手のプロフィールを見る。今の動きを確かめるテスト。
 // 要件と違う所は「分かっている不具合」。手で試すシナリオは bruno/client/profile/
 
 describe('ログインしていない人が見る', function (): void {

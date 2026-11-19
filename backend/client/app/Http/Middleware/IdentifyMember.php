@@ -12,7 +12,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * トークンがあれば、ログインしている会員の番号（users.id）をリクエストに載せる。なくても通す。
- * ログインがなくても使える API（相手のプロフィールを見る）で使う。載せた番号は $request->attributes の member_id。
+ * ログインがなくても使える API（相手のプロフィールを見る）で使う。載せた番号は $request->attributes の login_user_id。
  */
 final class IdentifyMember
 {
@@ -23,7 +23,7 @@ final class IdentifyMember
             // 分かっている不具合：壊れた・期限の切れたトークンは、JWT の例外のまま 500 になる（401 が望ましい）
             $payload = JWT::decode($token, new Key(config()->string('app.key'), 'HS256'));
             if (is_numeric($payload->sub ?? null)) {
-                $request->attributes->set('member_id', (int) $payload->sub);
+                $request->attributes->set('login_user_id', (int) $payload->sub);
             }
         }
 

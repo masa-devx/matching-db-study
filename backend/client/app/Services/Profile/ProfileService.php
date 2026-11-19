@@ -13,23 +13,24 @@ use RuntimeException;
 /**
  * 相手のプロフィールを見る・プロフィールを書き換える。
  * レガシー版の ProfileController から、動きを変えずに移した。直す所は「分かっている不具合」と書いた。
+ * 名前：target は URL で指した会員、viewer はログインして見ている人。PublicId は UUID、Id は users.id。
  */
 final class ProfileService
 {
     /**
      * 会員1人とプロフィールを読む。見ている人（$viewerId）がいれば、2人のトークルームの番号も探す。
      *
-     * @return array{member: User, roomId: string|null}
+     * @return array{target: User, roomId: string|null}
      */
-    public function showFor(string $publicId, ?int $viewerId): array
+    public function showFor(string $targetPublicId, ?int $viewerId): array
     {
         // 分かっている不具合：見つからないときを Laravel に任せていて、応答に Model の名前が出る（architecture.md の7章）
-        $member = User::query()->where('public_id', $publicId)->firstOrFail();
-        $member->load('profile');
+        $target = User::query()->where('public_id', $targetPublicId)->firstOrFail();
+        $target->load('profile');
 
         return [
-            'member' => $member,
-            'roomId' => $viewerId === null ? null : $this->findSharedRoomId($viewerId, $member->id),
+            'target' => $target,
+            'roomId' => $viewerId === null ? null : $this->findSharedRoomId($viewerId, $target->id),
         ];
     }
 
@@ -39,24 +40,24 @@ final class ProfileService
      *
      * @param  array<string, mixed>  $input
      */
-    public function update(string $publicId, array $input): Profile
+    public function update(string $targetPublicId, array $input): Profile
     {
-        $memberId = User::query()->where('public_id', $publicId)->value('id');
+        $targetId = User::query()->where('public_id', $targetPublicId)->value('id');
         // 分かっている不具合：見つからないときは 404 が望ましい。今の動き（500）のままにしている
-        $profile = Profile::query()->where('user_id', $memberId)->first()
+        $profile = Profile::query()->where('user_id', $targetId)->first()
             ?? throw new RuntimeException('プロフィールが見つからない');
-        $profile->fill($input)->save();
+        $profile->update($input);
 
         return $profile;
     }
 
     /** 2人が参加しているトークルームの番号。なければ null。SQL はレガシー版と同じ3本。 */
-    private function findSharedRoomId(int $viewerId, int $memberId): ?string
+    private function findSharedRoomId(int $viewerId, int $targetId): ?string
     {
         $viewerRoomIds = TalkRoomMember::query()->where('user_id', $viewerId)->pluck('talk_room_id');
         $sharedRoomId = TalkRoomMember::query()
             ->whereIn('talk_room_id', $viewerRoomIds)
-            ->where('user_id', $memberId)
+            ->where('user_id', $targetId)
             ->value('talk_room_id');
 
         $roomPublicId = TalkRoom::query()->where('id', $sharedRoomId)->value('public_id');

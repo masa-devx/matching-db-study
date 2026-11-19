@@ -8,7 +8,7 @@ use Tests\DummyData\DummyMember;
 use function Pest\Laravel\assertDatabaseHas;
 use function Pest\Laravel\putJson;
 
-// PUT /api/users/{publicId}：プロフィールを書き換える。今の動きを確かめるテスト。
+// PUT /api/users/{user_id}：プロフィールを書き換える。今の動きを確かめるテスト。
 // 要件と違う所は「分かっている不具合」。DB は表の名前で確かめ、ほかの会員の行が変わらないことも見る
 
 describe('自分のプロフィールを書き換える', function (): void {
