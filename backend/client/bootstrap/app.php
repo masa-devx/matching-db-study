@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use App\Exceptions\BusinessException;
-use App\Exceptions\Users\UserNotFoundException;
+use App\Exceptions\UserNotFoundException;
 use App\Http\Middleware\IdentifyUser;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;

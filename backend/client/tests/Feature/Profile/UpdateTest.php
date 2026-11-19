@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Exceptions;
 use Tests\DummyData\DummyAuth;
 use Tests\DummyData\DummyUser;
 use Tests\Endpoints;
@@ -84,5 +85,25 @@ describe('URL の番号がおかしい', function (): void {
         DummyAuth::actingAs($loginUser)->putJson(Endpoints::profile(DummyUser::MISSING_PUBLIC_ID), ['nickname' => 'あと'])
             ->assertNotFound()
             ->assertExactJson(['message' => '会員が見つかりません']);
+    });
+
+    it('いない会員を書き換えようとしても、エラーのログには出さない', function (): void {
+        $loginUser = DummyUser::create();
+        Exceptions::fake();   // 前は RuntimeException の 500 で、エラーのログに残っていた
+
+        DummyAuth::actingAs($loginUser)->putJson(Endpoints::profile(DummyUser::MISSING_PUBLIC_ID), ['nickname' => 'あと'])
+            ->assertNotFound();
+
+        Exceptions::assertNothingReported();
+    });
+
+    // 分かっている不具合：要件は 404。会員はいるがプロフィールがないとき、ProfileService が RuntimeException を投げる
+    it('プロフィールのない会員なら 500 で、エラーのログに出る', function (): void {
+        $target = DummyUser::create(withProfile: false);
+        Exceptions::fake();   // 思っていなかった失敗は、業務の例外と違って記録される（dontReport が広すぎないかも、ここで確かめる）
+
+        putJson(Endpoints::profile($target->publicId), ['nickname' => 'あと'])->assertInternalServerError();
+
+        Exceptions::assertReported(RuntimeException::class);
     });
 });

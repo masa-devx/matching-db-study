@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Profile;
 
-use App\Exceptions\Users\UserNotFoundException;
+use App\Exceptions\UserNotFoundException;
 use App\Models\Profile;
 use App\Models\TalkRoom;
 use App\Models\TalkRoomMember;
