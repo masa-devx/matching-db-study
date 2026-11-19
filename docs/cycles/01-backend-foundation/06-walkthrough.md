@@ -335,9 +335,149 @@ flowchart LR
 
 - 次にやること：#237 で実物を作ったあとに、同じ流れをヒントなしで説明する
 
-## PR（#237 ホームのプロフィールの API を Service に移す）
+## PR #240（#237 ホームのプロフィールの API を Service に移す）
 
-解説の本体は、PR を作ったあとに `code-walkthrough` で書く。ここには、移して気づいた「次の改善の候補」を先に残す（チケットの「確かめ方」の4つ目）。
+`GET`・`PUT /api/users/{user_id}` を、レガシー版の `ProfileController`（55行）から、Controller → Service → Model の形に移した。動きは変えていない。
+
+### ディレクトリの設計
+
+```text
+backend/client/
+├── app/
+│   ├── Http/
+│   │   ├── Controllers/Profile/ProfileController.php   新しい Controller（直下の古いものは消した）
+│   │   └── Middleware/IdentifyMember.php               トークンがあれば、ログインしている人を載せる
+│   └── Services/Profile/ProfileService.php             読む・探す・書き換える
+└── tests/
+    ├── DummyData/                                      テストの会員・マッチ・トークンを作るクラス
+    └── Feature/Profile/ShowTest.php・UpdateTest.php    今の動きを確かめる API テスト
+```
+
+| 置いた所 | 理由（`architecture.md`） | ほかに置ける所と、置かなかった理由 |
+| --- | --- | --- |
+| `Profile/` のフォルダ | 3章：置き場の中を業務のまとまりで分ける。プロフィールは `Profile`（`docs/backend.md` の2章） | `Members/`：会員の検索・通報なども入り、何のまとまりか分かりにくい（人が決めた） |
+| `IdentifyMember`（Middleware） | 4章：トークンを読むのは Middleware だけ | Controller で読む（レガシー版の形。29か所のコピーと同じ形が、もう1つ増える）・Service で読む（Service は HTTP を知らない） |
+| Resource を作らない | 4章：返す項目を選ぶときに作る。今は全部の列を返すので、作っても中身がない | `ProfileResource` を作り、`toArray()` をそのまま返す（作ったあと、中身がないので消した） |
+
+### クラスの責務
+
+| クラス | 責務 |
+| --- | --- |
+| `ProfileController` | URL の `{user_id}` とリクエストを知っていて、Service を呼んで JSON にする。DB と JWT は知らない |
+| `ProfileService` | 会員とプロフィールの読み方・2人のトークルームの探し方・書き換え方を知っていて、Model を呼ぶ。HTTP（リクエスト・状態コード）は知らない |
+| `IdentifyMember` | JWT の読み方を知っていて、ログインしている人の `users.id` を `login_user_id` に載せる。トークンがなくても止めない。会員が使えるか（退会・停止）は見ない |
+
+### メソッドの表
+
+| メソッド | 入力 | 戻り値 | 副作用 | 失敗のしかた | 呼ぶ所 |
+| --- | --- | --- | --- | --- | --- |
+| `ProfileService::showFor` | `$targetPublicId`（UUID）・`$viewerId`（`users.id` か null） | `array{target: User, roomId: string\|null}` | なし（読むだけ） | いない会員：`firstOrFail()` の例外 → 404（文に Model の名前が出る）。UUID の形でない：PostgreSQL のエラー → 500 | `ProfileController::show` |
+| `ProfileService::update` | `$targetPublicId`・`$input`（送られた項目の全部） | 書き換えた `Profile` | `profiles` の1行を書き換える | いない会員・プロフィールがない：`RuntimeException` → 500 | `ProfileController::update` |
+| `ProfileController::show` | `Request`・`$targetPublicId` | JSON（`users` の列・`profile`・`room_id`） | なし | Service の例外がそのまま上がる | ルート `GET /api/users/{user_id}` |
+| `ProfileController::update` | `Request`・`$targetPublicId` | JSON（`profiles` の列） | Service と同じ | 同上 | ルート `PUT /api/users/{user_id}` |
+| `IdentifyMember::handle` | `Request`・次の処理 | 次の処理の応答 | `login_user_id` を載せる | 壊れた・期限の切れたトークン：JWT の例外 → 500 | ルートの `->middleware('member.identify')` |
+
+見る人がいるときだけ、トークルームを探す（`ProfileService.php`）：
+
+```php
+$target = User::query()->where('public_id', $targetPublicId)->firstOrFail();
+$target->load('profile');
+
+return [
+    'target' => $target,
+    'roomId' => $viewerId === null ? null : $this->findSharedRoomId($viewerId, $target->id),
+];
+```
+
+外の番号（UUID）を、中の番号（`users.id`）に置き換えてから、プロフィールを探す（`ProfileService.php`）：
+
+```php
+$targetId = User::query()->where('public_id', $targetPublicId)->value('id');
+$profile = Profile::query()->where('user_id', $targetId)->first()
+    ?? throw new RuntimeException('プロフィールが見つからない');
+$profile->update($input);
+```
+
+HTTP の側の名前（`$loginUserId`）から、業務の側の名前（`$viewerId`）に渡す（`ProfileController.php`）：
+
+```php
+$loginUserId = $request->attributes->get('login_user_id');   // IdentifyMember が載せる。トークンがなければ null
+$result = $this->profiles->showFor($targetPublicId, is_int($loginUserId) ? $loginUserId : null);
+```
+
+### 呼び出しの流れ
+
+ログインしている人が、相手のプロフィールを見るとき（SQL 5本）。
+
+```mermaid
+sequenceDiagram
+    participant B as 画面
+    participant M as IdentifyMember
+    participant C as ProfileController
+    participant S as ProfileService
+    participant D as PostgreSQL
+    B->>M: GET /api/users/{user_id}（Bearer トークン）
+    M->>M: JWT を読み、sub を login_user_id に載せる
+    M->>C: show(request, targetPublicId)
+    C->>S: showFor(targetPublicId, viewerId)
+    S->>D: ① select users where public_id = ?
+    S->>D: ② select profiles where user_id = ?
+    S->>D: ③ select talk_room_id from talk_room_members where user_id = 見る人
+    S->>D: ④ select talk_room_id from talk_room_members where talk_room_id in (③) and user_id = 相手
+    S->>D: ⑤ select public_id from talk_rooms where id = ④
+    S-->>C: target と roomId
+    C-->>B: 200（users の列・profile・room_id）
+```
+
+トークンがないときは、`IdentifyMember` が何も載せず、①②の2本だけになる。書き換えは、`users` の `id` → `profiles` を1件 → `update profiles` の3本。
+
+### 名前
+
+| 名前 | ほかの候補 | 選ばなかった理由 |
+| --- | --- | --- |
+| URL の `{user_id}` | `{publicId}`（前の名前） | 用語集の「ID の名前」の決まり（2026-11-16）と違う |
+| `$targetPublicId`・`$targetId` | `$publicId`・`$memberId` | 「だれの」「どちらの番号か」が分からず、読み違えた（用語集の「コードの中の、会員の番号の名前」） |
+| `login_user_id`・`$loginUserId` | `member_id`・`viewer_id` | `member_id` は用語集では管理画面の UUID。`viewer_id` は、書き換えの API で使うと意味が合わない |
+| `$viewerId`（Service） | `$loginUserId` | Service は HTTP を知らない。コマンドから呼ぶときも「見る人」なら通じる |
+| `showFor` | `show`・`showMine` | Controller の名前とそろえない（3章）。`Mine` は自分のものだけ。相手のものも見るので `For`（だれに向けて見せるか） |
+| `IdentifyMember` | `AuthenticateMember` | 認証（通さない）はしない。だれかを見分けるだけ。`AuthenticateMember` は、401 を返す Middleware の名前に取っておく |
+
+### 依存の向き
+
+```mermaid
+flowchart LR
+    R[routes/api.php] --> M[IdentifyMember]
+    R --> C[ProfileController]
+    M --> J[firebase/php-jwt]
+    C --> S[ProfileService]
+    S --> U[User]
+    S --> P[Profile]
+    S --> T[TalkRoom・TalkRoomMember]
+```
+
+逆向き（Model → Service、Service → Http）はない。`tests/Arch/LayersTest.php` が確かめる。`IdentifyMember` は、決まりの「Middleware → Service」をまだ使っていない（使えるかを見ないため）。
+
+### レガシー版との違い
+
+| | レガシー版（`legacy-repo`） | この PR のあと |
+| --- | --- | --- |
+| 置き場 | `ProfileController` の1ファイル（55行）に、JWT・SQL 5本・書き換えが全部 | Middleware（JWT）・Controller（受け取る・返す）・Service（SQL と書き換え）の3つ |
+| トークンを読む所 | `show` の中（`if ($token)`） | `IdentifyMember`（`$token !== null && $token !== ''`） |
+| テスト | 0本 | 13本（見る 7・書き換え 6） |
+| 応答・状態コード・SQL の本数 | ― | 同じ（テストを変えずに通る。SQL は 2・5・3本で同じ） |
+
+移して、細かく動きが変わる所が2つある（どちらも、テストでは確かめていない。`pr-review` で見てもらう）。
+
+- トークンが `0` という文字のとき：レガシー版は `if ($token)` で「ない」と見て 200。今は読もうとして、JWT の例外で 500
+- 正しく署名したトークンの `sub` が数字でないとき：レガシー版は、そのまま SQL に入れて 500。今は「ログインしていない」と見て 200（`room_id` は null）。この API が作るトークンの `sub` は、いつも数字
+
+### 直した課題と、現場での意味
+
+`05-problems.md` には、まだこのチケットの節がない（課題の理解は会話の中で行い、記録していない。あとで書く）。
+
+- だれが困らなくなるか：次にプロフィールの不具合（見せすぎ・他人の書き換え）を直す人。どこに何があるかが分かれ、テストが13本あるので、直したら落ちる・通るで確かめられる
+- どう気づけるようになるか：分かっている不具合が、テストとコードのコメントに書いてある。直すときは、そのテストを要件どおりに戻せば落ちる
+- 数字：テスト 0 → 13本。SQL の本数は前と後で同じ（2・5・3本）
 
 ### 次の改善の候補
 
@@ -352,4 +492,18 @@ flowchart LR
 | 他人のプロフィールを書き換えられないようにする（FR-AUTH-022） | PUT のルートに、ログインを求める Middleware がない | ログインを求め、URL の会員が自分でなければ 403 | 今の動きを確かめるテスト・Bruno |
 | 壊れたトークンを 401 にする | `IdentifyMember` が、JWT の例外のまま 500 を返す | 例外を受けて 401 を返す。トークンを読むコード（17のコントローラーに29か所）も、Middleware にまとめる | Middleware を作ったとき |
 | 見つからないときの応答をそろえる | GET は Laravel の 404（文に Model の名前が出る）、PUT は 500 | どちらも、決まった形の 404 にする（`architecture.md` の7章） | 今の動きを確かめるテスト |
+
+### 説明の練習
+
+リーダーが、問い合わせの場面で聞いた（2026-11-19）：「マッチしている相手のプロフィールを開いたのに、『メッセージを送る』のボタンが出ない」（画面は、`room_id` が null だとボタンを出さない）。
+
+| 問い | 人の答え | 結果 |
+| --- | --- | --- |
+| 通るコードの順 | ルート → `IdentifyMember` → `ProfileController` → `ProfileService` | 合っている |
+| 見る人の番号の渡り方 | トークンの `sub` → Controller は `$loginUserId` → Service は `$viewerId`（ヒント1） | 合っている。あいだは `$request->attributes` の `login_user_id` |
+| `room_id` が null になる所 | トークンがないとき・トークルームの行がないとき（ヒント1） | 合っている。ほかに、`sub` が数字でないとき・`talk_room_members` に片方の行しかないとき |
+| それを確かめているテスト | 「マッチしていない相手なら、room_id は null」と「マッチしている相手なら、room_id に…入る」 | 一部。「トークンがない」の場面は、どのテストも `room_id` を確かめていない（「200 で見られる」は状態コードだけ） |
+
+- 分かったこと：チケットの「今の動きを確かめるテスト」の一覧にあった「トークンなしなら `room_id` は null」が、テストに入っていなかった
+- 次にやること：テストの名前だけでなく、確かめている行（`assert…`）まで見る
 
