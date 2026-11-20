@@ -12,6 +12,8 @@ use Illuminate\Support\Str;
  * テストの会員（users とプロフィール）を作る。Model と Factory を使うのは tests/DummyData/ の中だけ。
  * 既定は、メールアドレスを確認した・無料の・女性。購入の行と監査ログは作らない。
  * $unverified が true なら、登録した直後と同じく、確認していない・確認用の文字を持つ会員にする。
+ * 確認済みの会員の確認用の文字は空にする。本物は、確認したあとも文字を持ったまま（確認の API が消さない）なので、
+ * 「文字が出ない」は値ではなく、キーがないこと（assertJsonMissingPath）で確かめる。
  */
 final class DummyUser
 {

@@ -46,7 +46,7 @@ Route::post('/email-verifications', [EmailVerificationController::class, 'store'
 
 // 01b ログイン・自分の情報・ログアウト（docs/api/01b-auth.md）。レガシー版は、JWT を JSON で返す
 Route::post('/auth/login', [AuthController::class, 'login']);
-Route::get('/me', [AuthController::class, 'me'])->name('profile.account.show');   // URL は /me のまま。コードでは「自分のアカウント」を Account と呼ぶ（docs/glossary.md）
+Route::get('/me', [AuthController::class, 'me'])->name('legacy.profile.account.show');   // 名前は docs/glossary.md の「アカウント」
 Route::post('/auth/logout', [AuthController::class, 'logout']);
 
 // 02 いいね（docs/api/02-likes.md）。レガシー版は、コントローラの中で JWT を読む

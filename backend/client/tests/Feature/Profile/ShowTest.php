@@ -22,6 +22,14 @@ describe('ログインしていない人が見る', function (): void {
         getJson(Endpoints::profile($target->publicId))->assertOk();
     });
 
+    it('確認していない相手を見ても、確認用の文字は返らない（FR-002・FR-AUTH-005）', function (): void {
+        $target = DummyUser::create(unverified: true);
+
+        getJson(Endpoints::profile($target->publicId))
+            ->assertOk()
+            ->assertJsonMissingPath('verification_token');
+    });
+
     it('マッチしている2人の片方を見ても、room_id は null', function (): void {
         $someone = DummyUser::create();
         $target = DummyUser::create();
@@ -44,18 +52,26 @@ describe('ログインしていない人が見る', function (): void {
 
 describe('ログインしている人が見る', function (): void {
     // 分かっている不具合：要件（FR-002）は、メールアドレス・生年月日を返さない。表の列を全部返している
-    it('ニックネームと一緒に、メールアドレス・生年月日も返る。確認用の文字は返らない（不変条件 2）', function (): void {
+    it('ニックネームと一緒に、メールアドレス・生年月日も返る', function (): void {
         $loginUser = DummyUser::create();
-        $target = DummyUser::create(nickname: 'さき', unverified: true);
+        $target = DummyUser::create(nickname: 'さき');
 
         DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile($target->publicId))
             ->assertOk()
             ->assertJsonPath('profile.nickname', 'さき')
             ->assertJsonPath('email', $target->email)
             ->assertJsonStructure(['profile' => ['birthday']])
-            ->assertJsonMissingPath('verification_token')
             ->assertJsonMissingPath('password')
             ->assertJsonMissingPath('remember_token');
+    });
+
+    it('確認していない相手を見ても、確認用の文字は返らない（FR-002・FR-AUTH-005）', function (): void {
+        $loginUser = DummyUser::create();
+        $target = DummyUser::create(unverified: true);
+
+        DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile($target->publicId))
+            ->assertOk()
+            ->assertJsonMissingPath('verification_token');
     });
 
     it('プロフィールのない会員なら、profile は null', function (): void {

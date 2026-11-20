@@ -19,9 +19,23 @@ final class Endpoints
         return '/api/users';
     }
 
+    /** メールアドレスを確認する（GET /api/email-verifications/{token}。確認のメールのリンク） */
+    public static function emailVerification(string $token): string
+    {
+        return "/api/email-verifications/{$token}";
+    }
+
+    // ---- Members（会員の検索） ----
+
+    /** 会員を検索する（GET /api/users） */
+    public static function searchUsers(): string
+    {
+        return '/api/users';
+    }
+
     // ---- Profile（自分のアカウントと、相手のプロフィール） ----
 
-    /** 自分のアカウントを見る（GET /api/me）。URL は /me のまま、コードでは Account と呼ぶ（docs/glossary.md） */
+    /** 自分のアカウントを見る（GET /api/me。名前は docs/glossary.md の「アカウント」） */
     public static function account(): string
     {
         return '/api/me';

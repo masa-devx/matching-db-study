@@ -68,7 +68,7 @@ class AuthController extends Controller
         // 署名が違う・期限が切れた JWT の例外をつかまえないので、401 ではなく 500 になる
         $payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));
 
-        // 呼ぶたびに DB を読む。users の行をそのまま返す（verification_token も出る）
+        // 呼ぶたびに DB を読む。users の行をそのまま返す（verification_token は User の #[Hidden] で隠す）
         return response()->json(User::find($payload->sub));
     }
 
