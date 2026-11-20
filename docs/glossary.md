@@ -17,6 +17,7 @@
 | 言葉 | 意味 | 画面 | API（URL・JSON） | コード（業務のまとまり・クラス） | 表・列 | 注意 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 会員 | 登録した人 | ― | 自分は `/me`、相手は `/users/{user_id}`。JSON は `user_id` | 業務のまとまりは `Members`。クラスは `User`（`UserNotFoundException`・`IdentifyUser`・テストの `DummyUser`） | `users` | 会員の側の API は `users`、管理画面は `members`（下の「管理画面」）。会員の側のコードは `User`、管理画面のコードは `Member` |
+| アカウント | ログインしている会員本人。本人の情報（メールアドレス・確認済みか・有料会員か）と、本人がすること（見る・プロフィールを直す・退会する） | ―（設定の「アカウント」の見出しの下は、メールアドレスの確認とパスワードだけで、これより狭い。パスワードは `Auth`） | `/me`（URL は変えない。`/me` を付けるかの基準は `docs/cycles/01-backend-foundation/03-how.md` の「`/me` を付けるか」） | 業務のまとまりは `Profile`。`Account` は、ログインしている本人に対する操作の名前（Controller・Service・テスト・ルートの名前）に使う：`AccountController`・`AccountService`（どちらも、その API を移すときに作る）・テストの `Endpoints::account()`・`tests/Feature/Profile/ShowAccountTest.php`・今の URL のルートの名前 `legacy.profile.account.show`。データ（Model・例外・ダミーデータ）は `User` のまま（`User`・`UserNotFoundException`・`DummyUser`） | `users` | URL の `/me` と、コードの `Account` は同じもの。コードの名前には `me`・`Me` を使わない（何を指すかが分かりにくいため。2026-11-20 に人が決めた）。管理画面も同じ（管理者本人の名前は、管理画面のログインを移すチケットで決める）。今あるコードの `me()`・`$me` は、その API を移すチケットで直す |
 | プロフィール | 会員の公開する情報（ニックネーム・性別・生年月日・都道府県・身長・自己紹介・プロフィール画像と、#153 で足した6項目：体型・お仕事・年収・タバコ・お酒・結婚歴） | 自己紹介 など | `profile` | `Profile` | `profiles` | |
 | プロフィール画像 | プロフィールに出す画像。デモ用の画像のパスを持つ | ― | `image` | ― | `profiles.image` | 前の `product.md` の `avatar_path` は、実際の列とずれていた |
 | 登録 | 会員になること | 登録 | `POST /users`（名前は仮） | `Auth` | `users`・`profiles` | |
@@ -43,7 +44,7 @@
 | 既読 | 相手がトーク画面を開いて、自分のメッセージを読んだこと。有料の機能（男性の無料の会員には分からない。M6。#190） | 自分の吹き出しの下の「既読」 | `partner_last_read_at`（トークの一覧の応答） | `Messaging`・`TalkRoom` | 相手の `talk_room_members.last_read_at` | 今は、画面が判断している。API は、無料の会員にも日時を返してしまう（改善版で直す） |
 | マッチ | お互いにいいねした状態 | ― | `matches`・`match_id` | `Matching`・`UserMatch` | `user_matches` | `match` は PHP の予約語なので、クラスは `UserMatch` |
 | ブロック | 相手を自分から見えなくし、相手からも見えなくすること | ― | `blocks` | `Matching`・`Block` | `blocks` | |
-| 退会 | 会員をやめること | 退会 | `DELETE /me` | `Members`・`Withdrawal` | `users.deleted_at` | |
+| 退会 | 会員をやめること | 退会 | `DELETE /me` | `Profile`・`AccountService::withdraw`（上の「アカウント」の行） | `users.deleted_at` | |
 | トークルーム | マッチした2人が話す部屋。マッチしたときに作る | 「メッセージ」（タブ・一覧のページ） | `talk-rooms`・`room_id` | `Messaging`・`TalkRoom` | `talk_rooms`・`talk_room_members` | 画面は部屋の一覧も「メッセージ」と呼ぶ |
 | メッセージ | トークルームで送る文 | メッセージ | `messages` | `Messaging`・`Message` | `messages` | |
 | 既読・未読 | 相手のメッセージを読んだか | ― | `read`・`unread_count` | `Messaging` | `talk_room_members.last_read_at` | |
@@ -56,7 +57,7 @@
 
 | 言葉 | 意味 | 画面 | API（URL・JSON） | コード（業務のまとまり・クラス） | 表・列 | 注意 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 管理者 | 管理画面を使う運営の人 | ― | `/me`（管理画面の API） | `Admins`・`Admin` | `admins` | |
+| 管理者 | 管理画面を使う運営の人 | ― | `/me`（管理画面の API。コードの名前に `Me` を使わない。名前は、管理画面のログインを移すチケットで決める） | `Admins`・`Admin` | `admins` | |
 | 会員 | 運営から見た会員 | ― | `members`・`member_id` | `Members` | `users` | 会員の側の API の `users` と同じ人。運営から見るときは `members` と呼ぶ |
 | 停止 | 運営が会員の利用を止めること | ― | `suspension` | `Members`・`MemberSuspension` | `users.suspended_at` | |
 | 監査ログ | 管理者がだれの何を見た・変えたかの記録 | ― | `audit-logs` | `AuditLogs`・`AuditLog` | `admin_audit_logs` | |

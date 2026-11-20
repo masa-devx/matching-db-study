@@ -11,7 +11,35 @@ namespace Tests;
  */
 final class Endpoints
 {
-    // ---- Profile（プロフィール） ----
+    // ---- Auth（登録・ログイン） ----
+
+    /** 会員を登録する（POST /api/users） */
+    public static function register(): string
+    {
+        return '/api/users';
+    }
+
+    /** メールアドレスを確認する（GET /api/email-verifications/{token}。確認のメールのリンク） */
+    public static function emailVerification(string $token): string
+    {
+        return "/api/email-verifications/{$token}";
+    }
+
+    // ---- Members（会員の検索） ----
+
+    /** 会員を検索する（GET /api/users） */
+    public static function searchUsers(): string
+    {
+        return '/api/users';
+    }
+
+    // ---- Profile（自分のアカウントと、相手のプロフィール） ----
+
+    /** 自分のアカウントを見る（GET /api/me。名前は docs/glossary.md の「アカウント」） */
+    public static function account(): string
+    {
+        return '/api/me';
+    }
 
     /** 相手のプロフィールを見る・書き換える（GET・PUT /api/users/{user_id}。{user_id} の中身は users.public_id） */
     public static function profile(string $targetPublicId): string

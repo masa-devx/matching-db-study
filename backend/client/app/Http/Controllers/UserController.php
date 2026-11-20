@@ -22,7 +22,7 @@ use Illuminate\Support\Str;
 
 /**
  * 01b 登録（レガシー版。docs/api/01b-auth.md）。
- * 入力を確かめない・トランザクションがない・応答に確認用の文字が出る。改善する段階で、要件 ID のテストにする。
+ * 入力を確かめない・トランザクションがない。応答に確認用の文字が出ていた（今は User の #[Hidden] で隠す）。改善する段階で、要件 ID のテストにする。
  * 04 で、相手を探す index() を足した（docs/api/04-search.md）。OFFSET で20人ずつ・1＋N 本・条件は文字で比べる。
  * 06 で、退会の destroy() を足し（docs/api/06-blocks-withdrawal.md）、検索からブロックした・された相手と退会した会員を除いた。
  * 07 で、身長の条件を男性の無料の会員には使わせないようにした（送ったときだけ2本増える。docs/api/07-paid-members.md）。
@@ -182,7 +182,7 @@ class UserController extends Controller
             $user->load('profile');   // 1人ずつプロフィールを読む（1＋N）
         }
 
-        // users の行をそのまま返す（メールアドレス・確認用の文字・生年月日も出る）
+        // users の行をそのまま返す（メールアドレス・生年月日も出る。確認用の文字は User の #[Hidden] で隠す）
         return response()->json($users);
     }
 
