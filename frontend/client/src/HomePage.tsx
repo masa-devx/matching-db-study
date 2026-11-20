@@ -5,6 +5,7 @@ import Button from './components/Button'
 import Icon from './components/Icon'
 import { SkeletonProfile } from './components/Skeleton'
 import { useToast } from './components/Toast'
+import { goToLoginAfterUnauthorized } from './shared/session/goToLoginAfterUnauthorized'
 
 // M4（#198）：プルダウンに出す都道府県と身長（検索の条件の画面にある一覧と同じものを、ここにも書いた）
 const PREFECTURES = [
@@ -87,8 +88,16 @@ export default function HomePage() {
           headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
         }),
       )
-      .then((r) => r.json())
+      .then((r) => {
+        // #243：ログインが切れた・止められたときは 401。ログインの画面へ移す（ほかの失敗は、まだ考えない）
+        if (r.status === 401) {
+          goToLoginAfterUnauthorized()
+          return null
+        }
+        return r.json()
+      })
       .then((u) => {
+        if (u === null) return
         setMe(u)
         setForm(u.profile ?? {})
       })
@@ -125,6 +134,11 @@ export default function HomePage() {
         image: form.image,
       }),
     })
+    // #243：ログインが切れた・止められたときは 401。保存せず、ログインの画面へ移す
+    if (res.status === 401) {
+      goToLoginAfterUnauthorized()
+      return
+    }
     const profile = await res.json()
     setSaving(false)
     setMe({ ...me, profile })
