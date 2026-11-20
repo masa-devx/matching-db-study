@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>認証の仕組み</title>
+<link rel="stylesheet" href="assets/page.css">
+</head>
+<body>
+<main>
+  <p class="meta"><a href="index.html">← 目次へ</a></p>
+  <h1>認証の仕組み（セッションと Laravel Sanctum）</h1>
+  <p class="meta">作成: 2026-11-20 ／ 状態: <span class="status" data-state="doc">設計中（#246）</span></p>
+
+  <div class="card point">
+    <strong>このページでわかること</strong>
+    <ul>
+      <li>認証の形にはどんなものがあり、それぞれ「ログインしていること」をどこに覚えているか</li>
+      <li>このサービスの今の段階で、セッション（Sanctum の SPA 認証）を選んだ理由</li>
+      <li>Laravel Sanctum とは何か。中で何をしているか</li>
+      <li>ログイン・毎回のリクエスト・ログアウトの流れ（図）</li>
+      <li>使う表（<code>sessions</code>・<code>users</code>）の列の意味と、使わない表</li>
+      <li>Cookie・CSRF・CORS の決まりと、はまりやすい所</li>
+    </ul>
+    <p>今回の実装の範囲（チケットの分け方・変わるファイル）は <a href="auth-session-plan.html">認証の実装の計画</a> に書く。</p>
+  </div>
+
+  <h2>1. 認証の形と、選んだもの</h2>
+  <p>認証（ログインした人がだれかを確かめること）の形の違いは、<strong>「ログインしていること」をどこに覚えておくか</strong>と、<strong>どう止めるか</strong>の2つ。</p>
+  <table>
+    <tr><th>形</th><th>どこに覚えるか</th><th>止め方</th><th>向いている場面</th></tr>
+    <tr><td><strong>セッション</strong>（Sanctum の SPA 認証も、この形）</td><td>サーバーの DB（表 <code>sessions</code>）。ブラウザには、行の番号だけを入れた HttpOnly の Cookie</td><td>行を消せば、次のリクエストから止まる</td><td>画面と API が同じサイトにある Web のサービス</td></tr>
+    <tr><td>API トークン（Sanctum の API トークン）</td><td>DB の表（<code>personal_access_tokens</code>。ハッシュ）。画面が <code>Authorization</code> のヘッダーで送る</td><td>表の行を消す</td><td>スマホのアプリ・外のプログラムから呼ぶ API</td></tr>
+    <tr><td>JWT と取り替え用のトークン（前の D-014）</td><td>JWT は署名だけで確かめ、どこにも覚えない。取り替え用は DB</td><td>JWT は期限まで止められない。取り替え用は DB で止める</td><td>いくつものサーバーが、DB を見ずに「だれか」を確かめたいとき</td></tr>
+    <tr><td>OAuth2 のサーバー（Laravel Passport）</td><td>DB</td><td>DB で止める</td><td>ほかの会社のアプリに、ログインを貸すとき</td></tr>
+    <tr><td>外のログインのサービス（Firebase Auth・Auth0 など）</td><td>外のサービス</td><td>外のサービスで止める</td><td>ログインの仕組みを自分で持たない・SNS でログインさせたいとき</td></tr>
+  </table>
+
+  <h3>このサービスで、セッションを選んだ理由（2026-11-20 に人が決めた）</h3>
+  <ol>
+    <li><strong>今の形に合う</strong>：画面は Web の1つだけで、API と同じサイトに置く。スマホのアプリも、外から呼ぶプログラムもない。Laravel の公式も、この形にはセッション（Sanctum の SPA 認証）を勧めている</li>
+    <li><strong>JWT の強みが、もう消えている</strong>：JWT の強みは「DB を読まずに確かめられる」こと。しかし、止めた会員・退会した会員を毎回 DB で確かめると決めている（#243）。毎回 DB を読むなら、セッションと手間は同じで、JWT には取り替え用の表という作る部分が増える</li>
+    <li><strong>止めるのが簡単</strong>：セッションは行を消せば止まる。ログアウトも、運営が止めた会員も、次のリクエストから効く</li>
+  </ol>
+  <div class="card warn">
+    <strong>弱いところ</strong>
+    <p>スマホのアプリを作るときは、セッションの Cookie が使いにくい。そのときは、Sanctum の API トークンを足す（同じ Sanctum の別の機能なので、作り直さずに足せる）。</p>
+  </div>
+
+  <h2>2. Laravel Sanctum とは</h2>
+  <p>Laravel の公式の、軽い認証のパッケージ。2つの機能を持つ。</p>
+  <table>
+    <tr><th>機能</th><th>中身</th><th>このサービスで</th></tr>
+    <tr><td><strong>SPA 認証</strong></td><td>Laravel の標準のセッション（Cookie と表 <code>sessions</code>）を、別のポートで動く画面（SPA：1枚のページの中で画面を切り替えるアプリ。ここでは React）からも使えるようにする。CSRF の守りも付く</td><td><strong>使う</strong></td></tr>
+    <tr><td>API トークン</td><td>会員ごとにトークンを作り、表 <code>personal_access_tokens</code> にハッシュで置く。画面やアプリが <code>Authorization: Bearer</code> で送る</td><td>今は使わない（スマホのアプリを作るときに）</td></tr>
+  </table>
+  <p>このリポジトリには、もう入っている：<code>backend/client/composer.json</code> の <code>laravel/sanctum</code>（^4.0）・設定ファイル <code>sanctum.php</code>・表 <code>personal_access_tokens</code>（行は 0）。まだ、どの API も使っていない。</p>
+
+  <h3>Sanctum が中でしていること（SPA 認証）</h3>
+  <table>
+    <tr><th>部品</th><th>していること</th></tr>
+    <tr><td><code>statefulApi()</code>（<code>bootstrap/app.php</code> に1行足す）</td><td>API のルートに、Sanctum の Middleware（<code>EnsureFrontendRequestsAreStateful</code>）を付ける</td></tr>
+    <tr><td><code>EnsureFrontendRequestsAreStateful</code></td><td>リクエストの送り元（<code>Origin</code>・<code>Referer</code>）が、設定した画面のドメイン（<code>stateful</code>）なら、セッションを使う形にする：Cookie の暗号化・セッションの読み込み・CSRF の確かめを付ける。違うなら、何も付けない（API トークンの形として扱う）</td></tr>
+    <tr><td><code>GET /sanctum/csrf-cookie</code></td><td>CSRF のトークンを、Cookie <code>XSRF-TOKEN</code> に入れて返す。画面は、ログインの前に1回呼ぶ</td></tr>
+    <tr><td><code>auth:sanctum</code>（ルートに付ける Middleware）</td><td>セッションにログインした会員がいれば通す。いなければ、<code>Authorization</code> の API トークンを見る。どちらもなければ 401</td></tr>
+  </table>
+
+  <h2>3. 流れ</h2>
+  <h3>ログイン</h3>
+  <pre class="mermaid">
+sequenceDiagram
+    participant B as ブラウザ（localhost:5173）
+    participant A as API（localhost:8000）
+    participant D as PostgreSQL
+    B->>A: GET /sanctum/csrf-cookie
+    A-->>B: 204。Cookie XSRF-TOKEN（画面から読める）
+    B->>A: POST /api/auth/login（メールアドレス・パスワード。ヘッダー X-XSRF-TOKEN）
+    A->>A: CSRF のトークンを確かめる
+    A->>D: select * from users where email = ?
+    A->>A: パスワードを照合する
+    A->>A: セッションの番号を作り直す（前の番号を使わせない）
+    A->>D: insert into sessions（id・user_id・payload・last_activity）
+    A-->>B: 200。Cookie（セッションの番号。HttpOnly で、画面から読めない）
+  </pre>
+
+  <h3>ログインしたあとの、毎回のリクエスト</h3>
+  <pre class="mermaid">
+sequenceDiagram
+    participant B as ブラウザ
+    participant S as Sanctum（セッション）
+    participant M as AuthenticateUser（#243）
+    participant C as Controller
+    participant D as PostgreSQL
+    B->>S: GET /api/users/{user_id}（Cookie を自動で付ける）
+    S->>D: select * from sessions where id = ?
+    S->>D: select * from users where id = ?
+    S->>M: ログインしている会員
+    M->>M: 退会・停止していないか（Service に聞く）
+    alt 使えない会員
+      M-->>B: 401「ログインしてください」
+    else 使える会員
+      M->>C: login_user_id を載せて次へ
+      C-->>B: 200
+    end
+    S->>D: update sessions set last_activity = ?（応答のあと）
+  </pre>
+
+  <h3>ログアウト</h3>
+  <pre class="mermaid">
+sequenceDiagram
+    participant B as ブラウザ
+    participant A as API
+    participant D as PostgreSQL
+    B->>A: POST /api/auth/logout（Cookie・X-XSRF-TOKEN）
+    A->>D: delete from sessions where id = ?
+    A->>A: CSRF のトークンも作り直す
+    A-->>B: 204。セッションの Cookie を消す
+    B->>A: 同じ Cookie で GET /api/me
+    A-->>B: 401（行がないので、だれでもない）
+  </pre>
+
+  <h2>4. 使う表と、列の意味</h2>
+  <pre class="mermaid">
+erDiagram
+    users ||--o{ sessions : "ログインしている端末"
+    users ||--o{ personal_access_tokens : "使わない（API トークン）"
+    users {
+        bigint id PK
+        varchar email UK
+        varchar password
+        timestamp email_verified_at
+        varchar remember_token
+        timestamp last_login_at
+        timestamp deleted_at
+        timestamp suspended_at
+        timestamp banned_at
+    }
+    sessions {
+        varchar id PK
+        bigint user_id
+        varchar ip_address
+        text user_agent
+        text payload
+        int last_activity
+    }
+  </pre>
+
+  <h3>表 <code>sessions</code>（もうある。Laravel の最初のマイグレーション）</h3>
+  <table>
+    <tr><th>列</th><th>型</th><th>意味</th></tr>
+    <tr><td><code>id</code></td><td>文字・主キー</td><td>セッションの番号。ブラウザの Cookie に入るのは、これ（暗号にして入れる）。ログインのたびに作り直す</td></tr>
+    <tr><td><code>user_id</code></td><td>整数・NULL 可・インデックス</td><td>ログインしている会員の <code>users.id</code>。ログインの前（CSRF の Cookie をもらっただけ）は NULL。<strong>外部キーはない</strong></td></tr>
+    <tr><td><code>ip_address</code></td><td>文字（45）</td><td>最後に来た IP（IPv6 も入る長さ）</td></tr>
+    <tr><td><code>user_agent</code></td><td>文字</td><td>ブラウザの名前。「ログインしている端末の一覧」を作るときに使える</td></tr>
+    <tr><td><code>payload</code></td><td>長い文字</td><td>セッションの中身（ログインした会員の番号・CSRF のトークンなど）を、文字にしたもの</td></tr>
+    <tr><td><code>last_activity</code></td><td>整数・インデックス</td><td>最後に使った時刻（UNIX の秒）。リクエストのたびに書き直す。ここから24時間（<code>SESSION_LIFETIME=1440</code>）たった行は期限切れとして扱われ、ときどき消される</td></tr>
+  </table>
+  <div class="card warn">
+    <strong>気をつけること：<code>sessions.user_id</code> に外部キーがない</strong>
+    <p>会員を止めたり退会させたりしても、その会員の <code>sessions</code> の行は残る。そのため、次のどちらか（または両方）が要る。</p>
+    <ul>
+      <li>毎回のリクエストで、会員が使えるか（退会・停止）を確かめる（#243 の Middleware）</li>
+      <li>止めた・退会したときに、その会員の行を消す（<code>delete from sessions where user_id = ?</code>。<code>user_id</code> のインデックスが効く）</li>
+    </ul>
+  </div>
+
+  <h3>表 <code>users</code>（認証に関係する列だけ）</h3>
+  <table>
+    <tr><th>列</th><th>認証での使い方</th></tr>
+    <tr><td><code>email</code>（UNIQUE）・<code>password</code>（bcrypt のハッシュ）</td><td>ログインで照合する。変えない</td></tr>
+    <tr><td><code>email_verified_at</code></td><td>確認していない会員は、自分の情報・再送・ログアウトだけ使える（FR-AUTH-021）</td></tr>
+    <tr><td><code>remember_token</code></td><td>「ログインしたままにする」を使うときの、長い期限の Cookie と照らし合わせる値。<strong>使わない</strong>（操作がないまま24時間で切れ、使うたびに延びる形にした。<a href="auth-session-plan.html">計画</a>の5章）</td></tr>
+    <tr><td><code>last_login_at</code></td><td>ログインしたときに書く（今と同じ）</td></tr>
+    <tr><td><code>deleted_at</code>・<code>suspended_at</code>・<code>banned_at</code></td><td>退会・停止・強制退会。毎回のリクエストで見る（#243）。どれかが入っていれば 401</td></tr>
+    <tr><td><code>verification_token</code></td><td>確認のメールのリンクの文字。認証の Cookie とは関係ない（応答には出さない。PR #255）</td></tr>
+  </table>
+
+  <h3>使わない表・作らない表</h3>
+  <table>
+    <tr><th>表</th><th>扱い</th></tr>
+    <tr><td><code>personal_access_tokens</code></td><td>もうある（Sanctum の API トークン用）。今は使わない。スマホのアプリを作るときに使う</td></tr>
+    <tr><td><code>refresh_tokens</code></td><td>作らない。前の D-014（JWT と取り替え用のトークン）で作る予定だった表</td></tr>
+  </table>
+
+  <h2>5. Cookie</h2>
+  <table>
+    <tr><th>Cookie</th><th>中身</th><th>画面から読めるか</th><th>設定</th></tr>
+    <tr><td>セッションの Cookie</td><td><code>sessions.id</code>（暗号にしたもの）</td><td>読めない（<code>HttpOnly</code>）</td><td><code>SameSite=Lax</code>。本番だけ <code>Secure</code>（https のときだけ送る）</td></tr>
+    <tr><td><code>XSRF-TOKEN</code></td><td>CSRF のトークン</td><td><strong>読める</strong>（わざと）</td><td>画面が読んで、ヘッダー <code>X-XSRF-TOKEN</code> に入れて送る。よそのサイトのページからは、こちらの Cookie を読めないので、送れない</td></tr>
+  </table>
+
+  <h2>6. CSRF と CORS</h2>
+  <ul>
+    <li><strong>CSRF</strong>（よそのサイトのページに、ログインした会員のふりをした書き込みを送らせる攻撃）：ブラウザは Cookie を自動で付けるので、Cookie で認証すると起きうる。Sanctum は、書き込みのたびに <code>X-XSRF-TOKEN</code> と、セッションの中のトークンが同じかを確かめ、違えば <code>419</code> で断る。<code>SameSite=Lax</code> も、よそのサイトからの <code>POST</code> に Cookie を付けない</li>
+    <li><strong>GET で書き込まない</strong>：<code>SameSite=Lax</code> は、よそのサイトからのページの移動（<code>GET</code>）には Cookie を付ける。CSRF の確かめも <code>GET</code> にはかからない</li>
+    <li><strong>CORS</strong>（ほかのオリジンのページに、応答を読ませるかの決まり）：設定ファイル <code>cors.php</code> を作り、許すオリジンを画面（<code>http://localhost:5173</code>）だけにして、<code>supports_credentials</code> を true にする。すべてのオリジンを許す設定と、一緒にしない</li>
+  </ul>
+
+  <h2>7. レガシー版との違い</h2>
+  <table>
+    <tr><th></th><th>レガシー版（今）</th><th>改善版（これから）</th></tr>
+    <tr><td>ログインの応答</td><td>JSON で、30日の JWT（<code>AuthController.php:58</code>）</td><td>セッションの Cookie（HttpOnly）。JSON にトークンは入れない</td></tr>
+    <tr><td>画面の持ち方</td><td><code>sessionStorage</code> に置き、24ファイルで読んで <code>Authorization</code> に付ける</td><td>持たない。ブラウザが Cookie を自動で付ける（<code>credentials: 'include'</code>）</td></tr>
+    <tr><td>XSS があったとき</td><td>トークンを持ち出せる。よその PC から30日使える</td><td>セッションの Cookie は読めないので、持ち出せない。ただし、ページが開いているあいだは、そのページの中から会員として操作できる（XSS そのものは、画面で防ぐ）</td></tr>
+    <tr><td>ログアウト</td><td>サーバーは何もしない。トークンは30日使える</td><td>行を消す。同じ Cookie は 401</td></tr>
+    <tr><td>止めた会員</td><td>確かめるのはログインだけ。持っているトークンの期限まで使える</td><td>次のリクエストから 401（#243）</td></tr>
+    <tr><td>だれかを確かめる所</td><td>16の Controller と <code>IdentifyUser</code> に、JWT を読むコードをコピー</td><td>Sanctum と <code>AuthenticateUser</code> の Middleware だけ</td></tr>
+  </table>
+
+  <h2>8. はまりやすい所</h2>
+  <ul>
+    <li><strong><code>localhost</code> と <code>127.0.0.1</code> は別のサイト</strong>：画面を <code>localhost:5173</code>、API を <code>127.0.0.1:8000</code> で開くと、ブラウザは「よそのサイト」とみなし、<code>SameSite=Lax</code> の Cookie を送らない。手元では、どちらも <code>localhost</code> で開く（ポートの違いは、同じサイトのまま）</li>
+    <li><strong><code>credentials: 'include'</code> を付け忘れる</strong>：<code>fetch</code> は、ほかのオリジンへの送信に Cookie を付けない。付け忘れた画面だけ 401 になる</li>
+    <li><strong>Sanctum の <code>stateful</code> に画面のドメインがない</strong>：<code>EnsureFrontendRequestsAreStateful</code> がセッションを使わず、ログインしても毎回 401 になる。環境変数 <code>SANCTUM_STATEFUL_DOMAINS</code> に <code>localhost:5173</code> を入れる</li>
+    <li><strong>ログインのときにセッションの番号を作り直さない</strong>：前もって番号を知っている人が、ログインのあとの会員になりすませる（セッションの固定という攻撃）。<code>$request-&gt;session()-&gt;regenerate()</code> を必ず呼ぶ</li>
+    <li><strong>テスト</strong>：API テストは、今の <code>DummyAuth::actingAs()</code>（JWT を作る）から、セッションでログインした形に変わる。Laravel の <code>actingAs()</code> を使う</li>
+  </ul>
+
+  <h2>9. 問い</h2>
+  <details><summary>JWT をやめてセッションにすると、何が良くなり、何を手放すか？</summary><p>良くなるのは、止めるのがすぐ効くこと（行を消す）と、作る部分が減ること（取り替え用の表・家族・使い回しの見つけ方が要らない）。手放すのは、DB を読まずに確かめられること。ただし、止めた会員を毎回 DB で確かめると決めているので、もともと使っていなかった。</p></details>
+  <details><summary>セッションの Cookie は画面から読めないのに、XSRF-TOKEN は読めてよいのはなぜ？</summary><p>XSRF-TOKEN は「同じサイトのページから送った」ことを示すためのもので、持ち出しても、セッションの Cookie がなければ会員になれない。よそのサイトのページは、こちらのサイトの Cookie を読めないので、正しい値をヘッダーに入れられない。</p></details>
+  <details><summary>運営が会員を止めたのに、その会員が操作を続けられるとしたら、どこを見る？</summary><p>#243 の Middleware が、毎回 <code>suspended_at</code> を見ているか。その API のルートに Middleware が付いているか。止めたときに、その会員の <code>sessions</code> の行を消しているか（<code>sessions.user_id</code> には外部キーがないので、自動では消えない）。</p></details>
+  <details><summary>手元で、ログインできたのに次の API が 401 になる。まず何を確かめる？</summary><p>画面と API を同じホスト名（どちらも <code>localhost</code>）で開いているか。<code>fetch</code> に <code>credentials: 'include'</code> が付いているか。<code>SANCTUM_STATEFUL_DOMAINS</code> に <code>localhost:5173</code> があるか。ブラウザの開発者ツールで、リクエストに Cookie が付いているかを見る。</p></details>
+</main>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+  // page.js が選んだ表示（data-scheme）に合わせる。なければ端末の設定
+  const scheme = document.documentElement.dataset.scheme;
+  const dark = scheme ? scheme.startsWith("dark") : (document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches));
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/page.js"></script>
+</body>
+</html>
