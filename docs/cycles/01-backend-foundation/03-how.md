@@ -372,8 +372,8 @@ URL は今のまま（`/api/...`）。新しい URL に移すのは、サイク�
 | --- | --- | --- |
 | `app/Http/Middleware/AuthenticateUser.php`（新しい） | ガードが見つけたログインしている会員を受け取り、使えるかを Service に聞く。だめなら `AuthenticationException` を投げるだけ（応答は作らない）。よければ `login_user_id` を載せる | ログインしている会員を読むのは Middleware だけ（`architecture-backend.md` の4章） |
 | `app/Http/Controllers/Controller.php` | `loginUserId(Request): int`。値がなければ `AuthenticationException` を投げる。どの Controller も、これを呼ぶだけにする | 読み方を1か所にする。Middleware を付け忘れたとき、黙って「会員 0 番」として動かない |
-| `User` の Model | 会員が使えるか（退会・停止・強制退会）を、行の値だけで答える（`isUsable()`。今ある `scopeActive` と同じ条件）。ログインと `AuthenticateUser` の両方から使う | 行の値だけで決まる事実は Model に1つだけ置く。2か所に書くと、止め方を足したときにずれる |
-| `app/Services/Auth/AuthService.php`（新しい。`docs/backend.md` の移行の地図の名前） | `login(email, password): User`：照合（失敗と成功で時間をそろえる。NFR-AUTH-002）・止めた会員の業務の例外・`last_login_at`。`canUseApi(User): bool` | 業務の決まりは Service。`Auth::` と `session()` は使わない（2章） |
+| `User` の Model | 会員が使えるか（退会・停止・強制退会）を、行の値だけで答える（`isAccountUsable()`。今ある `scopeActive` と同じ条件）。ログインと `AuthenticateUser` の両方から使う | 行の値だけで決まる事実は Model に1つだけ置く。2か所に書くと、止め方を足したときにずれる |
+| `app/Services/Auth/AuthService.php`（新しい。`docs/backend.md` の移行の地図の名前） | `login(email, password): User`：照合（失敗と成功で時間をそろえる。NFR-AUTH-002）・止めた会員の業務の例外・`last_login_at`。`isUserAccountUsable(User): bool` | 業務の決まりは Service。`Auth::` と `session()` は使わない（2章） |
 | `app/Http/Controllers/Auth/AuthController.php`（新しい。古い `AuthController` から移す） | `login`：Service が返した会員で `Auth::guard('web')->login()` と `regenerate(true)`。`logout`：`logout`・`invalidate`・`regenerateToken` | セッションを触ってよいのは Controller と Middleware（HTTP の側）。`architecture-backend.md` の2章の表に書き足す |
 | `bootstrap/app.php` | `statefulApi()`・Middleware の別名・`AuthenticationException` を 401、CSRF の失敗を 419、メンテナンスを 503 にし、どれも日本語の文にする `render`。401・419 のときに `auth.rejected` のログを1行出す。メンテナンスで health を通す（`preventRequestsDuringMaintenance(except: ...)`） | 例外を応答に変えるのは1か所（7章） |
 | `app/Listeners/`（新しい。メンテナンスに入れたとき） | 出来事 `MaintenanceModeEnabled` を受けて、`sessions` を全部消す | Laravel の標準のコマンドをそのまま使い、足りない所だけを出来事で足す |
@@ -393,7 +393,7 @@ URL は今のまま（`/api/...`）。新しい URL に移すのは、サイク�
 
 | 順 | チケット | バックエンド | 画面 | 直す文書 | Size | 依存 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | #243 ログインを確かめる Middleware（JWT のまま） | `AuthenticateUser`・`User::isUsable()`・`AuthService::canUseApi()`・`loginUserId()`・401 を `bootstrap/app.php` で日本語に。プロフィールの API に付ける（FR-AUTH-020）。`IdentifyUser` は使う所がなくなるので消す | 401 を受けたら、ログインの画面に移す（プロフィールの画面から） | `architecture-backend.md` の4章の見本 | 中 | ― |
+| 1 | #243 ログインを確かめる Middleware（JWT のまま） | `AuthenticateUser`・`User::isAccountUsable()`・`AuthService::isUserAccountUsable()`・`loginUserId()`・401 を `bootstrap/app.php` で日本語に。プロフィールの API に付ける（FR-AUTH-020）。`IdentifyUser` は使う所がなくなるので消す | 401 を受けたら、ログインの画面に移す（プロフィールの画面から） | `architecture-backend.md` の4章の見本 | 中 | ― |
 | 2 | トークンを読む所を、API と画面で1か所にする（JWT のまま） | 残りの15の Controller の JWT を読むコピーを消し、`loginUserId()` を呼ぶ。「ログインが要らないルート（health・登録・ログイン・メールの確認・パスワードの再設定）を引いた残り」が、ログインなしで 401 になるテスト | 全部の `fetch` を `client.ts` に通す。送り先を `localhost`。ログインの判定を `GET /api/me` にする（`RequireAuth`・`session`）。画面のフォルダも移す | `architecture-frontend.md` の4章・`AGENTS.md` の送り先・画面の見本のファイル・`frontend/client/README.md` | 大 | 1 |
 | 3 | 会員の側のメンテナンス（新） | 503 と日本語の文・health を通す・出来事で `sessions` を全部消す | 503 を受けたら、メンテナンスの画面を出す | `AGENTS.md` の「主要コマンド」にメンテナンスを足す | 中 | 2 |
 | 4 | セッションに切り替える（新） | Sanctum の設定・CORS・`Auth/AuthController` と `AuthService::login()` に移す・ログアウト・`AuthenticateUser` の中身・CSRF と 419・例外の文の値を隠す・`auth.rejected`・パスワードの変更と再設定でセッションを消す | `client.ts` に `credentials` と `X-XSRF-TOKEN`・419 の扱い・ログインとログアウトの画面・登録と再設定の画面（CSRF） | `architecture-backend.md` の2章・8章・`testing.md`・D-021・この節の「`api.php` で管理する」・`docs/api` の curl の例・`auth.md` の curl の手順 | 大 | 3 |
@@ -449,7 +449,7 @@ URL は今のまま（`/api/...`）。新しい URL に移すのは、サイク�
 | M3 | must | パスワードの変更で全部消すと、変えた端末もログアウトされる。受け持つチケットがない | 直した：`logoutOtherDevices()` と `AuthenticateSession`。再設定・退会は全部消す。4 で受け持つ |
 | M4 | must | SQL の例外の文に、セッションの番号やメールアドレスが入る | 直した：`mask_bindings_in_exception_messages` とテスト（4） |
 | S1 | should | 401・419 の作る所と形。24時間で切れたあとは 419 になる | 直した：`bootstrap/app.php` で日本語の文。画面は 419 もログインの画面へ |
-| S2 | should | 「使える会員か」が2か所。Service の名前がずれる | 直した：`User::isUsable()` の1か所。Service は `Auth/AuthService` |
+| S2 | should | 「使える会員か」が2か所。Service の名前がずれる | 直した：`User::isAccountUsable()` の1か所。Service は `Auth/AuthService` |
 | S3 | should | ログインした会員の番号を16か所で読む。付け忘れで「会員 0 番」 | 直した：基底の Controller の `loginUserId()` |
 | S4 | should | ルートのテストが付け忘れを見つけない | 直した：「ログインが要らないルートを引いた残り」で作る |
 | S5 | should | 直す文書がどのチケットにもない | 直した：チケットの表に「直す文書」の列 |

@@ -14,8 +14,8 @@ use function Pest\Laravel\postJson;
 // POST /api/users：会員を登録する。応答に出す項目と、確認のメールのテスト。
 // 確認用の文字は、確認のメールにだけ入れる。応答に出すと、メールを見ずに確認を通せる（不変条件 2）
 
-describe('ログインしていない人が登録する', function (): void {
-    it('201 で、応答に確認用の文字とパスワードが入らない（FR-AUTH-001・FR-AUTH-005）', function (): void {
+describe('ログインしていない人が、会員として登録する', function (): void {
+    it('登録でき（201）、応答に確認用の文字とパスワードは入らない（FR-AUTH-001・FR-AUTH-005）', function (): void {
         Mail::fake();
         $input = ['email' => 'new@example.test', 'password' => 'password', 'nickname' => 'あらた', 'gender' => 'female', 'birthday' => '1995-01-01'];
 
@@ -43,7 +43,7 @@ describe('ログインしていない人が登録する', function (): void {
         });
     });
 
-    it('確認のメールのリンクの文字で確認の API を開くと、確認済みになる（FR-AUTH-005）', function (): void {
+    it('確認のメールのリンクを開くと、メールアドレスが確認済みになる（FR-AUTH-005）', function (): void {
         Mail::fake();
         $input = ['email' => 'new@example.test', 'password' => 'password', 'nickname' => 'あらた', 'gender' => 'female', 'birthday' => '1995-01-01'];
         postJson(Endpoints::register(), $input)->assertCreated();

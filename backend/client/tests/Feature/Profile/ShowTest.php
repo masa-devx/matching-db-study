@@ -14,8 +14,8 @@ use function Pest\Laravel\getJson;
 // GET /api/users/{user_id}：相手のプロフィールを見る。今の動きを確かめるテスト。
 // 要件と違う所は「分かっている不具合」。手で試すシナリオは bruno/client/profile/
 
-describe('ログインしていない人が見る', function (): void {
-    it('401 で「ログインしてください」（FR-AUTH-020）', function (): void {
+describe('ログインしていない人が、相手のプロフィールを見る', function (): void {
+    it('見られない（401「ログインしてください」。FR-AUTH-020）', function (): void {
         $target = DummyUser::create();
 
         getJson(Endpoints::profile($target->publicId))
@@ -23,7 +23,7 @@ describe('ログインしていない人が見る', function (): void {
             ->assertExactJson(['message' => 'ログインしてください']);
     });
 
-    it('401 のときは、DB を読まない', function (): void {
+    it('ログインしていなければ、会員の情報にもプロフィールにもアクセスできない（DB を読まない）', function (): void {
         $target = DummyUser::create();
         DB::enableQueryLog();
 
@@ -33,8 +33,8 @@ describe('ログインしていない人が見る', function (): void {
     });
 });
 
-describe('使えない会員の、前のトークンで見る', function (): void {
-    it('止められた会員なら 401 で「ログインしてください」', function (): void {
+describe('使えなくなった会員が、前にもらったトークンで相手のプロフィールを見る', function (): void {
+    it('停止させられた会員は、見られない（401「ログインしてください」）', function (): void {
         $loginUser = DummyUser::create(suspended: true);
         $target = DummyUser::create();
 
@@ -43,7 +43,7 @@ describe('使えない会員の、前のトークンで見る', function (): voi
             ->assertExactJson(['message' => 'ログインしてください']);
     });
 
-    it('退会した会員なら 401 で「ログインしてください」', function (): void {
+    it('退会した会員は、見られない（401「ログインしてください」）', function (): void {
         $loginUser = DummyUser::create(withdrawn: true);
         $target = DummyUser::create();
 
@@ -52,7 +52,7 @@ describe('使えない会員の、前のトークンで見る', function (): voi
             ->assertExactJson(['message' => 'ログインしてください']);
     });
 
-    it('強制退会の会員なら 401 で「ログインしてください」', function (): void {
+    it('強制退会になった会員は、見られない（401「ログインしてください」）', function (): void {
         $loginUser = DummyUser::create(banned: true);
         $target = DummyUser::create();
 
@@ -61,7 +61,7 @@ describe('使えない会員の、前のトークンで見る', function (): voi
             ->assertExactJson(['message' => 'ログインしてください']);
     });
 
-    it('いなくなった会員の番号のトークンなら 401', function (): void {
+    it('登録が消えた会員の番号が入ったトークンでは、見られない（401）', function (): void {
         $gone = DummyUser::create();
         $target = DummyUser::create();
         $token = DummyAuth::token($gone);
@@ -73,9 +73,9 @@ describe('使えない会員の、前のトークンで見る', function (): voi
     });
 });
 
-describe('ログインしている人が見る', function (): void {
+describe('ログインしている人が、相手のプロフィールを見る', function (): void {
     // 分かっている不具合：要件（FR-002）は、メールアドレス・生年月日を返さない。表の列を全部返している
-    it('ニックネームと一緒に、メールアドレス・生年月日も返る', function (): void {
+    it('ニックネームと一緒に、メールアドレスと生年月日も返る', function (): void {
         $loginUser = DummyUser::create();
         $target = DummyUser::create(nickname: 'さき');
 
@@ -88,7 +88,7 @@ describe('ログインしている人が見る', function (): void {
             ->assertJsonMissingPath('remember_token');
     });
 
-    it('確認していない相手を見ても、確認用の文字は返らない（FR-002・FR-AUTH-005）', function (): void {
+    it('相手がメールアドレスを確認していなくても、確認用の文字は返らない（FR-002・FR-AUTH-005）', function (): void {
         $loginUser = DummyUser::create();
         $target = DummyUser::create(unverified: true);
 
@@ -97,7 +97,7 @@ describe('ログインしている人が見る', function (): void {
             ->assertJsonMissingPath('verification_token');
     });
 
-    it('プロフィールのない会員なら、profile は null', function (): void {
+    it('相手がプロフィールを作っていなければ、プロフィールは空（`profile` が null）', function (): void {
         $loginUser = DummyUser::create();
         $target = DummyUser::create(withProfile: false);
 
@@ -106,7 +106,7 @@ describe('ログインしている人が見る', function (): void {
             ->assertJsonPath('profile', null);
     });
 
-    it('マッチしていない相手なら、room_id は null', function (): void {
+    it('マッチしていない相手なら、トークルームの番号は空（`room_id` が null）', function (): void {
         $loginUser = DummyUser::create();
         $target = DummyUser::create();
 
@@ -115,7 +115,7 @@ describe('ログインしている人が見る', function (): void {
             ->assertJsonPath('room_id', null);
     });
 
-    it('マッチしている相手なら、room_id に2人のトークルームの番号が入る', function (): void {
+    it('マッチしている相手なら、2人のトークルームの番号が返る（`room_id`）', function (): void {
         $loginUser = DummyUser::create();
         $target = DummyUser::create();
         $roomId = DummyMatching::match($loginUser, $target);
@@ -125,7 +125,7 @@ describe('ログインしている人が見る', function (): void {
             ->assertJsonPath('room_id', $roomId);
     });
 
-    it('2人とも、ほかの人とだけマッチしているなら、room_id は null', function (): void {
+    it('2人とも、ほかの人とだけマッチしているなら、トークルームの番号は空', function (): void {
         $loginUser = DummyUser::create();
         $target = DummyUser::create();
         DummyMatching::match($loginUser, DummyUser::create());
@@ -136,8 +136,8 @@ describe('ログインしている人が見る', function (): void {
             ->assertJsonPath('room_id', null);
     });
 
-    // ログインを確かめる Middleware が、見る人の会員を1本読む（退会・停止・強制退会を見るため）
-    it('マッチしている相手なら、SQL は6本（見る人・会員・プロフィール・トークルームを探す3本）', function (): void {
+    // 内訳：見る人のアカウントの状態（Middleware）・相手の会員・プロフィール・トークルームを探す3本
+    it('マッチしている相手を見るときの SQL は、決まった本数で済む（6本）', function (): void {
         $loginUser = DummyUser::create();
         $target = DummyUser::create();
         DummyMatching::match($loginUser, $target);
@@ -149,7 +149,7 @@ describe('ログインしている人が見る', function (): void {
     });
 
     // 分かっている不具合：自分とのトークルームはないので、null が望ましい。見る人と相手が同じときを分けていない
-    it('自分を見ると、room_id に自分のトークルームのどれかが入る', function (): void {
+    it('自分を見ると、自分のトークルームのどれかの番号が返る', function (): void {
         $loginUser = DummyUser::create();
         $roomIds = [
             DummyMatching::match($loginUser, DummyUser::create()),
@@ -162,8 +162,8 @@ describe('ログインしている人が見る', function (): void {
     });
 });
 
-describe('トークンがおかしい', function (): void {
-    it('壊れたトークンなら 401 で「ログインしてください」（FR-AUTH-013）', function (): void {
+describe('壊れた・偽の・期限切れのトークンで、相手のプロフィールを見る', function (): void {
+    it('壊れたトークンでは、見られない（401「ログインしてください」。FR-AUTH-013）', function (): void {
         $target = DummyUser::create();
 
         DummyAuth::withToken('abc')->getJson(Endpoints::profile($target->publicId))
@@ -171,7 +171,7 @@ describe('トークンがおかしい', function (): void {
             ->assertExactJson(['message' => 'ログインしてください']);
     });
 
-    it('ほかの鍵で署名したトークンなら 401（FR-AUTH-013）', function (): void {
+    it('ほかの鍵で署名した偽のトークンでは、見られない（401「ログインしてください」。FR-AUTH-013）', function (): void {
         $loginUser = DummyUser::create();
         $target = DummyUser::create();
         $forged = DummyAuth::tokenSignedWithOtherKey($loginUser);
@@ -181,7 +181,7 @@ describe('トークンがおかしい', function (): void {
             ->assertExactJson(['message' => 'ログインしてください']);
     });
 
-    it('期限の切れたトークンなら 401（FR-AUTH-013）', function (): void {
+    it('期限の切れたトークンでは、見られない（401「ログインしてください」。FR-AUTH-013）', function (): void {
         $loginUser = DummyUser::create();
         $target = DummyUser::create();
         $expired = DummyAuth::token($loginUser, expiresAt: time() - 60);
@@ -191,12 +191,12 @@ describe('トークンがおかしい', function (): void {
             ->assertExactJson(['message' => 'ログインしてください']);
     });
 
-    it('いない会員の URL でも、壊れたトークンなら 401（先にログインを確かめる）', function (): void {
+    it('いない会員の URL でも、先にトークンを確かめて断る（401）', function (): void {
         DummyAuth::withToken('abc')->getJson(Endpoints::profile(DummyUser::MISSING_PUBLIC_ID))
             ->assertUnauthorized();
     });
 
-    it('401 は、エラーのログに出さない', function (): void {
+    it('トークンで断ったことは、エラーのログに出さない', function (): void {
         Exceptions::fake();   // 決まりどおりに断っただけなので、エラーとして記録しない
 
         DummyAuth::withToken('abc')->getJson(Endpoints::profile(DummyUser::MISSING_PUBLIC_ID))->assertUnauthorized();
@@ -205,8 +205,8 @@ describe('トークンがおかしい', function (): void {
     });
 });
 
-describe('URL の番号がおかしい', function (): void {
-    it('いない会員なら 404 で、「会員が見つかりません」（FR-004）', function (): void {
+describe('ログインしている人が、いない会員や形の違う番号のプロフィールを見る', function (): void {
+    it('いない会員なら、見つからない（404「会員が見つかりません」。FR-004）', function (): void {
         $loginUser = DummyUser::create();
 
         DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile(DummyUser::MISSING_PUBLIC_ID))
@@ -224,7 +224,7 @@ describe('URL の番号がおかしい', function (): void {
     });
 
     // 分かっている不具合：404 が望ましい。形を確かめずに UUID の列を探し、PostgreSQL のエラーになる
-    it('UUID の形でないなら 500', function (): void {
+    it('番号が UUID の形でないなら、500 になる', function (): void {
         $loginUser = DummyUser::create();
 
         DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile('abc'))->assertInternalServerError();

@@ -15,7 +15,7 @@ use Symfony\Component\HttpFoundation\Response;
 use UnexpectedValueException;
 
 /**
- * ログインを確かめる。トークンを読み、その会員が今も API を使えるか（退会・停止・強制退会）を AuthService に聞く。
+ * ログインを確かめる。トークンを読み、その会員のアカウントが今も使える状態か（退会・停止・強制退会）を AuthService に聞く。
  * だめなら AuthenticationException を投げるだけで、応答は bootstrap/app.php が作る（401「ログインしてください」）。
  * よければ、会員の番号（users.id）を $request->attributes の login_user_id に載せる。Controller は loginUserId() で読む。
  * 認証は、今は JWT。セッションに替えるときは、このクラスの中身だけを替える（#259）
@@ -27,7 +27,7 @@ final class AuthenticateUser
     public function handle(Request $request, Closure $next): Response
     {
         $userId = $this->userIdFromToken($request);
-        if ($userId === null || ! $this->auth->canUseApi($userId)) {
+        if ($userId === null || ! $this->auth->isUserAccountUsable($userId)) {
             throw new AuthenticationException;
         }
 

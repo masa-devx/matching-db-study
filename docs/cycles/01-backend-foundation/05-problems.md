@@ -173,11 +173,11 @@
 | --- | --- | --- |
 | なぜ、止めた会員が前のトークンで使えるか | 前のトークンが、まだ使える状態だから | 一部。署名と期限しか見ず、会員の今の状態（`suspended_at`）を毎回見ていないことが原因 |
 | どう直すか（1回目） | 認証やセッションがあるかを見る | 一部。署名と期限だけでは、今と同じく止めた会員が通る。代わりの案の「期限を短くする」も、期限まで使える |
-| どう直すか（2回目） | 使えるかは Middleware、401 は Service | ずれていた。使えるかは `User::isUsable()`（行の値だけで決まる。ログインと同じ判定を1か所に）を、`AuthService::canUseApi()` から呼ぶ。Middleware は Model を使わない（2章）。401 は HTTP なので、Middleware が `AuthenticationException` を投げ、`bootstrap/app.php` で作る（#241 の 404 と同じ形。#237 で人が答えた「Service は HTTP を知らない」） |
+| どう直すか（2回目） | 使えるかは Middleware、401 は Service | ずれていた。使えるかは `User::isAccountUsable()`（行の値だけで決まる。ログインと同じ判定を1か所に）を、`AuthService::isUserAccountUsable()` から呼ぶ。Middleware は Model を使わない（2章）。401 は HTTP なので、Middleware が `AuthenticationException` を投げ、`bootstrap/app.php` で作る（#241 の 404 と同じ形。#237 で人が答えた「Service は HTTP を知らない」） |
 | どう確かめるか | テストを書いて異常系を出し、そのあと処理を書く | 合っている。正確には：分かっている不具合のテストの期待値を要件どおりにする → 止めた・退会・強制退会のテストを足す → Red → 直す → Green → 確かめの行を1つずつ消して落ちるのを見る |
 
 ### 決めたこと
 
-- `03-how.md` の「認証をセッションに移す」の1のとおり：`AuthenticateUser`・`AuthService::canUseApi()`・`User::isUsable()`・`loginUserId()`・`bootstrap/app.php` の 401。プロフィールの2本の API に付ける。`IdentifyUser` は消す
+- `03-how.md` の「認証をセッションに移す」の1のとおり：`AuthenticateUser`・`AuthService::isUserAccountUsable()`・`User::isAccountUsable()`・`loginUserId()`・`bootstrap/app.php` の 401。プロフィールの2本の API に付ける。`IdentifyUser` は消す
 - 画面のプロフィール（ホーム・相手）は、401 を受けたらログインの画面に移す
 - 認証は JWT のまま
