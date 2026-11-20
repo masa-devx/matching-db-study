@@ -80,7 +80,7 @@ Laravel と Rails の公式の考え方に合わせる。**Controller は、URL 
 
 - メソッドは `index`（一覧）・`show`（1件）・`store`（作る）・`update`（直す）・`destroy`（消す）の5つまで。1つの操作だけの Controller は `__invoke` でもよい。テストで確かめる（8章）
 - この5つ以外のメソッドが欲しくなったら、**隠れている名詞を探して、Controller を分ける**（Laravel：「Controller は焦点を絞っておく。標準の操作以外のメソッドがいつも要るなら、2つの小さい Controller に分ける」。Rails：「独自のアクションをたくさん足しているなら、別のリソースが隠れていないかを考える」）
-- 1人に1つしかないもの（「自分」）は、`index` のない名詞にする（`GET /me` → `AccountController@show`。Laravel のシングルトンのリソース）。URL は `/me` のまま、コードでは `Account` と呼び、`Me` を名前に使わない（`docs/glossary.md` の「アカウント」。2026-11-20 に人が決めた。`MeController`・`MeTest` では、何を指すかが分かりにくいため）
+- 1人に1つしかないもの（「自分」）は、`index` のない名詞にする（`GET /me` → `AccountController@show`。Laravel のシングルトンのリソース）。URL は `/me` のまま、コードでは `Account` と呼び、`Me` を名前に使わない。管理画面も同じ。データ（Model・例外）は `User` のまま（`docs/glossary.md` の「アカウント」。2026-11-20 に人が決めた。`MeController`・`MeTest` では、何を指すかが分かりにくいため）
 - URL の形（状態を名詞にする `POST /members/{id}/suspension`・一度きりの動作は動詞のパス `POST /auth/login`）は、`docs/cycles/01-backend-foundation/03-how.md` の「CRUD ではない操作の書き方」に従う。Controller の名前は、その名詞にそろえる（`SuspensionController`）。新しい URL の名詞は、#127（ルートの骨組み）で決める
 - 例外：ログインと新規登録は `Auth/AuthController` にまとめる（人が決めた）。メソッドは `login`・`logout`・`store`（新規登録）まで。パスワードの再設定・メールの確認は、別の名詞（`PasswordResetController` など）にする
 

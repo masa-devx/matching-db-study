@@ -82,7 +82,7 @@
 
 | 今のファイル（メソッド） | 新しい Controller | Service |
 | --- | --- | --- |
-| `AuthController`（login・**me**） | `Admins/AuthController@login`・**`Admins/MeController@show`** | `Admins/AuthService`（`login`・`showMe`・`canWrite`。`canWrite` は書き込みのルートの Middleware `admin.can-write` から呼ぶ） |
+| `AuthController`（login・**me**） | `Admins/AuthController@login`・**管理者本人を見る Controller**（名前は、移すチケットで決める。`Me` は使わない。`docs/glossary.md` の「アカウント」） | `Admins/AuthService`（`login`・本人を見る操作（名前は移すときに決める）・`canWrite`。`canWrite` は書き込みのルートの Middleware `admin.can-write` から呼ぶ） |
 | `DashboardController`（index） | `Dashboard/DashboardController` | `Dashboard/DashboardService` |
 | `MemberController`（index・show） | `Members/MemberController` | `Members/MemberService` |
 | `SuspensionController`（store・destroy） | `Members/SuspensionController` | `Members/SuspensionService` |

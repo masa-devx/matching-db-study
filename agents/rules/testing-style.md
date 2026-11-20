@@ -12,7 +12,7 @@ Pest のテストを、あとから読んだ人が「どの API の、どんな�
 
 | もの | 置き場 | 例 |
 | --- | --- | --- |
-| API テスト | `tests/Feature/<業務のまとまり>/<操作>Test.php`。まとまりは `app/` と同じ名前（`docs/backend.md` の2章） | `tests/Feature/Profile/ShowTest.php`（相手のプロフィールを見る） |
+| API テスト | `tests/Feature/<業務のまとまり>/<操作>Test.php`。まとまりは `app/` と同じ名前（`docs/backend.md` の2章）。1つのまとまりに名詞が2つ以上あるときは `<操作><名詞>Test.php`（例：`Profile/ShowAccountTest.php`。2026-11-20 に決めた。今ある `Profile/ShowTest.php`・`UpdateTest.php` の名前は、その API を移すときに見直す） | `tests/Feature/Profile/ShowTest.php`（相手のプロフィールを見る） |
 | どのまとまりにも入らないもの | `tests/Feature/` の直下 | `HealthTest.php`・`TestEnvironmentTest.php` |
 | DB を使わないロジック | `tests/Unit/`。`app/` と同じフォルダの形にする | `tests/Unit/Models/UserTest.php` |
 | ダミーデータ | `tests/DummyData/Dummy<名詞>.php` | `DummyUser::create()` |
