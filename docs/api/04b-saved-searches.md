@@ -12,82 +12,274 @@
 | --- | --- | --- | --- |
 | `GET /api/me/search-conditions` | 自分の保存した検索条件の一覧 | 作る（`SearchConditionController::index`） | 作る |
 | `POST /api/me/search-conditions` | 名前と条件を保存する | 作る（`store`） | 作る |
-| `PUT /api/me/search-conditions/{public_id}` | 名前と条件を直す（#162 から、画面は名前だけ（`{"name": …}`）と、条件だけ（`{"conditions": …}`）の2通りで呼ぶ） | 作る（`update`） | 作る（改訂版の新しい URL では `PATCH`） |
+| `PUT /api/me/search-conditions/{public_id}` | 名前と条件を直す | 作る（`update`） | 作る（改訂版の新しい URL では `PATCH`） |
 | `DELETE /api/me/search-conditions/{public_id}` | 消す | 作る（`destroy`） | 作る |
-| `GET /api/users`（04） | 保存した条件で検索する | 変えない（画面がクエリにして送る。有料の条件（#150 から、こだわり条件の4つ）の確かめは `is_paid` だけ） | 条件の決まり（`SearchConditions`）と有料の判断を、保存と同じものにする |
+| `GET /api/users`（04） | 保存した条件で検索する | 変えない | 決まりと有料の判断を保存とそろえる |
 
-レガシー版は、設計を考えずに「とりあえず使える」形で作る。だれが使うかは、これまでと同じく JWT を読んで決める（`AuthController::me()` の処理をコピーする。4つ足して 17〜20か所目）。わざと残す問題は4つ：上限を数えてから入れるだけで止める・条件を確かめない・有料かどうかの確かめを検索からコピーする（`is_paid` だけ）・持ち主を確かめない。
+- `PUT`：#162 から、画面は名前だけ（`{"name": …}`）と、条件だけ（`{"conditions": …}`）の2通りで呼ぶ
+- `GET /api/users`（04）
+  - レガシー版：変えない。画面がクエリにして送る。有料の条件（#150 から、こだわり条件の4つ）の確かめは `is_paid` だけ
+  - 改善版：条件の決まり（`SearchConditions`）と有料の判断を、保存と同じものにする
 
-> 2026-11-17（#150）：有料の条件は、身長から4つ（`last_login`・`new_member`・`keyword`・`sort=new`）に入れ替えた。保存するときの確かめ（`SearchConditionController::store`）も、この4つを見る。下の表と「レガシー版で起きること」の「身長」は、入れ替える前に測った記録として残す。同じ問題は、この4つでそのまま起きる（期限切れの会員が保存できる・直すときは確かめない）。
+## レガシー版の作り方
 
-条件の中身（`conditions`）は、検索の API のクエリと同じ項目を持つ JSON のオブジェクト：`gender`・`age_min`・`age_max`・`prefecture`（都道府県の名前の配列）・`height_min`・`height_max`・`body_type`・`job`・`income`・`smoking`・`drinking`・`marital_status`（#153。どれも名前の配列）・`last_login`・`new_member`・`keyword`・`sort`。どれもなくてよい。項目が6つ増えたが、`conditions` は `jsonb` なので、表は変えていない（NFR-SAVED-003）。
+- レガシー版は、設計を考えずに「とりあえず使える」形で作る
+- だれが使うかは、これまでと同じく JWT を読んで決める（`AuthController::me()` の処理をコピーする。4つ足して 17〜20か所目）
+- わざと残す問題は4つ
+  - 上限を数えてから入れるだけで止める
+  - 条件を確かめない
+  - 有料かどうかの確かめを検索からコピーする（`is_paid` だけ）
+  - 持ち主を確かめない
+
+> 2026-11-17（#150）：有料の条件は、身長から4つ（`last_login`・`new_member`・`keyword`・`sort=new`）に入れ替えた。保存するときの確かめ（`SearchConditionController::store`）も、この4つを見る。下の「レガシー版で起きること」の「身長」は、入れ替える前に測った記録として残す。同じ問題は、この4つでそのまま起きる（期限切れの会員が保存できる・直すときは確かめない）。
+
+## 条件の中身（`conditions`）
+
+検索の API のクエリと同じ項目を持つ JSON のオブジェクト。
+
+- `gender`・`age_min`・`age_max`
+- `prefecture`（都道府県の名前の配列）
+- `height_min`・`height_max`
+- `body_type`・`job`・`income`・`smoking`・`drinking`・`marital_status`（#153。どれも名前の配列）
+- `last_login`・`new_member`・`keyword`・`sort`
+- どれもなくてよい
+- 項目が6つ増えたが、`conditions` は `jsonb` なので、表は変えていない（NFR-SAVED-003）
 
 ## `GET /api/me/search-conditions`（一覧）
 
-| 項目 | レガシー版（legacy-repo） | 改善版（refactored-repo） |
-| --- | --- | --- |
-| だれが使えるか | 正しい JWT を持つ人（自分の一覧だけ） | 正しい `access` の Cookie を持つ会員 |
-| 応答（成功） | `200`。`search_conditions` の行の配列を、そのまま返す（`id`・`public_id`・`user_id`・`name`・`conditions`・日時）。保存した順（`id` の小さい順）。**「今の自分が使えるか」は返さない**（画面が、有料かどうかの判断をもう一度コピーして決める） | `200` `{"data": [{"id": "0193…", "name": "東京・20代", "conditions": {"age_min": 20, "age_max": 29, "prefecture": ["東京都"]}, "usable": true}]}`。中の `id`・`user_id` は返さない。今の決まりに合わない項目は捨てる（FR-SAVED-015）。`usable` は、今の自分がその条件で検索できるか（FR-SAVED-002・010） |
-| 応答（失敗） | `401`：`Authorization` がない。`500`：JWT が壊れている | `401` |
-| 流れる SQL の目安 | 1本（`select * from search_conditions where user_id = ? order by id asc`）。`user_id` にインデックスがないので、表を全部読む | 1本＋ガード1本（NFR-SAVED-004）。`(user_id, id)` のインデックスで読む |
-| curl の例 | `curl http://127.0.0.1:8000/api/me/search-conditions -H 'Authorization: Bearer <JWT>'` | `-b cookies.txt` で同じ |
+### だれが使えるか
+
+- レガシー版（legacy-repo）：正しい JWT を持つ人（自分の一覧だけ）
+- 改善版（refactored-repo）：正しい `access` の Cookie を持つ会員
+
+### 応答（成功）
+
+- レガシー版：`200`。`search_conditions` の行の配列を、そのまま返す
+  - `id`・`public_id`・`user_id`・`name`・`conditions`・日時
+  - 保存した順（`id` の小さい順）
+  - **「今の自分が使えるか」は返さない**（画面が、有料かどうかの判断をもう一度コピーして決める）
+- 改善版：`200` `{"data": [{"id": "0193…", "name": "東京・20代", "conditions": {"age_min": 20, "age_max": 29, "prefecture": ["東京都"]}, "usable": true}]}`
+  - 中の `id`・`user_id` は返さない
+  - 今の決まりに合わない項目は捨てる（FR-SAVED-015）
+  - `usable` は、今の自分がその条件で検索できるか（FR-SAVED-002・010）
+
+### 応答（失敗）
+
+- レガシー版
+  - `401`：`Authorization` がない
+  - `500`：JWT が壊れている
+- 改善版：`401`
+
+### 流れる SQL の目安
+
+- レガシー版：1本（`select * from search_conditions where user_id = ? order by id asc`）
+  - `user_id` にインデックスがないので、表を全部読む
+- 改善版：1本＋ガード1本（NFR-SAVED-004）。`(user_id, id)` のインデックスで読む
+
+### curl の例
+
+- レガシー版：`curl http://127.0.0.1:8000/api/me/search-conditions -H 'Authorization: Bearer <JWT>'`
+- 改善版：`-b cookies.txt` で同じ
 
 ## `POST /api/me/search-conditions`（保存する）
 
-| 項目 | レガシー版（legacy-repo） | 改善版（refactored-repo） |
-| --- | --- | --- |
-| だれが使えるか | 正しい JWT を持つ人。確認していない会員・退会した会員の JWT でも保存できる | 正しい `access` の Cookie を持ち、メールアドレスを確認した会員 |
-| 入力（JSON） | `{"name": "東京・20代", "conditions": {"age_min": 20, "age_max": 29, "prefecture": ["東京都"]}}`。**確かめない**（年齢 17・身長 300・知らない項目・配列や文字だけの `conditions` も入る。名前の長さも見ない） | `name`：必須・1〜30文字。`conditions`：オブジェクト。中身は検索の API と同じ決まり（年齢 18〜99・下が上より大きければ誤り・身長 120〜220・都道府県は 1〜47 の番号・知らない項目は誤り）。FR-SAVED-007・008 |
-| 何をするか | ① `conditions` に `height_min` か `height_max` があれば、07 の検索と同じ確かめ（男性で `is_paid` でなければ `403`。**期限は見ない**）② 今の件数を数え、5件以上なら `422` ③ 1行入れる。②と③のあいだにロックもトランザクションもない（同時に送ると6件目が入る） | ① 入力を確かめる ② 有料の項目が入っていれば、07 の1つの関数（期限を見る）で判断する ③ トランザクションの中で、会員の行を `for update` で押さえてから数え、5件以上なら `422`、そうでなければ入れる（FR-SAVED-005・009。NFR-SAVED-001・002） |
-| 応答（成功） | `201`。入れた行をそのまま返す（`id`・`public_id`・`user_id`・`name`・`conditions`・日時） | `201` `{"data": {"id": "0193…", "name": "東京・20代", "conditions": {…}, "usable": true}}` |
-| 応答（失敗） | `401`：`Authorization` がない。`403`：男性の無料の会員（`is_paid` が false）が有料の条件（#150 から、`last_login`・`new_member`・`keyword`・`sort=new`。その前は身長）を入れた `{"message": "有料会員になると使えます"}`。`422`：5件ある `{"message": "保存できるのは5件までです"}`。`500`：JWT が壊れている・**`name` か `conditions` がない**（NOT NULL の違反） | `401`・`403`（`paid_required`）・`422`（入力の誤り・上限 `saved_search_limit`） |
-| 流れる SQL の目安 | 2本（数える・insert）＋ `public_id` を読み直す1本。有料の条件が入っていれば、プロフィールと会員の2本が増える | 3本＋begin・commit（行ロック・数える・insert。`public_id` は、アプリで UUID v7 を作って入れるので、読み直さない。DB の既定の値に任せるなら、読み直しの1本が増えて4本）＋ガード1本 |
-| curl の例 | `curl -X POST http://127.0.0.1:8000/api/me/search-conditions -H 'Authorization: Bearer <JWT>' -H 'Content-Type: application/json' -d '{"name":"東京・20代","conditions":{"age_min":20,"age_max":29,"prefecture":["東京都"]}}'` | `-b cookies.txt` で同じ |
+### だれが使えるか
+
+- レガシー版：正しい JWT を持つ人。確認していない会員・退会した会員の JWT でも保存できる
+- 改善版：正しい `access` の Cookie を持ち、メールアドレスを確認した会員
+
+### 入力（JSON）
+
+- レガシー版：`{"name": "東京・20代", "conditions": {"age_min": 20, "age_max": 29, "prefecture": ["東京都"]}}`
+  - **確かめない**（年齢 17・身長 300・知らない項目・配列や文字だけの `conditions` も入る）
+  - 名前の長さも見ない
+- 改善版（FR-SAVED-007・008）
+  - `name`：必須・1〜30文字
+  - `conditions`：オブジェクト。中身は検索の API と同じ決まり
+    - 年齢 18〜99・下が上より大きければ誤り
+    - 身長 120〜220
+    - 都道府県は 1〜47 の番号
+    - 知らない項目は誤り
+
+### 何をするか
+
+- レガシー版
+  - ① `conditions` に `height_min` か `height_max` があれば、07 の検索と同じ確かめ（男性で `is_paid` でなければ `403`。**期限は見ない**）
+  - ② 今の件数を数え、5件以上なら `422`
+  - ③ 1行入れる
+  - ②と③のあいだにロックもトランザクションもない（同時に送ると6件目が入る）
+- 改善版（FR-SAVED-005・009。NFR-SAVED-001・002）
+  - ① 入力を確かめる
+  - ② 有料の項目が入っていれば、07 の1つの関数（期限を見る）で判断する
+  - ③ トランザクションの中で、会員の行を `for update` で押さえてから数え、5件以上なら `422`、そうでなければ入れる
+
+### 応答（成功）
+
+- レガシー版：`201`。入れた行をそのまま返す（`id`・`public_id`・`user_id`・`name`・`conditions`・日時）
+- 改善版：`201` `{"data": {"id": "0193…", "name": "東京・20代", "conditions": {…}, "usable": true}}`
+
+### 応答（失敗）
+
+- レガシー版
+  - `401`：`Authorization` がない
+  - `403`：男性の無料の会員（`is_paid` が false）が有料の条件を入れた `{"message": "有料会員になると使えます"}`
+    - 有料の条件は、#150 から `last_login`・`new_member`・`keyword`・`sort=new`。その前は身長
+  - `422`：5件ある `{"message": "保存できるのは5件までです"}`
+  - `500`：JWT が壊れている・**`name` か `conditions` がない**（NOT NULL の違反）
+- 改善版：`401`・`403`（`paid_required`）・`422`（入力の誤り・上限 `saved_search_limit`）
+
+### 流れる SQL の目安
+
+- レガシー版：2本（数える・insert）＋ `public_id` を読み直す1本
+  - 有料の条件が入っていれば、プロフィールと会員の2本が増える
+- 改善版：3本＋begin・commit（行ロック・数える・insert）＋ガード1本
+  - `public_id` は、アプリで UUID v7 を作って入れるので、読み直さない
+  - DB の既定の値に任せるなら、読み直しの1本が増えて4本
+
+### curl の例
+
+- レガシー版：`curl -X POST http://127.0.0.1:8000/api/me/search-conditions -H 'Authorization: Bearer <JWT>' -H 'Content-Type: application/json' -d '{"name":"東京・20代","conditions":{"age_min":20,"age_max":29,"prefecture":["東京都"]}}'`
+- 改善版：`-b cookies.txt` で同じ
 
 ## `PUT /api/me/search-conditions/{public_id}`（直す）
 
-| 項目 | レガシー版（legacy-repo） | 改善版（refactored-repo） |
-| --- | --- | --- |
-| だれが使えるか | 正しい JWT を持つ人。**持ち主を確かめない**（ID を知っていれば、他人の条件を直せる） | 持ち主だけ。他人のもの・ないものは `404`（FR-SAVED-006） |
-| 入力（JSON） | `{"name": "東京・30代", "conditions": {"age_min": 30, "age_max": 39}}`。送られた項目を、そのまま全部 Model に入れる（`$request->all()`）。**`user_id` を送ると、持ち主を書き換えられる** | `name`・`conditions`（どちらも、送ったものだけを直す）。決まりは保存と同じ |
-| 何をするか | `public_id` で1行読み、送られた項目で書き換える。**有料かどうかの確かめは、ここにはコピーしなかった**（男性の無料の会員が、直すときに有料の条件を足せる） | 入力を確かめ、有料の項目が入っていれば判断し、`where user_id = ? and public_id = ?` で書き換える。変わった行が 0 なら `404` |
-| 応答（成功） | `200`。直した行をそのまま返す | `200` `{"data": {…}}` |
-| 応答（失敗） | `401`：`Authorization` がない。`500`：JWT が壊れている・**ない ID**（`null` に `update()`）・**UUID の形でない ID**（PostgreSQL の型の誤り） | `401`・`403`（`paid_required`）・`404`・`422` |
-| 流れる SQL の目安 | 2本（`public_id` で読む・update） | 1本＋ガード1本 |
-| curl の例 | `curl -X PUT http://127.0.0.1:8000/api/me/search-conditions/<public_id> -H 'Authorization: Bearer <JWT>' -H 'Content-Type: application/json' -d '{"name":"東京・30代"}'` | `-b cookies.txt` で同じ |
+### だれが使えるか
+
+- レガシー版：正しい JWT を持つ人。**持ち主を確かめない**（ID を知っていれば、他人の条件を直せる）
+- 改善版：持ち主だけ。他人のもの・ないものは `404`（FR-SAVED-006）
+
+### 入力（JSON）
+
+- レガシー版：`{"name": "東京・30代", "conditions": {"age_min": 30, "age_max": 39}}`
+  - 送られた項目を、そのまま全部 Model に入れる（`$request->all()`）
+  - **`user_id` を送ると、持ち主を書き換えられる**
+- 改善版：`name`・`conditions`（どちらも、送ったものだけを直す）。決まりは保存と同じ
+
+### 何をするか
+
+- レガシー版：`public_id` で1行読み、送られた項目で書き換える
+  - **有料かどうかの確かめは、ここにはコピーしなかった**（男性の無料の会員が、直すときに有料の条件を足せる）
+- 改善版：入力を確かめ、有料の項目が入っていれば判断し、`where user_id = ? and public_id = ?` で書き換える
+  - 変わった行が 0 なら `404`
+
+### 応答（成功）
+
+- レガシー版：`200`。直した行をそのまま返す
+- 改善版：`200` `{"data": {…}}`
+
+### 応答（失敗）
+
+- レガシー版
+  - `401`：`Authorization` がない
+  - `500`：JWT が壊れている・**ない ID**（`null` に `update()`）・**UUID の形でない ID**（PostgreSQL の型の誤り）
+- 改善版：`401`・`403`（`paid_required`）・`404`・`422`
+
+### 流れる SQL の目安
+
+- レガシー版：2本（`public_id` で読む・update）
+- 改善版：1本＋ガード1本
+
+### curl の例
+
+- レガシー版：`curl -X PUT http://127.0.0.1:8000/api/me/search-conditions/<public_id> -H 'Authorization: Bearer <JWT>' -H 'Content-Type: application/json' -d '{"name":"東京・30代"}'`
+- 改善版：`-b cookies.txt` で同じ
 
 ## `DELETE /api/me/search-conditions/{public_id}`（消す）
 
-| 項目 | レガシー版（legacy-repo） | 改善版（refactored-repo） |
-| --- | --- | --- |
-| だれが使えるか | 正しい JWT を持つ人。**持ち主を確かめない**（他人の条件を消せる） | 持ち主だけ |
-| 何をするか | `public_id` が同じ行を消す | `where user_id = ? and public_id = ?` で消す。消えた行が 0 なら `404`（FR-SAVED-004・006） |
-| 応答（成功） | `204`（消えた行がなくても `204`） | `204` |
-| 応答（失敗） | `401`：`Authorization` がない。`500`：JWT が壊れている・UUID の形でない ID | `401`・`404` |
-| 流れる SQL の目安 | 1本（delete） | 1本＋ガード1本 |
-| curl の例 | `curl -X DELETE http://127.0.0.1:8000/api/me/search-conditions/<public_id> -H 'Authorization: Bearer <JWT>'` | `-b cookies.txt` で同じ |
+### だれが使えるか
+
+- レガシー版：正しい JWT を持つ人。**持ち主を確かめない**（他人の条件を消せる）
+- 改善版：持ち主だけ
+
+### 何をするか
+
+- レガシー版：`public_id` が同じ行を消す
+- 改善版：`where user_id = ? and public_id = ?` で消す。消えた行が 0 なら `404`（FR-SAVED-004・006）
+
+### 応答（成功）
+
+- レガシー版：`204`（消えた行がなくても `204`）
+- 改善版：`204`
+
+### 応答（失敗）
+
+- レガシー版
+  - `401`：`Authorization` がない
+  - `500`：JWT が壊れている・UUID の形でない ID
+- 改善版：`401`・`404`
+
+### 流れる SQL の目安
+
+- レガシー版：1本（delete）
+- 改善版：1本＋ガード1本
+
+### curl の例
+
+- レガシー版：`curl -X DELETE http://127.0.0.1:8000/api/me/search-conditions/<public_id> -H 'Authorization: Bearer <JWT>'`
+- 改善版：`-b cookies.txt` で同じ
 
 ## レガシー版で起きること（#141 で測った。改善する段階で要件 ID のテストにする）
 
+下の「身長」は、2026-11-17 の午前（#150 の前。身長が有料だったとき）に測った記録。#150 のあとは、同じことが有料の4つ（フリーワードなど）で起きる。
 
-> 下の表の「身長」は、2026-11-17 の午前（#150 の前。身長が有料だったとき）に測った記録。#150 のあとは、同じことが有料の4つ（フリーワードなど）で起きる。#159 で、次の3つを足して確かめた：`{"keyword": "0"}` を男性の無料の会員が保存すると `201`（保存は `empty()`、検索は `filled()` で見るので、判定がずれる。使うときは `403`）／試しのデータに、有料の条件の入った行を入れた（約1割）／会員のシーダーを流し直したあとの、持ち主のいない行を消すようにした。
+#159 で、次の3つを足して確かめた。
+
+- `{"keyword": "0"}` を男性の無料の会員が保存すると `201`
+  - 保存は `empty()`、検索は `filled()` で見るので、判定がずれる。使うときは `403`
+- 試しのデータに、有料の条件の入った行を入れた（約1割）
+- 会員のシーダーを流し直したあとの、持ち主のいない行を消すようにした
+
 2026-11-17 に、開発用の DB（保存した検索条件 59,805件）で curl で測った。測ったあと、シーダーを流し直してデータを戻した。
 
-| 入力・場面 | 結果 | 要件 ID |
-| --- | --- | --- |
-| 4件ある会員（`search00001`）で、保存を10本同時に送る（同時に処理できるサーバーを、コンテナの中だけで一時的に立てて試した） | **`201` が 7本・`422` が 3本。11件になった** | FR-SAVED-005・NFR-SAVED-001 |
-| 同じことを、いつもの API のサーバー（1本ずつ処理する）で試す | `201` が 1本・`422` が 9本。5件（ふだんの画面の操作では表に出ない） | ― |
-| `{"age_min": 17, "height_min": 300, "x": "y"}` を保存する（女性） | `201`。そのまま入る | FR-SAVED-007 |
-| `conditions` に配列（`[1, 2]`）・文字（`"abc"`）を送る | どちらも `201`。そのまま入る | FR-SAVED-007 |
-| 名前が 200文字 | `201` | FR-SAVED-008 |
-| 名前が空の文字・名前なし・`conditions` なし | `500`（NOT NULL の違反。空の文字は Laravel が `null` に変える）。応答に SQL のエラーが出る | FR-SAVED-007・008 |
-| 男性の無料の会員が、身長を入れて保存する | `403`（要件どおり） | FR-SAVED-009 |
-| 期限が過ぎた男性（`search00306`。`is_paid` は true のまま）が、身長を入れて保存する | **`201`** | FR-SAVED-009・FR-PAID-005 |
-| 男性の無料の会員が、`PUT` で自分の条件に身長を足す | **`200`**（直すときは確かめない） | FR-SAVED-009 |
-| 会員 A のトークンで、会員 B の条件の名前を `PUT` で直す | **`200`。B の条件の名前が変わる** | FR-SAVED-006 |
-| 会員 A のトークンで、B の条件に `PUT` で `{"user_id": <A の id>}` を送る | **`200`。B の条件が A のものになる**（A は6件になり、上限も超える） | FR-SAVED-005・006 |
-| 会員 A のトークンで、B の条件を `DELETE` する | **`204`。B の条件が消える** | FR-SAVED-006 |
-| ない ID を `PUT`・`DELETE` する | `PUT` は `500`（`null` に `update()`）・`DELETE` は `204` | FR-SAVED-004 |
-| UUID の形でない ID（`abc`）を `PUT`・`DELETE` する | どちらも `500`（PostgreSQL の型の誤り） | FR-SAVED-004 |
-| 会員を DB から消す（確かめたあと `rollback` で戻した） | 保存した検索条件が 5件残る | FR-SAVED-014 |
-| 自分の一覧の `EXPLAIN (ANALYZE, BUFFERS)` | Seq Scan。4件を返すのに 59,801行を捨て、1,549 ページを読む（2.1 ms）。**表を作り直した直後の数字**。シーダーを流し直す（消して入れ直す）と、消えた行の跡が空きとして残り、6,177 ページまで膨らんだ。`VACUUM FULL search_conditions` で詰めると 1,545 ページに戻る | NFR-SAVED-004 |
+- 4件ある会員（`search00001`）で、保存を10本同時に送る
+  - 同時に処理できるサーバーを、コンテナの中だけで一時的に立てて試した
+  - 結果：**`201` が 7本・`422` が 3本。11件になった**
+  - 要件 ID：FR-SAVED-005・NFR-SAVED-001
+- 同じことを、いつもの API のサーバー（1本ずつ処理する）で試す
+  - 結果：`201` が 1本・`422` が 9本。5件（ふだんの画面の操作では表に出ない）
+  - 要件 ID：―
+- `{"age_min": 17, "height_min": 300, "x": "y"}` を保存する（女性）
+  - 結果：`201`。そのまま入る
+  - 要件 ID：FR-SAVED-007
+- `conditions` に配列（`[1, 2]`）・文字（`"abc"`）を送る
+  - 結果：どちらも `201`。そのまま入る
+  - 要件 ID：FR-SAVED-007
+- 名前が 200文字
+  - 結果：`201`
+  - 要件 ID：FR-SAVED-008
+- 名前が空の文字・名前なし・`conditions` なし
+  - 結果：`500`（NOT NULL の違反。空の文字は Laravel が `null` に変える）。応答に SQL のエラーが出る
+  - 要件 ID：FR-SAVED-007・008
+- 男性の無料の会員が、身長を入れて保存する
+  - 結果：`403`（要件どおり）
+  - 要件 ID：FR-SAVED-009
+- 期限が過ぎた男性（`search00306`。`is_paid` は true のまま）が、身長を入れて保存する
+  - 結果：**`201`**
+  - 要件 ID：FR-SAVED-009・FR-PAID-005
+- 男性の無料の会員が、`PUT` で自分の条件に身長を足す
+  - 結果：**`200`**（直すときは確かめない）
+  - 要件 ID：FR-SAVED-009
+- 会員 A のトークンで、会員 B の条件の名前を `PUT` で直す
+  - 結果：**`200`。B の条件の名前が変わる**
+  - 要件 ID：FR-SAVED-006
+- 会員 A のトークンで、B の条件に `PUT` で `{"user_id": <A の id>}` を送る
+  - 結果：**`200`。B の条件が A のものになる**（A は6件になり、上限も超える）
+  - 要件 ID：FR-SAVED-005・006
+- 会員 A のトークンで、B の条件を `DELETE` する
+  - 結果：**`204`。B の条件が消える**
+  - 要件 ID：FR-SAVED-006
+- ない ID を `PUT`・`DELETE` する
+  - 結果：`PUT` は `500`（`null` に `update()`）・`DELETE` は `204`
+  - 要件 ID：FR-SAVED-004
+- UUID の形でない ID（`abc`）を `PUT`・`DELETE` する
+  - 結果：どちらも `500`（PostgreSQL の型の誤り）
+  - 要件 ID：FR-SAVED-004
+- 会員を DB から消す（確かめたあと `rollback` で戻した）
+  - 結果：保存した検索条件が 5件残る
+  - 要件 ID：FR-SAVED-014
+- 自分の一覧の `EXPLAIN (ANALYZE, BUFFERS)`
+  - 結果：Seq Scan。4件を返すのに 59,801行を捨て、1,549 ページを読む（2.1 ms）
+  - **表を作り直した直後の数字**
+  - シーダーを流し直す（消して入れ直す）と、消えた行の跡が空きとして残り、6,177 ページまで膨らんだ
+  - `VACUUM FULL search_conditions` で詰めると 1,545 ページに戻る
+  - 要件 ID：NFR-SAVED-004

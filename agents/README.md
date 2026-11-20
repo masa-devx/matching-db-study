@@ -26,8 +26,26 @@ agents/ の目次。作業内容に合うルールを読み、スキルで進め
 
 | ルール | 読むとき | 中身 |
 | --- | --- | --- |
-| [architecture-backend.md](rules/architecture-backend.md) | 構造・責務・置き場を決める、バックエンドのコードを書く | 改訂版の設計（Controller → Service → Model）：判断の順・依存の向き・ディレクトリと名前（Controller と Service の分け方）・書き方（サンプルコード）・トランザクション・エラー・アーキテクチャのテスト・共通の原則・古いコードの移し方・管理画面での当てはめ |
-| [architecture-frontend.md](rules/architecture-frontend.md) | 画面（`frontend/`）の構造・責務・置き場を決める、画面のコードを書く | 改訂版の画面の形（機能ごとのフォルダ・container／presenter・hook・`api.ts`・Repository）：判断の順・ディレクトリと名前・依存の向き・書き方（401 と 403・失敗と読み込み中・書き込み・機能をまたぐ部品・有料の出し分け）・状態の置き場・メッセージの2つの出どころ・テスト・共通の原則・古いコードの移し方・管理画面での当てはめ |
+| [architecture-backend.md](rules/architecture-backend.md) | 構造・責務・置き場を決める、バックエンドのコードを書く | 改訂版の設計（Controller → Service → Model） |
+| [architecture-frontend.md](rules/architecture-frontend.md) | 画面（`frontend/`）の構造・責務・置き場を決める、画面のコードを書く | 改訂版の画面の形 |
+
+architecture-backend.md の中身：
+
+- 判断の順・依存の向き
+- ディレクトリと名前（Controller と Service の分け方）
+- 書き方（サンプルコード）
+- トランザクション・エラー
+- アーキテクチャのテスト・共通の原則
+- 古いコードの移し方・管理画面での当てはめ
+
+architecture-frontend.md の中身：
+
+- 改訂版の画面の形：機能ごとのフォルダ・container／presenter・hook・`api.ts`・Repository
+- 判断の順・ディレクトリと名前・依存の向き
+- 書き方：401 と 403・失敗と読み込み中・書き込み・機能をまたぐ部品・有料の出し分け
+- 状態の置き場・メッセージの2つの出どころ
+- テスト・共通の原則
+- 古いコードの移し方・管理画面での当てはめ
 
 ### テスト
 
