@@ -6,10 +6,12 @@ namespace Tests\DummyData;
 
 use App\Models\Profile;
 use App\Models\User;
+use Illuminate\Support\Str;
 
 /**
  * テストの会員（users とプロフィール）を作る。Model と Factory を使うのは tests/DummyData/ の中だけ。
  * 既定は、メールアドレスを確認した・無料の・女性。購入の行と監査ログは作らない。
+ * $unverified が true なら、登録した直後と同じく、確認していない・確認用の文字を持つ会員にする。
  */
 final class DummyUser
 {
@@ -27,13 +29,14 @@ final class DummyUser
         bool $paid = false,
         bool $withdrawn = false,
         bool $suspended = false,
+        bool $unverified = false,
         ?string $nickname = null,
         ?string $birthday = null,
         ?string $prefecture = null,
         ?int $height = null,
         bool $withProfile = true,
     ): TestUser {
-        $user = self::createUser($paid, $suspended);
+        $user = self::createUser($paid, $suspended, $unverified);
         if ($withdrawn) {
             self::withdraw($user);
         }
@@ -55,10 +58,12 @@ final class DummyUser
         return new TestUser($user->id, $user->public_id, $user->email, $profile->nickname, $gender);   // 性別は、渡した値をそのまま入れている
     }
 
-    /** 有料なら期限を今から30日にする。停止なら停止の日時と理由を入れる。 */
-    private static function createUser(bool $paid, bool $suspended): User
+    /** 有料なら期限を今から30日にする。停止なら停止の日時と理由を入れる。確認していないなら、確認の日時を空にし、確認用の文字を入れる。 */
+    private static function createUser(bool $paid, bool $suspended, bool $unverified): User
     {
         return User::factory()->create([
+            'email_verified_at' => $unverified ? null : now(),
+            'verification_token' => $unverified ? Str::random(40) : null,
             'is_paid' => $paid,
             'paid_until' => $paid ? now()->addDays(30) : null,
             'suspended_at' => $suspended ? now() : null,

@@ -44,15 +44,16 @@ describe('ログインしていない人が見る', function (): void {
 
 describe('ログインしている人が見る', function (): void {
     // 分かっている不具合：要件（FR-002）は、メールアドレス・生年月日を返さない。表の列を全部返している
-    it('ニックネームと一緒に、メールアドレス・確認用の文字・生年月日も返る', function (): void {
+    it('ニックネームと一緒に、メールアドレス・生年月日も返る。確認用の文字は返らない（不変条件 2）', function (): void {
         $loginUser = DummyUser::create();
-        $target = DummyUser::create(nickname: 'さき');
+        $target = DummyUser::create(nickname: 'さき', unverified: true);
 
         DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile($target->publicId))
             ->assertOk()
             ->assertJsonPath('profile.nickname', 'さき')
             ->assertJsonPath('email', $target->email)
-            ->assertJsonStructure(['verification_token', 'profile' => ['birthday']])
+            ->assertJsonStructure(['profile' => ['birthday']])
+            ->assertJsonMissingPath('verification_token')
             ->assertJsonMissingPath('password')
             ->assertJsonMissingPath('remember_token');
     });
