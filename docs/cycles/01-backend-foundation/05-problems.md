@@ -151,5 +151,5 @@
 
 - 今回は案A（`#[Hidden]` に足す）。返す項目を書く案B（Resource）は、土台4のチケットでやる
 - テストの置き場：登録は `tests/Feature/Auth/RegisterTest.php`、自分の情報は `tests/Feature/Profile/ShowAccountTest.php`
-- 「自分」の名前：URL の `/me` は変えない（2026-11-16 に決めた基準のまま）。コードでは `Account` と呼び、`Me` を名前に使わない（`MeTest` では、何を指すかが分かりにくいため）。用語集に「アカウント」の行を足し、`architecture-backend.md`・`docs/backend.md` の `MeController` を `AccountController` に直した。ルートには、別名として `profile.account.show` の名前を付けた
+- 「自分」の名前：URL の `/me` は変えない（2026-11-16 に決めた基準のまま）。コードでは `Account` と呼び、`Me` を名前に使わない（`MeTest` では、何を指すかが分かりにくいため）。用語集に「アカウント」の行を足し、`architecture-backend.md`・`docs/backend.md` の `MeController` を `AccountController` に直した。今の URL の `GET /me` に、ルートの名前 `legacy.profile.account.show` を付けた（URL を変えずに、ルートの一覧で何の API かを読めるようにするため。PR #255 のレビューで `legacy.` を足した）
 - 名前の直しは、このチケットで触る所だけ。今あるコードの `me()`・`$me`・`{publicId}` などは、その API を移すチケットで直す

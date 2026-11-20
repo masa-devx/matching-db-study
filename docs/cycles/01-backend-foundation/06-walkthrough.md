@@ -674,3 +674,157 @@ Service は `bootstrap/app.php` を知らない。例外のクラスは、HTTP �
 
 - 次にやること：「応答（何が返るか）」と「記録（ログに残るか）」を、別々に答える
 
+
+## PR #255（#244 の5 確認用の文字を応答に出さない。元の #133）
+
+`User` の `#[Hidden]` に `verification_token` を足し、登録・自分の情報・相手のプロフィールの3つの応答から、確認用の文字を消した。あわせて、「自分」をコードでは `Account` と呼ぶ決まりを足した（URL の `/me` は変えない）。
+
+### ディレクトリの設計
+
+```text
+backend/client/
+├── app/Models/User.php                         #[Hidden] に1語足した
+├── routes/api.php                              GET /me に、ルートの名前 legacy.profile.account.show を付けた
+└── tests/
+    ├── DummyData/DummyUser.php                 unverified: true を足した
+    ├── Endpoints.php                           register()・account() を足した
+    └── Feature/
+        ├── Auth/RegisterTest.php               登録と、確認のリンク（新しい）
+        ├── Members/SearchTest.php              会員の検索（新しい）
+        └── Profile/
+            ├── ShowAccountTest.php             自分のアカウントを見る（新しい）
+            └── ShowTest.php                    相手のプロフィールを見る（1本を要件どおりに変えた）
+```
+
+| 置いた所 | 理由（決まり） | ほかに置ける所と、置かなかった理由 |
+| --- | --- | --- |
+| 隠す列は `User` の `#[Hidden]` | 同じ Model を返す3つの API が、1か所の変更で直る | Controller ごとに `makeHidden()`：3か所に書き、4つ目の API で書き忘れる。Resource で返す項目を書く：応答の形が変わるので、土台4のチケットでやる（`05-problems.md`） |
+| 登録のテストは `Feature/Auth/` | 新規登録は `Auth` のまとまり（`docs/backend.md` の2章） | `Feature/Profile/`：登録はプロフィールの操作ではない |
+| 自分の情報のテストは `Feature/Profile/ShowAccountTest.php` | 「自分（見る・直す・退会）」は `Profile` のまとまり（`docs/backend.md` の2章）。同じフォルダに相手の `ShowTest.php` があるので、名詞を入れて分けた | `Feature/Account/ShowTest.php`：`Account` という業務のまとまりはない。`Feature/Profile/MeTest.php`：`Me` では何を指すかが分かりにくい（人が決めた） |
+
+### クラスの責務
+
+| クラス・ファイル | 責務 |
+| --- | --- |
+| `User` の `#[Hidden]` | JSON にするときに出さない列を知っている。DB から読むこと・`$user->verification_token` で読むことは止めない |
+| `Endpoints::register()`・`account()` | テストで呼ぶ URL の文字を知っている。`/me` を、コードでは `account` と呼べるようにする |
+| `DummyUser::create(unverified: true)` | 登録した直後と同じ会員（確認していない・確認用の文字を持つ）を作る。Factory の既定は確認済みで、確認用の文字が空なので、隠せたかを確かめられなかった |
+
+### メソッドの表
+
+アプリの public のメソッドは増えていない。変わったのは、Model を JSON にするときの動きだけ。
+
+| 場所 | 入力 | 出力 | 副作用 | 失敗のしかた | 呼ぶ所 |
+| --- | --- | --- | --- | --- | --- |
+| `response()->json($user)`（Laravel） | `User` | JSON。`#[Hidden]` の列（`password`・`remember_token`・`verification_token`）は入らない | なし | ― | `UserController::store`・`UserController::index`（検索）・`AuthController::me`・`ProfileController::show`（`toArray()`） |
+| `Endpoints::register()` | ― | `'/api/users'` | なし | ― | `RegisterTest` |
+| `Endpoints::account()` | ― | `'/api/me'` | なし | ― | `ShowAccountTest` |
+| `Endpoints::searchUsers()`・`emailVerification($token)` | ―・確認用の文字 | `'/api/users'`・`'/api/email-verifications/{token}'` | なし | ― | `SearchTest`・`RegisterTest` |
+| `DummyUser::create(unverified: true)` | ほかの引数と同じ | `TestUser` | `users` に、`email_verified_at` が空で、`verification_token` に40文字を入れた行を作る | ― | `ShowAccountTest`・`ShowTest` |
+
+直したのは、この1行（`app/Models/User.php`）：
+
+```php
+// 確認用の文字は、確認のメールにだけ入れる。応答に出すと、メールを見ずに確認を通せる（不変条件 2）
+#[Hidden(['password', 'remember_token', 'verification_token'])]
+class User extends Authenticatable
+```
+
+`#[Hidden]` は JSON にするときだけ効くので、次の2つは変わらない：
+
+```php
+$user = User::where('verification_token', $token)->first();                  // 確認の API（EmailVerificationController）
+'url' => config('app.frontend_url').'/verify/'.$this->user->verification_token, // 確認のメール（VerifyMail）
+```
+
+メールに入ることは、テストで確かめている（`RegisterTest.php`）：
+
+```php
+$token = DB::table('users')->where('email', 'new@example.test')->value('verification_token');
+expect($token)->toBeString();
+expect($token)->not->toBeEmpty();
+assert(is_string($token));   // Larastan に文字だと伝える
+Mail::assertSent(VerifyMail::class, function (VerifyMail $mail) use ($token): bool {
+    $mail->assertSeeInText('/verify/'.$token);
+
+    return $mail->hasTo('new@example.test');
+});
+```
+
+### 呼び出しの流れ
+
+登録のとき。
+
+```mermaid
+sequenceDiagram
+    participant B as 画面
+    participant C as UserController
+    participant D as PostgreSQL
+    participant M as VerifyMail
+    participant U as User（#[Hidden]）
+    B->>C: POST /api/users
+    C->>D: insert into users（verification_token に40文字）
+    C->>D: insert into profiles
+    C->>M: 確認のメールを送る（リンクに確認用の文字を入れる）
+    C->>U: response()->json(user, 201)
+    U-->>C: Hidden の列を外した配列
+    C-->>B: 201（email・id・日時。確認用の文字は入らない）
+```
+
+### 名前
+
+| 名前 | ほかの候補 | 選ばなかった理由 |
+| --- | --- | --- |
+| コードの `Account`（URL は `/me`） | `Me`・`LoginUser` | `Me` は何を指すかが分かりにくい。`LoginUser` は「ログインする処理」と読まれやすい。`Account` は、設定の画面の「アカウント」とそろう（人が決めた。用語集の「アカウント」） |
+| `ShowAccountTest.php` | `MeTest.php`・`Account/ShowTest.php` | 上の理由と、`Account` というまとまりはないため |
+| `DummyUser::create(unverified: true)` | `verified: false` | ほかの引数（`paid`・`withdrawn`・`suspended`）は、既定と違う状態を `true` で表すので、そろえた |
+| ルートの名前 `legacy.profile.account.show` | 付けない・`profile.account.show` | URL を変えずに、`route:list` で「自分のアカウントを見る API」と読めるようにした（人が、URL を変えずに名前を付けられるならと言ったため）。今の URL なので `legacy.` で始める（`03-how.md:206`。レビューの S2）。`profile.account.show` は、新しい URL の `GET /me` に付ける名前として空けておく |
+
+### 依存の向き
+
+```mermaid
+flowchart LR
+    UC[UserController] --> U[User]
+    AC[AuthController] --> U
+    PC[ProfileController] --> PS[ProfileService] --> U
+    EV[EmailVerificationController] --> U
+    VM[VerifyMail] --> U
+```
+
+`#[Hidden]` を変えると、`User` を JSON にする所がみな変わる。今は4つ（`UserController` の登録と検索・`AuthController`・`ProfileController`）。検索は、レビューで見つけた（S1）。`EmailVerificationController` と `VerifyMail` は、JSON にしないので変わらない。
+
+### レガシー版との違い
+
+| | レガシー版 | この PR のあと |
+| --- | --- | --- |
+| 隠す列 | `password`・`remember_token`（Laravel の見本のまま） | `verification_token` を足した |
+| 確認用の文字が出る API | 登録・自分の情報・相手のプロフィール（ログインしていない人にも）・検索 | なし |
+| API テスト | 相手のプロフィールだけ（確認用の文字が出ることを、分かっている不具合として確かめていた） | 登録・確認のリンク・自分の情報・検索にも足した |
+
+### 直した課題と、現場での意味
+
+課題と、決めたことは `05-problems.md` の「#244 の5」の節。
+
+- だれが困らなくなるか：メールアドレスを勝手に使われた人（登録の応答の文字で、メールを見ずに「確認済み」にされなくなる）と、運営（確認済みの数を、本人がメールを受け取った数として使える）
+- どう気づけるようになるか：4つの API のテストが、確認用の文字が応答に出たら落ちる。新しく秘密の列を足して `#[Hidden]` に書き忘れたときは、まだ気づけない（下の「次の改善の候補」）
+- 数字：確認用の文字が出る API が 4 → 0
+
+### 次の改善の候補
+
+| 候補 | 今どうなっているか | 直すとどうなるか | 気づいた所 |
+| --- | --- | --- | --- |
+| 返す項目を API ごとに書く（Resource） | `#[Hidden]` に書いた列以外は全部出る。メールアドレス・停止の理由（`suspended_reason`）・強制退会の理由も、自分の情報と相手のプロフィールに出る | 書いていない列は出ない。新しい列を足しても安全 | 課題の理解（案B）。#244 の土台4 |
+| 確認用の文字とパスワードの再設定の文字を、SQL のログに残さない | URL のパスに入るので、`QueryLogger.php:56` の `path` にそのまま残る（開発の PC だけ） | ログの `path` を、ルートの形（`api/email-verifications/{token}`）にする（`logging.md`） | PR #255 のレビュー（範囲の外） |
+| 「自分」の名前を `Account` にそろえる | `AuthController::me()`・PHP の `$me`・`$myProfile`、ルートの引数の `{publicId}`、管理画面の `Admins/MeController`、画面の `Me` の型が残っている | 同じものに2つの呼び方がなくなる | この PR（人が「該当するところだけ」と決めた） |
+
+### 説明の練習
+
+リーダーが、半年後に来る PR の場面で聞いた（2026-11-20）：「検索が遅いので、`UserController::index` を `DB::table('users')->join('profiles', ...)` の形に書き換えた」。
+
+| 問い | 人の答え | 結果 |
+| --- | --- | --- |
+| 検索の応答の確認用の文字はどうなるか | 出なくなる。`User.php` の `#[Hidden]` に入れたから | ずれていた。また出る。`#[Hidden]` は Model を JSON にするときだけ効き、`DB::table` は Model を通らない（ただの行が返る）。`select *` なら、確認用の文字もパスワードも出る。管理画面の会員の一覧（#244 の4）が直らないのと同じ理由 |
+| CI のどのテストで気づけるか | 気づけない | ずれていた。この PR で足した `tests/Feature/Members/SearchTest.php` が落ちる（`assertJsonMissingPath('0.verification_token')` は、値が `null` でもキーがあれば落ちる）。足す前なら「気づけない」が正しかった |
+| `DB::table` のまま、出さないようにするには | Model を直す | ずれていた。Model を直しても、`DB::table` には効かない。`select('users.public_id', 'profiles.nickname', ...)` のように、返す列を書き出す。隠す列を書く形（`#[Hidden]`）から、出す列を書く形（Resource と同じ考え方）に変える |
+
+- 次にやること：守りの仕組みを説明するときは、「どの道を通ったときに効くか」まで言う（`#[Hidden]` は Model を JSON にするとき・`dontReport` は Laravel が記録するとき）。#244 の土台4（Resource）のチケットで、もう一度確かめる
