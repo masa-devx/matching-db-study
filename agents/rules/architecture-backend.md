@@ -90,6 +90,19 @@ Laravel の公式の名前の付け方（`php artisan make:〇〇` の例）に�
 - ほかの種類（Event・Job・Command・Policy・Rule・Enum など）は、初めて作るチケットで決め、この表に足す
 - 層のテスト（`tests/Arch/LayersTest.php`）で、Service・Mail の終わりの名前と、Middleware・Listener に種類の名前を付けないこと、UseCase・Repository がないことを確かめる
 
+
+### メソッドの名前（どの種類のクラスにも当てはめる）
+
+Model・Service・Middleware・Controller など、どのクラスのメソッドにも当てはめる（2026-11-20 に人が決めた。#243）。
+
+- 層や技術の言葉（API・HTTP・DB・JSON・トークン・セッション）を、名前に入れない（`canUseApi` ではなく `isAccountUsable`）。同じメソッドを、コマンドやキューから呼んでも名前が合うようにするため（2026-11-20 に人が決めた。#243）
+- 真偽を返すメソッドは、呼ぶ所が「〇〇は△△か」と読める、肯定の形にする。頭の言葉は `is`（状態・性質。`isAccountUsable`）・`has`（持っている・済んでいる。`hasVerifiedEmail`）・`can`（できる・許されている。`canSendLike`）・`should`（そうするのがよいという判断。`shouldQueue`）。迷ったら `is` にする。`check`・`validate` のように、何を確かめるかが分からない動詞にしない（Swift の API Design Guidelines・.NET の Framework Design Guidelines。2026-11-20 に人が決めた。#243）
+- 否定の名前（`isNot〇〇`・`disabled`）を作らない。読むたびに否定を解くことになるため（.NET）
+- 真偽の引数で、メソッドの動きを変えない（`book($user, true)` は、呼ぶ所で true の意味が分からない）。動きごとにメソッドを分ける（Martin Fowler「FlagArgument」）。テストのダミーデータの、名前を付けて渡す引数（`DummyUser::create(banned: true)`）は、呼ぶ所で意味が読めるので外す（`unverified` も同じ）
+- 状態が3つ以上あるなら、真偽ではなく enum で持ち、真偽のメソッドはそこから作る（真偽の値は「何を調べた結果か」を持たないため）。DB の列は日時のままでもよく、Model が PHP の enum を返す形も含む（会員の状態：退会・停止・強制退会・どれでもない。列を1つにするかは、ロードマップの「会員の状態を1つにする」で決める）
+- 一度だけ起きて「いつか」に意味がある出来事は、日時の列（`〇〇_at`。null なら起きていない）で持ち、Model の真偽のメソッドで読む（Laravel の `email_verified_at` と `hasVerifiedEmail()`・`deleted_at` と `trashed()` と同じ形）
+- Model と Service で同じ事実を確かめるときは、同じ言葉を使う。番号から探して答える Service のメソッドは、主語（だれの何か）を名前に入れる（Model の `$user->isAccountUsable()` と、Service の `$auth->isUserAccountUsable($userId)`。`$auth->hasUsableAccount($userId)` は「AuthService が持つか」と読めてしまう）。引数の形（`ById`）は名前に出さない
+- Middleware の別名は「だれ.何をするか」の形にする（会員の側の `user.authenticate`・管理画面の `admin.authenticate`・`admin.can-write`）
 ### Controller の分け方
 
 Laravel と Rails の公式の考え方に合わせる。**Controller は、URL の名詞（リソース）1つに1つ**。
@@ -114,13 +127,6 @@ Laravel と Rails の公式の考え方に合わせる。**Controller は、URL 
 - `final` にし、名前は `Service` で終わる。`app/Services/` には Service のクラスだけを置く（戻り値は Model か配列。配列は PHPDoc で形を書く）
 - **public のメソッドは操作の名前**（動詞から始める：`search`・`showProfile`・`updateProfile`・`send`・`listReceived`・`suspend`）。Controller のメソッドの名前（`index`・`store`）にそろえない（いくつかの Controller から呼ぶと、ぶつかるため）。**private のメソッドは、その中の手順**（`findMember`・`assertNotBlocked` など）
 - 名前には「何ができるか」を書き、「だれが呼べるか」（ログインしているか・本人か・役割）は入れない（`updateMine` ではなく `updateProfile`）。だれが呼べるかは、Middleware とメソッドの中の条件で決める。認証の作りが変わっても、名前を変えずに済むため（2026-11-19 に人が決めた。PR #240）
-- 層や技術の言葉（API・HTTP・DB・JSON・トークン・セッション）を、名前に入れない（`canUseApi` ではなく `isAccountUsable`）。同じメソッドを、コマンドやキューから呼んでも名前が合うようにするため（2026-11-20 に人が決めた。#243）
-- 真偽を返すメソッドは、呼ぶ所が「〇〇は△△か」と読める、肯定の形にする。頭の言葉は `is`（状態・性質。`isAccountUsable`）・`has`（持っている・済んでいる。`hasVerifiedEmail`）・`can`（できる・許されている。`canSendLike`）・`should`（そうするのがよいという判断。`shouldQueue`）。迷ったら `is` にする。`check`・`validate` のように、何を確かめるかが分からない動詞にしない（Swift の API Design Guidelines・.NET の Framework Design Guidelines。2026-11-20 に人が決めた。#243）
-- 否定の名前（`isNot〇〇`・`disabled`）を作らない。読むたびに否定を解くことになるため（.NET）
-- 真偽の引数で、メソッドの動きを変えない（`book($user, true)` は、呼ぶ所で true の意味が分からない）。動きごとにメソッドを分ける（Martin Fowler「FlagArgument」）
-- 状態が3つ以上あるなら、真偽ではなく enum で持ち、真偽のメソッドはそこから作る（真偽の値は「何を調べた結果か」を持たないため）
-- 一度だけ起きて「いつか」に意味がある出来事は、日時の列（`〇〇_at`。null なら起きていない）で持ち、Model の真偽のメソッドで読む（Laravel の `email_verified_at` と `hasVerifiedEmail()`・`deleted_at` と `trashed()` と同じ形）
-- Model と Service で同じ事実を確かめるときは、同じ言葉を使う。番号から探して答える Service のメソッドは、主語（だれの何か）を名前に入れる（Model の `$user->isAccountUsable()` と、Service の `$auth->isUserAccountUsable($userId)`。`$auth->hasUsableAccount($userId)` は「AuthService が持つか」と読めてしまう）。引数の形（`ById`）は名前に出さない
 - メソッドの数の上限は決めない。太ったら見直す（`docs/backend.md` の「やり直しのきっかけ」）
 
 ## 4. 書き方
@@ -368,7 +374,7 @@ try {
 
 ## 8. アーキテクチャのテスト
 
-2章（「使ってはいけない」の列）と、3章の名前の一部（Controller のメソッドの名前・Service の `final` と名前）と、`strict_types` を、Pest の `arch()` で確かめる。
+2章（「使ってはいけない」の列）と、3章の名前の一部（Controller のメソッドの名前・Service の `final` と名前・Mail の名前・Middleware と Listener に種類の名前を付けないこと・UseCase と Repository がないこと）と、`strict_types` を、Pest の `arch()` で確かめる。
 
 - 置き場：`tests/Arch/LayersTest.php`（中身はファイルを読む。ここにはコピーしない）。`phpunit.xml` のテストの組 `Arch` で、CI でほかのテストと一緒に流れる
 - 正本は会員の側（`backend/client/tests/Arch/`）。管理画面（`backend/admin/tests/Arch/`）には、同じファイルをコピーする。違うのは、ファイルの上の「このアプリだけのもの」（古いコントローラーの一覧 `LEGACY_CONTROLLERS`）だけ。印（`// ==== ここから下は、会員の側…`）より下は、2つのファイルで同じにする。管理画面の `tests/Arch/SameRulesAsClientTest.php` が、印より下を比べ、違えば落ちる。印より上に決まり（`arch(`・`test(` など）が書かれていないことも確かめる。管理画面の CI は `backend/client/tests/Arch/**` が変わったときにも動く
@@ -485,7 +491,7 @@ $this->firestore->openRoom($room);
 形と依存の向きは同じ。違いは使い方だけ。
 
 - 管理画面には、まだ Model がない（古いコントローラーは全部 `DB::` で書いている）。移すときに、使う表の Model を `backend/admin/app/Models/` に作る（会員の側の Model は読み込まない。表の作りは `backend/client` のマイグレーションが正本）
-- **役割の確かめは、書き込みのルートのグループに付けた Middleware（`admin.can-write`）でまとめて行う**（人が決めた。#239 の A1）。レガシー版の問題（#130）は、確かめを Controller ごとに貼り忘れたこと。グループに入れれば、書き忘れが起きない。Middleware は、役割を Service（`Admins/AuthService::canWrite()`）に聞く
+- **役割の確かめは、書き込みのルートのグループに付けた Middleware（`admin.can-write`）でまとめて行う**（人が決めた。#239 の A1）。レガシー版の問題（#130）は、確かめを Controller ごとに貼り忘れたこと。グループに入れれば、書き忘れが起きない。Middleware は、役割を Service（`Admins/AuthService::canAdminWrite($adminId)`。番号から探して答えるので、主語を名前に入れる）に聞く
 - 書き込みの Service は、**同じトランザクションで監査ログを保存する**
 - 例外：ログイン（役割はまだ分からない）と、見たことの記録（`member.view`。それ自体が監査ログ）は、役割を確かめない
 - 監査ログに残す値（停止の理由など）にも、`agents/rules/logging.md` の「秘密値をログに流さない」を当てはめる。自由に書ける文には、個人情報（メールアドレス・電話番号）を書かないよう、画面に注意を出す
@@ -493,7 +499,7 @@ $this->firestore->openRoom($room);
 
 ```php
 // backend/admin/routes/api.php
-Route::middleware(['auth.admin', 'admin.can-write'])->group(function (): void {
+Route::middleware(['admin.authenticate', 'admin.can-write'])->group(function (): void {
     Route::post('/members/{publicId}/suspension', [SuspensionController::class, 'store']);
     Route::delete('/members/{publicId}/suspension', [SuspensionController::class, 'destroy']);
 });
