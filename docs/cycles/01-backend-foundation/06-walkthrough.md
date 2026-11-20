@@ -828,3 +828,148 @@ flowchart LR
 | `DB::table` のまま、出さないようにするには | Model を直す | ずれていた。Model を直しても、`DB::table` には効かない。`select('users.public_id', 'profiles.nickname', ...)` のように、返す列を書き出す。隠す列を書く形（`#[Hidden]`）から、出す列を書く形（Resource と同じ考え方）に変える |
 
 - 次にやること：守りの仕組みを説明するときは、「どの道を通ったときに効くか」まで言う（`#[Hidden]` は Model を JSON にするとき・`dontReport` は Laravel が記録するとき）。#244 の土台4（Resource）のチケットで、もう一度確かめる
+
+## PR #262（#243 ログインを確かめる Middleware。JWT のまま）
+
+トークンを読み、会員のアカウントが今も使える状態か（退会・停止・強制退会）を毎回確かめる Middleware を作り、プロフィールの2本の API に付けた。#246（認証をセッションに移す）の最初の子。あわせて、メソッド・クラス・テストの名前の決まりを足した。
+
+### ディレクトリの設計
+
+```text
+backend/client/app/
+├── Http/
+│   ├── Middleware/AuthenticateUser.php      ログインを確かめる（新しい）。IdentifyUser は消した
+│   └── Controllers/Controller.php           loginUserId() を足した（基底のクラス）
+├── Services/Auth/AuthService.php            アカウントが使える状態かを答える（新しい）
+└── Models/User.php                          isAccountUsable() を足した
+frontend/client/src/
+└── shared/session/goToLoginAfterUnauthorized.ts   401 のあと、ログインの画面へ（新しい）
+```
+
+| 置いた所 | 理由（決まり） | ほかに置ける所と、置かなかった理由 |
+| --- | --- | --- |
+| トークンを読むのは `AuthenticateUser` | トークンを読むのは Middleware だけ（`architecture-backend.md` の4章） | Controller ごとに読む：今の29か所のコピーと同じになる |
+| 「使える状態か」の判定は `User::isAccountUsable()` | 行の値だけで決まる事実は Model の1か所に置く。ログインの API も同じ判定が要る | Middleware：Model を使えない（層のテストで止まる）。ログインと2か所になる |
+| `AuthService::isUserAccountUsable()` | Middleware は Model を使わないので、番号から会員を探して Model に聞く窓口が要る（2章） | ― |
+| 401 の応答は `bootstrap/app.php` | 例外を応答に変えるのは1か所（7章。#241 の 404 と同じ形） | Middleware で `response()->json()`：401 の作り方が2か所になる |
+| `loginUserId()` は基底の `Controller` | 会員の番号を読む所を1つにする。付け忘れたとき「会員 0 番」として動かない | 各 Controller で `$request->attributes->get()`：#257 で15か所にコピーが増える |
+| 画面の `goToLoginAfterUnauthorized` は `shared/session/` | ログインした自分を消すのは `shared/session`（`architecture-frontend.md` の4章「401 と 403」） | 画面の中に書く：2つの画面にコピーになる。#257 で、消す所は `shared/session` に残し、ログインの画面へ移すのは `app/RequireAuth` に分ける。`client.ts` は 401 を投げるだけで、ここを呼ばない（依存の向き） |
+
+### クラスの責務
+
+| クラス・ファイル | 責務 |
+| --- | --- |
+| `AuthenticateUser` | トークンを読み、会員の番号を取り出し、アカウントの状態を Service に聞く。だめなら例外を投げる。応答は作らない。判定の中身は知らない |
+| `AuthService` | 番号から会員を探し、`User` に「使える状態か」を聞く。HTTP もトークンも知らない |
+| `User::isAccountUsable()` | 退会・停止・強制退会の列だけを見て答える |
+| `Controller::loginUserId()` | Middleware が載せた番号を読む。なければ（付け忘れ。プログラムの誤り）、ログに残る 500 にする |
+| `bootstrap/app.php` | `AuthenticationException` を 401「ログインしてください」に変える |
+| `goToLoginAfterUnauthorized()` | トークンを捨て、ログインの画面を開き直す |
+
+### メソッドの表
+
+| 場所 | 入力 | 出力 | 副作用 | 失敗のしかた | 呼ぶ所 |
+| --- | --- | --- | --- | --- | --- |
+| `AuthenticateUser::handle` | リクエスト | 次の処理の応答 | `login_user_id` を載せる | トークンがない・壊れている・期限切れ・使えない会員：`AuthenticationException` | ルートの `user.authenticate` |
+| `AuthService::isUserAccountUsable` | 会員の番号 | 真偽 | `users` を主キーで1本読む | いない会員は false | `AuthenticateUser` |
+| `User::isAccountUsable` | ― | 真偽 | なし | ― | `AuthService` |
+| `Controller::loginUserId` | リクエスト | 会員の番号 | なし | 載っていなければ `LogicException`（500。エラーのログに残る） | `ProfileController::show` |
+| `goToLoginAfterUnauthorized` | ― | ― | `sessionStorage` の `token` と `searchConditions` を消し、`/login` を開き直す | ― | `HomePage`・`UserPage`（401 のとき） |
+
+トークンの読み方（`AuthenticateUser.php`）。受け止めるのは、トークンが壊れている・署名が違う・期限切れのときの例外だけ：
+
+```php
+try {
+    $payload = JWT::decode($token, new Key(config()->string('app.key'), 'HS256'));
+} catch (UnexpectedValueException|DomainException|TypeError) {
+    // 壊れた・署名が違う・期限切れのトークンは、どれも「ログインしていない」と同じに扱う（FR-AUTH-020）。
+    // TypeError は、ヘッダーの alg や kid が配列のような、形のおかしいトークン（送った人の入力）で、署名を確かめる前に出る（レビューの M1）。
+    // 鍵がない（設定の誤り）ときの InvalidArgumentException は受け止めず、500 のままにする
+    return null;
+}
+```
+
+判定は1か所（`User.php`）：
+
+```php
+public function isAccountUsable(): bool
+{
+    return $this->deleted_at === null && $this->suspended_at === null && $this->banned_at === null;
+}
+```
+
+### 呼び出しの流れ
+
+停止させられた会員が、前にもらったトークンで相手のプロフィールを見るとき。
+
+```mermaid
+sequenceDiagram
+    participant B as 画面
+    participant M as AuthenticateUser
+    participant S as AuthService
+    participant U as User
+    participant D as PostgreSQL
+    participant H as bootstrap/app.php
+    B->>M: GET /api/users/{user_id}（Authorization: Bearer）
+    M->>M: JWT を読む（署名と期限）
+    M->>S: isUserAccountUsable(会員の番号)
+    S->>D: select * from users where id = ? limit 1
+    D-->>S: suspended_at が入った行
+    S->>U: isAccountUsable()
+    U-->>S: false
+    S-->>M: false
+    M-->>H: AuthenticationException を投げる
+    H-->>B: 401「ログインしてください」
+    B->>B: goToLoginAfterUnauthorized()（トークンを捨て、ログインの画面へ）
+```
+
+ホームの画面は、先に `/api/me` を呼ぶ。`/api/me` は、まだ JWT のコピーを読んでいる（#257 で直す）。期限の切れたトークンでは `/api/me` が 500 を返し、`public_id` が分からないまま `/api/users/undefined` を呼ぶ。そこで `AuthenticateUser` が、URL を見る前に 401 を返すので、ログインの画面に移る。移る動きは合っているが、`/api/me` の 500 がエラーのログに1行残る。
+
+### 名前
+
+| 名前 | ほかの候補 | 選ばなかった理由 |
+| --- | --- | --- |
+| `User::isAccountUsable()` | `isUsable()` | 何が使えるのかが分からない（人が決めた） |
+| `AuthService::isUserAccountUsable()` | `canUseApi()`・`isAccountUsableById()`・`hasUsableAccount()` | `canUseApi`：層の言葉（API）が入る。`ById`：引数の形を名前に出すだけ。`hasUsableAccount`：「AuthService が持つか」と読めてしまう（Swift の指針。`architecture-backend.md` の3章） |
+| `AuthenticateUser` | `AuthenticateUserMiddleware` | Laravel の `make:middleware` の例に合わせ、種類の名前を付けない（3章「クラスの名前」） |
+| `loginUserId()` | `currentUserId()` | 用語集の「会員の番号の名前」の `login_user_id`・`$loginUserId` とそろえる |
+
+### 依存の向き
+
+```mermaid
+flowchart LR
+    R[routes/api.php] --> M[AuthenticateUser]
+    M --> S[AuthService]
+    S --> U[User]
+    C[ProfileController] --> Base[Controller::loginUserId]
+    H[bootstrap/app.php] --> E[AuthenticationException]
+    M --> E
+    Base --> E
+```
+
+Middleware は Model を使わない（`tests/Arch/LayersTest.php` の「Request と Middleware は、Model・DB を使わない」）。Service は HTTP を使わない（同じく「Service は、Http を使わない」）。
+
+### レガシー版との違い
+
+| | レガシー版 | この PR のあと |
+| --- | --- | --- |
+| トークンを読む所 | 17ファイル・29か所にコピー | プロフィールの2本は `AuthenticateUser` の1か所。残りの15の Controller は #257 |
+| 止めた会員 | ログインの API だけが見る。前のトークンは30日使える | プロフィールの API は、次のリクエストから 401 |
+| 壊れたトークン | 500（エラーのログに残る） | 401（エラーのログに出さない） |
+| ログインしていない人 | 相手のプロフィールが見られる・書き換えられる | 401 |
+
+### 直した課題と、現場での意味
+
+課題と、決めたことは `05-problems.md` の「#243」の節。
+
+- だれが困らなくなるか：通報した会員（止めてもらった相手から、プロフィールを見られない）と、運営（壊れたトークンの 500 が、エラーのログに残らない）
+- どう気づけるようになるか：止めた会員の前のトークンを確かめるテストが、Middleware の確かめの行を消すと落ちる
+- 数字：プロフィールの API の、ログインなし・壊れたトークン・止めた会員が、200 と 500 から、どれも 401 になった
+
+### 次の改善の候補
+
+| 候補 | 今どうなっているか | 直すとどうなるか | 気づいた所 |
+| --- | --- | --- | --- |
+| 残りの15の Controller を Middleware に置き換える | `/api/me` やいいねの一覧は、壊れたトークンで 500・止めた会員で 200 | 全部の API で同じ 401 になる | #257 |
+| `ProfileService::showProfile` の `?int $viewerId` | ログインが要るようになり、もう null は来ない | `int` にし、見る人がいないときの分かれ道を消す | この PR |
+| 会員の状態を enum で持つ | 退会・停止・強制退会を3つの日時の列で持つ | 状態が1つの値で決まり、真偽のメソッドはそこから作る | 真偽の名前の調べもの（#261） |

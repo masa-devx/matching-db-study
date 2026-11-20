@@ -181,3 +181,5 @@
 - `03-how.md` の「認証をセッションに移す」の1のとおり：`AuthenticateUser`・`AuthService::isUserAccountUsable()`・`User::isAccountUsable()`・`loginUserId()`・`bootstrap/app.php` の 401。プロフィールの2本の API に付ける。`IdentifyUser` は消す
 - 画面のプロフィール（ホーム・相手）は、401 を受けたらログインの画面に移す
 - 認証は JWT のまま
+- 画面は、機能のフォルダに移さない。画面のテストの道具（#114）がまだなく、`architecture-frontend.md` の9章では、移す前に今の動きのテストが要るため。移すのは #257 か、#114 のあと
+- あわせて、名前の決まり（メソッド・クラス・テスト）を `architecture-backend.md` の3章と `testing-style.md` の3章に足した（人が決めた。2026-11-20）。PR を戻すと、この決まりも戻る
