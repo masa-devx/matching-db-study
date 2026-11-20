@@ -77,7 +77,7 @@ export default function HomePage() {
       navigate('/login')
       return
     }
-    // 読み込み中・失敗・401 は考えない（StrictMode なので、開発中は2本ずつ呼ばれる）
+    // 読み込み中と失敗は考えない。401 はプロフィールの API だけで見る（/api/me の 401・500 は #257 で扱う）。StrictMode なので、開発中は2本ずつ呼ばれる
     // 自分の public_id（#46）を知るために /api/me を呼び、そのあとプロフィールを呼ぶ（2本が順に流れる）
     fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me`, {
       headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },

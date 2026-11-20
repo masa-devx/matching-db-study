@@ -87,7 +87,13 @@ export default function UserPage() {
         setRoomId(d.room_id ?? null)
         // マッチの演出に出す自分の写真を、ここで読む（ホームと同じ2本を写す）
         const me = await fetch(`${api}/api/me`, { headers }).then((x) => x.json())
-        const mine = await fetch(`${api}/api/users/${me.public_id}`, { headers }).then((x) => x.json())
+        const res = await fetch(`${api}/api/users/${me.public_id}`, { headers })
+        // #243：止められた・ログインが切れたときは 401。ログインの画面へ移す
+        if (res.status === 401) {
+          goToLoginAfterUnauthorized()
+          return
+        }
+        const mine = await res.json()
         setMatchedWith(mine.profile ?? {})
       } else {
         toast('いいねしました')
