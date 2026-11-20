@@ -10,21 +10,30 @@
 <main>
   <h1>DB 設計の学習ノート（マッチングアプリ）</h1>
   <p>マッチングアプリ（会員・いいね・マッチ・メッセージ・有料プラン）を題材に、テーブル設計・JOIN・中間テーブル・インデックス・同時更新を、作って確かめる。実在のサービスのコード・名前・データは使わない。</p>
-  <p class="meta">技術: Laravel（API）＋ PostgreSQL、画面は React（03b から）。1つの一歩ごとに、explain-step で解説を作り、理解してから実装し、explain-change で記録する。</p>
+  <p class="meta">技術: Laravel（API）＋ PostgreSQL、画面は React（03b から）。</p>
 
-  <h2>進め方</h2>
+  <div class="card point">
+    <strong>2つの版がある</strong>
+    <table>
+      <tr><th>版</th><th>ブランチ</th><th>何をするか</th><th>目次</th></tr>
+      <tr><td>レガシー版</td><td><code>legacy-repo</code></td><td>一歩（機能）ごとに解説を作り、わざとレガシーコード（Fat Controller・テストなし）で作り切る。そこで起きる問題を測って記録する</td><td><a href="#legacy">1. レガシー版の目次</a></td></tr>
+      <tr><td>改善版</td><td><code>refactored-repo</code></td><td>レガシー版で測った問題を、現場と同じ開発サイクル（なぜ → 何を → どう → チケット → 実装 → レビュー）で直す。テストを先に足し、前と後を比べる</td><td><a href="#refactored">2. 改善版の目次</a></td></tr>
+    </table>
+  </div>
+
+  <h2 id="legacy">1. レガシー版の目次（legacy-repo）</h2>
+  <h3>進め方</h3>
   <pre class="mermaid">
 flowchart LR
   A["explain-step<br>解説と図を作る"] --> B["読んで理解する<br>6つの問いに答える"]
   B --> C["レガシーコードで作る<br>Fat Controller・テストなし"]
   C --> D["explain-change<br>レガシー版と測った問題を記録"]
-  D --> F["テストを足して直す<br>もう一度測る"]
-  F --> G["explain-change<br>前と後の数字を記録"]
-  G --> E["次の一歩へ"]
+  D --> E["次の一歩へ"]
   E --> A
   </pre>
+  <p class="meta">測った問題を直すのは、改善版（下の2章）で行う。</p>
 
-  <h2>一歩ずつの目次</h2>
+  <h3>一歩ずつの目次</h3>
   <p class="meta">状態: 未着手／解説だけ／レガシー版まで／実装済み。ページができたら、名前をリンクにする。</p>
   <p class="meta">フォルダの名前（#93）：会員の API と画面は <code>backend/client/</code>・<code>frontend/client/</code>、管理画面は <code>backend/admin/</code>・<code>frontend/admin/</code>。それより前に書いた解説の中の <code>backend/</code>・<code>frontend/</code>・<code>admin/</code> は、当時の名前のまま残している。</p>
   <table>
@@ -51,6 +60,58 @@ flowchart LR
     <tr><td>11</td><td>DB を引っ越す</td><td>手元の PostgreSQL どうしで、ダンプと戻し方・止める時間・移している間に書かれたデータの扱いを試す。クラウド（AWS など）に載せるかは、あとで決める</td><td>未着手</td></tr>
     <tr><td>12</td><td><a href="12-admin.html">管理画面</a></td><td>`admin/`（Laravel と React）。管理者と会員の権限の分け方・だれが何を見たかを残す監査ログ・大量のメッセージの一覧と N+1</td><td>レガシー版まで</td></tr>
   </table>
+
+  <h2 id="refactored">2. 改善版の目次（refactored-repo）</h2>
+  <h3>進め方</h3>
+  <p class="meta">正本は <code>docs/process.md</code>。1サイクルは2週間。記録は <code>docs/cycles/&lt;番号&gt;-&lt;名前&gt;/</code>（Markdown）に残す。</p>
+  <pre class="mermaid">
+flowchart LR
+  A["なぜ・何を<br>PM と話す"] --> B["どう作るか<br>リーダーと設計"]
+  B --> C["チケットに分ける"]
+  C --> D["課題を理解する<br>人が先に答える"]
+  D --> E["テストを先に変える<br>Red から Green"]
+  E --> F["差分を人が見る<br>コードの解説"]
+  F --> G["PR のレビュー<br>説明の練習"]
+  G --> H["承認して取り込む"]
+  H --> I["振り返り"]
+  </pre>
+
+  <h3>サイクル</h3>
+  <table>
+    <tr><th>サイクル</th><th>エピック</th><th>状態</th></tr>
+    <tr><td>01（11/16〜11/29）</td><td>バックエンドの土台の改善（棚卸し・設計書・API テストの土台・エラーの返し方・認証の土台）</td><td>実装の途中</td></tr>
+    <tr><td>02（11/30〜12/13）</td><td>安全の穴を直す（#244 の残り）→ API を新しい URL に移す</td><td>予定</td></tr>
+  </table>
+
+  <h3>サイクル 01 でやったこと・やっていること</h3>
+  <table>
+    <tr><th>チケット</th><th>中身</th><th>状態</th><th>記録</th></tr>
+    <tr><td>#102</td><td>今のコードの棚卸し（機能の地図）</td><td>取り込み済み</td><td><code>docs/onboarding/feature-map.md</code></td></tr>
+    <tr><td>#237</td><td>プロフィールの API を Service に移す（Controller → Service → Model）</td><td>取り込み済み（PR #240）</td><td rowspan="3"><code>docs/cycles/01-backend-foundation/</code> の <code>05-problems.md</code>（課題）・<code>06-walkthrough.md</code>（コードの解説）・<code>07-review.md</code>（レビュー）</td></tr>
+    <tr><td>#241</td><td>エラーの返し方を1か所にする（業務の例外・<code>lang/ja/errors.php</code>）</td><td>取り込み済み（PR #242）</td></tr>
+    <tr><td>#244 の5</td><td>確認用の文字を応答に出さない。「自分」をコードでは <code>Account</code> と呼ぶ</td><td>取り込み済み（PR #255）</td></tr>
+    <tr><td>#246</td><td>認証をセッション（Laravel Sanctum の SPA 認証）に移す。#243（ログインを確かめる Middleware）もこの中で作る</td><td>設計中</td><td><a href="auth-session.html">認証の仕組み</a>・<a href="auth-session-plan.html">認証の実装の計画</a></td></tr>
+  </table>
+
+  <h3>改善版の解説のページ</h3>
+  <table>
+    <tr><th>ページ</th><th>中身</th><th>状態</th></tr>
+    <tr><td><a href="auth-session.html">認証の仕組み（セッションと Sanctum）</a></td><td>認証の形の比べ方・Laravel Sanctum の SPA 認証・表 <code>sessions</code> と <code>users</code> の列・Cookie・CSRF・CORS</td><td>設計中（#246）</td></tr>
+    <tr><td><a href="auth-session-plan.html">認証の実装の計画</a></td><td>セッションに移す範囲・変わる要件とファイル・チケットの分け方</td><td>設計中（#246）</td></tr>
+    <tr><td><a href="architecture-styles.html">アーキテクチャの地図</a></td><td>レイヤード・オニオン・クリーン・DDD などの比べ方</td><td>サイクル 01「どう作るか」の資料</td></tr>
+    <tr><td><a href="modular-monolith.html">レイヤードからモジュラーモノリスへ</a></td><td>フレームワークを替えられる設計の、将来のイメージ</td><td>将来のイメージ（決まった計画ではない）</td></tr>
+    <tr><td><a href="layered-design.html">バックエンドの設計（前の版）</a></td><td>4層のレイヤードの案。今の決まりは <code>agents/rules/architecture-backend.md</code></td><td>参考（残しておく版）</td></tr>
+  </table>
+
+  <h3>これからやること</h3>
+  <table>
+    <tr><th>順</th><th>やること</th><th>どこで決めたか</th></tr>
+    <tr><td>1</td><td>#246：認証をセッションに移す（Sanctum の土台 → ログイン・ログアウト・自分の情報 → #243 の Middleware → 残りの API と画面を一度に切り替える → JWT を消す）</td><td><a href="auth-session-plan.html">認証の実装の計画</a></td></tr>
+    <tr><td>2</td><td>#244 の残り：他人のデータに触れる穴を直す（トーク・保存した検索条件・プロフィールの書き換え・検索に止めた会員が出る）。管理画面の役割の確かめは、あとで</td><td>チケット #244</td></tr>
+    <tr><td>3</td><td>API を新しい URL に移す（サイクル 02）</td><td><code>docs/roadmap.md</code> の「並び」</td></tr>
+    <tr><td>あと</td><td>ロードマップのエピックの候補（有料会員を正しく扱う・検索を速くする・運用の土台・メッセージの一覧 など）</td><td><code>docs/roadmap.md</code> の「エピックの候補」</td></tr>
+  </table>
+
 </main>
 <script type="module">
   import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";

@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>認証の実装の計画</title>
+<link rel="stylesheet" href="assets/page.css">
+</head>
+<body>
+<main>
+  <p class="meta"><a href="index.html">← 目次へ</a></p>
+  <h1>認証の実装の計画（#246：セッションに移す）</h1>
+  <p class="meta">作成: 2026-11-20 ／ 状態: <span class="status" data-state="doc">設計中（3つの問いは 2026-11-20 に決めた）</span></p>
+
+  <div class="card point">
+    <strong>このページでわかること</strong>
+    <ul>
+      <li>今回、何を作り、何を作らないか</li>
+      <li>変わる要件と決定（D-014 → セッション）</li>
+      <li>変わるファイル（API・画面・テスト・文書）</li>
+      <li>チケットの分け方の案と、順番</li>
+      <li>決めたこと（切れる時間・CSRF・移すあいだの形）</li>
+      <li>手元での確かめ方と、戻し方</li>
+    </ul>
+    <p>仕組みそのもの（Sanctum・表の列・Cookie・CSRF）は <a href="auth-session.html">認証の仕組み</a> に書いた。</p>
+  </div>
+
+  <div class="card warn">
+    <strong>このページは設計の途中の案</strong>
+    <p>決まったら、正本の <code>docs/cycles/01-backend-foundation/03-how.md</code>・<code>docs/requirements/auth.md</code>・<code>docs/decisions.md</code> に書く。このページと違うところがあれば、そちらが正しい。</p>
+  </div>
+
+  <h2>1. 範囲</h2>
+  <table>
+    <tr><th>作る</th><th>作らない</th></tr>
+    <tr><td>
+      <ul>
+        <li>Sanctum の SPA 認証の設定（<code>statefulApi()</code>・<code>cors.php</code>・<code>sanctum.php</code> の <code>stateful</code>）</li>
+        <li>ログイン・ログアウト・自分の情報を、セッションで動かす</li>
+        <li>ログインを確かめる Middleware（#243 の <code>AuthenticateUser</code>）を、セッションの上に作る</li>
+        <li>画面：トークンを持たない形にする（<code>credentials: 'include'</code>・<code>X-XSRF-TOKEN</code>）。バックエンドを直すときに、影響のある画面も一緒に直す（人が決めた）</li>
+        <li>会員の側のメンテナンス（開発者がコマンドで入れる・入れたら全員をログアウトさせる）。切り替えのリリースで使う</li>
+        <li>最後に、JWT を読むコードを消す</li>
+      </ul>
+    </td><td>
+      <ul>
+        <li>取り替え用のトークン（表 <code>refresh_tokens</code>・<code>family_id</code> など。人が「今は考えない」と決めた）</li>
+        <li>管理画面の認証（別に決める）</li>
+        <li>Sanctum の API トークン（スマホのアプリを作るときに）</li>
+        <li>新しい表（<code>sessions</code> はもうある）</li>
+        <li>メンテナンスのお知らせ（予告）・管理画面のメンテナンス</li>
+      </ul>
+    </td></tr>
+  </table>
+
+  <h2>2. 変わる要件と決定</h2>
+  <table>
+    <tr><th>場所</th><th>今</th><th>変えたあと</th></tr>
+    <tr><td><code>docs/decisions.md</code> の D-014</td><td>JWT（15分）と取り替え用のトークン（30日）</td><td>「置き換え」にする。新しい決定を足す：会員の認証は、Sanctum の SPA 認証（セッション）</td></tr>
+    <tr><td>FR-AUTH-010（ログイン）</td><td><code>access</code> と <code>refresh</code> の Cookie</td><td>セッションの Cookie が付く。ログインのたびに、セッションの番号を作り直す</td></tr>
+    <tr><td>FR-AUTH-013（15分で切れる）</td><td>アクセストークンは15分</td><td>操作がないまま24時間で切れる。使うたびに、期限が24時間先に延びる（5章の1）</td></tr>
+    <tr><td>FR-AUTH-014・015（取り替え・使い回し）</td><td>取り替え用のトークン</td><td>外す。番号は欠番にし、理由を1行残す</td></tr>
+    <tr><td>FR-AUTH-016（ログアウト）</td><td>取り替え用のトークンを使えなくする</td><td><code>204</code>。セッションの行を消し、Cookie を消す。同じ Cookie は 401</td></tr>
+    <tr><td>新しい要件（CSRF）</td><td>―</td><td>書き込みは、CSRF のトークン（Sanctum の <code>XSRF-TOKEN</code>）がなければ <code>419</code> で断る（5章の2）</td></tr>
+    <tr><td>NFR-AUTH-001</td><td>確かめに DB を使わない</td><td>毎回、セッションと会員の状態（退会・停止）を DB で確かめる</td></tr>
+  </table>
+
+  <h2>3. 変わるファイル</h2>
+  <p>正本は <code>docs/cycles/01-backend-foundation/03-how.md</code> の「ディレクトリとクラス」。主なものだけ並べる。</p>
+  <table>
+    <tr><th>側</th><th>ファイル</th><th>何を</th></tr>
+    <tr><td rowspan="8">API</td><td><code>app/Http/Middleware/AuthenticateUser.php</code>（新しい）</td><td>ログインしている会員が使えるかを確かめ、だめなら例外を投げる（応答は作らない）</td></tr>
+    <tr><td><code>User</code> の <code>isUsable()</code></td><td>退会・停止・強制退会を、1か所で決める。ログインと Middleware の両方から使う</td></tr>
+    <tr><td><code>app/Services/Auth/AuthService.php</code>（新しい）</td><td>ログインの照合と、止めた会員の確かめ。セッションは触らない</td></tr>
+    <tr><td><code>app/Http/Controllers/Auth/AuthController.php</code>（新しい）</td><td>セッションにログインさせる・番号を作り直す・ログアウトで消す</td></tr>
+    <tr><td><code>Controller.php</code> の <code>loginUserId()</code></td><td>ログインした会員の番号を読む所を1つにする</td></tr>
+    <tr><td><code>bootstrap/app.php</code></td><td><code>statefulApi()</code>・401／419／503 を日本語の文にする・<code>auth.rejected</code> のログ・health はメンテナンス中も通す</td></tr>
+    <tr><td>メンテナンスの出来事を受ける所（<code>app/Listeners/</code>）</td><td>メンテナンスに入れたら、<code>sessions</code> を全部消す</td></tr>
+    <tr><td>設定（<code>cors.php</code>・<code>sanctum.php</code>・<code>database.php</code>）と見本のファイル</td><td>CORS・画面のドメイン（<code>FRONTEND_URL</code> から）・SQL の例外の文の値を隠す・<code>SESSION_LIFETIME=1440</code></td></tr>
+    <tr><td rowspan="3">画面</td><td><code>shared/api/client.ts</code>（新しい）</td><td>どの <code>fetch</code> もここを通す。<code>credentials</code>・<code>X-XSRF-TOKEN</code>・401／419 でログインの画面・503 でメンテナンスの画面</td></tr>
+    <tr><td><code>app/RequireAuth.tsx</code>・<code>features/auth/session</code>（新しい）</td><td>起動のときに <code>GET /api/me</code> でログインしているかを決める（<code>sessionStorage</code> を見ない）</td></tr>
+    <tr><td>メンテナンスの画面（新しい）</td><td>「ただいまメンテナンス中です」</td></tr>
+    <tr><td>テスト</td><td><code>tests/DummyData/DummyAuth.php</code></td><td>セッションでログインした形（Laravel の <code>actingAs()</code>）にする。セッションを消すテストだけ、置き場を DB にする</td></tr>
+  </table>
+
+  <h2>4. チケットの分け方</h2>
+  <p>先に「読む所を1か所にする」を、API と画面の両方で JWT のまま済ませる。そのあとメンテナンスを用意し、メンテナンスの中で中身だけを替える。画面は、どのチケットでも一緒に直す（人が決めた）。</p>
+  <table>
+    <tr><th>順</th><th>チケット</th><th>バックエンド</th><th>画面</th><th>Size</th></tr>
+    <tr><td>1</td><td>#243 ログインを確かめる Middleware（JWT のまま）</td><td><code>AuthenticateUser</code>・<code>isUsable()</code>・<code>loginUserId()</code>・401 を日本語に。プロフィールの API に付ける</td><td>401 でログインの画面へ</td><td>中</td></tr>
+    <tr><td>2</td><td>トークンを読む所を、API と画面で1か所にする（JWT のまま）</td><td>残りの15の Controller を <code>loginUserId()</code> に。ログインが要るルートのテスト</td><td><code>client.ts</code>・送り先を <code>localhost</code>・<code>GET /api/me</code> でログインを判定・フォルダを移す</td><td>大</td></tr>
+    <tr><td>3</td><td>会員の側のメンテナンス</td><td>503・health を通す・入れたら <code>sessions</code> を全部消す</td><td>メンテナンスの画面</td><td>中</td></tr>
+    <tr><td>4</td><td>セッションに切り替える（メンテナンスの中で出す）</td><td>Sanctum・CSRF と 419・ログインを <code>AuthService</code> に移す・ログアウト・例外の文の値を隠す・<code>auth.rejected</code>・パスワードの変更でほかの端末を消す</td><td><code>credentials</code>・<code>X-XSRF-TOKEN</code>・419・ログインとログアウト・登録と再設定</td><td>大</td></tr>
+    <tr><td>5</td><td>JWT を消す</td><td><code>firebase/php-jwt</code>・テストの JWT</td><td><code>sessionStorage</code> の残り</td><td>小</td></tr>
+  </table>
+  <pre class="mermaid">
+flowchart LR
+    T1["1 #243 Middleware（JWT のまま）"] --> T2["2 読む所を API と画面で1か所に"]
+    T2 --> T3["3 会員の側のメンテナンス"]
+    T3 --> T4["4 セッションに切り替える（メンテナンスの中で）"]
+    T4 --> T5["5 JWT を消す"]
+  </pre>
+
+  <h3>切り替えの日の流れ（4 のリリース）</h3>
+  <pre class="mermaid">
+sequenceDiagram
+    participant O as 開発者
+    participant A as API
+    participant F as 画面
+    participant M as 会員
+    O->>A: php artisan down --with-secret
+    A->>A: sessions を全部消す（強制ログアウト）
+    O->>A: 抜け道の URL を開く（確かめ用の Cookie）
+    M->>F: 操作する
+    F->>A: リクエスト
+    A-->>F: 503
+    F-->>M: メンテナンスの画面
+    O->>A: 新しいコードを出す
+    O->>A: 抜け道でログイン・CSRF・401・419 を確かめ、戻し方も1回試す
+    O->>A: php artisan up
+    M->>F: 開き直す
+    F-->>M: ログインの画面（全員ログインし直し）
+  </pre>
+  <div class="card warn">
+    <strong>テストで気をつけること</strong>
+    <ul>
+      <li>テストの中では、Laravel が CSRF の確かめを飛ばす（<code>PreventRequestForgery.php</code> の <code>runningUnitTests()</code>）。FR-AUTH-018 の確かめ方は、4 のチケットで決める</li>
+      <li>テストのセッションはメモリに置く（<code>SESSION_DRIVER=array</code>）。セッションを消すテストは、そのテストだけ置き場を DB にしないと、何も確かめない</li>
+    </ul>
+  </div>
+
+  <h2>5. 決めたこと（2026-11-20 に人が決めた）</h2>
+  <table>
+    <tr><th>#</th><th>問い</th><th>決めたこと</th><th>理由・中身</th></tr>
+    <tr><td>1</td><td>ログインが切れる時間</td><td>操作がないまま <strong>24時間</strong> で切れる。使っているあいだは延び続ける</td><td>頻繁に切れると使いにくいため。セッションは、リクエストのたびに <code>sessions.last_activity</code> と Cookie の期限を書き直すので、取り替え用のトークン（<code>refresh_token</code>）がなくても、ページを開くたびに期限が24時間先に延びる。設定は <code>SESSION_LIFETIME=1440</code>（分）。「ログインしたままにする」（<code>remember_token</code>）は使わない</td></tr>
+    <tr><td>2</td><td>CSRF の守り方</td><td>Sanctum の CSRF のトークン（<code>XSRF-TOKEN</code>）を使う。前に選んだ「JSON だけを受ける」の代わりにする</td><td>Laravel の標準の仕組みで、自分で書く所がない。画面は、書き込みのたびに <code>X-XSRF-TOKEN</code> を付ける（<code>client.ts</code> の1か所）</td></tr>
+    <tr><td>3</td><td>移すあいだの形</td><td>(a) <strong>一度に切り替える</strong></td><td>セッションと JWT の両方を受けるあいだ、XSS で持ち出される穴が残るのを避ける。そのために、先に API と画面の「読む所」を1か所にし（2）、メンテナンスの中で中身だけを替える（4）</td></tr>
+  </table>
+
+  <h2>6. 手元での確かめ方</h2>
+  <ol>
+    <li>画面は <code>http://localhost:5173</code>、API は <code>http://localhost:8000</code> で開く（どちらも <code>localhost</code>。<code>127.0.0.1</code> を混ぜると、Cookie が届かない）</li>
+    <li>ログインし、ブラウザの開発者ツールの「アプリケーション」で、セッションの Cookie に HttpOnly の印が付いていること、<code>sessionStorage</code> にトークンがないことを見る</li>
+    <li>DB で <code>select id, user_id, last_activity from sessions;</code> を流し、行ができていることを見る</li>
+    <li>ログアウトし、行が消えること、同じ画面の API が 401 になることを見る</li>
+    <li>管理画面で会員を止め、その会員の次の操作が 401 になることを見る</li>
+  </ol>
+
+  <h2>7. 戻し方</h2>
+  <ul>
+    <li>マイグレーションはない（表 <code>sessions</code> は前からある）。PR を戻せば、元の JWT に戻る</li>
+    <li>戻すときは、API と画面を一緒に戻す（片方だけ戻すと、ログインできなくなる）</li>
+    <li>残った <code>sessions</code> の行は、使われずに期限で消えるので、害はない</li>
+  </ul>
+</main>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+  // page.js が選んだ表示（data-scheme）に合わせる。なければ端末の設定
+  const scheme = document.documentElement.dataset.scheme;
+  const dark = scheme ? scheme.startsWith("dark") : (document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches));
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/page.js"></script>
+</body>
+</html>
