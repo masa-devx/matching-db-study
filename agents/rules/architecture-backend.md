@@ -80,7 +80,7 @@ Laravel と Rails の公式の考え方に合わせる。**Controller は、URL 
 
 - メソッドは `index`（一覧）・`show`（1件）・`store`（作る）・`update`（直す）・`destroy`（消す）の5つまで。1つの操作だけの Controller は `__invoke` でもよい。テストで確かめる（8章）
 - この5つ以外のメソッドが欲しくなったら、**隠れている名詞を探して、Controller を分ける**（Laravel：「Controller は焦点を絞っておく。標準の操作以外のメソッドがいつも要るなら、2つの小さい Controller に分ける」。Rails：「独自のアクションをたくさん足しているなら、別のリソースが隠れていないかを考える」）
-- 1人に1つしかないもの（「自分」）は、`index` のない名詞にする（`GET /me` → `MeController@show`。Laravel のシングルトンのリソース）
+- 1人に1つしかないもの（「自分」）は、`index` のない名詞にする（`GET /me` → `AccountController@show`。Laravel のシングルトンのリソース）。URL は `/me` のまま、コードでは `Account` と呼び、`Me` を名前に使わない（`docs/glossary.md` の「アカウント」。2026-11-20 に人が決めた。`MeController`・`MeTest` では、何を指すかが分かりにくいため）
 - URL の形（状態を名詞にする `POST /members/{id}/suspension`・一度きりの動作は動詞のパス `POST /auth/login`）は、`docs/cycles/01-backend-foundation/03-how.md` の「CRUD ではない操作の書き方」に従う。Controller の名前は、その名詞にそろえる（`SuspensionController`）。新しい URL の名詞は、#127（ルートの骨組み）で決める
 - 例外：ログインと新規登録は `Auth/AuthController` にまとめる（人が決めた）。メソッドは `login`・`logout`・`store`（新規登録）まで。パスワードの再設定・メールの確認は、別の名詞（`PasswordResetController` など）にする
 
@@ -90,7 +90,7 @@ Laravel と Rails の公式の考え方に合わせる。**Controller は、URL 
 | いいね | いいね | `Matching/LikeController@store` |
 | ブロック・通報 | ブロック・通報 | `Matching/BlockController`・`Members/ReportController` |
 | 会員の検索 | 会員（の一覧） | `Members/MemberController@index` |
-| 自分のプロフィールを見る・直す | 自分 | `Profile/MeController@show`・`update` |
+| 自分のプロフィールを見る・直す | 自分のアカウント | `Profile/AccountController@show`・`update` |
 
 ### Service の分け方
 
@@ -107,8 +107,8 @@ Laravel と Rails の公式の考え方に合わせる。**Controller は、URL 
 Controller は**受け取る → 呼ぶ → 返す**だけ。`if` で業務の判断をしない。Model を直接使わない。
 
 ```php
-// app/Http/Controllers/Profile/MeController.php（PATCH /me。自分のプロフィールを直す）
-final class MeController extends Controller
+// app/Http/Controllers/Profile/AccountController.php（PATCH /me。自分のプロフィールを直す）
+final class AccountController extends Controller
 {
     public function __construct(private readonly ProfileService $profiles) {}
 

@@ -27,7 +27,7 @@
 | まとまり | 中身 |
 | --- | --- |
 | `Auth` | 新規登録・ログイン・ログアウト・メールの確認・パスワード |
-| `Profile` | 自分（自分の情報を見る・プロフィールを直す・退会）・相手のプロフィール。`Members` から分けた（「Members」では中身が分かりにくいため。2026-11-19 に人が決めた） |
+| `Profile` | 自分のアカウント（URL は `/me`。自分の情報を見る・プロフィールを直す・退会）・相手のプロフィール。`Members` から分けた（「Members」では中身が分かりにくいため。2026-11-19 に人が決めた） |
 | `Members` | 会員の検索・保存した検索条件・通報・お知らせ |
 | `Matching` | いいね・届いたいいね・スキップ・マッチ・ブロック |
 | `Messaging` | トークルーム・メッセージ・Firestore のトークン |
@@ -57,11 +57,11 @@
 
 | 今のファイル（メソッド） | 新しい Controller | Service |
 | --- | --- | --- |
-| `AuthController`（login・me・logout）・`UserController`（store：新規登録） | `Auth/AuthController`（login・logout・store）・**`me` は `Profile/MeController@show`** | `Auth/AuthService`・`Profile/MeService` |
+| `AuthController`（login・me・logout）・`UserController`（store：新規登録） | `Auth/AuthController`（login・logout・store）・**`me` は `Profile/AccountController@show`** | `Auth/AuthService`・`Profile/AccountService` |
 | `EmailVerificationController`（show・store） | `Auth/EmailVerificationController` | `Auth/EmailVerificationService` |
 | `PasswordController`（update）・`PasswordResetController`（store・update） | `Auth/PasswordController`・`Auth/PasswordResetController` | `Auth/PasswordService` |
-| `UserController`（index：検索・destroy：退会） | `Members/MemberController@index`・`Profile/MeController@destroy` | `Members/MemberService`（`search`。クエリは `User` の `scopeSearch`）・`Profile/MeService`（`withdraw`） |
-| `ProfileController`（show：相手のプロフィール・update：自分のプロフィール） | `Profile/ProfileController@show`・**自分のは `Profile/MeController@update`**（新しい URL は `PATCH /me`。`03-how.md` の281行目） | `Profile/ProfileService`（`showProfile`・`updateProfile`） |
+| `UserController`（index：検索・destroy：退会） | `Members/MemberController@index`・`Profile/AccountController@destroy` | `Members/MemberService`（`search`。クエリは `User` の `scopeSearch`）・`Profile/AccountService`（`withdraw`） |
+| `ProfileController`（show：相手のプロフィール・update：自分のプロフィール） | `Profile/ProfileController@show`・**自分のは `Profile/AccountController@update`**（新しい URL は `PATCH /me`。`03-how.md` の281行目） | `Profile/ProfileService`（`showProfile`・`updateProfile`） |
 | `SearchConditionController`（index・store・update・destroy） | `Members/SearchConditionController` | `Members/SearchConditionService` |
 | `ReportController`（store） | `Members/ReportController` | `Members/ReportService` |
 | `NoticeController`（index・**read**） | `Members/NoticeController@index`・**既読は `Members/NoticeReadController@store`**（名詞：既読） | `Members/NoticeService` |
