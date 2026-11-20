@@ -74,6 +74,22 @@ app/
 └── Support/                                      基盤（Logging など）
 ```
 
+### クラスの名前
+
+Laravel の公式の名前の付け方（`php artisan make:〇〇` の例）に合わせる。種類の名前を終わりに付けるかは、種類ごとに決める。Laravel の文書・コマンドと同じ形にして、初めて読む人にも分かるようにするため（2026-11-20 に人が決めた。#243）。
+
+| 種類 | 置き場 | 名前 | 例 |
+| --- | --- | --- | --- |
+| Controller・Request・Resource・Service・Client・例外 | 上の図のとおり | 種類の名前で終える（`〜Controller`・`〜Request`・`〜Resource`・`〜Service`・`〜Client`・`〜Exception`） | `AccountController`・`AuthService`・`UserNotFoundException` |
+| Middleware | `Http/Middleware/` | 何をするかを、動詞から書く。`Middleware` は付けない | `AuthenticateUser`・`EnsureEmailIsVerified` |
+| Listener（出来事を受けて動く） | `Listeners/` | 何をするかを、動詞から書く。`Listener` は付けない | `DeleteAllSessions` |
+| Mail | `Mail/` | `Mail` で終える（今あるものに合わせる） | `VerifyMail`・`ResetPasswordMail` |
+| Model | `Models/` | 表の名前の単数 | `User`・`UserMatch` |
+
+- UseCase と Repository は作らない（D-025：Controller → Service → Model）。`〜UseCase`・`〜Repository` という名前のクラスも作らない
+- ほかの種類（Event・Job・Command・Policy・Rule・Enum など）は、初めて作るチケットで決め、この表に足す
+- 層のテスト（`tests/Arch/LayersTest.php`）で、Service・Mail の終わりの名前と、Middleware・Listener に種類の名前を付けないこと、UseCase・Repository がないことを確かめる
+
 ### Controller の分け方
 
 Laravel と Rails の公式の考え方に合わせる。**Controller は、URL の名詞（リソース）1つに1つ**。
@@ -98,6 +114,13 @@ Laravel と Rails の公式の考え方に合わせる。**Controller は、URL 
 - `final` にし、名前は `Service` で終わる。`app/Services/` には Service のクラスだけを置く（戻り値は Model か配列。配列は PHPDoc で形を書く）
 - **public のメソッドは操作の名前**（動詞から始める：`search`・`showProfile`・`updateProfile`・`send`・`listReceived`・`suspend`）。Controller のメソッドの名前（`index`・`store`）にそろえない（いくつかの Controller から呼ぶと、ぶつかるため）。**private のメソッドは、その中の手順**（`findMember`・`assertNotBlocked` など）
 - 名前には「何ができるか」を書き、「だれが呼べるか」（ログインしているか・本人か・役割）は入れない（`updateMine` ではなく `updateProfile`）。だれが呼べるかは、Middleware とメソッドの中の条件で決める。認証の作りが変わっても、名前を変えずに済むため（2026-11-19 に人が決めた。PR #240）
+- 層や技術の言葉（API・HTTP・DB・JSON・トークン・セッション）を、名前に入れない（`canUseApi` ではなく `isAccountUsable`）。同じメソッドを、コマンドやキューから呼んでも名前が合うようにするため（2026-11-20 に人が決めた。#243）
+- 真偽を返すメソッドは、呼ぶ所が「〇〇は△△か」と読める、肯定の形にする。頭の言葉は `is`（状態・性質。`isAccountUsable`）・`has`（持っている・済んでいる。`hasVerifiedEmail`）・`can`（できる・許されている。`canSendLike`）・`should`（そうするのがよいという判断。`shouldQueue`）。迷ったら `is` にする。`check`・`validate` のように、何を確かめるかが分からない動詞にしない（Swift の API Design Guidelines・.NET の Framework Design Guidelines。2026-11-20 に人が決めた。#243）
+- 否定の名前（`isNot〇〇`・`disabled`）を作らない。読むたびに否定を解くことになるため（.NET）
+- 真偽の引数で、メソッドの動きを変えない（`book($user, true)` は、呼ぶ所で true の意味が分からない）。動きごとにメソッドを分ける（Martin Fowler「FlagArgument」）
+- 状態が3つ以上あるなら、真偽ではなく enum で持ち、真偽のメソッドはそこから作る（真偽の値は「何を調べた結果か」を持たないため）
+- 一度だけ起きて「いつか」に意味がある出来事は、日時の列（`〇〇_at`。null なら起きていない）で持ち、Model の真偽のメソッドで読む（Laravel の `email_verified_at` と `hasVerifiedEmail()`・`deleted_at` と `trashed()` と同じ形）
+- Model と Service で同じ事実を確かめるときは、同じ言葉を使う。番号から探して答える Service のメソッドは、主語（だれの何か）を名前に入れる（Model の `$user->isAccountUsable()` と、Service の `$auth->isUserAccountUsable($userId)`。`$auth->hasUsableAccount($userId)` は「AuthService が持つか」と読めてしまう）。引数の形（`ById`）は名前に出さない
 - メソッドの数の上限は決めない。太ったら見直す（`docs/backend.md` の「やり直しのきっかけ」）
 
 ## 4. 書き方
@@ -157,14 +180,14 @@ final class ProfileResource extends JsonResource
 }
 ```
 
-トークンを読むのは Middleware だけ。Controller ごとに JWT を読まない。トークンが正しくても、退会・停止・強制退会した会員は通さない（使えるかは Service に聞き、Service は `User::isUsable()` の1か所で決める）。Middleware は応答を作らず、例外を投げる。401 の応答は `bootstrap/app.php` が作る（7章）。
+トークンを読むのは Middleware だけ。Controller ごとに JWT を読まない。トークンが正しくても、退会・停止・強制退会した会員は通さない（使えるかは Service に聞き、Service は `User::isAccountUsable()` の1か所で決める）。Middleware は応答を作らず、例外を投げる。401 の応答は `bootstrap/app.php` が作る（7章）。
 
 ```php
 // app/Http/Middleware/AuthenticateUser.php（#243）
 public function handle(Request $request, Closure $next): Response
 {
     $userId = $this->userIdFromToken($request);   // JWT を読む。ない・壊れている・期限切れなら null
-    if ($userId === null || ! $this->auth->canUseApi($userId)) {   // AuthService：退会・停止・強制退会していないか
+    if ($userId === null || ! $this->auth->isUserAccountUsable($userId)) {   // AuthService：退会・停止・強制退会していないか
         throw new AuthenticationException;   // bootstrap/app.php が 401「ログインしてください」にする
     }
     $request->attributes->set('login_user_id', $userId);
