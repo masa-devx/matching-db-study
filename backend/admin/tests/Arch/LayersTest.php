@@ -213,6 +213,34 @@ arch('Service は Service で終わる', function (): void {
         ->toHaveSuffix('Service');
 });
 
+// ---- クラスの名前（architecture-backend.md の3章「クラスの名前」）----
+
+arch('Mail は Mail で終わる', function (): void {
+    expect('App\Mail')
+        ->classes()
+        ->toHaveSuffix('Mail');
+});
+
+// Laravel の公式の付け方に合わせ、何をするかを動詞から書く（AuthenticateUser）。種類の名前は付けない
+arch('Middleware と Listener には、種類の名前を付けない', function (): void {
+    expect('App\Http\Middleware')
+        ->classes()
+        ->not->toHaveSuffix('Middleware');
+    expect('App\Listeners')
+        ->classes()
+        ->not->toHaveSuffix('Listener');
+});
+
+// Controller → Service → Model の形にした（D-025）。UseCase と Repository の層は作らない
+arch('UseCase と Repository のクラスを作らない', function (): void {
+    expect('App')
+        ->classes()
+        ->not->toHaveSuffix('UseCase');
+    expect('App')
+        ->classes()
+        ->not->toHaveSuffix('Repository');
+});
+
 // ---- Model ----
 
 // Model は DB とのやり取りだけ（2章）。Service・Client・Http・ログを使わない。

@@ -34,8 +34,9 @@ Route::get('/health', function () {
 });
 
 // 01 会員とプロフィール（docs/api/01-members.md）。#46 で、パスを UUID（public_id）にし、/profile を外した
-Route::get('/users/{user_id}', [ProfileController::class, 'show'])->middleware('user.identify');   // トークンがあれば、会員の番号を載せる
-Route::put('/users/{user_id}', [ProfileController::class, 'update']);
+// ログインが要る（user.authenticate。FR-AUTH-020）。ほかの API の JWT のコピーも、#257 でこの Middleware に置き換える
+Route::get('/users/{user_id}', [ProfileController::class, 'show'])->middleware('user.authenticate');
+Route::put('/users/{user_id}', [ProfileController::class, 'update'])->middleware('user.authenticate');
 
 // 01b 登録とメールアドレスの確認（docs/api/01b-auth.md）。レガシー版は、だれでも使える
 Route::post('/users', [UserController::class, 'store']);

@@ -6,4 +6,5 @@ declare(strict_types=1);
 // キーは、何が起きたかを英語の小文字と _ で書く。使う所ができたときに足す
 return [
     'user_not_found' => '会員が見つかりません',
+    'unauthenticated' => 'ログインしてください',
 ];

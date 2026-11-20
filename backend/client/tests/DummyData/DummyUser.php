@@ -31,6 +31,7 @@ final class DummyUser
         bool $paid = false,
         bool $withdrawn = false,
         bool $suspended = false,
+        bool $banned = false,
         bool $unverified = false,
         ?string $nickname = null,
         ?string $birthday = null,
@@ -38,7 +39,7 @@ final class DummyUser
         ?int $height = null,
         bool $withProfile = true,
     ): TestUser {
-        $user = self::createUser($paid, $suspended, $unverified);
+        $user = self::createUser($paid, $suspended, $banned, $unverified);
         if ($withdrawn) {
             self::withdraw($user);
         }
@@ -60,8 +61,8 @@ final class DummyUser
         return new TestUser($user->id, $user->public_id, $user->email, $profile->nickname, $gender);   // 性別は、渡した値をそのまま入れている
     }
 
-    /** 有料なら期限を今から30日にする。停止なら停止の日時と理由を入れる。確認していないなら、確認の日時を空にし、確認用の文字を入れる。 */
-    private static function createUser(bool $paid, bool $suspended, bool $unverified): User
+    /** 有料なら期限を今から30日にする。停止・強制退会なら、その日時と理由を入れる。確認していないなら、確認の日時を空にし、確認用の文字を入れる。 */
+    private static function createUser(bool $paid, bool $suspended, bool $banned, bool $unverified): User
     {
         return User::factory()->create([
             'email_verified_at' => $unverified ? null : now(),
@@ -70,6 +71,8 @@ final class DummyUser
             'paid_until' => $paid ? now()->addDays(30) : null,
             'suspended_at' => $suspended ? now() : null,
             'suspended_reason' => $suspended ? 'テストで止めた' : null,
+            'banned_at' => $banned ? now() : null,
+            'banned_reason' => $banned ? 'テストで強制退会にした' : null,
         ]);
     }
 

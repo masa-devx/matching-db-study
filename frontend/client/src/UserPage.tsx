@@ -7,6 +7,7 @@ import { SkeletonProfile } from './components/Skeleton'
 import { useToast } from './components/Toast'
 import ReportDialog from './components/ReportDialog'
 import UpsellDialog from './components/UpsellDialog'
+import { goToLoginAfterUnauthorized } from './shared/session/goToLoginAfterUnauthorized'
 
 // レガシー版（03b）。相手のプロフィール。取る・持つ・見せる・決まりを、全部この部品に書く
 // 03c：モーダル・トースト・スケルトン・マッチの演出は components/ の部品を使う
@@ -45,8 +46,16 @@ export default function UserPage() {
     }
     // 読み込み中・失敗は考えない。すぐ別の人に移ると、前の人の応答があとから上書きする
     fetch(`${api}/api/users/${publicId}`, { headers })
-      .then((r) => r.json())
+      .then((r) => {
+        // #243：ログインが切れた・止められたときは 401。ログインの画面へ移す（ほかの失敗は、まだ考えない）
+        if (r.status === 401) {
+          goToLoginAfterUnauthorized()
+          return null
+        }
+        return r.json()
+      })
       .then((u) => {
+        if (u === null) return
         setUser(u)
         // M3（#187）：もうマッチしていれば、「メッセージを送る」を出す
         setRoomId(u.room_id ?? null)
@@ -78,7 +87,13 @@ export default function UserPage() {
         setRoomId(d.room_id ?? null)
         // マッチの演出に出す自分の写真を、ここで読む（ホームと同じ2本を写す）
         const me = await fetch(`${api}/api/me`, { headers }).then((x) => x.json())
-        const mine = await fetch(`${api}/api/users/${me.public_id}`, { headers }).then((x) => x.json())
+        const res = await fetch(`${api}/api/users/${me.public_id}`, { headers })
+        // #243：止められた・ログインが切れたときは 401。ログインの画面へ移す
+        if (res.status === 401) {
+          goToLoginAfterUnauthorized()
+          return
+        }
+        const mine = await res.json()
         setMatchedWith(mine.profile ?? {})
       } else {
         toast('いいねしました')

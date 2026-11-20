@@ -186,7 +186,7 @@ return ['token' => $token];
 | `password` を送らない | `401`「パスワードが違います」（測った。設計のときは `500` と見込んでいた） | FR-AUTH-010 |
 | `"password": ["password"]`（配列） | `500`（`password_verify()` の TypeError）。`laravel.log` のスタックトレースに、パスワードのハッシュの先頭15文字が残る | FR-AUTH-010・FR-AUTH-032 |
 | `"email": ["sakura@example.test"]`（配列） | 先頭の要素だけが使われ、ログインできる（入力の形を確かめない） | FR-AUTH-010 |
-| 署名を書き換えた JWT・`exp` が過ぎた JWT・`abc` で `GET /api/me` | `500`（`401` にならない。`exp` が過ぎたものは、#104 で API テストにしたが、#237（PR #240）で消した。その API を移すチケットで書き直す。プロフィールを見る API（`GET /api/users/{user_id}`）では、壊れた・ほかの鍵で署名した・`exp` が過ぎた JWT の 500 を、`tests/Feature/Profile/ShowTest.php` で確かめている） | FR-AUTH-013 |
+| 署名を書き換えた JWT・`exp` が過ぎた JWT・`abc` で `GET /api/me` | `500`（`401` にならない。`exp` が過ぎたものは、#104 で API テストにしたが、#237（PR #240）で消した。その API を移すチケットで書き直す。プロフィールの API（`GET`・`PUT /api/users/{user_id}`）は、#243 で 401 にした。`tests/Feature/Profile/ShowTest.php`・`UpdateTest.php` で確かめている） | FR-AUTH-013 |
 | `500` のときの `laravel.log` | スタックトレースに `JWT::decode()` の引数として JWT が残る。今は PHP の設定（`zend.exception_string_param_max_len=15`）で先頭15文字（どの JWT でも同じヘッダーの部分）だけ。この設定を上げると、JWT がまるごと残る。鍵は `#[SensitiveParameter]` で伏せられる | FR-AUTH-032 |
 | JWT の `sub` の会員がいない | `200 {}`（`User::find()` が `null`）。DB を作り直して ID が振り直されると、古い JWT が別の会員を指す（要確認。試していない） | FR-AUTH-013 |
 | メールアドレスを確認していない会員でログイン | ログインでき、01 のプロフィールの API も使える | FR-AUTH-021 |
