@@ -34,3 +34,4 @@
 | [feature-map.md](feature-map.md) | 機能 → 画面 → API → コントローラー → 表の対応 |
 | [as-is-db.md](as-is-db.md) | 今の表の形と、知られている問題 |
 | [quiz-log.md](quiz-log.md) | 出た問い・自分の答え・分からなかったところ |
+| [design-topics.md](design-topics.md) | 設計の判断の地図：大きなトピックと小さな見出し・状態・記録の場所。説明するときの流れ |
