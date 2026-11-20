@@ -69,6 +69,15 @@ class User extends Authenticatable
     }
 
     /**
+     * API を使える会員か（退会・利用の停止・強制退会のどれでもない）。行の値だけで決まるので、ここに1つだけ置く。
+     * ログインを確かめる Middleware（AuthenticateUser）から、AuthService を通して使う
+     */
+    public function isUsable(): bool
+    {
+        return $this->deleted_at === null && $this->suspended_at === null && $this->banned_at === null;
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
