@@ -188,7 +188,7 @@ API のルートは、すべて `routes/api.php` から読み込む。`routes/we
 | URL の頭 | 付かない | 標準で `/api` が付く（`bootstrap/app.php` の `apiPrefix` で変えられる） |
 
 - API は毎回トークンで確かめるので、セッションと CSRF の確かめは要らない。`api.php` に置けば、余計なミドルウェアが付かない
-- 気をつけること：改善版はトークンを HttpOnly の Cookie に置く（D-014）。`api.php` には CSRF の確かめも Cookie の暗号化も付かない。Cookie にトークンを置くと、「毎回トークンで確かめるので CSRF は要らない」という前提が崩れる。CORS は応答を読ませない仕組みで、送ること自体は止めない。SameSite も、同じサイトの別のオリジンからの送信は止めない。認証を移すチケットで、次の3つを決める（PR #132 のレビュー S7）
+- 気をつけること：改善版はトークンを HttpOnly の Cookie に置く（D-014）。`api.php` には CSRF の確かめも Cookie の暗号化も付かない。Cookie にトークンを置くと、「毎回トークンで確かめるので CSRF は要らない」という前提が崩れる。CORS は応答を読ませない仕組みで、送ること自体は止めない。SameSite も、同じサイトの別のオリジンからの送信は止めない。認証を移すチケットで、次の3つを決める（PR #132 のレビュー S7）。2026-11-20 に決めた：下の「認証をセッションに移す」
   - 書き込みは JSON の `Content-Type` か独自のヘッダーを必須にするか、CSRF のトークン（Sanctum の SPA の方式）を使うか
   - Cookie の `SameSite`・`Secure`・`HttpOnly` の値
   - CORS で許すオリジンは画面のオリジンだけ（`http://localhost:5173`・管理画面は `http://localhost:5174`）。すべてのオリジンを許す設定と `supports_credentials` を一緒にしない
@@ -276,7 +276,7 @@ B の補足（PR #132 のレビュー S15）：500 の `detail` は決まった�
 | `GET /api/email-verifications/{token}` | `GET /users/{user_id}/email-verification/{hash}` | 付けない | メールのリンクで開くので、ログインしていない（下の注） |
 | `POST /api/email-verifications` | `POST /me/email-verification` | 付ける | 迷う（自分のメールアドレス） |
 | `POST /api/auth/login`・`/logout` | `POST /auth/login`・`/auth/logout` | 付けない | ログインの前後 |
-| ―（改善版で足す） | `POST /auth/refresh` | 付けない | |
+| ―（改善版で足す） | ―（作らない。D-027 でセッションにした） | ― | |
 | `GET /api/me` | `GET /me` | 付ける | 自分そのもの |
 | `PUT /api/users/{publicId}` | `PATCH /me` | 付ける | 自分そのもの |
 | `DELETE /api/me` | `DELETE /me` | 付ける | 自分そのもの（退会） |
@@ -306,6 +306,168 @@ B の補足（PR #132 のレビュー S15）：500 の `detail` は決まった�
 ### 次に話すこと
 
 管理画面の14本を「今の URL → 新しい URL」の表にする（会員の側の24本は上の表）。
+
+## 認証をセッションに移す（#246。2026-11-20）
+
+D-027。仕組みの解説は [explanations/auth-session.html](../../../explanations/auth-session.html)、計画は [explanations/auth-session-plan.html](../../../explanations/auth-session-plan.html)。メンテナンスの要件は [docs/requirements/maintenance.md](../../requirements/maintenance.md)。
+
+### 比べた案
+
+| 案 | 良いところ | 弱いところ | 手間 |
+| --- | --- | --- | --- |
+| A：D-014 のまま（JWT 15分と取り替え用のトークン） | 表の設計・使い回しの見つけ方を学べる | 止めた会員を毎回 DB で確かめるので、JWT の強み（DB を見ない）が使えない。自分で作る部分が多い | 大 |
+| B：Sanctum の SPA 認証（セッション） | Laravel の標準。行を消せば止まる。会員の台帳とパスワードが自分の DB に残り、移しやすい | ネイティブアプリには、あとで API トークンを足す | 中 |
+| C：Firebase Authentication | パスワードを自分で持たない。SNS・SMS でのログインが早く用意できる | Google に縛られる。画面の SDK がトークンを JavaScript から読める所に置くので、#246 の目的（XSS で持ち出させない）と合わない | 中 |
+| D：自分で一から書く | 仕組みを細かく学べる | 書き損じが、そのまま会員のなりすましになる。現場の形と違う | 大 |
+
+選ぶ案と理由：B（人が決めた。2026-11-20）。学び方は、Sanctum の中（`vendor/laravel/sanctum`・`SessionGuard`・`PreventRequestForgery`）を読み、テストで壊して確かめる。
+
+### 決めたこと（2026-11-20 に人が決めた）
+
+| 問い | 決めたこと |
+| --- | --- |
+| 切れる時間 | 操作がないまま24時間（`SESSION_LIFETIME=1440`）。リクエストのたびに延びる。取り替え用のトークンも「ログインしたままにする」も使わない |
+| CSRF | Sanctum の CSRF のトークン（`XSRF-TOKEN` の Cookie と `X-XSRF-TOKEN` のヘッダー）。前の宿題（「`api.php` で管理する」の節の3つ）の答え：書き込みは CSRF のトークン・Cookie は `HttpOnly`・`SameSite=Lax`・本番だけ `Secure`・CORS は画面のオリジンだけ |
+| 移すあいだ | 一度に切り替える。セッションと JWT の両方を受ける時期を作らない（XSS で持ち出される穴を残さない） |
+| 取り替え用のトークン | 今は考えない。表 `refresh_tokens` は作らない |
+| 画面 | 別のチケットにせず、バックエンドを直すチケットの中で一緒に直す。画面のフォルダも、そのとき `architecture-frontend.md` のとおりに移す。画面ごとのチケット（#115〜#122・#248・#249）と管理画面のチケット（#123・#250〜#253）は閉じた（#112 の本文） |
+| メンテナンス | 会員の側だけを、開発者がコマンド（`php artisan down --with-secret`・`up`）で止める。管理画面は止めない・ボタンも作らない。入れたときに `sessions` を全部消す（強制ログアウト）。確かめる開発者は、抜け道の URL を一度開く（Laravel の標準）。お知らせ（予告）は入れない。切り替えのリリースで使う |
+
+### DB
+
+- 新しい表・列はない。表 `sessions`（Laravel の最初のマイグレーション）を使う。`id` が主キー、`user_id` と `last_activity` にインデックスがある
+- **1回のリクエストで流れる SQL（本番。`StartSession`・`DatabaseSessionHandler` を読んだ）**
+  - ログインしているリクエスト：`sessions` の select 1本・`users` の select 1本（ガードが読む。判定はこの会員を使い、読み直さない）・`sessions` の行全体の update 1本（`payload`・`user_id`・`ip_address`・`user_agent`・`last_activity`。中身が変わらなくても毎回。Controller のあと、応答を返す前）
+  - 50回に1回ほど（掃除のくじ。設定の `session.lottery` は 2/100）、Controller の前に、期限を過ぎた行を消す `delete from sessions where last_activity <= ?` が流れる
+  - Cookie のないリクエスト：select と insert（会員のいない行ができる）
+  - 読むだけの API（検索・一覧）も、毎回1本の書き込みになる。select も主の DB に流れるので、あとで読み取り用の複製を足しても、セッションの分は逃がせない
+- **会員のいない行（`user_id` が空）**ができる道：ログインの前の `/sanctum/csrf-cookie`・ログアウトのあと・Cookie なしで来るリクエスト。ログインでは `regenerate(true)` で前の行を消す（消さないと、ゲストの行が残る）
+- **行の数の見積もり**：24時間のうちに使われた、ログインしている端末の数＋ログインせずに来た端末の数＋くじを待っている期限切れの行。会員の総数ではなく、1日に使う端末の数で決まる。どれも今は数がないので、切り替えの前と後に `select count(*), count(user_id) from sessions` を測る
+- **10倍になったときに見る数字**：`select n_tup_upd, n_tup_hot_upd, n_dead_tup, last_autovacuum from pg_stat_user_tables where relname = 'sessions'`。`last_activity` にインデックスがあるので、update は HOT（インデックスを書き直さない更新）にならない。書き込みが目立ってきたら、`SESSION_DRIVER` を別の置き場（Redis など）に替える。そのときは NFR-AUTH-001 の「表 `sessions`」の書き方も変える
+- **`sessions.user_id` に外部キーを付けない理由**：番号は使い回さないので、会員の行が消えてもガードが会員を見つけられず 401 になる。外部キーを付けると、Laravel は insert の失敗を受け止めて update に切り替える（`performInsert`）ので、違反が表に出ないまま保存されなくなる。今は、`users` を物理的に消すのは試しのデータ（シーダー）だけ。本番で消す処理を作るときに、その処理で `delete from sessions where user_id = ?` も流す
+- **セッションを消す処理**：パスワードの変更（FR-AUTH-033）は、Laravel の `Auth::logoutOtherDevices()` と Sanctum の `AuthenticateSession` で、変えた端末のほかを使えなくする（`delete ... where user_id = ?` を直接流すと、変えた端末もログアウトされる）。パスワードの再設定（FR-AUTH-035）・退会は、その会員の行を全部消す。メンテナンス（FR-MAINT-002）は、表の行を全部消す
+- `last_activity` は `integer`（UNIX の秒）なので、2038-01-19 にあふれる。Laravel の標準の形で、今は直さない
+- テストは `SESSION_DRIVER=array`（`phpunit.xml:45`）なので、`sessions` の SQL は流れない。セッションを消すテスト（FR-AUTH-033・035・退会・FR-MAINT-002）だけ、そのテストの中でセッションの置き場を DB にし、行が消えた・残ったを `assertDatabaseHas`・`assertDatabaseMissing` で確かめる。SQL の本数を確かめるテストは、本番と本数が違うことをコメントに書く
+
+### API
+
+URL は今のまま（`/api/...`）。新しい URL に移すのは、サイクル 02。エラーの形は `docs/api/README.md` のとおり（日本語の `message`）。
+
+| API | 今 | 変えたあと |
+| --- | --- | --- |
+| `GET /sanctum/csrf-cookie`（Sanctum が足す） | ― | `204`。Cookie `XSRF-TOKEN` を返す。画面の `client.ts` は、書き込みの前に Cookie がなければ1回呼ぶ |
+| `POST /api/auth/login` | `200` `{"token": "<JWT>"}` | `200`。応答は `GET /api/me` と同じ形。セッションの Cookie を付け、JSON にトークンは入れない。止めた・強制退会の会員は今と同じ `403`（照合と止めた会員の確かめは、ログインの状態を作る前） |
+| `POST /api/auth/logout` | `200`（サーバーは何もしない） | `204`。セッションを消し、CSRF のトークンも作り直す（FR-AUTH-016）。画面は応答の本文を読まない |
+| `GET /api/me` | JWT を読む | セッションの会員を返す |
+| ログインが要るほかの API | 各 Controller が JWT を読む。ない・壊れている JWT は 401・500 | `AuthenticateUser` が確かめる。ログインしていない・止めた・退会した会員は `401`「ログインしてください」 |
+| 書き込みの API | CSRF の確かめなし | `X-XSRF-TOKEN` がなければ `419`「画面を読み込み直してください」（文は `lang/ja/errors.php`）。24時間で切れたあとの書き込みも、401 ではなく 419 になる（Sanctum は、ログインより先に CSRF を確かめる） |
+| メンテナンス中の会員の API | ― | `503`「ただいまメンテナンス中です」。`GET /api/health` と抜け道は通す |
+| `POST /auth/refresh`（「`/me` を付けるか」の表で「改善版で足す」） | ― | 作らない（D-027） |
+
+詳しい入力と応答は、それぞれのチケットで `docs/api/01b-auth.md` の「改善版」の列に書く。curl で確かめるときは、`Origin: http://localhost:5173`（か `Referer`）を付けないと、Sanctum がセッションを使わない。Cookie を保存したファイルは作業用のフォルダに置き、PR に貼らずに消す。
+
+### ディレクトリとクラス
+
+| ファイル | 責務 | 置き場の理由 |
+| --- | --- | --- |
+| `app/Http/Middleware/AuthenticateUser.php`（新しい） | ガードが見つけたログインしている会員を受け取り、使えるかを Service に聞く。だめなら `AuthenticationException` を投げるだけ（応答は作らない）。よければ `login_user_id` を載せる | ログインしている会員を読むのは Middleware だけ（`architecture-backend.md` の4章） |
+| `app/Http/Controllers/Controller.php` | `loginUserId(Request): int`。値がなければ `AuthenticationException` を投げる。どの Controller も、これを呼ぶだけにする | 読み方を1か所にする。Middleware を付け忘れたとき、黙って「会員 0 番」として動かない |
+| `User` の Model | 会員が使えるか（退会・停止・強制退会）を、行の値だけで答える（`isUsable()`。今ある `scopeActive` と同じ条件）。ログインと `AuthenticateUser` の両方から使う | 行の値だけで決まる事実は Model に1つだけ置く。2か所に書くと、止め方を足したときにずれる |
+| `app/Services/Auth/AuthService.php`（新しい。`docs/backend.md` の移行の地図の名前） | `login(email, password): User`：照合（失敗と成功で時間をそろえる。NFR-AUTH-002）・止めた会員の業務の例外・`last_login_at`。`canUseApi(User): bool` | 業務の決まりは Service。`Auth::` と `session()` は使わない（2章） |
+| `app/Http/Controllers/Auth/AuthController.php`（新しい。古い `AuthController` から移す） | `login`：Service が返した会員で `Auth::guard('web')->login()` と `regenerate(true)`。`logout`：`logout`・`invalidate`・`regenerateToken` | セッションを触ってよいのは Controller と Middleware（HTTP の側）。`architecture-backend.md` の2章の表に書き足す |
+| `bootstrap/app.php` | `statefulApi()`・Middleware の別名・`AuthenticationException` を 401、CSRF の失敗を 419、メンテナンスを 503 にし、どれも日本語の文にする `render`。401・419 のときに `auth.rejected` のログを1行出す。メンテナンスで health を通す（`preventRequestsDuringMaintenance(except: ...)`） | 例外を応答に変えるのは1か所（7章） |
+| `app/Listeners/`（新しい。メンテナンスに入れたとき） | 出来事 `MaintenanceModeEnabled` を受けて、`sessions` を全部消す | Laravel の標準のコマンドをそのまま使い、足りない所だけを出来事で足す |
+| 設定の `cors.php`（新しい。Laravel の `config:publish cors` で出す） | 許すオリジンは画面だけ（`FRONTEND_URL`）。`supports_credentials` は true。対象は `api/*` と `sanctum/csrf-cookie` | Laravel の標準の置き場 |
+| 設定の `sanctum.php` | `stateful` の既定に、`FRONTEND_URL` のホストとポートを入れる | CORS・メールのリンクと同じ1つの値にする。環境変数を書き忘れても動く |
+| 設定の `database.php` | `pgsql` に `mask_bindings_in_exception_messages` を true で足す | SQL の例外の文に、セッションの番号・メールアドレスが入らないようにする（FR-AUTH-032） |
+| 環境変数の見本（`backend/client` と `frontend/client` の見本のファイル） | `SESSION_LIFETIME` を 120 から 1440 に。`VITE_API_URL` を `http://localhost:8000` に | 見本だけ。本物の秘密の値のファイルは、人が書き換える |
+| `lang/ja/errors.php` | `unauthenticated`（ログインしてください）・`csrf`（画面を読み込み直してください）・`maintenance`（ただいまメンテナンス中です） | エラーの文の置き場（7章） |
+| `frontend/client/src/shared/api/client.ts`（新しい） | どの `fetch` もここを通す。送り先の既定は `http://localhost:8000`。切り替えのあとは `credentials: 'include'` と `X-XSRF-TOKEN`。401・419 はログインの画面へ、503 はメンテナンスの画面へ | API を呼ぶ所を1か所にする（`architecture-frontend.md`） |
+| `frontend/client/src/app/RequireAuth.tsx`・`features/auth/session`（新しい） | 起動のときに `GET /api/me` を1回読み、ログインしているかを決める（`sessionStorage` を見ない） | ログインの守りを1か所にする（`architecture-frontend.md`） |
+| メンテナンスの画面（新しい。置き場は `architecture-frontend.md` に合わせて、作るチケットで決める） | 「ただいまメンテナンス中です」。ログインの画面には移さない | FR-MAINT-006 |
+| `tests/DummyData/DummyAuth.php` | `actingAs()` を、Laravel の `actingAs($user, 'web')` で作る形にする | テストのログインの形を1か所で変える |
+
+### チケットの分け方と順番
+
+先に「読む所を1か所にする」を、API と画面の両方で JWT のまま済ませる。そのあと、メンテナンスを用意し、メンテナンスの中で中身だけを替える。
+
+| 順 | チケット | バックエンド | 画面 | 直す文書 | Size | 依存 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | #243 ログインを確かめる Middleware（JWT のまま） | `AuthenticateUser`・`User::isUsable()`・`AuthService::canUseApi()`・`loginUserId()`・401 を `bootstrap/app.php` で日本語に。プロフィールの API に付ける（FR-AUTH-020）。`IdentifyUser` は使う所がなくなるので消す | 401 を受けたら、ログインの画面に移す（プロフィールの画面から） | `architecture-backend.md` の4章の見本 | 中 | ― |
+| 2 | トークンを読む所を、API と画面で1か所にする（JWT のまま） | 残りの15の Controller の JWT を読むコピーを消し、`loginUserId()` を呼ぶ。「ログインが要らないルート（health・登録・ログイン・メールの確認・パスワードの再設定）を引いた残り」が、ログインなしで 401 になるテスト | 全部の `fetch` を `client.ts` に通す。送り先を `localhost`。ログインの判定を `GET /api/me` にする（`RequireAuth`・`session`）。画面のフォルダも移す | `architecture-frontend.md` の4章・`AGENTS.md` の送り先・画面の見本のファイル・`frontend/client/README.md` | 大 | 1 |
+| 3 | 会員の側のメンテナンス（新） | 503 と日本語の文・health を通す・出来事で `sessions` を全部消す | 503 を受けたら、メンテナンスの画面を出す | `AGENTS.md` の「主要コマンド」にメンテナンスを足す | 中 | 2 |
+| 4 | セッションに切り替える（新） | Sanctum の設定・CORS・`Auth/AuthController` と `AuthService::login()` に移す・ログアウト・`AuthenticateUser` の中身・CSRF と 419・例外の文の値を隠す・`auth.rejected`・パスワードの変更と再設定でセッションを消す | `client.ts` に `credentials` と `X-XSRF-TOKEN`・419 の扱い・ログインとログアウトの画面・登録と再設定の画面（CSRF） | `architecture-backend.md` の2章・8章・`testing.md`・D-021・この節の「`api.php` で管理する」・`docs/api` の curl の例・`auth.md` の curl の手順 | 大 | 3 |
+| 5 | JWT を消す（新） | `firebase/php-jwt`・`DummyAuth` の JWT | `sessionStorage` の残り | ― | 小 | 4 |
+
+- どのチケットも、最初のコミットで今の動きを確かめるテストを足す
+- 4 は、3 のメンテナンスを使って出す（下の「リリースの順番」）
+- CSRF（FR-AUTH-018）は、テストの中では Laravel が確かめを飛ばす（`PreventRequestForgery.php:99` の `runningUnitTests()`）。4 のチケットで、確かめを飛ばさない形のテストを作るか、curl で確かめるかを決める
+- 4 で、ログインとログアウトのテストには `Origin` を付ける（付けないと、Sanctum がセッションを使わない）
+
+### ログ・エラー通知・監視
+
+- ログに、パスワード・セッションの番号・CSRF のトークン・抜け道の秘密の文字を出さない（FR-AUTH-032・NFR-MAINT-001）
+  - SQL のログ（`QueryLogger`）は値を書かない
+  - SQL の例外の文も、`mask_bindings_in_exception_messages` で値を隠す。わざと失敗する SQL を流し、文に値が入らないことをテストで確かめる
+- 401・419 は、Laravel がもとからログに出さない（`Handler.php` の `$internalDontReport`）。数えるために、`bootstrap/app.php` の `render` で1行だけ出す
+  - 名前：`auth.rejected`
+  - 中身：`status`（401・419）・`reason`（`no_session_cookie`・`session_not_found`・`user_inactive`・`csrf_mismatch`）・`path`（ルートの形）・`origin`（ホストとポートだけ）・`requestId`・`userId`（分かるときだけ）
+  - Cookie の値・セッションの番号は書かない。`requestId` は、`QueryLogger` の外でも使える所（`app/Support/Logging/`）に移す
+  - 増えたかは `grep auth.rejected` の件数で見る。`reason` で、Cookie が届いていない（`localhost` と `127.0.0.1` の混ざり・`stateful` の設定もれ）・24時間で切れた・止めた会員・CSRF を分けられる
+- ログの `userId` は、中の番号（`users.id`）のまま。ログは外に出さないため
+- エラーの通知の仕組みは、まだない。運用の土台のエピックで作る。セッションにすると、表 `sessions` で失敗したときに、ログインしていない画面まで止まる（止まる範囲が広がる）
+
+### リリースの順番（4 のチケット）
+
+0. DB のバックアップを取る
+1. 人が、本物の秘密の値のファイルを書き換える（`SESSION_LIFETIME` を 1440 に・画面の `VITE_API_URL` を `http://localhost:8000` に）。古いコードには効かないので、取り込む前でよい
+2. `php artisan down --with-secret` でメンテナンスに入れる（全員のセッションが消える）。出た抜け道の URL を、確かめるブラウザで開く
+3. 取り込み、`docker compose restart app`・画面の `npm run dev` を起こし直す
+4. 値を1つずつ確かめる：`php artisan config:show session.lifetime`・`session.driver`・`sanctum.stateful`・`app.frontend_url`（まとめて出すと鍵の値も出るので、キーを1つずつ指定する）
+5. 抜け道のブラウザで確かめる：ログイン・`sessions` に行ができる・`sessionStorage` にトークンがない・書き込みで CSRF・ログアウトで 401・止めた会員で 401・抜け道のないブラウザは 503。health は `Origin` がなくセッションを通らないので、これだけでは確かめにならない
+6. 戻し方を1回試し、もう一度出す
+7. `php artisan up` でメンテナンスを解く。会員はログインし直す
+
+### 戻し方
+
+- マイグレーションはない。チケットごとに PR を戻す
+- 5 を出したあとは、4 だけを戻せない。戻すときは 5 → 4 の順。5 を戻したら `composer install`（`firebase/php-jwt` を戻す）
+- 4 を戻すときは、メンテナンスに入れてから戻す。API と画面を一緒に戻す（同じ PR に入れる）。片方だけだと、だれもログインできない
+- 4 を戻すと、会員はもう一度ログインする（JWT を持っていないため）。メンテナンスで `sessionStorage` の古い JWT も使えなくなっている（入れる前のタブの JWT は、期限まで使える。戻すときは、画面の起動のときに `sessionStorage` を消す処理を残す）
+- 環境変数は戻さなくてよい（古いコードは `SESSION_LIFETIME` を見ない）
+- `sessions` の行は、戻すと自動では消えない（掃除のくじは、セッションを使うリクエストでしか引かれない）。人が `delete from sessions` を流すか、残すかを決める
+- 手順：戻すコミットのブランチ → `docker compose restart app` → 5 を戻したら `composer install` → 画面を起こし直す → ログインし直す
+
+### レビュー（design-reviewer・db-reviewer・ops-reviewer）の指摘と扱い
+
+2026-11-20 に3人に見てもらった。指摘は、コードで起きるかを確かめてからまとめた。
+
+| # | 印 | 指摘 | 扱い |
+| --- | --- | --- | --- |
+| M1 | must | 画面の準備がないまま切り替えると、画面が止まる（ログインの判定が `sessionStorage`・登録と再設定が 419・送り先が `127.0.0.1`・401 や 419 でログインの画面に移す処理がない） | 直した：画面は各チケットで一緒に直す（人が決めた）。2 で `client.ts`・送り先・ログインの判定、4 で CSRF と 419。切り替えはメンテナンスの中で行う |
+| M2 | must | ログインの処理の置き場が決まっていない。`Auth::attempt()` を先に呼ぶと、止めた会員の確かめより前にログインの状態ができる | 直した：`AuthService::login()` が照合と止めた会員の確かめ、Controller がセッション。`architecture-backend.md` の2章に書き足す（4） |
+| M3 | must | パスワードの変更で全部消すと、変えた端末もログアウトされる。受け持つチケットがない | 直した：`logoutOtherDevices()` と `AuthenticateSession`。再設定・退会は全部消す。4 で受け持つ |
+| M4 | must | SQL の例外の文に、セッションの番号やメールアドレスが入る | 直した：`mask_bindings_in_exception_messages` とテスト（4） |
+| S1 | should | 401・419 の作る所と形。24時間で切れたあとは 419 になる | 直した：`bootstrap/app.php` で日本語の文。画面は 419 もログインの画面へ |
+| S2 | should | 「使える会員か」が2か所。Service の名前がずれる | 直した：`User::isUsable()` の1か所。Service は `Auth/AuthService` |
+| S3 | should | ログインした会員の番号を16か所で読む。付け忘れで「会員 0 番」 | 直した：基底の Controller の `loginUserId()` |
+| S4 | should | ルートのテストが付け忘れを見つけない | 直した：「ログインが要らないルートを引いた残り」で作る |
+| S5 | should | 直す文書がどのチケットにもない | 直した：チケットの表に「直す文書」の列 |
+| S6 | should | SQL の本数の書き方が実際と違う（行全体の update・応答の前・くじ） | 直した：DB の節 |
+| S7 | should | 10倍のときに見る数字がない | 直した：`pg_stat_user_tables` の SQL と、置き場を替える目安 |
+| S8 | should | 会員のいない行・行の数の見積もり | 直した：`regenerate(true)`・数え方・測る SQL。`/sanctum/csrf-cookie` とログインに回数の上限を付けるかは、4 で決める |
+| S9 | should | テストの array のセッションでは、消すテストが何も確かめない | 直した：そのテストだけ DB に置く |
+| S10 | should | 401・419 を数える手段がない | 直した：`auth.rejected` |
+| S11 | should | 環境変数の書き忘れに気づけない | 直した：`stateful` の既定を `FRONTEND_URL` から作る・`config:show` で1つずつ確かめる |
+| S12 | should | 戻し方の順番・`sessions` の行が自動で消えない | 直した：戻し方の節 |
+| S13 | should | リリースの順番と、health では確かめにならないこと | 直した：リリースの順番の節（メンテナンスの中で確かめる） |
+| A1 | ask | `IdentifyUser` をいつ消すか | 1 で消す（使う所がなくなる） |
+| A2 | ask | 会員を2回読まないか | ガードが読んだ会員を判定に渡す |
+| A3 | ask | ログインの応答の中身・ログアウトの 204 | ログインは `GET /api/me` と同じ形。画面はログアウトの本文を読まない |
+| A4 | ask | `users` を物理的に消す処理はあるか | 今は試しのデータだけ。外部キーを付けない理由を DB の節に書いた |
+| A5 | ask | ログの `userId` | 中の番号のまま |
+| A6 | ask | 管理画面と Cookie の名前を分けるか | 管理画面の認証を決めるときに分ける（メモ） |
+| N1〜N6 | nits | 数の誤り（16 → 15）・計画のページの誤り・「トークン（セッション）」の言い方・2038年・見本にもうある `APP_URL`・`SESSION_DOMAIN` のずれ | 直した（2038年は、知っていることとして DB の節に書いた） |
 
 ## 決めたこと・決めなかったこと・宿題
 
