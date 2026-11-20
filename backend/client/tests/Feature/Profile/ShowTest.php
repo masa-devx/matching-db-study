@@ -15,38 +15,61 @@ use function Pest\Laravel\getJson;
 // 要件と違う所は「分かっている不具合」。手で試すシナリオは bruno/client/profile/
 
 describe('ログインしていない人が見る', function (): void {
-    // 分かっている不具合：要件（FR-AUTH-020）は 401。ルートに、ログインを求める Middleware がない
-    it('200 で見られる', function (): void {
+    it('401 で「ログインしてください」（FR-AUTH-020）', function (): void {
         $target = DummyUser::create();
 
-        getJson(Endpoints::profile($target->publicId))->assertOk();
-    });
-
-    it('確認していない相手を見ても、確認用の文字は返らない（FR-002・FR-AUTH-005）', function (): void {
-        $target = DummyUser::create(unverified: true);
-
         getJson(Endpoints::profile($target->publicId))
-            ->assertOk()
-            ->assertJsonMissingPath('verification_token');
+            ->assertUnauthorized()
+            ->assertExactJson(['message' => 'ログインしてください']);
     });
 
-    it('マッチしている2人の片方を見ても、room_id は null', function (): void {
-        $someone = DummyUser::create();
-        $target = DummyUser::create();
-        DummyMatching::match($someone, $target);
-
-        getJson(Endpoints::profile($target->publicId))
-            ->assertOk()
-            ->assertJsonPath('room_id', null);
-    });
-
-    it('SQL は2本（会員とプロフィール）', function (): void {
+    it('401 のときは、DB を読まない', function (): void {
         $target = DummyUser::create();
         DB::enableQueryLog();
 
-        getJson(Endpoints::profile($target->publicId))->assertOk();
+        getJson(Endpoints::profile($target->publicId))->assertUnauthorized();
 
-        expect(DB::getQueryLog())->toHaveCount(2);
+        expect(DB::getQueryLog())->toHaveCount(0);
+    });
+});
+
+describe('使えない会員の、前のトークンで見る', function (): void {
+    it('止められた会員なら 401 で「ログインしてください」', function (): void {
+        $loginUser = DummyUser::create(suspended: true);
+        $target = DummyUser::create();
+
+        DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile($target->publicId))
+            ->assertUnauthorized()
+            ->assertExactJson(['message' => 'ログインしてください']);
+    });
+
+    it('退会した会員なら 401 で「ログインしてください」', function (): void {
+        $loginUser = DummyUser::create(withdrawn: true);
+        $target = DummyUser::create();
+
+        DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile($target->publicId))
+            ->assertUnauthorized()
+            ->assertExactJson(['message' => 'ログインしてください']);
+    });
+
+    it('強制退会の会員なら 401 で「ログインしてください」', function (): void {
+        $loginUser = DummyUser::create(banned: true);
+        $target = DummyUser::create();
+
+        DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile($target->publicId))
+            ->assertUnauthorized()
+            ->assertExactJson(['message' => 'ログインしてください']);
+    });
+
+    it('いなくなった会員の番号のトークンなら 401', function (): void {
+        $gone = DummyUser::create();
+        $target = DummyUser::create();
+        $token = DummyAuth::token($gone);
+        DB::table('profiles')->where('user_id', $gone->id)->delete();
+        DB::table('users')->where('id', $gone->id)->delete();
+
+        DummyAuth::withToken($token)->getJson(Endpoints::profile($target->publicId))
+            ->assertUnauthorized();
     });
 });
 
@@ -113,7 +136,8 @@ describe('ログインしている人が見る', function (): void {
             ->assertJsonPath('room_id', null);
     });
 
-    it('マッチしている相手なら、SQL は5本（会員・プロフィール・トークルームを探す3本）', function (): void {
+    // ログインを確かめる Middleware が、見る人の会員を1本読む（退会・停止・強制退会を見るため）
+    it('マッチしている相手なら、SQL は6本（見る人・会員・プロフィール・トークルームを探す3本）', function (): void {
         $loginUser = DummyUser::create();
         $target = DummyUser::create();
         DummyMatching::match($loginUser, $target);
@@ -121,7 +145,7 @@ describe('ログインしている人が見る', function (): void {
 
         DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile($target->publicId))->assertOk();
 
-        expect(DB::getQueryLog())->toHaveCount(5);
+        expect(DB::getQueryLog())->toHaveCount(6);
     });
 
     // 分かっている不具合：自分とのトークルームはないので、null が望ましい。見る人と相手が同じときを分けていない
@@ -139,56 +163,70 @@ describe('ログインしている人が見る', function (): void {
 });
 
 describe('トークンがおかしい', function (): void {
-    // 分かっている不具合：要件は 401（期限切れは FR-AUTH-013）。IdentifyUser が JWT の例外を受けず、そのまま 500 になる
-    it('壊れたトークンなら 500', function (): void {
+    it('壊れたトークンなら 401 で「ログインしてください」（FR-AUTH-013）', function (): void {
         $target = DummyUser::create();
 
         DummyAuth::withToken('abc')->getJson(Endpoints::profile($target->publicId))
-            ->assertInternalServerError();
+            ->assertUnauthorized()
+            ->assertExactJson(['message' => 'ログインしてください']);
     });
 
-    it('ほかの鍵で署名したトークンなら 500', function (): void {
+    it('ほかの鍵で署名したトークンなら 401（FR-AUTH-013）', function (): void {
         $loginUser = DummyUser::create();
         $target = DummyUser::create();
         $forged = DummyAuth::tokenSignedWithOtherKey($loginUser);
 
         DummyAuth::withToken($forged)->getJson(Endpoints::profile($target->publicId))
-            ->assertInternalServerError();
+            ->assertUnauthorized()
+            ->assertExactJson(['message' => 'ログインしてください']);
     });
 
-    it('期限の切れたトークンなら 500', function (): void {
+    it('期限の切れたトークンなら 401（FR-AUTH-013）', function (): void {
         $loginUser = DummyUser::create();
         $target = DummyUser::create();
         $expired = DummyAuth::token($loginUser, expiresAt: time() - 60);
 
         DummyAuth::withToken($expired)->getJson(Endpoints::profile($target->publicId))
-            ->assertInternalServerError();
+            ->assertUnauthorized()
+            ->assertExactJson(['message' => 'ログインしてください']);
     });
 
-    // 移す前と違う：移す前は、先に会員を探していたので 404。今は IdentifyUser が先にトークンを読む
-    it('いない会員でも、壊れたトークンなら 500', function (): void {
+    it('いない会員の URL でも、壊れたトークンなら 401（先にログインを確かめる）', function (): void {
         DummyAuth::withToken('abc')->getJson(Endpoints::profile(DummyUser::MISSING_PUBLIC_ID))
-            ->assertInternalServerError();
+            ->assertUnauthorized();
+    });
+
+    it('401 は、エラーのログに出さない', function (): void {
+        Exceptions::fake();   // 決まりどおりに断っただけなので、エラーとして記録しない
+
+        DummyAuth::withToken('abc')->getJson(Endpoints::profile(DummyUser::MISSING_PUBLIC_ID))->assertUnauthorized();
+
+        Exceptions::assertNothingReported();
     });
 });
 
 describe('URL の番号がおかしい', function (): void {
     it('いない会員なら 404 で、「会員が見つかりません」（FR-004）', function (): void {
-        getJson(Endpoints::profile(DummyUser::MISSING_PUBLIC_ID))
+        $loginUser = DummyUser::create();
+
+        DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile(DummyUser::MISSING_PUBLIC_ID))
             ->assertNotFound()
             ->assertExactJson(['message' => '会員が見つかりません']);   // 文まで見る（URL を間違えたときの、ルートがない 404 と見分ける）
     });
 
     it('いない会員を見ても、エラーのログには出さない', function (): void {
+        $loginUser = DummyUser::create();
         Exceptions::fake();   // 決まりどおりに断っただけなので、エラーとして記録しない（architecture-backend.md の7章）
 
-        getJson(Endpoints::profile(DummyUser::MISSING_PUBLIC_ID))->assertNotFound();
+        DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile(DummyUser::MISSING_PUBLIC_ID))->assertNotFound();
 
         Exceptions::assertNothingReported();
     });
 
     // 分かっている不具合：404 が望ましい。形を確かめずに UUID の列を探し、PostgreSQL のエラーになる
     it('UUID の形でないなら 500', function (): void {
-        getJson(Endpoints::profile('abc'))->assertInternalServerError();
+        $loginUser = DummyUser::create();
+
+        DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile('abc'))->assertInternalServerError();
     });
 });

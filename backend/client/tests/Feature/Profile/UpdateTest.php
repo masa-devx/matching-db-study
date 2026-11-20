@@ -27,13 +27,14 @@ describe('自分のプロフィールを書き換える', function (): void {
         assertDatabaseHas('profiles', ['user_id' => $someone->id, 'nickname' => 'べつのひと']);
     });
 
-    it('SQL は3本（会員の番号・プロフィール・書き換え）', function (): void {
+    // ログインを確かめる Middleware が、送った人の会員を1本読む（退会・停止・強制退会を見るため）
+    it('SQL は4本（送った人・会員の番号・プロフィール・書き換え）', function (): void {
         $loginUser = DummyUser::create(nickname: 'まえ');
         DB::enableQueryLog();
 
         DummyAuth::actingAs($loginUser)->putJson(Endpoints::profile($loginUser->publicId), ['nickname' => 'あと'])->assertOk();
 
-        expect(DB::getQueryLog())->toHaveCount(3);
+        expect(DB::getQueryLog())->toHaveCount(4);
     });
 
     // 分かっている不具合：要件（FR-006）は 422 で、保存しない。空の文字は Laravel が null に変える
@@ -57,13 +58,24 @@ describe('自分のプロフィールを書き換える', function (): void {
 });
 
 describe('他人のプロフィールを書き換える', function (): void {
-    // 分かっている不具合：要件（FR-AUTH-020・022）は 401 で、変わらない。update はトークンを読まない
-    it('ログインしていなくても、書き換えられる', function (): void {
+    it('ログインしていなければ 401 で「ログインしてください」。書き換わらない（FR-AUTH-020）', function (): void {
         $target = DummyUser::create(nickname: 'まえ');
 
-        putJson(Endpoints::profile($target->publicId), ['nickname' => 'かきかえ'])->assertOk();
+        putJson(Endpoints::profile($target->publicId), ['nickname' => 'かきかえ'])
+            ->assertUnauthorized()
+            ->assertExactJson(['message' => 'ログインしてください']);
 
-        assertDatabaseHas('profiles', ['user_id' => $target->id, 'nickname' => 'かきかえ']);
+        assertDatabaseHas('profiles', ['user_id' => $target->id, 'nickname' => 'まえ']);
+    });
+
+    it('止められた会員の前のトークンなら 401。書き換わらない', function (): void {
+        $loginUser = DummyUser::create(suspended: true);
+        $target = DummyUser::create(nickname: 'まえ');
+
+        DummyAuth::actingAs($loginUser)->putJson(Endpoints::profile($target->publicId), ['nickname' => 'かきかえ'])
+            ->assertUnauthorized();
+
+        assertDatabaseHas('profiles', ['user_id' => $target->id, 'nickname' => 'まえ']);
     });
 
     // 分かっている不具合：要件（FR-AUTH-022）は 403 で、変わらない。だれが送ったかと、URL の番号を比べない
@@ -99,10 +111,11 @@ describe('URL の番号がおかしい', function (): void {
 
     // 分かっている不具合：要件は 404。会員はいるがプロフィールがないとき、ProfileService が RuntimeException を投げる
     it('プロフィールのない会員なら 500 で、エラーのログに出る', function (): void {
+        $loginUser = DummyUser::create();
         $target = DummyUser::create(withProfile: false);
         Exceptions::fake();   // 思っていなかった失敗は、業務の例外と違って記録される（dontReport が広すぎないかも、ここで確かめる）
 
-        putJson(Endpoints::profile($target->publicId), ['nickname' => 'あと'])->assertInternalServerError();
+        DummyAuth::actingAs($loginUser)->putJson(Endpoints::profile($target->publicId), ['nickname' => 'あと'])->assertInternalServerError();
 
         Exceptions::assertReported(RuntimeException::class);
     });
