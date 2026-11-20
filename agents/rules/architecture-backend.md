@@ -115,7 +115,7 @@ final class AccountController extends Controller
     public function update(UpdateProfileRequest $request): ProfileResource
     {
         $profile = $this->profiles->updateProfile(
-            memberId: (int) $request->attributes->get('login_user_id'),   // Middleware が載せた、ログインした会員（読む所を1つにまとめるかは、移すときに考える）
+            memberId: $this->loginUserId($request),   // ログインした会員の番号を読むのは、基底の Controller の loginUserId() だけ（載っていなければ 401）
             input: $request->validated(),
         );
 
@@ -157,17 +157,17 @@ final class ProfileResource extends JsonResource
 }
 ```
 
-トークンを読むのは Middleware だけ。Controller ごとに JWT を読まない。トークンが正しくても、退会・停止した会員は通さない（使えるかは Service に聞く）。
+トークンを読むのは Middleware だけ。Controller ごとに JWT を読まない。トークンが正しくても、退会・停止・強制退会した会員は通さない（使えるかは Service に聞き、Service は `User::isUsable()` の1か所で決める）。Middleware は応答を作らず、例外を投げる。401 の応答は `bootstrap/app.php` が作る（7章）。
 
 ```php
-// app/Http/Middleware/AuthenticateUser.php
+// app/Http/Middleware/AuthenticateUser.php（#243）
 public function handle(Request $request, Closure $next): Response
 {
-    $loginUserId = $this->loginUserIdFrom($request->bearerToken());   // JWT を読む。読めなければ null
-    if ($loginUserId === null || ! $this->users->canUseApi($loginUserId)) {   // UserAuthService：退会・停止していないか
-        return response()->json(['message' => 'ログインしてください'], 401);
+    $userId = $this->userIdFromToken($request);   // JWT を読む。ない・壊れている・期限切れなら null
+    if ($userId === null || ! $this->auth->canUseApi($userId)) {   // AuthService：退会・停止・強制退会していないか
+        throw new AuthenticationException;   // bootstrap/app.php が 401「ログインしてください」にする
     }
-    $request->attributes->set('login_user_id', $loginUserId);
+    $request->attributes->set('login_user_id', $userId);
 
     return $next($request);
 }

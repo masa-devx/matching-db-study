@@ -16,7 +16,7 @@
 
 | 言葉 | 意味 | 画面 | API（URL・JSON） | コード（業務のまとまり・クラス） | 表・列 | 注意 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 会員 | 登録した人 | ― | 自分は `/me`、相手は `/users/{user_id}`。JSON は `user_id` | 業務のまとまりは `Members`。クラスは `User`（`UserNotFoundException`・`IdentifyUser`・テストの `DummyUser`） | `users` | 会員の側の API は `users`、管理画面は `members`（下の「管理画面」）。会員の側のコードは `User`、管理画面のコードは `Member` |
+| 会員 | 登録した人 | ― | 自分は `/me`、相手は `/users/{user_id}`。JSON は `user_id` | 業務のまとまりは `Members`。クラスは `User`（`UserNotFoundException`・`AuthenticateUser`・テストの `DummyUser`） | `users` | 会員の側の API は `users`、管理画面は `members`（下の「管理画面」）。会員の側のコードは `User`、管理画面のコードは `Member` |
 | アカウント | ログインしている会員本人。本人の情報（メールアドレス・確認済みか・有料会員か）と、本人がすること（見る・プロフィールを直す・退会する） | ―（設定の「アカウント」の見出しの下は、メールアドレスの確認とパスワードだけで、これより狭い。パスワードは `Auth`） | `/me`（URL は変えない。`/me` を付けるかの基準は `docs/cycles/01-backend-foundation/03-how.md` の「`/me` を付けるか」） | 業務のまとまりは `Profile`。`Account` は、ログインしている本人に対する操作の名前（Controller・Service・テスト・ルートの名前）に使う：`AccountController`・`AccountService`（どちらも、その API を移すときに作る）・テストの `Endpoints::account()`・`tests/Feature/Profile/ShowAccountTest.php`・今の URL のルートの名前 `legacy.profile.account.show`。データ（Model・例外・ダミーデータ）は `User` のまま（`User`・`UserNotFoundException`・`DummyUser`） | `users` | URL の `/me` と、コードの `Account` は同じもの。コードの名前には `me`・`Me` を使わない（何を指すかが分かりにくいため。2026-11-20 に人が決めた）。管理画面も同じ（管理者本人の名前は、管理画面のログインを移すチケットで決める）。今あるコードの `me()`・`$me` は、その API を移すチケットで直す |
 | プロフィール | 会員の公開する情報（ニックネーム・性別・生年月日・都道府県・身長・自己紹介・プロフィール画像と、#153 で足した6項目：体型・お仕事・年収・タバコ・お酒・結婚歴） | 自己紹介 など | `profile` | `Profile` | `profiles` | |
 | プロフィール画像 | プロフィールに出す画像。デモ用の画像のパスを持つ | ― | `image` | ― | `profiles.image` | 前の `product.md` の `avatar_path` は、実際の列とずれていた |
