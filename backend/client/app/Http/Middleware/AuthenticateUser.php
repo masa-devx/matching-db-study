@@ -12,16 +12,20 @@ use Firebase\JWT\Key;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
+use TypeError;
 use UnexpectedValueException;
 
 /**
  * ログインを確かめる。トークンを読み、その会員のアカウントが今も使える状態か（退会・停止・強制退会）を AuthService に聞く。
  * だめなら AuthenticationException を投げるだけで、応答は bootstrap/app.php が作る（401「ログインしてください」）。
- * よければ、会員の番号（users.id）を $request->attributes の login_user_id に載せる。Controller は loginUserId() で読む。
+ * よければ、会員の番号（users.id）を $request->attributes の LOGIN_USER_ID に載せる。Controller は loginUserId() で読む。
  * 認証は、今は JWT。セッションに替えるときは、このクラスの中身だけを替える（#259）
  */
 final class AuthenticateUser
 {
+    /** ログインしている会員の番号を載せるキー。載せる所（ここ）と読む所（Controller::loginUserId()）で同じ文字を使う */
+    public const string LOGIN_USER_ID = 'login_user_id';
+
     public function __construct(private readonly AuthService $auth) {}
 
     public function handle(Request $request, Closure $next): Response
@@ -31,12 +35,12 @@ final class AuthenticateUser
             throw new AuthenticationException;
         }
 
-        $request->attributes->set('login_user_id', $userId);
+        $request->attributes->set(self::LOGIN_USER_ID, $userId);
 
         return $next($request);
     }
 
-    /** トークンがない・壊れている・署名が違う・期限が切れているときは null */
+    /** トークンがない・壊れている・署名が違う・期限が切れている・形がおかしいときは null */
     private function userIdFromToken(Request $request): ?int
     {
         $token = $request->bearerToken();
@@ -46,8 +50,9 @@ final class AuthenticateUser
 
         try {
             $payload = JWT::decode($token, new Key(config()->string('app.key'), 'HS256'));
-        } catch (UnexpectedValueException|DomainException) {
-            // 壊れた・署名が違う・期限切れのトークンは、どれも「ログインしていない」と同じに扱う（FR-AUTH-013）。
+        } catch (UnexpectedValueException|DomainException|TypeError) {
+            // 壊れた・署名が違う・期限切れのトークンは、どれも「ログインしていない」と同じに扱う（FR-AUTH-020）。
+            // TypeError は、ヘッダーの alg や kid が配列のような、形のおかしいトークン（送った人の入力）で、署名を確かめる前に出る。
             // 鍵がない（設定の誤り）ときの InvalidArgumentException は受け止めず、500 のままにする
             return null;
         }

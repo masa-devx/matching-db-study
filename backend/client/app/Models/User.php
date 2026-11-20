@@ -70,7 +70,8 @@ class User extends Authenticatable
 
     /**
      * この会員のアカウントが、使える状態か（退会・利用の停止・強制退会のどれでもない）。行の値だけで決まるので、ここに1つだけ置く。
-     * ログインを確かめる Middleware（AuthenticateUser）から、AuthService を通して使う
+     * ログインを確かめる Middleware（AuthenticateUser）から、AuthService を通して使う。
+     * 古いログインの API（AuthController::login）にも停止・強制退会の判定があり、#259 でここに移す
      */
     public function isAccountUsable(): bool
     {
