@@ -13,7 +13,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-#[Hidden(['password', 'remember_token'])]
+// 確認用の文字は、確認のメールにだけ入れる。応答に出すと、メールを見ずに確認を通せる（不変条件 2）
+#[Hidden(['password', 'remember_token', 'verification_token'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
