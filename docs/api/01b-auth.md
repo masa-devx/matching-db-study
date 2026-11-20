@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | だれが使えるか | だれでも | だれでも |
 | 入力（JSON） | `email`・`password`・`nickname`・`gender`・`birthday`。**確かめない**（`$request->only()` で、決めた名前のものだけを取り出す） | `email`（メールアドレスの形・小文字にそろえて重ならない）・`password`（8〜64文字、かつ 72バイトまで）・`gender_code`（性別の表にあるもの）・`birthdate`（日付・日本の時間帯の今日で 18歳以上）・`nickname`（1〜20文字）。ほかのキーは無視する |
-| 応答（成功） | `201`。作った `users` の行をそのまま返す（`password` だけ隠れる。**確認用の文字 `verification_token` も返る**） | `201` `{"user_id": 21, "email": "a@example.test", "email_verified": false}` |
+| 応答（成功） | `201`。作った `users` の行をそのまま返す（`password` と、確認用の文字 `verification_token` は隠れる。確認用の文字は、legacy-repo では返していた。refactored-repo で `User` の `#[Hidden]` に足し、返さないようにした） | `201` `{"user_id": 21, "email": "a@example.test", "email_verified": false}` |
 | 応答（失敗） | 入力の誤りでは失敗しない。ただし、項目がない（`email` などが `null`）・まったく同じメールアドレス（`users.email` の UNIQUE）・256文字以上のニックネーム（`varchar(255)`）は `500` | `422`：入力の誤り・使われているメールアドレス（同時に2つ来て、DB の UNIQUE で断ったときも `422`） |
 | 流れる SQL の目安 | 2本（`insert into users`・`insert into profiles`）。トランザクションなし | 4本＋トランザクション（メールアドレスが空いているか・性別があるか・`insert into users`・`insert into profiles`） |
 | メール | 2本目の `insert` のあとに、その場で送る | トランザクションのコミットのあとに送る（database.md） |
@@ -31,12 +31,11 @@ return response()->json($user, 201);
 
 - 解説（01b-auth.html の「5. 見本」）は `User::create($request->all())` だったが、表を分けた（D-015）ので、`$request->all()` だと `users` にない列（`nickname` など）で `500` になる。`only()` にしたので、「`email_verified_at` を送って確認を飛ばす」問題は起きない。解説はこの形に合わせて直す
 
-レガシー版の応答の例（`email_verified_at` は入れていないので、キーがない。全体の決まり「キーを残す」に合わない）：
+レガシー版の応答の例（`email_verified_at` は入れていないので、キーがない。全体の決まり「キーを残す」に合わない。確認用の文字は、legacy-repo では返していた。refactored-repo で `User` の `#[Hidden]` に足し、返さないようにした）：
 
 ```json
 {
   "email": "a@example.test",
-  "verification_token": "Xb3…（40文字）",
   "updated_at": "2026-11-12T01:00:00.000000Z",
   "created_at": "2026-11-12T01:00:00.000000Z",
   "id": 21
@@ -58,7 +57,7 @@ return response()->json($user, 201);
 | 項目 | レガシー版（legacy-repo） | 改善版（refactored-repo） |
 | --- | --- | --- |
 | パス | `GET /api/email-verifications/{token}` | `GET /api/users/{public_id}/email-verification/{hash}?expires=…&signature=…`（`{hash}` はメールアドレスの SHA-1。Laravel の標準の形） |
-| だれが使えるか | リンクを知っている人（**登録の応答や、01 のプロフィールの `GET` で、他人も確認用の文字を見られる**） | 署名が正しく、期限内のリンクを持つ人 |
+| だれが使えるか | 確認のメールを受け取った人（legacy-repo では、登録の応答や 01 のプロフィールの `GET` で、他人も確認用の文字を見られた。refactored-repo で応答から隠した） | 署名が正しく、期限内のリンクを持つ人 |
 | 応答（成功） | `200` `{"message": "メールアドレスを確認しました"}`。開くたびに `email_verified_at` を今の時刻で書き換える | `200` `{"message": "メールアドレスを確認しました"}`。確認済みなら `200` `{"message": "確認済みです"}` で、何も変えない（FR-AUTH-006） |
 | 応答（失敗） | `404` `{"message": "確認のリンクが正しくありません"}`：その文字の会員がいない | `403`：署名が違う・期限（60分）が切れた・`{hash}` が合わない。`404`：その会員がいない |
 | 流れる SQL の目安 | 2本（`select * from users where verification_token = ? limit 1`・`update users set email_verified_at = ?`）。**`verification_token` にインデックスがないので、表を全部読む** | 1〜2本（`select * from users where id = ?`・まだなら `update`） |
@@ -105,7 +104,7 @@ return ['message' => 'メールアドレスを確認しました'];
 | `500` になったときの応答 | 開発用の設定で詳しいエラーを返すので、**SQL の値（パスワードのハッシュ・確認用の文字）が応答に出る**。平文のパスワードは出ない（測った） | FR-AUTH-032 |
 | 失敗した登録のあと | 会員の ID が飛ぶ（失敗した `insert` でも番号が進む） | ― |
 | `Host: evil.example` を付けて登録・再送 | **届いたリンクが `http://evil.example/…` になる**（リンクをリクエストの Host で作るため）。他人の受信箱に、よそのサイトへのリンクを送り込める | FR-AUTH-005 |
-| 登録の応答・他人のプロフィールの `GET` を見る | **`verification_token` が見えるので、メールを受け取らずに確認を済ませられる** | FR-AUTH-005・FR-002 |
+| 登録の応答・他人のプロフィールの `GET` を見る | **直した**（refactored-repo）。legacy-repo では `verification_token` が見え、メールを受け取らずに確認を済ませられた。今は、登録・自分の情報・相手のプロフィールの応答に出ない（`User` の `#[Hidden]`） | FR-AUTH-005・FR-002 |
 | 確認のリンクを、何日たってから・2回開く | どちらも確認できる。2回目は `email_verified_at` が書き換わる | FR-AUTH-006 |
 | 確認のリンクを開くとき | `verification_token` で表を全部読む（測った：`Seq Scan` で 28行を読み、28行を捨てた） | ― |
 | 確認のリンクを開いたあとの SQL のログ | `db.summary` の `path` に、**確認用の文字がそのまま残る**（パスに入れたため）。改善する段階で、ログの `path` をルートの形（`api/email-verifications/{token}`）にする | FR-AUTH-032 |
@@ -159,7 +158,7 @@ return ['token' => $token];
 | --- | --- | --- |
 | だれが使えるか | 正しい JWT を持つ人 | 正しい `access` の Cookie を持つ人。確認していなくても使える（FR-AUTH-021） |
 | 入力 | `Authorization: Bearer <JWT>` | `access` の Cookie |
-| 応答（成功） | `200`。`users` の行をそのまま返す（`password` だけ隠れる。**`verification_token` も返る**） | `200` `{"user_id": 21, "email": "a@example.test", "email_verified": true}`（FR-AUTH-017） |
+| 応答（成功） | `200`。`users` の行をそのまま返す（`password` と `verification_token` は隠れる。確認用の文字は、legacy-repo では返していた。refactored-repo で `User` の `#[Hidden]` に足し、返さないようにした） | `200` `{"user_id": 21, "email": "a@example.test", "email_verified": true}`（FR-AUTH-017） |
 | 応答（失敗） | `401` `{"message": "ログインしてください"}`：`Authorization` がない。**署名が違う・期限が切れた・形がおかしい JWT は `500`**（`JWT::decode()` の例外をつかまえない） | `401`：トークンがない・署名が違う・期限が切れた（どれも同じ形） |
 | 流れる SQL の目安 | 1本（`select * from users where id = ? limit 1`。呼ぶたびに DB を見る） | 1本（JWT の確かめには DB を使わない。NFR-AUTH-001。応答を作るために会員を読む） |
 | curl の例 | `curl http://127.0.0.1:8000/api/me -H 'Authorization: Bearer <JWT>'` | `curl http://127.0.0.1:8000/api/me -b cookies.txt` |

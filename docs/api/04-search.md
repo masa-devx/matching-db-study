@@ -22,7 +22,7 @@
 | 除く会員 | 自分・もういいねした相手（`whereNotIn` に ID を並べる）・メールアドレスを確認していない会員 | 同じ（いいねは `not exists`） |
 | 並び | `last_login_at` の新しい順だけ（**同じ時刻の並びが決まらない。一度もログインしていない会員（NULL）が先頭に出る**） | `last_login_at` の新しい順、同じなら `public_id` の大きい順（FR-SEARCH-006） |
 | 続き | `page` で `offset (page - 1) * 20`・`limit 20`。「もうない」は、返った件数が20より少ないかで画面が決める（ちょうど20件で終わると、次の空のページを1回読む） | 21件読んで、21件目があれば `next_cursor` を返す。なければ `null`（FR-SEARCH-007・008） |
-| 応答（成功） | `200`。`users` の行の配列（`profile` が中に入る）。**メールアドレス・確認用の文字・生年月日・中の `id` も返す** | `200` `{"data": [{"user_id": "019a…", "nickname": "香織", "age": 28, "prefecture": {"code": 13, "name": "東京都"}, "height_cm": 160, "avatar_url": "/images/avatars/demo-3.svg"}], "next_cursor": "eyJ…"}`（メールアドレス・生年月日は返さない。FR-SEARCH-001） |
+| 応答（成功） | `200`。`users` の行の配列（`profile` が中に入る）。**メールアドレス・生年月日・中の `id` も返す**（確認用の文字は、legacy-repo では返していた。refactored-repo で `User` の `#[Hidden]` に足し、返さないようにした） | `200` `{"data": [{"user_id": "019a…", "nickname": "香織", "age": 28, "prefecture": {"code": 13, "name": "東京都"}, "height_cm": 160, "avatar_url": "/images/avatars/demo-3.svg"}], "next_cursor": "eyJ…"}`（メールアドレス・生年月日は返さない。FR-SEARCH-001） |
 | 応答（失敗） | `401` `{"message": "ログインしてください"}`：`Authorization` がない。`500`：JWT が壊れている。**おかしな条件（年齢 17・身長 300・下が上より大きい）は、そのまま絞って `200`**。`prefecture` を配列でなく文字で送ると `500`（`TypeError`） | `401`：ログインしていない。`403`：確認していない。`422`：条件の誤り（どの条件かを `errors` で返す） |
 | 流れる SQL の目安 | **1ページ20人で 23本**（自分のプロフィール・いいねした相手の ID・本体・1人ごとのプロフィール 20本。1＋N） | 2本（自分のプロフィール・本体。NFR-SEARCH-001） |
 | curl の例 | `curl -G http://127.0.0.1:8000/api/users -H 'Authorization: Bearer <JWT>' --data-urlencode 'prefecture[]=東京都' -d age_min=25 -d age_max=35 -d height_min=170 -d page=2` | `curl -G http://127.0.0.1:8000/api/users -b cookies.txt -d 'prefecture_codes[]=13' -d age_min=25 -d cursor=<next_cursor>` |
@@ -72,7 +72,7 @@ return $users;
 | すること | レガシー版 | 要件 |
 | --- | --- | --- |
 | 25〜35歳・東京都と神奈川県・170cm 以上で探す | `200`・20人・SQL 23本・47ms。合う169人に、身長が2桁の会員が1人入る（文字で比べるため） | FR-SEARCH-001・NFR-SEARCH-001 |
-| 応答の中身 | `email`・`verification_token`・`birthday`・中の `id` が出る | FR-SEARCH-001 |
+| 応答の中身 | `email`・`birthday`・中の `id` が出る（`verification_token` は、refactored-repo で隠した） | FR-SEARCH-001 |
 | 自分・いいねした相手（5・6）・未確認の会員 | どれも出ない | FR-SEARCH-003〜005 |
 | 条件なしの1ページ目 | **先頭の20人がすべて `last_login_at` が NULL**（一度もログインしていない会員。合う中に433人いて、1〜22ページ目を埋める） | FR-SEARCH-006 |
 | 何も変えずに、1ページ目と2ページ目を読む | **17人が重なる**。NULL どうしの順が決まらず、PostgreSQL は LIMIT だけのとき（top-N heapsort）と OFFSET つきのとき（quicksort）で並べ方を変えるため、ページごとに順が変わる。同じページを2回読むと同じ順 | FR-SEARCH-006・008 |
