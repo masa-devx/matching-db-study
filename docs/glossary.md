@@ -16,9 +16,9 @@
 
 | 言葉 | 意味 | 画面 | API（URL・JSON） | コード（業務のまとまり・クラス） | 表・列 | 注意 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 会員 | 登録した人 | ― | 自分は `/me`、相手は `/users/{user_id}`。JSON は `user_id` | 業務のまとまりは `Members`。クラスは `User`（`UserNotFoundException`・`AuthenticateUser`・テストの `DummyUser`） | `users` | 会員の側の API は `users`、管理画面は `members`（下の「管理画面」）。会員の側のコードは `User`、管理画面のコードは `Member` |
-| アカウント | ログインしている会員本人。本人の情報（メールアドレス・確認済みか・有料会員か）と、本人がすること（見る・プロフィールを直す・退会する） | ―（設定の「アカウント」の見出しの下は、メールアドレスの確認とパスワードだけで、これより狭い。パスワードは `Auth`） | `/me`（URL は変えない。`/me` を付けるかの基準は `docs/cycles/01-backend-foundation/03-how.md` の「`/me` を付けるか」） | 業務のまとまりは `Profile`。`Account` は、ログインしている本人に対する操作の名前（Controller・Service・テスト・ルートの名前）に使う：`AccountController`・`AccountService`（どちらも、その API を移すときに作る）・テストの `Endpoints::account()`・`tests/Feature/Profile/ShowAccountTest.php`・今の URL のルートの名前 `legacy.profile.account.show`。データ（Model・例外・ダミーデータ）は `User` のまま（`User`・`UserNotFoundException`・`DummyUser`） | `users` | 「アカウント」は、会員がログインに使う登録（`users` の行。だれのものでも）を指す。コードの `Account〜Controller`・`AccountService` は、そのうち「ログインしている本人に対する操作」に使う。「アカウントが使える状態か」（`isAccountUsable`）は、どの会員の行にも使う（退会・停止・強制退会のどれでもない）。判定は業務のまとまり `Auth` に置く（`AuthService`）。URL の `/me` と、コードの `Account` は同じもの。コードの名前には `me`・`Me` を使わない（何を指すかが分かりにくいため。2026-11-20 に人が決めた）。管理画面も同じ（管理者本人の名前は、管理画面のログインを移すチケットで決める）。今あるコードの `me()`・`$me` は、その API を移すチケットで直す |
-| プロフィール | 会員の公開する情報（ニックネーム・性別・生年月日・都道府県・身長・自己紹介・プロフィール画像と、#153 で足した6項目：体型・お仕事・年収・タバコ・お酒・結婚歴） | 自己紹介 など | `profile` | `Profile` | `profiles` | |
+| 会員 | 登録した人 | ― | 自分は `/me`、相手は `/users/{user_id}`。JSON は `user_id` | `Members`・`User`（下の「会員」） | `users` | 下の「会員」 |
+| アカウント | ログインしている会員本人（下の「アカウント」） | 下の「アカウント」 | `/me`（下の「アカウント」） | `Profile`・`Account`・`User`（下の「アカウント」） | `users` | 下の「アカウント」 |
+| プロフィール | 会員の公開する情報（ニックネーム・性別・生年月日・都道府県・身長・自己紹介・プロフィール画像と、#153 で足したプロフィールの6項目） | 自己紹介 など | `profile` | `Profile` | `profiles` | |
 | プロフィール画像 | プロフィールに出す画像。デモ用の画像のパスを持つ | ― | `image` | ― | `profiles.image` | 前の `product.md` の `avatar_path` は、実際の列とずれていた |
 | 登録 | 会員になること | 登録 | `POST /users`（名前は仮） | `Auth` | `users`・`profiles` | |
 | メールアドレスの確認 | 届いたリンクを開いて、本人のメールアドレスだと確かめること | ― | `email-verification` | `Auth`・`EmailVerification` | `users.email_verified_at` | |
@@ -39,7 +39,7 @@
 | 強制退会 | 運営が、会員を、戻せない形で使えなくすること。自分での退会（退会）と違い、同じメールアドレスで登録し直せない（A7。#213） | 管理画面の「強制退会にする」。会員のログインでは「強制退会になっています」 | `ban`・`banned_at`・`banned_reason` | ―（`users` の列） | `users` | 利用の停止（戻せる）とは別。`deleted_at` も書くので、ほかの会員からは、退会した会員と同じに見える |
 | 停止の履歴 | 会員の利用を止めた・解いた記録（だれが・いつ・理由）。解いても消えない（A1。#211） | 管理画面の会員の詳細の「停止の履歴」 | `suspensions` | ― | `suspensions` | 今の状態は `users.suspended_at` にも持つ（レガシー版は、2か所） |
 | 対応のメモ | サポートが、会員ごとに残す、問い合わせと答え・気づいたこと。会員には見せない（A1。#216） | 管理画面の会員の詳細の「対応のメモ」 | `notes`・`body` | ― | `member_notes` | 通報の案件のメモ（案件ごと）とは別。直す・消す仕組みは、まだない |
-| 有料の区分 | 管理画面で、会員を、有料かどうかで4つに分けたもの：無料／有料（期限の中）／もうすぐ切れる（あと7日以内）／期限が過ぎた（有料の印が付いたままで、期限が過ぎている）（A1。#224） | 管理画面の会員の一覧・検索窓・詳細・ダッシュボードの印 | `plan`（絞り込み）・`paid_state`（行） | ―（レガシー版は、4か所に決め方がある） | `users.is_paid`・`users.paid_until` | 会員の側は、`is_paid` だけで有料と決める所があり、期限が過ぎても有料の機能が使える（FR-PAID-005）。管理画面は、期限も見る |
+| 有料の区分 | 管理画面で、会員を有料かどうかで4つに分けたもの（下の「有料の区分」） | 管理画面の会員の一覧・検索窓・詳細・ダッシュボードの印 | `plan`（絞り込み）・`paid_state`（行） | ―（レガシー版は、4か所に決め方がある） | `users.is_paid`・`users.paid_until` | 下の「有料の区分」 |
 | 新しいマッチ | マッチしたばかりで、まだ一度も開いていなくて、まだ1通もないトークルームの相手（M3。#187） | メッセージのタブの上の「新しいマッチ」。タブのバッジにも数える | `last_read_at`（トークの一覧の応答） | `Messaging`・`TalkRoom` | `talk_room_members.last_read_at` が NULL で、`messages` に行がない | 今は、画面が判断している（改善版では API が返す） |
 | 既読 | 相手がトーク画面を開いて、自分のメッセージを読んだこと。有料の機能（男性の無料の会員には分からない。M6。#190） | 自分の吹き出しの下の「既読」 | `partner_last_read_at`（トークの一覧の応答） | `Messaging`・`TalkRoom` | 相手の `talk_room_members.last_read_at` | 今は、画面が判断している。API は、無料の会員にも日時を返してしまう（改善版で直す） |
 | マッチ | お互いにいいねした状態 | ― | `matches`・`match_id` | `Matching`・`UserMatch` | `user_matches` | `match` は PHP の予約語なので、クラスは `UserMatch` |
@@ -52,6 +52,54 @@
 | プラン | 有料会員の期間と値段 | プラン | `plans` | `Billing`・`Plan` | `plans` | |
 | 購入 | プランを買うこと | 購入 | `purchases` | `Billing`・`Purchase` | `purchases` | |
 | 有料会員 | 料金を払っている会員 | ― | 改善版は「できること」で返す（`entitlements`。決め方は API を移すチケットで） | `Billing` | `users.is_paid` | レガシー版の真偽値。プランを増やすとき（07b）に直す |
+
+
+### 会員
+
+- 意味：登録した人
+- API：自分は `/me`、相手は `/users/{user_id}`。JSON は `user_id`
+- コード：
+  - 業務のまとまりは `Members`
+  - クラスは `User`（`UserNotFoundException`・`AuthenticateUser`・テストの `DummyUser`）
+- 表・列：`users`
+- 注意：
+  - 会員の側の API は `users`、管理画面は `members`（下の「管理画面」）
+  - 会員の側のコードは `User`、管理画面のコードは `Member`
+
+### アカウント
+
+- 意味：ログインしている会員本人
+  - 本人の情報（メールアドレス・確認済みか・有料会員か）
+  - 本人がすること（見る・プロフィールを直す・退会する）
+- 画面：―。設定の「アカウント」の見出しの下は、メールアドレスの確認とパスワードだけで、これより狭い。パスワードは `Auth`
+- API：`/me`。URL は変えない。`/me` を付けるかの基準は、`docs/cycles/01-backend-foundation/03-how.md` の「`/me` を付けるか」
+- コード：
+  - 業務のまとまりは `Profile`
+  - `Account` は、ログインしている本人に対する操作の名前（Controller・Service・テスト・ルートの名前）に使う
+    - `AccountController`・`AccountService`（どちらも、その API を移すときに作る）
+    - テストの `Endpoints::account()`・`tests/Feature/Profile/ShowAccountTest.php`
+    - 今の URL のルートの名前 `legacy.profile.account.show`
+  - データ（Model・例外・ダミーデータ）は `User` のまま（`User`・`UserNotFoundException`・`DummyUser`）
+- 表・列：`users`
+- 注意：
+  - 「アカウント」は、会員がログインに使う登録（`users` の行。だれのものでも）を指す
+  - コードの `Account〜Controller`・`AccountService` は、そのうち「ログインしている本人に対する操作」に使う
+  - 「アカウントが使える状態か」（`isAccountUsable`）は、どの会員の行にも使う（退会・停止・強制退会のどれでもない）。判定は、業務のまとまり `Auth` に置く（`AuthService`）
+  - URL の `/me` と、コードの `Account` は同じもの
+  - コードの名前には、`me`・`Me` を使わない（何を指すかが分かりにくいため。2026-11-20 に人が決めた）
+  - 管理画面も同じ（管理者本人の名前は、管理画面のログインを移すチケットで決める）
+  - 今あるコードの `me()`・`$me` は、その API を移すチケットで直す
+
+### 有料の区分
+
+- 意味：管理画面で、会員を、有料かどうかで4つに分けたもの（A1。#224）
+  - 無料
+  - 有料（期限の中）
+  - もうすぐ切れる（あと7日以内）
+  - 期限が過ぎた（有料の印が付いたままで、期限が過ぎている）
+- 注意：
+  - 会員の側は、`is_paid` だけで有料と決める所があり、期限が過ぎても有料の機能が使える（FR-PAID-005）
+  - 管理画面は、期限も見る
 
 ## 管理画面
 

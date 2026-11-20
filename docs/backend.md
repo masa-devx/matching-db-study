@@ -27,11 +27,16 @@
 | まとまり | 中身 |
 | --- | --- |
 | `Auth` | 新規登録・ログイン・ログアウト・メールの確認・パスワード |
-| `Profile` | 自分のアカウント（URL は `/me`。自分の情報を見る・プロフィールを直す・退会）・相手のプロフィール。`Members` から分けた（「Members」では中身が分かりにくいため。2026-11-19 に人が決めた） |
+| `Profile` | 自分のアカウント・相手のプロフィール |
 | `Members` | 会員の検索・保存した検索条件・通報・お知らせ |
 | `Matching` | いいね・届いたいいね・スキップ・マッチ・ブロック |
 | `Messaging` | トークルーム・メッセージ・Firestore のトークン |
 | `Billing` | プラン・購入 |
+
+`Profile` について：
+
+- 自分のアカウントは、URL が `/me`。自分の情報を見る・プロフィールを直す・退会
+- `Members` から分けた。「Members」では中身が分かりにくいため（2026-11-19 に人が決めた）
 
 ### 2-2. 管理画面
 
@@ -57,24 +62,34 @@
 
 | 今のファイル（メソッド） | 新しい Controller | Service |
 | --- | --- | --- |
-| `AuthController`（login・me・logout）・`UserController`（store：新規登録） | `Auth/AuthController`（login・logout・store）・**`me` は `Profile/AccountController@show`** | `Auth/AuthService`・`Profile/AccountService` |
+| `AuthController`（login・logout）・`UserController`（store：新規登録） | `Auth/AuthController`（login・logout・store） | `Auth/AuthService` |
+| `AuthController`（me） | **`me` は `Profile/AccountController@show`** | `Profile/AccountService` |
 | `EmailVerificationController`（show・store） | `Auth/EmailVerificationController` | `Auth/EmailVerificationService` |
 | `PasswordController`（update）・`PasswordResetController`（store・update） | `Auth/PasswordController`・`Auth/PasswordResetController` | `Auth/PasswordService` |
-| `UserController`（index：検索・destroy：退会） | `Members/MemberController@index`・`Profile/AccountController@destroy` | `Members/MemberService`（`search`。クエリは `User` の `scopeSearch`）・`Profile/AccountService`（`withdraw`） |
-| `ProfileController`（show：相手のプロフィール・update：自分のプロフィール） | `Profile/ProfileController@show`・**自分のは `Profile/AccountController@update`**（新しい URL は `PATCH /me`。`03-how.md` の281行目） | `Profile/ProfileService`（`showProfile`・`updateProfile`） |
+| `UserController`（index：検索） | `Members/MemberController@index` | `Members/MemberService`（`search`） |
+| `UserController`（destroy：退会） | `Profile/AccountController@destroy` | `Profile/AccountService`（`withdraw`） |
+| `ProfileController`（show：相手のプロフィール） | `Profile/ProfileController@show` | `Profile/ProfileService`（`showProfile`） |
+| `ProfileController`（update：自分のプロフィール） | **`Profile/AccountController@update`** | `Profile/ProfileService`（`updateProfile`） |
 | `SearchConditionController`（index・store・update・destroy） | `Members/SearchConditionController` | `Members/SearchConditionService` |
 | `ReportController`（store） | `Members/ReportController` | `Members/ReportService` |
-| `NoticeController`（index・**read**） | `Members/NoticeController@index`・**既読は `Members/NoticeReadController@store`**（名詞：既読） | `Members/NoticeService` |
-| `LikeController`（store・index）・`ReceivedLikeController`（index） | `Matching/LikeController`・`Matching/ReceivedLikeController` | `Matching/LikeService`（`send`・`listSent`・`listReceived`。Firestore へは `Clients/Firestore/FirestoreClient`） |
+| `NoticeController`（index） | `Members/NoticeController@index` | `Members/NoticeService` |
+| `NoticeController`（**read**） | **`Members/NoticeReadController@store`**（名詞：既読） | `Members/NoticeService` |
+| `LikeController`（store・index）・`ReceivedLikeController`（index） | `Matching/LikeController`・`Matching/ReceivedLikeController` | `Matching/LikeService`（`send`・`listSent`・`listReceived`） |
 | `SkipController`（store・index・destroy） | `Matching/SkipController` | `Matching/SkipService` |
 | `UserMatchController`（index） | `Matching/MatchController` | `Matching/MatchService` |
 | `BlockController`（store・index・destroy） | `Matching/BlockController` | `Matching/BlockService` |
-| `TalkRoomController`（index）・`MessageController`（index・store） | `Messaging/TalkRoomController`・`Messaging/MessageController` | `Messaging/MessageService`（`listRooms`・`listMessages`・`send`。Firestore へは `FirestoreClient`） |
+| `TalkRoomController`（index）・`MessageController`（index・store） | `Messaging/TalkRoomController`・`Messaging/MessageController` | `Messaging/MessageService`（`listRooms`・`listMessages`・`send`） |
 | `FirebaseTokenController`（store） | `Messaging/FirebaseTokenController` | `Messaging/FirebaseTokenService` |
 | `PlanController`（index）・`PurchaseController`（store・index） | `Billing/PlanController`・`Billing/PurchaseController` | `Billing/PlanService`・`Billing/PurchaseService` |
 | `app/Models/*` | 移さない（`app/Models/` のまま） | ― |
 | `app/Mail/VerifyMail.php` | 移さない（メールの中身）。送るのは Service から `Clients/Mail/MailClient` を通す | ― |
 | `app/Support/Logging/` | そのまま | ― |
+
+表の補足：
+
+- `Members/MemberService` の `search` のクエリは、`User` の `scopeSearch` に置く
+- 自分のプロフィールを直す新しい URL は `PATCH /me`（`03-how.md` の281行目）
+- `Matching/LikeService` と `Messaging/MessageService` は、Firestore へは `Clients/Firestore/FirestoreClient`（`FirestoreClient`）を通す
 
 ### 管理画面
 
@@ -82,19 +97,32 @@
 
 | 今のファイル（メソッド） | 新しい Controller | Service |
 | --- | --- | --- |
-| `AuthController`（login・**me**） | `Admins/AuthController@login`・**管理者本人を見る Controller**（名前は、移すチケットで決める。`Me` は使わない。`docs/glossary.md` の「アカウント」） | `Admins/AuthService`（`login`・本人を見る操作（名前は移すときに決める）・`canAdminWrite`。`canWrite` は書き込みのルートの Middleware `admin.can-write` から呼ぶ） |
+| `AuthController`（login） | `Admins/AuthController@login` | `Admins/AuthService`（`login`・`canAdminWrite`） |
+| `AuthController`（**me**） | **管理者本人を見る Controller**（名前は未定） | `Admins/AuthService`（本人を見る操作。名前は未定） |
 | `DashboardController`（index） | `Dashboard/DashboardController` | `Dashboard/DashboardService` |
 | `MemberController`（index・show） | `Members/MemberController` | `Members/MemberService` |
 | `SuspensionController`（store・destroy） | `Members/SuspensionController` | `Members/SuspensionService` |
-| `NoticeController`（store・**ban**） | `Notices/NoticeController@store`・**強制退会は `Members/BanController@store`**（名詞：強制退会） | `Notices/NoticeService`・`Members/BanService` |
+| `NoticeController`（store） | `Notices/NoticeController@store` | `Notices/NoticeService` |
+| `NoticeController`（**ban**） | **`Members/BanController@store`**（名詞：強制退会） | `Members/BanService` |
 | `MemberNoteController`（store） | `Members/MemberNoteController` | `Members/MemberNoteService` |
-| `MemberActivityController`（**talkRooms・violations・blocks・blockRanking**） | **名詞ごとに分ける**：`Members/MemberTalkRoomController@index`・`MemberViolationController@index`・`MemberBlockController@index`・`BlockRankingController@index` | `Members/MemberActivityService` |
+| `MemberActivityController`（**talkRooms**） | **`Members/MemberTalkRoomController@index`** | `Members/MemberActivityService` |
+| `MemberActivityController`（**violations**） | **`MemberViolationController@index`** | `Members/MemberActivityService` |
+| `MemberActivityController`（**blocks**） | **`MemberBlockController@index`** | `Members/MemberActivityService` |
+| `MemberActivityController`（**blockRanking**） | **`BlockRankingController@index`** | `Members/MemberActivityService` |
 | `MessageController`（index）・`TalkRoomController`（show） | `Messages/MessageController`・`Messages/TalkRoomController` | `Messages/MessageService`（`search`・`showRoom`） |
 | `ReportCaseController`（index・show・update） | `Reports/ReportCaseController` | `Reports/ReportCaseService` |
-| `SalesController`（**purchases・monthly**） | **`Sales/PurchaseController@index`・`Sales/MonthlySalesController@index`** | `Sales/SalesService` |
+| `SalesController`（**purchases**） | **`Sales/PurchaseController@index`** | `Sales/SalesService` |
+| `SalesController`（**monthly**） | **`Sales/MonthlySalesController@index`** | `Sales/SalesService` |
 | `PlanController`（index・update） | `Plans/PlanController` | `Plans/PlanService` |
 | `AuditLogController`（index） | `AuditLogs/AuditLogController` | `AuditLogs/AuditLogService` |
 | `Controller.php`（基底） | 移さない | ― |
+
+表の補足：
+
+- 管理者本人を見る Controller と、`Admins/AuthService` の本人を見る操作の名前は、移すチケットで決める
+  - `Me` は使わない（`docs/glossary.md` の「アカウント」）
+- `canWrite` は、書き込みのルートの Middleware `admin.can-write` から呼ぶ
+- `MemberActivityController` は、名詞ごとに4つの Controller に分ける
 
 移す順は、画面・機能ごと。最初はホーム（#237：`ProfileController`）。そのあとは、機能を足すとき・不具合を直すときに、触る所を移す。移し方の決まりは [architecture-backend.md](../agents/rules/architecture-backend.md) の10章。移す前に、その API が「API テストがある」状態（成功1本と、`docs/api/` に書いた失敗ごとに1本）にする。
 
@@ -143,23 +171,44 @@
 
 ### このリポジトリの中
 
-| 資料 | 中身 |
-| --- | --- |
-| [../explanations/architecture-styles.html](../explanations/architecture-styles.html) | アーキテクチャの地図：MVC・レイヤード・ヘキサゴナル・オニオン・クリーン・DDD・モジュラーモノリス・垂直スライスを、メリット・向く場面・将来の変更で比べた |
-| [../explanations/layered-design.html](../explanations/layered-design.html) | 決める途中で作った詳細設計の解説（第3版のまま残した参考の版）。図・サンプルコード・メリットとデメリット。正本は architecture-backend.md と、このファイル |
-| [../explanations/modular-monolith.html](../explanations/modular-monolith.html) | レイヤードからモジュラーモノリスへ移るときのディレクトリと順番・フレームワークや言語を替えるときの備え |
-| [cycles/01-backend-foundation/03-how.md](cycles/01-backend-foundation/03-how.md) | 決めたことと、比べて採らなかった案（議事録） |
+- [../explanations/architecture-styles.html](../explanations/architecture-styles.html)
+  - アーキテクチャの地図：MVC・レイヤード・ヘキサゴナル・オニオン・クリーン・DDD・モジュラーモノリス・垂直スライスを、メリット・向く場面・将来の変更で比べた
+- [../explanations/layered-design.html](../explanations/layered-design.html)
+  - 決める途中で作った詳細設計の解説（第3版のまま残した参考の版）
+  - 図・サンプルコード・メリットとデメリット
+  - 正本は architecture-backend.md と、このファイル
+- [../explanations/modular-monolith.html](../explanations/modular-monolith.html)
+  - レイヤードからモジュラーモノリスへ移るときのディレクトリと順番
+  - フレームワークや言語を替えるときの備え
+- [cycles/01-backend-foundation/03-how.md](cycles/01-backend-foundation/03-how.md)
+  - 決めたことと、比べて採らなかった案（議事録）
 
 ### 外の資料
 
-| 資料 | 何に使ったか | 読んだか |
-| --- | --- | --- |
-| [DIP を用いたレイヤードアーキテクチャの記事（StyleEdge の技術ブログ・2023-11-17）](https://techblog.styleedge.co.jp/entry/2023/11/17/074959) | 4層の名前と置き場（`Application`・`Domains`・`Http`・`Infrastructure`）・Eloquent を Infrastructure だけで使う・エンティティの生成用と再構成用のファクトリメソッド・QueryService は必要なときだけ。会員の側の形のもとにした | 読んだ（2026-11-15）。第1版の形で、第2版（#236）では使っていない |
-| [Pest の Architecture Testing](https://pestphp.com/docs/arch-testing) | `arch()` で依存の向きを確かめる書き方 | 読んでいない（書き方は AI の知識。使う前に確かめる） |
-| [The Clean Architecture（Robert C. Martin）](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html) | 依存は内側へだけ、という考え方 | 読んでいない（考え方の出どころとして） |
-| [Hexagonal Architecture（Alistair Cockburn）](https://alistair.cockburn.us/hexagonal-architecture/) | ポートとアダプター（外との境目に差し替え口を作る） | 読んでいない（考え方の出どころとして） |
-| [The Onion Architecture（Jeffrey Palermo）](https://jeffreypalermo.com/2008/07/the-onion-architecture-part-1/) | ドメインを中心に置く同心円の層 | 読んでいない（考え方の出どころとして） |
-| [StranglerFigApplication（Martin Fowler）](https://martinfowler.com/bliki/StranglerFigApplication.html) | 古いものを、新しいもので少しずつ置き換える移し方 | 読んでいない（考え方の出どころとして） |
-| [CQRS（Martin Fowler）](https://martinfowler.com/bliki/CQRS.html) | 書き込みと読み取りの道を分ける（QueryService の考え方のもと） | 読んでいない（考え方の出どころとして） |
+各資料の「何に使ったか」と「読んだか」を書く。
 
-「読んでいない」ものは、AI の知識で説明した考え方の出どころとして並べた。詳しく使う前に、リンク先を読んで確かめる。
+- [DIP を用いたレイヤードアーキテクチャの記事（StyleEdge の技術ブログ・2023-11-17）](https://techblog.styleedge.co.jp/entry/2023/11/17/074959)
+  - 何に使ったか：4層の名前と置き場（`Application`・`Domains`・`Http`・`Infrastructure`）
+  - 何に使ったか：Eloquent を Infrastructure だけで使う
+  - 何に使ったか：エンティティの生成用と再構成用のファクトリメソッド
+  - 何に使ったか：QueryService は必要なときだけ
+  - 会員の側の形のもとにした
+  - 読んだか：読んだ（2026-11-15）。第1版の形で、第2版（#236）では使っていない
+- [Pest の Architecture Testing](https://pestphp.com/docs/arch-testing)
+  - 何に使ったか：`arch()` で依存の向きを確かめる書き方
+  - 読んだか：読んでいない（書き方は AI の知識。使う前に確かめる）
+- [The Clean Architecture（Robert C. Martin）](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
+  - 何に使ったか：依存は内側へだけ、という考え方
+  - 読んだか：読んでいない（考え方の出どころとして）
+- [Hexagonal Architecture（Alistair Cockburn）](https://alistair.cockburn.us/hexagonal-architecture/)
+  - 何に使ったか：ポートとアダプター（外との境目に差し替え口を作る）
+  - 読んだか：読んでいない（考え方の出どころとして）
+- [The Onion Architecture（Jeffrey Palermo）](https://jeffreypalermo.com/2008/07/the-onion-architecture-part-1/)
+  - 何に使ったか：ドメインを中心に置く同心円の層
+  - 読んだか：読んでいない（考え方の出どころとして）
+- [StranglerFigApplication（Martin Fowler）](https://martinfowler.com/bliki/StranglerFigApplication.html)
+  - 何に使ったか：古いものを、新しいもので少しずつ置き換える移し方
+  - 読んだか：読んでいない（考え方の出どころとして）
+- [CQRS（Martin Fowler）](https://martinfowler.com/bliki/CQRS.html)
+  - 何に使ったか：書き込みと読み取りの道を分ける（QueryService の考え方のもと）
+  - 読んだか：読んでいない（考え方の出どころとして）

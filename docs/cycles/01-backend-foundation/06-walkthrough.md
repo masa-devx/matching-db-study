@@ -59,8 +59,10 @@ backend/client/tests/
 | Infrastructure は UseCase と Http を使わない | Repository は、呼ぶ側を知らない | `arch()` | Repository に `use App\Http\…;` |
 | QueryService は Application・Repository・Domain を使わない | 読み取りの道は、書き込みの道と交わらない | `arch()` | QueryService の引数の型が Domain の値オブジェクト |
 | Support（基盤）は、層と Model を使わない | 基盤は、機能を知らない | `arch()` | Support に `use App\Models\User;` |
-| Domain の interface は Interface で終わる・UseCase は final・UseCase で終わる・QueryService は final（4本） | 名前と `final` | `arch()` | `class LikeUseCase`（`final` がない） |
+| 名前と `final` の決まり（4本） | 名前の終わりと `final`（表の下） | `arch()` | `class LikeUseCase`（`final` がない） |
 | 新しい層のファイルは strict_types | `declare(strict_types=1);` | `arch()`。古いコントローラーは外す | `declare` のないファイル |
+
+- 名前と `final` の決まり（4本）：Domain の interface は Interface で終わる・UseCase は final・UseCase で終わる・QueryService は final
 
 大事な所の抜き出し（3か所）。
 
@@ -214,13 +216,47 @@ docker/db/init/02-create-admin-test-db.sql   ← 足した。matching_admin_test
 
 ### メソッドの表
 
-| 関数 | 入力 | 戻り値 | 副作用 | 失敗のしかた | 呼ぶ所 |
-| --- | --- | --- | --- | --- | --- |
-| `createAdmin()` | 役割（既定は `owner`）・名前（既定は「テスト管理者」） | `TestAdmin` | `admins` に1行 | 役割が `owner`・`viewer` 以外なら `InvalidArgumentException`（行を入れる前） | テスト |
-| `createMember()` | 性別・有料・退会・停止・ニックネーム | `TestMember` | `users` に1行・`profiles` に1行 | 性別が `male`・`female` 以外・ニックネームが空の文字なら `InvalidArgumentException`（行を入れる前） | テスト |
-| `actingAsAdmin()` | `TestAdmin` | テストの入口（`->getJson(…)` と続ける） | `Authorization` ヘッダーを付ける | ― | テスト |
-| `adminToken()` | `TestAdmin` | JWT の文字 | なし | 鍵が空・短いと、ライブラリが例外を出す（`Provided key is too short`） | `actingAsAdmin()`。期限切れを試すテストは、使わずに自分で作る |
-| `TestCase::createApplication()` | ― | アプリ | マイグレーションの読み込み先を足す | DB が `pgsql`・`matching_admin_test` でなければ `RuntimeException`。会員の側のマイグレーションの置き場がなければ `RuntimeException` | テストごとに、Laravel が呼ぶ |
+#### `createAdmin()`
+
+- 入力：役割（既定は `owner`）・名前（既定は「テスト管理者」）
+- 戻り値：`TestAdmin`
+- 副作用：`admins` に1行
+- 失敗のしかた：役割が `owner`・`viewer` 以外なら `InvalidArgumentException`（行を入れる前）
+- 呼ぶ所：テスト
+
+#### `createMember()`
+
+- 入力：性別・有料・退会・停止・ニックネーム
+- 戻り値：`TestMember`
+- 副作用：`users` に1行・`profiles` に1行
+- 失敗のしかた：性別が `male`・`female` 以外・ニックネームが空の文字なら `InvalidArgumentException`（行を入れる前）
+- 呼ぶ所：テスト
+
+#### `actingAsAdmin()`
+
+- 入力：`TestAdmin`
+- 戻り値：テストの入口（`->getJson(…)` と続ける）
+- 副作用：`Authorization` ヘッダーを付ける
+- 失敗のしかた：―
+- 呼ぶ所：テスト
+
+#### `adminToken()`
+
+- 入力：`TestAdmin`
+- 戻り値：JWT の文字
+- 副作用：なし
+- 失敗のしかた：鍵が空・短いと、ライブラリが例外を出す（`Provided key is too short`）
+- 呼ぶ所：`actingAsAdmin()`。期限切れを試すテストは、使わずに自分で作る
+
+#### `TestCase::createApplication()`
+
+- 入力：―
+- 戻り値：アプリ
+- 副作用：マイグレーションの読み込み先を足す
+- 失敗のしかた
+  - DB が `pgsql`・`matching_admin_test` でなければ `RuntimeException`
+  - 会員の側のマイグレーションの置き場がなければ `RuntimeException`
+- 呼ぶ所：テストごとに、Laravel が呼ぶ
 
 大事な所の抜き出し（3か所）。
 
@@ -325,15 +361,30 @@ flowchart LR
 
 ### 説明の練習
 
-リーダーが「自分のプロフィールのニックネームを直す API を、新しい形で作るとき、どのファイルに何を書くか」と聞いた（2026-11-19）。
+#### 1回目：ニックネームを直す API を作るとき（2026-11-19）
 
-| 問い | 人の答え | 結果 |
-| --- | --- | --- |
-| 通るファイルと仕事 | 最初はレガシー版の形（Controller にロジックと保存）。ヒントのあと、Middleware・Request・Service・Model・Resource の仕事を5つとも合わせた | 一部（ヒント1） |
-| 「空にできない」の置き場 | Service | ずれた（正しくは Request。値1つで決まる入力の形・422） |
-| `PATCH /me` で他人を直せない理由 | Middleware で判断する | 一部（URL に相手の ID がないこと、が足りない） |
+リーダーが「自分のプロフィールのニックネームを直す API を、新しい形で作るとき、どのファイルに何を書くか」と聞いた。
 
-- 次にやること：#237 で実物を作ったあとに、同じ流れをヒントなしで説明する
+##### 問い1：通るファイルと仕事
+
+- 人の答え
+  - 最初はレガシー版の形（Controller にロジックと保存）
+  - ヒントのあと、Middleware・Request・Service・Model・Resource の仕事を5つとも合わせた
+- 結果：一部（ヒント1）
+
+##### 問い2：「空にできない」の置き場
+
+- 人の答え：Service
+- 結果：ずれた（正しくは Request。値1つで決まる入力の形・422）
+
+##### 問い3：`PATCH /me` で他人を直せない理由
+
+- 人の答え：Middleware で判断する
+- 結果：一部（URL に相手の ID がないこと、が足りない）
+
+##### 次にやること
+
+- #237 で実物を作ったあとに、同じ流れをヒントなしで説明する
 
 ## PR #240（#237 ホームのプロフィールの API を Service に移す）
 
@@ -353,29 +404,81 @@ backend/client/
     └── Feature/Profile/ShowTest.php・UpdateTest.php    今の動きを確かめる API テスト
 ```
 
-| 置いた所 | 理由（`architecture-backend.md`） | ほかに置ける所と、置かなかった理由 |
-| --- | --- | --- |
-| `Profile/` のフォルダ | 3章：置き場の中を業務のまとまりで分ける。プロフィールは `Profile`（`docs/backend.md` の2章） | `Members/`：会員の検索・通報なども入り、何のまとまりか分かりにくい（人が決めた） |
-| `IdentifyMember`（Middleware） | 4章：トークンを読むのは Middleware だけ | Controller で読む（レガシー版の形。29か所のコピーと同じ形が、もう1つ増える）・Service で読む（Service は HTTP を知らない） |
-| Resource を作らない | 4章：返す項目を選ぶときに作る。今は全部の列を返すので、作っても中身がない | `ProfileResource` を作り、`toArray()` をそのまま返す（作ったあと、中身がないので消した） |
+#### `Profile/` のフォルダ
+
+- 理由（`architecture-backend.md` の3章）：置き場の中を業務のまとまりで分ける。プロフィールは `Profile`（`docs/backend.md` の2章）
+- ほかに置ける所と、置かなかった理由
+  - `Members/`：会員の検索・通報なども入り、何のまとまりか分かりにくい（人が決めた）
+
+#### `IdentifyMember`（Middleware）
+
+- 理由（`architecture-backend.md` の4章）：トークンを読むのは Middleware だけ
+- ほかに置ける所と、置かなかった理由
+  - Controller で読む：レガシー版の形。29か所のコピーと同じ形が、もう1つ増える
+  - Service で読む：Service は HTTP を知らない
+
+#### Resource を作らない
+
+- 理由（`architecture-backend.md` の4章）：返す項目を選ぶときに作る。今は全部の列を返すので、作っても中身がない
+- ほかに置ける所と、置かなかった理由
+  - `ProfileResource` を作り、`toArray()` をそのまま返す：作ったあと、中身がないので消した
 
 ### クラスの責務
 
-| クラス | 責務 |
-| --- | --- |
-| `ProfileController` | URL の `{user_id}` とリクエストを知っていて、Service を呼んで JSON にする。DB と JWT は知らない |
-| `ProfileService` | 会員とプロフィールの読み方・2人のトークルームの探し方・書き換え方を知っていて、Model を呼ぶ。HTTP（リクエスト・状態コード）は知らない |
-| `IdentifyMember` | JWT の読み方を知っていて、ログインしている人の `users.id` を `login_user_id` に載せる。トークンがなくても止めない。会員が使えるか（退会・停止）は見ない |
+- `ProfileController`
+  - URL の `{user_id}` とリクエストを知っていて、Service を呼んで JSON にする
+  - DB と JWT は知らない
+- `ProfileService`
+  - 会員とプロフィールの読み方・2人のトークルームの探し方・書き換え方を知っていて、Model を呼ぶ
+  - HTTP（リクエスト・状態コード）は知らない
+- `IdentifyMember`
+  - JWT の読み方を知っていて、ログインしている人の `users.id` を `login_user_id` に載せる
+  - トークンがなくても止めない
+  - 会員が使えるか（退会・停止）は見ない
 
 ### メソッドの表
 
-| メソッド | 入力 | 戻り値 | 副作用 | 失敗のしかた | 呼ぶ所 |
-| --- | --- | --- | --- | --- | --- |
-| `ProfileService::showProfile` | `$targetPublicId`（UUID）・`$viewerId`（`users.id` か null） | `array{target: User, roomId: string\|null}` | なし（読むだけ） | いない会員：`firstOrFail()` の例外 → 404（文に Model の名前が出る）。UUID の形でない：PostgreSQL のエラー → 500 | `ProfileController::show` |
-| `ProfileService::updateProfile` | `$targetPublicId`・`$input`（送られた項目の全部） | 書き換えた `Profile` | `profiles` の1行を書き換える | いない会員・プロフィールがない：`RuntimeException` → 500 | `ProfileController::update` |
-| `ProfileController::show` | `Request`・`$targetPublicId` | JSON（`users` の列・`profile`・`room_id`） | なし | Service の例外がそのまま上がる | ルート `GET /api/users/{user_id}` |
-| `ProfileController::update` | `Request`・`$targetPublicId` | JSON（`profiles` の列） | Service と同じ | 同上 | ルート `PUT /api/users/{user_id}` |
-| `IdentifyMember::handle` | `Request`・次の処理 | 次の処理の応答 | `login_user_id` を載せる | 壊れた・期限の切れたトークン：JWT の例外 → 500 | ルートの `->middleware('member.identify')` |
+#### `ProfileService::showProfile`
+
+- 入力：`$targetPublicId`（UUID）・`$viewerId`（`users.id` か null）
+- 戻り値：`array{target: User, roomId: string|null}`
+- 副作用：なし（読むだけ）
+- 失敗のしかた
+  - いない会員：`firstOrFail()` の例外 → 404（文に Model の名前が出る）
+  - UUID の形でない：PostgreSQL のエラー → 500
+- 呼ぶ所：`ProfileController::show`
+
+#### `ProfileService::updateProfile`
+
+- 入力：`$targetPublicId`・`$input`（送られた項目の全部）
+- 戻り値：書き換えた `Profile`
+- 副作用：`profiles` の1行を書き換える
+- 失敗のしかた：いない会員・プロフィールがない：`RuntimeException` → 500
+- 呼ぶ所：`ProfileController::update`
+
+#### `ProfileController::show`
+
+- 入力：`Request`・`$targetPublicId`
+- 戻り値：JSON（`users` の列・`profile`・`room_id`）
+- 副作用：なし
+- 失敗のしかた：Service の例外がそのまま上がる
+- 呼ぶ所：ルート `GET /api/users/{user_id}`
+
+#### `ProfileController::update`
+
+- 入力：`Request`・`$targetPublicId`
+- 戻り値：JSON（`profiles` の列）
+- 副作用：Service と同じ
+- 失敗のしかた：同上（Service の例外がそのまま上がる）
+- 呼ぶ所：ルート `PUT /api/users/{user_id}`
+
+#### `IdentifyMember::handle`
+
+- 入力：`Request`・次の処理
+- 戻り値：次の処理の応答
+- 副作用：`login_user_id` を載せる
+- 失敗のしかた：壊れた・期限の切れたトークン：JWT の例外 → 500
+- 呼ぶ所：ルートの `->middleware('member.identify')`
 
 見る人がいるときだけ、トークルームを探す（`ProfileService.php`）：
 
@@ -433,14 +536,42 @@ sequenceDiagram
 
 ### 名前
 
-| 名前 | ほかの候補 | 選ばなかった理由 |
-| --- | --- | --- |
-| URL の `{user_id}` | `{publicId}`（前の名前） | 用語集の「ID の名前」の決まり（2026-11-16）と違う |
-| `$targetPublicId`・`$targetId` | `$publicId`・`$memberId` | 「だれの」「どちらの番号か」が分からず、読み違えた（用語集の「コードの中の、会員の番号の名前」） |
-| `login_user_id`・`$loginUserId` | `member_id`・`viewer_id` | `member_id` は用語集では管理画面の UUID。`viewer_id` は、書き換えの API で使うと意味が合わない |
-| `$viewerId`（Service） | `$loginUserId` | Service は HTTP を知らない。コマンドから呼ぶときも「見る人」なら通じる |
-| `showProfile`・`updateProfile` | `showFor`・`update`・`updateMyProfile`・`updateTargetProfile` | 名前には「何ができるか」を書き、「だれが呼べるか」（ログインしているか・本人か）は入れない。それは Middleware とメソッドの中の条件で決める（`architecture-backend.md` の3章。人が決めた）。`update` は Controller と同じ名前になる（3章） |
-| `IdentifyMember` | `AuthenticateMember` | 認証（通さない）はしない。だれかを見分けるだけ。`AuthenticateMember` は、401 を返す Middleware の名前に取っておく |
+#### URL の `{user_id}`
+
+- ほかの候補：`{publicId}`（前の名前）
+- 選ばなかった理由：用語集の「ID の名前」の決まり（2026-11-16）と違う
+
+#### `$targetPublicId`・`$targetId`
+
+- ほかの候補：`$publicId`・`$memberId`
+- 選ばなかった理由：「だれの」「どちらの番号か」が分からず、読み違えた（用語集の「コードの中の、会員の番号の名前」）
+
+#### `login_user_id`・`$loginUserId`
+
+- ほかの候補：`member_id`・`viewer_id`
+- 選ばなかった理由
+  - `member_id` は、用語集では管理画面の UUID
+  - `viewer_id` は、書き換えの API で使うと意味が合わない
+
+#### `$viewerId`（Service）
+
+- ほかの候補：`$loginUserId`
+- 選ばなかった理由：Service は HTTP を知らない。コマンドから呼ぶときも「見る人」なら通じる
+
+#### `showProfile`・`updateProfile`
+
+- ほかの候補：`showFor`・`update`・`updateMyProfile`・`updateTargetProfile`
+- 選ばなかった理由
+  - 名前には「何ができるか」を書き、「だれが呼べるか」（ログインしているか・本人か）は入れない
+  - 「だれが呼べるか」は、Middleware とメソッドの中の条件で決める（`architecture-backend.md` の3章。人が決めた）
+  - `update` は、Controller と同じ名前になる（3章）
+
+#### `IdentifyMember`
+
+- ほかの候補：`AuthenticateMember`
+- 選ばなかった理由
+  - 認証（通さない）はしない。だれかを見分けるだけ
+  - `AuthenticateMember` は、401 を返す Middleware の名前に取っておく
 
 ### 依存の向き
 
@@ -483,40 +614,120 @@ flowchart LR
 
 どれも、このチケットでは直さない（動きを変えずに移すチケットのため）。直すときは、テストの「分かっている不具合」を要件どおりに戻し、落ちる（Red）のを見てから直す。
 
-| 候補 | 今どうなっているか | 直すとどうなるか | 気づいた所 |
-| --- | --- | --- | --- |
-| トークルームを探す SQL を1本にする | `ProfileService::findSharedRoomId` が、自分のルームの一覧 → 相手もいるルーム → ルームの番号、の3本を流す | `talk_room_members` を2回つなぐ（JOIN）1本で探せる。ログインして見ると5本が3本になる | 前と後の SQL の本数を測ったとき |
-| 2人のルームを探す条件を、Model のスコープにする | `whereIn('talk_room_id', …)->where('user_id', …)` を Service に直接書いている。`architecture-backend.md` の4章（条件が2つ以上なら Model のスコープ）から外れている。トークルームの機能を直すときに移す（PR #240 のレビューで、人が決めた） | トークの API でも同じ条件を使うので、`TalkRoomMember` の1か所にまとめられる | Service に移したとき |
-| 返す項目を選ぶ（FR-002） | `toArray()` で、メールアドレスなども全部返す | Resource を作り、返してよい項目だけにする（`architecture-backend.md` の Resource の決まり） | 今の動きを確かめるテスト |
-| 入力を確かめる（FR-010・FR-006） | `$request->all()` を、そのまま `fill()` に渡す | Form Request の `validated()` だけを渡す。空のニックネームは 422 | 今の動きを確かめるテスト |
-| 他人のプロフィールを書き換えられないようにする（FR-AUTH-022） | PUT のルートに、ログインを求める Middleware がない | ログインを求め、URL の会員が自分でなければ 403 | 今の動きを確かめるテスト・Bruno |
-| 壊れたトークンを 401 にする | `IdentifyMember` が、JWT の例外のまま 500 を返す | 例外を受けて 401 を返す。トークンを読むコード（17のコントローラーに29か所）も、Middleware にまとめる | Middleware を作ったとき |
-| 見つからないときの応答をそろえる | GET は Laravel の 404（文に Model の名前が出る）、PUT は 500 | どちらも、決まった形の 404 にする（`architecture-backend.md` の7章） | 今の動きを確かめるテスト |
+#### トークルームを探す SQL を1本にする
+
+- 今どうなっているか：`ProfileService::findSharedRoomId` が、自分のルームの一覧 → 相手もいるルーム → ルームの番号、の3本を流す
+- 直すとどうなるか
+  - `talk_room_members` を2回つなぐ（JOIN）1本で探せる
+  - ログインして見ると、5本が3本になる
+- 気づいた所：前と後の SQL の本数を測ったとき
+
+#### 2人のルームを探す条件を、Model のスコープにする
+
+- 今どうなっているか
+  - `whereIn('talk_room_id', …)->where('user_id', …)` を Service に直接書いている
+  - `architecture-backend.md` の4章（条件が2つ以上なら Model のスコープ）から外れている
+  - トークルームの機能を直すときに移す（PR #240 のレビューで、人が決めた）
+- 直すとどうなるか：トークの API でも同じ条件を使うので、`TalkRoomMember` の1か所にまとめられる
+- 気づいた所：Service に移したとき
+
+#### 返す項目を選ぶ（FR-002）
+
+- 今どうなっているか：`toArray()` で、メールアドレスなども全部返す
+- 直すとどうなるか：Resource を作り、返してよい項目だけにする（`architecture-backend.md` の Resource の決まり）
+- 気づいた所：今の動きを確かめるテスト
+
+#### 入力を確かめる（FR-010・FR-006）
+
+- 今どうなっているか：`$request->all()` を、そのまま `fill()` に渡す
+- 直すとどうなるか：Form Request の `validated()` だけを渡す。空のニックネームは 422
+- 気づいた所：今の動きを確かめるテスト
+
+#### 他人のプロフィールを書き換えられないようにする（FR-AUTH-022）
+
+- 今どうなっているか：PUT のルートに、ログインを求める Middleware がない
+- 直すとどうなるか：ログインを求め、URL の会員が自分でなければ 403
+- 気づいた所：今の動きを確かめるテスト・Bruno
+
+#### 壊れたトークンを 401 にする
+
+- 今どうなっているか：`IdentifyMember` が、JWT の例外のまま 500 を返す
+- 直すとどうなるか
+  - 例外を受けて 401 を返す
+  - トークンを読むコード（17のコントローラーに29か所）も、Middleware にまとめる
+- 気づいた所：Middleware を作ったとき
+
+#### 見つからないときの応答をそろえる
+
+- 今どうなっているか：GET は Laravel の 404（文に Model の名前が出る）、PUT は 500
+- 直すとどうなるか：どちらも、決まった形の 404 にする（`architecture-backend.md` の7章）
+- 気づいた所：今の動きを確かめるテスト
 
 ### 説明の練習
 
-リーダーが、問い合わせの場面で聞いた（2026-11-19）：「マッチしている相手のプロフィールを開いたのに、『メッセージを送る』のボタンが出ない」（画面は、`room_id` が null だとボタンを出さない）。
+#### 1回目：メッセージを送るボタンが出ない（2026-11-19）
 
-| 問い | 人の答え | 結果 |
-| --- | --- | --- |
-| 通るコードの順 | ルート → `IdentifyMember` → `ProfileController` → `ProfileService` | 合っている |
-| 見る人の番号の渡り方 | トークンの `sub` → Controller は `$loginUserId` → Service は `$viewerId`（ヒント1） | 合っている。あいだは `$request->attributes` の `login_user_id` |
-| `room_id` が null になる所 | トークンがないとき・トークルームの行がないとき（ヒント1） | 合っている。ほかに、`sub` が数字でないとき・`talk_room_members` に片方の行しかないとき |
-| それを確かめているテスト | 「マッチしていない相手なら、room_id は null」と「マッチしている相手なら、room_id に…入る」 | 一部。「トークンがない」の場面は、どのテストも `room_id` を確かめていない（「200 で見られる」は状態コードだけ） |
+リーダーが、問い合わせの場面で聞いた：「マッチしている相手のプロフィールを開いたのに、『メッセージを送る』のボタンが出ない」（画面は、`room_id` が null だとボタンを出さない）。
+
+##### 問い1：通るコードの順
+
+- 人の答え：ルート → `IdentifyMember` → `ProfileController` → `ProfileService`
+- 結果：合っている
+
+##### 問い2：見る人の番号の渡り方
+
+- 人の答え：トークンの `sub` → Controller は `$loginUserId` → Service は `$viewerId`（ヒント1）
+- 結果：合っている。あいだは `$request->attributes` の `login_user_id`
+
+##### 問い3：`room_id` が null になる所
+
+- 人の答え：トークンがないとき・トークルームの行がないとき（ヒント1）
+- 結果：合っている
+  - ほかに、`sub` が数字でないとき・`talk_room_members` に片方の行しかないとき
+
+##### 問い4：それを確かめているテスト
+
+- 人の答え：「マッチしていない相手なら、room_id は null」と「マッチしている相手なら、room_id に…入る」
+- 結果：一部
+  - 「トークンがない」の場面は、どのテストも `room_id` を確かめていない（「200 で見られる」は状態コードだけ）
+
+##### 分かったこと・次にやること
 
 - 分かったこと：チケットの「今の動きを確かめるテスト」の一覧にあった「トークンなしなら `room_id` は null」が、テストに入っていなかった
 - 次にやること：テストの名前だけでなく、確かめている行（`assert…`）まで見る
 
-レビューのあと、承認の前に、もう1問聞いた（2026-11-19）：「しばらくアプリを開いていなかったら、相手のプロフィールでエラーが出た」（トークンの期限が切れていた）。
+#### 2回目：しばらく開かなかったらエラーが出た（2026-11-19）
 
-| 問い | 人の答え | 結果 |
-| --- | --- | --- |
-| API が返すものと原因 | エラーの応答を返さない。`if ($token !== null && $token !== '')` で例外を扱っていない | 一部。返すのは 500。例外を投げるのは、その中の `JWT::decode`（`ExpiredException`） |
-| 確かめているテスト | 「トークンがおかしい」の、壊れたトークンのテスト | 一部。期限切れは「期限の切れたトークンなら 500」 |
-| 401 に直す順 | 最初は「500 のままが望ましい」。ヒントのあと、テストを 401 に変える → 流す → 直す → 流す | 一部（ヒント1）。500 は分かっている不具合で、要件（FR-AUTH-013）は 401。通ったら、テストの名前を直し、コメントを消す |
-| なぜ先に Red を見るか | 先に直すと、テストが本当に確かめているか分からない | 合っている（M1 がその例） |
+レビューのあと、承認の前に、もう1問聞いた：「しばらくアプリを開いていなかったら、相手のプロフィールでエラーが出た」（トークンの期限が切れていた）。
 
-- 次にやること：「分かっている不具合」のコメントは、前半が要件（あるべき動き）、後半が今そうなる理由、と読む
+##### 問い1：API が返すものと原因
+
+- 人の答え：エラーの応答を返さない。`if ($token !== null && $token !== '')` で例外を扱っていない
+- 結果：一部
+  - 返すのは 500。例外を投げるのは、その中の `JWT::decode`（`ExpiredException`）
+
+##### 問い2：確かめているテスト
+
+- 人の答え：「トークンがおかしい」の、壊れたトークンのテスト
+- 結果：一部。期限切れは「期限の切れたトークンなら 500」
+
+##### 問い3：401 に直す順
+
+- 人の答え
+  - 最初は「500 のままが望ましい」
+  - ヒントのあと、テストを 401 に変える → 流す → 直す → 流す
+- 結果：一部（ヒント1）
+  - 500 は分かっている不具合で、要件（FR-AUTH-013）は 401
+  - 通ったら、テストの名前を直し、コメントを消す
+
+##### 問い4：なぜ先に Red を見るか
+
+- 人の答え：先に直すと、テストが本当に確かめているか分からない
+- 結果：合っている（M1 がその例）
+
+##### 次にやること
+
+- 「分かっている不具合」のコメントは、前半が要件（あるべき動き）、後半が今そうなる理由、と読む
 
 ## PR #242（#241 エラーハンドリングと例外処理の土台）
 
@@ -534,20 +745,41 @@ backend/client/
 └── lang/ja/errors.php                     画面に出るエラーの文
 ```
 
-| 置いた所 | 理由（決まり） | ほかに置ける所と、置かなかった理由 |
-| --- | --- | --- |
-| `UserNotFoundException` は `app/Exceptions/` の直下 | いくつもの業務のまとまり（プロフィール・いいね・トーク）で使う例外は直下に置く（`architecture-backend.md` の7章。PR #242 のレビューで決めた） | `app/Exceptions/Users/`：`Users` は業務のまとまりの一覧にない。`Exceptions/Profile/`：いいねやトークを移す人が、自分のまとまりに同じ例外をもう1つ作るおそれがある |
-| 状態コードは `bootstrap/app.php` | `architecture-backend.md` の7章（1か所で見る） | 例外のクラスの `render()`：状態コードが例外のファイルごとに散らばる |
-| 文は `lang/ja/errors.php` | Laravel の標準。入力の確かめ（422）の文も同じ仕組みで日本語にできる | 例外のクラスの中・定数のクラス：前者は一覧で見られない。後者は、422 の文と置き場が2種類になる |
+#### `UserNotFoundException` は `app/Exceptions/` の直下
+
+- 理由（決まり）
+  - いくつもの業務のまとまり（プロフィール・いいね・トーク）で使う例外は、直下に置く
+  - `architecture-backend.md` の7章。PR #242 のレビューで決めた
+- ほかに置ける所と、置かなかった理由
+  - `app/Exceptions/Users/`：`Users` は業務のまとまりの一覧にない
+  - `Exceptions/Profile/`：いいねやトークを移す人が、自分のまとまりに同じ例外をもう1つ作るおそれがある
+
+#### 状態コードは `bootstrap/app.php`
+
+- 理由（決まり）：`architecture-backend.md` の7章（1か所で見る）
+- ほかに置ける所と、置かなかった理由
+  - 例外のクラスの `render()`：状態コードが例外のファイルごとに散らばる
+
+#### 文は `lang/ja/errors.php`
+
+- 理由（決まり）：Laravel の標準。入力の確かめ（422）の文も同じ仕組みで日本語にできる
+- ほかに置ける所と、置かなかった理由
+  - 例外のクラスの中：一覧で見られない
+  - 定数のクラス：422 の文と置き場が2種類になる
 
 ### クラスの責務
 
-| クラス・ファイル | 責務 |
-| --- | --- |
-| `BusinessException` | 「決まりどおりに断った」ことを表す親。中身はない。状態コードも文も知らない |
-| `UserNotFoundException` | 「会員がいない」ことだけを表す。文と状態コードは知らない |
-| `bootstrap/app.php` の `withExceptions` | どの例外を、どの状態コードと文に変えるか、どれをログに出さないかを知っている。業務のことは知らない |
-| `lang/ja/errors.php` | 画面に出る文だけを知っている |
+- `BusinessException`
+  - 「決まりどおりに断った」ことを表す親。中身はない
+  - 状態コードも文も知らない
+- `UserNotFoundException`
+  - 「会員がいない」ことだけを表す
+  - 文と状態コードは知らない
+- `bootstrap/app.php` の `withExceptions`
+  - どの例外を、どの状態コードと文に変えるか、どれをログに出さないかを知っている
+  - 業務のことは知らない
+- `lang/ja/errors.php`
+  - 画面に出る文だけを知っている
 
 ### メソッドの表
 
@@ -645,34 +877,94 @@ Service は `bootstrap/app.php` を知らない。例外のクラスは、HTTP �
 
 ### 次の改善の候補
 
-| 候補 | 今どうなっているか | 直すとどうなるか | 気づいた所 |
-| --- | --- | --- | --- |
-| 「`public_id` で会員を探し、いなければ `UserNotFoundException`」を1か所にする | `ProfileService` の `showProfile` と `updateProfile` の2か所に書いている | #128 などでほかの Service にも増える。3つ目ができるときに、User のスコープか1つのメソッドにまとめる（退会した会員の扱いを変えるときに、直し漏れが起きない） | PR #242 のレビュー（A3） |
-| `ProfileFactory` の `realText()` を軽い書き方にする | 日本語の長い文を毎回読むので、テストが増えると 128MB を超える。今は `phpunit.xml` でテストのときだけ 512MB にした | 上限を上げずに流せる。試しのデータ（シーダー）の作り方も変わるので、別に決める | PR #242 の直し（テストが48本でメモリが足りなくなった） |
-| 会員の側の見本の `memberId`・`findMember` を、`User` の名前にそろえる | `architecture-backend.md` の 99・118・185〜196・410・415行目 | 見本をコピーしても、member と user が混ざらない。書き換えの操作の引数の名前を決めるときに一緒に直す | PR #242 のレビュー（S5） |
+#### 「`public_id` で会員を探し、いなければ `UserNotFoundException`」を1か所にする
+
+- 今どうなっているか：`ProfileService` の `showProfile` と `updateProfile` の2か所に書いている
+- 直すとどうなるか
+  - #128 などで、ほかの Service にも増える
+  - 3つ目ができるときに、User のスコープか1つのメソッドにまとめる（退会した会員の扱いを変えるときに、直し漏れが起きない）
+- 気づいた所：PR #242 のレビュー（A3）
+
+#### `ProfileFactory` の `realText()` を軽い書き方にする
+
+- 今どうなっているか
+  - 日本語の長い文を毎回読むので、テストが増えると 128MB を超える
+  - 今は `phpunit.xml` で、テストのときだけ 512MB にした
+- 直すとどうなるか
+  - 上限を上げずに流せる
+  - 試しのデータ（シーダー）の作り方も変わるので、別に決める
+- 気づいた所：PR #242 の直し（テストが48本でメモリが足りなくなった）
+
+#### 会員の側の見本の `memberId`・`findMember` を、`User` の名前にそろえる
+
+- 今どうなっているか：`architecture-backend.md` の 99・118・185〜196・410・415行目
+- 直すとどうなるか
+  - 見本をコピーしても、member と user が混ざらない
+  - 書き換えの操作の引数の名前を決めるときに、一緒に直す
+- 気づいた所：PR #242 のレビュー（S5）
 
 ### 説明の練習
 
-リーダーが、運営からの相談の場面で聞いた（2026-11-19）：「エラーのログに、毎日 `UserNotFoundException` が何百件も出ている」。
+#### 1回目：エラーのログに毎日出ている（2026-11-19）
 
-| 問い | 人の答え | 結果 |
-| --- | --- | --- |
-| なぜ出ないはずか | `render` の行（404 と文を返す）があるから | ずれていた。ログに出さないのは `dontReport` の行。Laravel は、記録する（report）と応答を作る（render）を別々に行う |
-| それでも出るとしたら | `UserNotFoundException` で起きている | 足りない。考えられるのは、`dontReport` の行を消した・`BusinessException` を継がない形にした・どこかで受け止めて自分でログに書いた |
-| 確かめているテスト | 「いない会員を見ても、エラーのログには出さない」 | 合っている |
-| `catch` して `Log::error()` を呼ぶと、ログに出るか | 出ない | ずれていた。出る。`dontReport` が止めるのは Laravel の記録のしくみだけで、`Log::error()` は通らない。止めるのは、7章の「try-catch を書かない場面」（受け止めて、記録して、投げ直すだけの `catch` は書かない） |
+リーダーが、運営からの相談の場面で聞いた：「エラーのログに、毎日 `UserNotFoundException` が何百件も出ている」。
 
-- 次にやること：例外の扱いは「記録する（report）」と「応答を作る（render）」の2つに分けて読む。`dontReport` は前者、`render` は後者
+##### 問い1：なぜ出ないはずか
 
-レビューの直しのあと、承認の前に、もう1問聞いた（2026-11-19）：「#128 で `ProfileForbiddenException` を足した人が、`render` の1行を書き忘れて PR を出した」。
+- 人の答え：`render` の行（404 と文を返す）があるから
+- 結果：ずれていた
+  - ログに出さないのは `dontReport` の行
+  - Laravel は、記録する（report）と応答を作る（render）を別々に行う
 
-| 問い | 人の答え | 結果 |
-| --- | --- | --- |
-| CI でどのテストが落ち、何と出るか | `BusinessExceptionsTest` が落ちる。not found のようなエラーが出る | 一部。出るのは、テストに書いた文「`App\Exceptions\ProfileForbiddenException` の render を bootstrap/app.php に書いていない」 |
-| テストがなかったら、本番で何が起きるか | 500 が出ないので、ログに出ない | ずれていた。500 は出る。出ないのはログ。会員の問い合わせで初めて気づく |
-| なぜ、その 500 はログに残らないか | `dontReport([BusinessException::class])` の行があるから | 合っている |
+##### 問い2：それでも出るとしたら
 
-- 次にやること：「応答（何が返るか）」と「記録（ログに残るか）」を、別々に答える
+- 人の答え：`UserNotFoundException` で起きている
+- 結果：足りない。考えられるのは次の3つ
+  - `dontReport` の行を消した
+  - `BusinessException` を継がない形にした
+  - どこかで受け止めて、自分でログに書いた
+
+##### 問い3：確かめているテスト
+
+- 人の答え：「いない会員を見ても、エラーのログには出さない」
+- 結果：合っている
+
+##### 問い4：`catch` して `Log::error()` を呼ぶと、ログに出るか
+
+- 人の答え：出ない
+- 結果：ずれていた。出る
+  - `dontReport` が止めるのは Laravel の記録のしくみだけで、`Log::error()` は通らない
+  - 止めるのは、7章の「try-catch を書かない場面」（受け止めて、記録して、投げ直すだけの `catch` は書かない）
+
+##### 次にやること
+
+- 例外の扱いは「記録する（report）」と「応答を作る（render）」の2つに分けて読む。`dontReport` は前者、`render` は後者
+
+#### 2回目：`render` の1行を書き忘れた PR（2026-11-19）
+
+レビューの直しのあと、承認の前に、もう1問聞いた：「#128 で `ProfileForbiddenException` を足した人が、`render` の1行を書き忘れて PR を出した」。
+
+##### 問い1：CI でどのテストが落ち、何と出るか
+
+- 人の答え：`BusinessExceptionsTest` が落ちる。not found のようなエラーが出る
+- 結果：一部
+  - 出るのは、テストに書いた文「`App\Exceptions\ProfileForbiddenException` の render を bootstrap/app.php に書いていない」
+
+##### 問い2：テストがなかったら、本番で何が起きるか
+
+- 人の答え：500 が出ないので、ログに出ない
+- 結果：ずれていた
+  - 500 は出る。出ないのはログ
+  - 会員の問い合わせで、初めて気づく
+
+##### 問い3：なぜ、その 500 はログに残らないか
+
+- 人の答え：`dontReport([BusinessException::class])` の行があるから
+- 結果：合っている
+
+##### 次にやること
+
+- 「応答（何が返るか）」と「記録（ログに残るか）」を、別々に答える
 
 
 ## PR #255（#244 の5 確認用の文字を応答に出さない。元の #133）
@@ -696,31 +988,64 @@ backend/client/
             └── ShowTest.php                    相手のプロフィールを見る（1本を要件どおりに変えた）
 ```
 
-| 置いた所 | 理由（決まり） | ほかに置ける所と、置かなかった理由 |
-| --- | --- | --- |
-| 隠す列は `User` の `#[Hidden]` | 同じ Model を返す3つの API が、1か所の変更で直る | Controller ごとに `makeHidden()`：3か所に書き、4つ目の API で書き忘れる。Resource で返す項目を書く：応答の形が変わるので、土台4のチケットでやる（`05-problems.md`） |
-| 登録のテストは `Feature/Auth/` | 新規登録は `Auth` のまとまり（`docs/backend.md` の2章） | `Feature/Profile/`：登録はプロフィールの操作ではない |
-| 自分の情報のテストは `Feature/Profile/ShowAccountTest.php` | 「自分（見る・直す・退会）」は `Profile` のまとまり（`docs/backend.md` の2章）。同じフォルダに相手の `ShowTest.php` があるので、名詞を入れて分けた | `Feature/Account/ShowTest.php`：`Account` という業務のまとまりはない。`Feature/Profile/MeTest.php`：`Me` では何を指すかが分かりにくい（人が決めた） |
+#### 隠す列は `User` の `#[Hidden]`
+
+- 理由（決まり）：同じ Model を返す3つの API が、1か所の変更で直る
+- ほかに置ける所と、置かなかった理由
+  - Controller ごとに `makeHidden()`：3か所に書き、4つ目の API で書き忘れる
+  - Resource で返す項目を書く：応答の形が変わるので、土台4のチケットでやる（`05-problems.md`）
+
+#### 登録のテストは `Feature/Auth/`
+
+- 理由（決まり）：新規登録は `Auth` のまとまり（`docs/backend.md` の2章）
+- ほかに置ける所と、置かなかった理由
+  - `Feature/Profile/`：登録はプロフィールの操作ではない
+
+#### 自分の情報のテストは `Feature/Profile/ShowAccountTest.php`
+
+- 理由（決まり）
+  - 「自分（見る・直す・退会）」は `Profile` のまとまり（`docs/backend.md` の2章）
+  - 同じフォルダに相手の `ShowTest.php` があるので、名詞を入れて分けた
+- ほかに置ける所と、置かなかった理由
+  - `Feature/Account/ShowTest.php`：`Account` という業務のまとまりはない
+  - `Feature/Profile/MeTest.php`：`Me` では何を指すかが分かりにくい（人が決めた）
 
 ### クラスの責務
 
-| クラス・ファイル | 責務 |
-| --- | --- |
-| `User` の `#[Hidden]` | JSON にするときに出さない列を知っている。DB から読むこと・`$user->verification_token` で読むことは止めない |
-| `Endpoints::register()`・`account()` | テストで呼ぶ URL の文字を知っている。`/me` を、コードでは `account` と呼べるようにする |
-| `DummyUser::create(unverified: true)` | 登録した直後と同じ会員（確認していない・確認用の文字を持つ）を作る。Factory の既定は確認済みで、確認用の文字が空なので、隠せたかを確かめられなかった |
+- `User` の `#[Hidden]`
+  - JSON にするときに出さない列を知っている
+  - DB から読むこと・`$user->verification_token` で読むことは止めない
+- `Endpoints::register()`・`account()`
+  - テストで呼ぶ URL の文字を知っている
+  - `/me` を、コードでは `account` と呼べるようにする
+- `DummyUser::create(unverified: true)`
+  - 登録した直後と同じ会員（確認していない・確認用の文字を持つ）を作る
+  - Factory の既定は確認済みで、確認用の文字が空なので、隠せたかを確かめられなかった
 
 ### メソッドの表
 
 アプリの public のメソッドは増えていない。変わったのは、Model を JSON にするときの動きだけ。
 
-| 場所 | 入力 | 出力 | 副作用 | 失敗のしかた | 呼ぶ所 |
-| --- | --- | --- | --- | --- | --- |
-| `response()->json($user)`（Laravel） | `User` | JSON。`#[Hidden]` の列（`password`・`remember_token`・`verification_token`）は入らない | なし | ― | `UserController::store`・`UserController::index`（検索）・`AuthController::me`・`ProfileController::show`（`toArray()`） |
-| `Endpoints::register()` | ― | `'/api/users'` | なし | ― | `RegisterTest` |
-| `Endpoints::account()` | ― | `'/api/me'` | なし | ― | `ShowAccountTest` |
-| `Endpoints::searchUsers()`・`emailVerification($token)` | ―・確認用の文字 | `'/api/users'`・`'/api/email-verifications/{token}'` | なし | ― | `SearchTest`・`RegisterTest` |
-| `DummyUser::create(unverified: true)` | ほかの引数と同じ | `TestUser` | `users` に、`email_verified_at` が空で、`verification_token` に40文字を入れた行を作る | ― | `ShowAccountTest`・`ShowTest` |
+#### `response()->json($user)`（Laravel）
+
+- 入力：`User`
+- 出力：JSON。`#[Hidden]` の列（`password`・`remember_token`・`verification_token`）は入らない
+- 副作用：なし
+- 失敗のしかた：―
+- 呼ぶ所：`UserController::store`・`UserController::index`（検索）・`AuthController::me`・`ProfileController::show`（`toArray()`）
+
+#### テストの部品
+
+| 場所 | 入力 | 出力 | 副作用 | 呼ぶ所 |
+| --- | --- | --- | --- | --- |
+| `Endpoints::register()` | ― | `'/api/users'` | なし | `RegisterTest` |
+| `Endpoints::account()` | ― | `'/api/me'` | なし | `ShowAccountTest` |
+| `Endpoints::searchUsers()` | ― | `'/api/users'` | なし | `SearchTest` |
+| `emailVerification($token)` | 確認用の文字 | `'/api/email-verifications/{token}'` | なし | `RegisterTest` |
+| `DummyUser::create(unverified: true)` | ほかの引数と同じ | `TestUser` | `users` に1行（下） | `ShowAccountTest`・`ShowTest` |
+
+- 失敗のしかたは、どれも「―」
+- `DummyUser::create(unverified: true)` が作る行：`email_verified_at` が空で、`verification_token` に40文字を入れた行
 
 直したのは、この1行（`app/Models/User.php`）：
 
@@ -773,12 +1098,31 @@ sequenceDiagram
 
 ### 名前
 
-| 名前 | ほかの候補 | 選ばなかった理由 |
-| --- | --- | --- |
-| コードの `Account`（URL は `/me`） | `Me`・`LoginUser` | `Me` は何を指すかが分かりにくい。`LoginUser` は「ログインする処理」と読まれやすい。`Account` は、設定の画面の「アカウント」とそろう（人が決めた。用語集の「アカウント」） |
-| `ShowAccountTest.php` | `MeTest.php`・`Account/ShowTest.php` | 上の理由と、`Account` というまとまりはないため |
-| `DummyUser::create(unverified: true)` | `verified: false` | ほかの引数（`paid`・`withdrawn`・`suspended`）は、既定と違う状態を `true` で表すので、そろえた |
-| ルートの名前 `legacy.profile.account.show` | 付けない・`profile.account.show` | URL を変えずに、`route:list` で「自分のアカウントを見る API」と読めるようにした（人が、URL を変えずに名前を付けられるならと言ったため）。今の URL なので `legacy.` で始める（`03-how.md:206`。レビューの S2）。`profile.account.show` は、新しい URL の `GET /me` に付ける名前として空けておく |
+#### コードの `Account`（URL は `/me`）
+
+- ほかの候補：`Me`・`LoginUser`
+- 選ばなかった理由
+  - `Me` は、何を指すかが分かりにくい
+  - `LoginUser` は、「ログインする処理」と読まれやすい
+  - `Account` は、設定の画面の「アカウント」とそろう（人が決めた。用語集の「アカウント」）
+
+#### `ShowAccountTest.php`
+
+- ほかの候補：`MeTest.php`・`Account/ShowTest.php`
+- 選ばなかった理由：上の理由と、`Account` というまとまりはないため
+
+#### `DummyUser::create(unverified: true)`
+
+- ほかの候補：`verified: false`
+- 選ばなかった理由：ほかの引数（`paid`・`withdrawn`・`suspended`）は、既定と違う状態を `true` で表すので、そろえた
+
+#### ルートの名前 `legacy.profile.account.show`
+
+- ほかの候補：付けない・`profile.account.show`
+- 選んだ理由と、選ばなかった理由
+  - URL を変えずに、`route:list` で「自分のアカウントを見る API」と読めるようにした（人が、URL を変えずに名前を付けられるならと言ったため）
+  - 今の URL なので、`legacy.` で始める（`03-how.md:206`。レビューの S2）
+  - `profile.account.show` は、新しい URL の `GET /me` に付ける名前として空けておく
 
 ### 依存の向き
 
@@ -811,23 +1155,64 @@ flowchart LR
 
 ### 次の改善の候補
 
-| 候補 | 今どうなっているか | 直すとどうなるか | 気づいた所 |
-| --- | --- | --- | --- |
-| 返す項目を API ごとに書く（Resource） | `#[Hidden]` に書いた列以外は全部出る。メールアドレス・停止の理由（`suspended_reason`）・強制退会の理由も、自分の情報と相手のプロフィールに出る | 書いていない列は出ない。新しい列を足しても安全 | 課題の理解（案B）。#244 の土台4 |
-| 確認用の文字とパスワードの再設定の文字を、SQL のログに残さない | URL のパスに入るので、`QueryLogger.php:56` の `path` にそのまま残る（開発の PC だけ） | ログの `path` を、ルートの形（`api/email-verifications/{token}`）にする（`logging.md`） | PR #255 のレビュー（範囲の外） |
-| 「自分」の名前を `Account` にそろえる | `AuthController::me()`・PHP の `$me`・`$myProfile`、ルートの引数の `{publicId}`、管理画面の `Admins/MeController`、画面の `Me` の型が残っている | 同じものに2つの呼び方がなくなる | この PR（人が「該当するところだけ」と決めた） |
+#### 返す項目を API ごとに書く（Resource）
+
+- 今どうなっているか
+  - `#[Hidden]` に書いた列以外は、全部出る
+  - メールアドレス・停止の理由（`suspended_reason`）・強制退会の理由も、自分の情報と相手のプロフィールに出る
+- 直すとどうなるか：書いていない列は出ない。新しい列を足しても安全
+- 気づいた所：課題の理解（案B）。#244 の土台4
+
+#### 確認用の文字とパスワードの再設定の文字を、SQL のログに残さない
+
+- 今どうなっているか：URL のパスに入るので、`QueryLogger.php:56` の `path` にそのまま残る（開発の PC だけ）
+- 直すとどうなるか：ログの `path` を、ルートの形（`api/email-verifications/{token}`）にする（`logging.md`）
+- 気づいた所：PR #255 のレビュー（範囲の外）
+
+#### 「自分」の名前を `Account` にそろえる
+
+- 今どうなっているか：次の名前が残っている
+  - `AuthController::me()`・PHP の `$me`・`$myProfile`
+  - ルートの引数の `{publicId}`
+  - 管理画面の `Admins/MeController`
+  - 画面の `Me` の型
+- 直すとどうなるか：同じものに2つの呼び方がなくなる
+- 気づいた所：この PR（人が「該当するところだけ」と決めた）
 
 ### 説明の練習
 
-リーダーが、半年後に来る PR の場面で聞いた（2026-11-20）：「検索が遅いので、`UserController::index` を `DB::table('users')->join('profiles', ...)` の形に書き換えた」。
+#### 1回目：検索を `DB::table` に書き換えた PR（2026-11-20）
 
-| 問い | 人の答え | 結果 |
-| --- | --- | --- |
-| 検索の応答の確認用の文字はどうなるか | 出なくなる。`User.php` の `#[Hidden]` に入れたから | ずれていた。また出る。`#[Hidden]` は Model を JSON にするときだけ効き、`DB::table` は Model を通らない（ただの行が返る）。`select *` なら、確認用の文字もパスワードも出る。管理画面の会員の一覧（#244 の4）が直らないのと同じ理由 |
-| CI のどのテストで気づけるか | 気づけない | ずれていた。この PR で足した `tests/Feature/Members/SearchTest.php` が落ちる（`assertJsonMissingPath('0.verification_token')` は、値が `null` でもキーがあれば落ちる）。足す前なら「気づけない」が正しかった |
-| `DB::table` のまま、出さないようにするには | Model を直す | ずれていた。Model を直しても、`DB::table` には効かない。`select('users.public_id', 'profiles.nickname', ...)` のように、返す列を書き出す。隠す列を書く形（`#[Hidden]`）から、出す列を書く形（Resource と同じ考え方）に変える |
+リーダーが、半年後に来る PR の場面で聞いた：「検索が遅いので、`UserController::index` を `DB::table('users')->join('profiles', ...)` の形に書き換えた」。
 
-- 次にやること：守りの仕組みを説明するときは、「どの道を通ったときに効くか」まで言う（`#[Hidden]` は Model を JSON にするとき・`dontReport` は Laravel が記録するとき）。#244 の土台4（Resource）のチケットで、もう一度確かめる
+##### 問い1：検索の応答の確認用の文字はどうなるか
+
+- 人の答え：出なくなる。`User.php` の `#[Hidden]` に入れたから
+- 結果：ずれていた。また出る
+  - `#[Hidden]` は Model を JSON にするときだけ効き、`DB::table` は Model を通らない（ただの行が返る）
+  - `select *` なら、確認用の文字もパスワードも出る
+  - 管理画面の会員の一覧（#244 の4）が直らないのと、同じ理由
+
+##### 問い2：CI のどのテストで気づけるか
+
+- 人の答え：気づけない
+- 結果：ずれていた
+  - この PR で足した `tests/Feature/Members/SearchTest.php` が落ちる
+  - `assertJsonMissingPath('0.verification_token')` は、値が `null` でもキーがあれば落ちる
+  - 足す前なら、「気づけない」が正しかった
+
+##### 問い3：`DB::table` のまま、出さないようにするには
+
+- 人の答え：Model を直す
+- 結果：ずれていた
+  - Model を直しても、`DB::table` には効かない
+  - `select('users.public_id', 'profiles.nickname', ...)` のように、返す列を書き出す
+  - 隠す列を書く形（`#[Hidden]`）から、出す列を書く形（Resource と同じ考え方）に変える
+
+##### 次にやること
+
+- 守りの仕組みを説明するときは、「どの道を通ったときに効くか」まで言う（`#[Hidden]` は Model を JSON にするとき・`dontReport` は Laravel が記録するとき）
+- #244 の土台4（Resource）のチケットで、もう一度確かめる
 
 ## PR #262（#243 ログインを確かめる Middleware。JWT のまま）
 
@@ -846,25 +1231,64 @@ frontend/client/src/
 └── shared/session/goToLoginAfterUnauthorized.ts   401 のあと、ログインの画面へ（新しい）
 ```
 
-| 置いた所 | 理由（決まり） | ほかに置ける所と、置かなかった理由 |
-| --- | --- | --- |
-| トークンを読むのは `AuthenticateUser` | トークンを読むのは Middleware だけ（`architecture-backend.md` の4章） | Controller ごとに読む：今の29か所のコピーと同じになる |
-| 「使える状態か」の判定は `User::isAccountUsable()` | 行の値だけで決まる事実は Model の1か所に置く。ログインの API も同じ判定が要る | Middleware：Model を使えない（層のテストで止まる）。ログインと2か所になる |
-| `AuthService::isUserAccountUsable()` | Middleware は Model を使わないので、番号から会員を探して Model に聞く窓口が要る（2章） | ― |
-| 401 の応答は `bootstrap/app.php` | 例外を応答に変えるのは1か所（7章。#241 の 404 と同じ形） | Middleware で `response()->json()`：401 の作り方が2か所になる |
-| `loginUserId()` は基底の `Controller` | 会員の番号を読む所を1つにする。付け忘れたとき「会員 0 番」として動かない | 各 Controller で `$request->attributes->get()`：#257 で15か所にコピーが増える |
-| 画面の `goToLoginAfterUnauthorized` は `shared/session/` | ログインした自分を消すのは `shared/session`（`architecture-frontend.md` の4章「401 と 403」） | 画面の中に書く：2つの画面にコピーになる。#257 で、消す所は `shared/session` に残し、ログインの画面へ移すのは `app/RequireAuth` に分ける。`client.ts` は 401 を投げるだけで、ここを呼ばない（依存の向き） |
+#### トークンを読むのは `AuthenticateUser`
+
+- 理由（決まり）：トークンを読むのは Middleware だけ（`architecture-backend.md` の4章）
+- ほかに置ける所と、置かなかった理由
+  - Controller ごとに読む：今の29か所のコピーと同じになる
+
+#### 「使える状態か」の判定は `User::isAccountUsable()`
+
+- 理由（決まり）
+  - 行の値だけで決まる事実は、Model の1か所に置く
+  - ログインの API も、同じ判定が要る
+- ほかに置ける所と、置かなかった理由
+  - Middleware：Model を使えない（層のテストで止まる）。ログインと2か所になる
+
+#### `AuthService::isUserAccountUsable()`
+
+- 理由（決まり）：Middleware は Model を使わないので、番号から会員を探して Model に聞く窓口が要る（2章）
+- ほかに置ける所と、置かなかった理由：―
+
+#### 401 の応答は `bootstrap/app.php`
+
+- 理由（決まり）：例外を応答に変えるのは1か所（7章。#241 の 404 と同じ形）
+- ほかに置ける所と、置かなかった理由
+  - Middleware で `response()->json()`：401 の作り方が2か所になる
+
+#### `loginUserId()` は基底の `Controller`
+
+- 理由（決まり）
+  - 会員の番号を読む所を1つにする
+  - 付け忘れたとき、「会員 0 番」として動かない
+- ほかに置ける所と、置かなかった理由
+  - 各 Controller で `$request->attributes->get()`：#257 で15か所にコピーが増える
+
+#### 画面の `goToLoginAfterUnauthorized` は `shared/session/`
+
+- 理由（決まり）：ログインした自分を消すのは `shared/session`（`architecture-frontend.md` の4章「401 と 403」）
+- ほかに置ける所と、置かなかった理由
+  - 画面の中に書く：2つの画面にコピーになる
+  - #257 で、消す所は `shared/session` に残し、ログインの画面へ移すのは `app/RequireAuth` に分ける
+  - `client.ts` は 401 を投げるだけで、ここを呼ばない（依存の向き）
 
 ### クラスの責務
 
-| クラス・ファイル | 責務 |
-| --- | --- |
-| `AuthenticateUser` | トークンを読み、会員の番号を取り出し、アカウントの状態を Service に聞く。だめなら例外を投げる。応答は作らない。判定の中身は知らない |
-| `AuthService` | 番号から会員を探し、`User` に「使える状態か」を聞く。HTTP もトークンも知らない |
-| `User::isAccountUsable()` | 退会・停止・強制退会の列だけを見て答える |
-| `Controller::loginUserId()` | Middleware が載せた番号を読む。なければ（付け忘れ。プログラムの誤り）、ログに残る 500 にする |
-| `bootstrap/app.php` | `AuthenticationException` を 401「ログインしてください」に変える |
-| `goToLoginAfterUnauthorized()` | トークンを捨て、ログインの画面を開き直す |
+- `AuthenticateUser`
+  - トークンを読み、会員の番号を取り出し、アカウントの状態を Service に聞く。だめなら例外を投げる
+  - 応答は作らない。判定の中身は知らない
+- `AuthService`
+  - 番号から会員を探し、`User` に「使える状態か」を聞く
+  - HTTP もトークンも知らない
+- `User::isAccountUsable()`
+  - 退会・停止・強制退会の列だけを見て答える
+- `Controller::loginUserId()`
+  - Middleware が載せた番号を読む
+  - なければ（付け忘れ。プログラムの誤り）、ログに残る 500 にする
+- `bootstrap/app.php`
+  - `AuthenticationException` を 401「ログインしてください」に変える
+- `goToLoginAfterUnauthorized()`
+  - トークンを捨て、ログインの画面を開き直す
 
 ### メソッドの表
 
@@ -927,12 +1351,28 @@ sequenceDiagram
 
 ### 名前
 
-| 名前 | ほかの候補 | 選ばなかった理由 |
-| --- | --- | --- |
-| `User::isAccountUsable()` | `isUsable()` | 何が使えるのかが分からない（人が決めた） |
-| `AuthService::isUserAccountUsable()` | `canUseApi()`・`isAccountUsableById()`・`hasUsableAccount()` | `canUseApi`：層の言葉（API）が入る。`ById`：引数の形を名前に出すだけ。`hasUsableAccount`：「AuthService が持つか」と読めてしまう（Swift の指針。`architecture-backend.md` の3章） |
-| `AuthenticateUser` | `AuthenticateUserMiddleware` | Laravel の `make:middleware` の例に合わせ、種類の名前を付けない（3章「クラスの名前」） |
-| `loginUserId()` | `currentUserId()` | 用語集の「会員の番号の名前」の `login_user_id`・`$loginUserId` とそろえる |
+#### `User::isAccountUsable()`
+
+- ほかの候補：`isUsable()`
+- 選ばなかった理由：何が使えるのかが分からない（人が決めた）
+
+#### `AuthService::isUserAccountUsable()`
+
+- ほかの候補：`canUseApi()`・`isAccountUsableById()`・`hasUsableAccount()`
+- 選ばなかった理由
+  - `canUseApi`：層の言葉（API）が入る
+  - `ById`：引数の形を名前に出すだけ
+  - `hasUsableAccount`：「AuthService が持つか」と読めてしまう（Swift の指針。`architecture-backend.md` の3章）
+
+#### `AuthenticateUser`
+
+- ほかの候補：`AuthenticateUserMiddleware`
+- 選ばなかった理由：Laravel の `make:middleware` の例に合わせ、種類の名前を付けない（3章「クラスの名前」）
+
+#### `loginUserId()`
+
+- ほかの候補：`currentUserId()`
+- 選ばなかった理由：用語集の「会員の番号の名前」の `login_user_id`・`$loginUserId` とそろえる
 
 ### 依存の向き
 
@@ -968,20 +1408,51 @@ Middleware は Model を使わない（`tests/Arch/LayersTest.php` の「Request
 
 ### 次の改善の候補
 
-| 候補 | 今どうなっているか | 直すとどうなるか | 気づいた所 |
-| --- | --- | --- | --- |
-| 残りの15の Controller を Middleware に置き換える | `/api/me` やいいねの一覧は、壊れたトークンで 500・止めた会員で 200 | 全部の API で同じ 401 になる | #257 |
-| `ProfileService::showProfile` の `?int $viewerId` | ログインが要るようになり、もう null は来ない | `int` にし、見る人がいないときの分かれ道を消す | この PR |
-| 会員の状態を enum で持つ | 退会・停止・強制退会を3つの日時の列で持つ | 状態が1つの値で決まり、真偽のメソッドはそこから作る | 真偽の名前の調べもの（#261） |
+#### 残りの15の Controller を Middleware に置き換える
+
+- 今どうなっているか：`/api/me` やいいねの一覧は、壊れたトークンで 500・止めた会員で 200
+- 直すとどうなるか：全部の API で同じ 401 になる
+- 気づいた所：#257
+
+#### `ProfileService::showProfile` の `?int $viewerId`
+
+- 今どうなっているか：ログインが要るようになり、もう null は来ない
+- 直すとどうなるか：`int` にし、見る人がいないときの分かれ道を消す
+- 気づいた所：この PR
+
+#### 会員の状態を enum で持つ
+
+- 今どうなっているか：退会・停止・強制退会を、3つの日時の列で持つ
+- 直すとどうなるか：状態が1つの値で決まり、真偽のメソッドはそこから作る
+- 気づいた所：真偽の名前の調べもの（#261）
 
 ### 説明の練習
 
-リーダーが、取り込んだ次の日の運営の相談の場面で聞いた（2026-11-20）：「管理画面で止めた会員から、まだメッセージが届くと、通報した会員に言われた」。
+#### 1回目：止めた会員からメッセージが届く（2026-11-20）
 
-| 問い | 人の答え | 結果 |
-| --- | --- | --- |
-| この PR のあとでも、なぜ止めた会員がメッセージを送れるか | メッセージの API に Middleware が付いていないから | 合っている。`MessageController` が自分で JWT を読み、署名と期限しか見ない |
-| まず、どのファイルのどこを見るか | `routes/api.php` | 合っている。`user.authenticate` が付いているのは、プロフィールの2本だけ |
-| メッセージの API に Middleware を付けるだけで、止めた会員は送れなくなるか。Controller の中の JWT のコードはどうなるか | 止められない。JWT があるかで判断する | ずれていた。付けるだけで止まる。Middleware は Controller より先に動き、止めた会員なら 401 を投げて終わる（Controller まで届かない）。Controller の中の JWT のコードは、使える会員のときにもう一度動くだけで、残ったままになる。それを消して `loginUserId()` にするのが #257 |
+リーダーが、取り込んだ次の日の運営の相談の場面で聞いた：「管理画面で止めた会員から、まだメッセージが届くと、通報した会員に言われた」。
 
-- 次にやること：Middleware と Controller の「動く順番」で考える。「止める」（Middleware を付ける）と「読む所を1か所にする」（Controller のコピーを消す）は、別の作業として分けて言う
+##### 問い1：この PR のあとでも、なぜ止めた会員がメッセージを送れるか
+
+- 人の答え：メッセージの API に Middleware が付いていないから
+- 結果：合っている
+  - `MessageController` が自分で JWT を読み、署名と期限しか見ない
+
+##### 問い2：まず、どのファイルのどこを見るか
+
+- 人の答え：`routes/api.php`
+- 結果：合っている
+  - `user.authenticate` が付いているのは、プロフィールの2本だけ
+
+##### 問い3：メッセージの API に Middleware を付けるだけで、止めた会員は送れなくなるか。Controller の中の JWT のコードはどうなるか
+
+- 人の答え：止められない。JWT があるかで判断する
+- 結果：ずれていた。付けるだけで止まる
+  - Middleware は Controller より先に動き、止めた会員なら 401 を投げて終わる（Controller まで届かない）
+  - Controller の中の JWT のコードは、使える会員のときにもう一度動くだけで、残ったままになる
+  - それを消して `loginUserId()` にするのが #257
+
+##### 次にやること
+
+- Middleware と Controller の「動く順番」で考える
+- 「止める」（Middleware を付ける）と「読む所を1か所にする」（Controller のコピーを消す）は、別の作業として分けて言う

@@ -63,30 +63,67 @@ src/
 
 ### 言葉
 
-| 言葉 | 意味 | 注意 |
-| --- | --- | --- |
-| container | `pages/` の部品。hook・URL・ログインした自分をつなぎ、presenter に props で渡す。取るのも持つのも hook | JSX の中身の大部分を書かない |
-| presenter | `components/` の部品。props だけで見せる | 参考にした記事の「Presenters」（API の形を変える関数）とは別の意味。そちらは `toXxx` と呼ぶ |
-| Repository | データの出どころ（REST・Firestore）を隠す型の約束（`repository.ts` の `XxxRepository`）と、その実装（`repositories/`） | バックエンドは Repository を使わない（D-025）。画面の Repository は DB とのやり取りではない。`Source`・`Adapter`・`Interface` とは呼ばない |
-| `shared/api/client.ts` | ブラウザの `fetch` を包む1つのファイル | バックエンドの Client（外のサービスを呼ぶクラス）とは別のもの。`frontend/client`（会員の画面）とも別 |
+- container
+  - 意味：`pages/` の部品。hook・URL・ログインした自分をつなぎ、presenter に props で渡す。取るのも持つのも hook
+  - 注意：JSX の中身の大部分を書かない
+- presenter
+  - 意味：`components/` の部品。props だけで見せる
+  - 注意：参考にした記事の「Presenters」（API の形を変える関数）とは別の意味。そちらは `toXxx` と呼ぶ
+- Repository
+  - 意味：データの出どころ（REST・Firestore）を隠す型の約束（`repository.ts` の `XxxRepository`）と、その実装（`repositories/`）
+  - 注意：バックエンドは Repository を使わない（D-025）
+  - 注意：画面の Repository は DB とのやり取りではない
+  - 注意：`Source`・`Adapter`・`Interface` とは呼ばない
+- `shared/api/client.ts`
+  - 意味：ブラウザの `fetch` を包む1つのファイル
+  - 注意：バックエンドの Client（外のサービスを呼ぶクラス）とは別のもの。`frontend/client`（会員の画面）とも別
 
 ## 3. 依存の向き
 
-下の表の「使ってよい」に書いたものだけを使う（表は、許すものの一覧として読む）。#114 で Biome の `noRestrictedImports` に書き、`npm run lint` で止める。Biome で書けない決まりが出たら、dependency-cruiser を足すかを決める。
+下の一覧の「使ってよい」に書いたものだけを使う（一覧は、許すものを並べたものとして読む）。#114 で Biome の `noRestrictedImports` に書き、`npm run lint` で止める。Biome で書けない決まりが出たら、dependency-cruiser を足すかを決める。
 
-| 場所 | 使ってよい | 使ってはいけない（よくある間違い） |
-| --- | --- | --- |
-| `app/` | すべての機能の `index.ts`・`shared/` | 機能の中のファイルを直に import する・画面の中身を書く |
-| `features/*/pages/` | 自分の機能の `components/`・`hooks/`・`types.ts`・`rules.ts`・ほかの機能の `index.ts`・`shared/`（`shared/api`・`shared/firebase` を除く） | `fetch`・`shared/api`・`api.ts`・`repositories/`（hook を通す。Repository の実装は `app/` から props で受け取る） |
-| `features/*/components/` | 自分の機能の `types.ts`・`rules.ts`・ほかの機能の `index.ts` が出した presenter・`shared/ui`・`shared/lib`・`shared/constants`・React（`useState` などの React の hook）・`<Link>` | 機能の `hooks/` フォルダ・`api.ts`・`shared/session`・store・`useNavigate`・`useParams`・`useSearchParams`・`useToast`・`fetch`・`sessionStorage` |
-| `features/*/hooks/` | 自分の機能の `api.ts`・`repository.ts`・`types.ts`・`rules.ts`・ほかの機能の `index.ts`（hook・型・読み直す関数）・`shared/session`・`shared/lib` | JSX を返す・`fetch`・`shared/api` を直接 |
-| `features/*/api.ts` | `shared/api`・自分の機能の `types.ts`・`shared/lib` | React・hook・store |
-| `features/*/repositories/` | `shared/api`・`shared/firebase`・自分の機能の `repository.ts`・`types.ts`・`shared/lib` | React・hook・store |
-| `features/*/rules.ts`・`types.ts`・`repository.ts` | `shared/lib`・`shared/constants`・`shared/session` の型 | React・API・ブラウザの機能（純粋な関数と型だけ） |
-| `shared/session/` | `shared/api`・`shared/firebase`・`shared/lib`・React | `features/`・`app/` |
-| `shared/api/`・`shared/firebase/` | ブラウザの `fetch`・Firebase の SDK | `features/`・`app/`・React |
-| `shared/ui/` | `shared/lib`・React | `features/`・`shared/api`・`shared/session` |
-| `shared/lib/`・`shared/constants/` | なし | React・ブラウザの機能 |
+- `app/`
+  - 使ってよい：すべての機能の `index.ts`・`shared/`
+  - 使ってはいけない（よくある間違い）：機能の中のファイルを直に import する・画面の中身を書く
+- `features/*/pages/`
+  - 使ってよい：自分の機能の `components/`・`hooks/`・`types.ts`・`rules.ts`
+  - 使ってよい：ほかの機能の `index.ts`
+  - 使ってよい：`shared/`（`shared/api`・`shared/firebase` を除く）
+  - 使ってはいけない（よくある間違い）：`fetch`・`shared/api`・`api.ts`・`repositories/`
+  - hook を通す。Repository の実装は `app/` から props で受け取る
+- `features/*/components/`
+  - 使ってよい：自分の機能の `types.ts`・`rules.ts`
+  - 使ってよい：ほかの機能の `index.ts` が出した presenter
+  - 使ってよい：`shared/ui`・`shared/lib`・`shared/constants`
+  - 使ってよい：React（`useState` などの React の hook）・`<Link>`
+  - 使ってはいけない（よくある間違い）：機能の `hooks/` フォルダ・`api.ts`・`shared/session`・store
+  - 使ってはいけない（よくある間違い）：`useNavigate`・`useParams`・`useSearchParams`・`useToast`・`fetch`・`sessionStorage`
+- `features/*/hooks/`
+  - 使ってよい：自分の機能の `api.ts`・`repository.ts`・`types.ts`・`rules.ts`
+  - 使ってよい：ほかの機能の `index.ts`（hook・型・読み直す関数）
+  - 使ってよい：`shared/session`・`shared/lib`
+  - 使ってはいけない（よくある間違い）：JSX を返す・`fetch`・`shared/api` を直接
+- `features/*/api.ts`
+  - 使ってよい：`shared/api`・自分の機能の `types.ts`・`shared/lib`
+  - 使ってはいけない（よくある間違い）：React・hook・store
+- `features/*/repositories/`
+  - 使ってよい：`shared/api`・`shared/firebase`・自分の機能の `repository.ts`・`types.ts`・`shared/lib`
+  - 使ってはいけない（よくある間違い）：React・hook・store
+- `features/*/rules.ts`・`types.ts`・`repository.ts`
+  - 使ってよい：`shared/lib`・`shared/constants`・`shared/session` の型
+  - 使ってはいけない（よくある間違い）：React・API・ブラウザの機能（純粋な関数と型だけ）
+- `shared/session/`
+  - 使ってよい：`shared/api`・`shared/firebase`・`shared/lib`・React
+  - 使ってはいけない（よくある間違い）：`features/`・`app/`
+- `shared/api/`・`shared/firebase/`
+  - 使ってよい：ブラウザの `fetch`・Firebase の SDK
+  - 使ってはいけない（よくある間違い）：`features/`・`app/`・React
+- `shared/ui/`
+  - 使ってよい：`shared/lib`・React
+  - 使ってはいけない（よくある間違い）：`features/`・`shared/api`・`shared/session`
+- `shared/lib/`・`shared/constants/`
+  - 使ってよい：なし
+  - 使ってはいけない（よくある間違い）：React・ブラウザの機能
 
 - 機能どうしで、互いの `index.ts` を import し合わない（例：`profile` が `likes` を使い、`likes` も `profile` を使う）。両方が要るものは、`shared/` に移すか、`app/` か container でつなぐ。Biome の `noRestrictedImports` では止められないので、レビューで見る（増えたら dependency-cruiser を考える）
 
@@ -188,16 +225,53 @@ flowchart TB
 
 ## 5. 状態の置き場
 
+くわしい決まりがあるものは、表の下の見出しに書く。
+
 | 状態 | 置き場 |
 | --- | --- |
-| API から取ったデータ（一覧・詳細） | その機能の hook（`useState`）。TanStack Query は使わない（D-005）。画面を離れたら捨てる（相手のプロフィールから戻ったときに、一覧のスクロールの位置は戻さない。今の動きと同じ） |
-| 検索の条件 | 正は URL（`useSearchParams`）。URL にクエリがないとき（タブのリンクから開いたとき）だけ、sessionStorage の最後の条件に戻す（FR-UI-016・043）。読み書きは `useSearchConditions` の1か所。フリーワードも URL に入るので、アクセスのログに残してよいかは、まだ確かめていない |
-| ログインした自分（性別・使える機能） | `shared/session/`（今は Context、05b で Zustand）。`GET /api/me` を読むのは、起動したとき・購入が成功したとき・有料の機能で 403 が返ったとき。ログアウトのときは消し、Firebase からも抜ける |
-| 画面をまたぐ数（未読の数・届いたいいねの数・管理画面のまだ対応していない通報の数） | その機能の hook（05b からは小さな store）。読み直す関数を `index.ts` から出す。数を読む部品は `TabBar`（管理画面はサイドバー）の中だけにし、描き直しをその部品にとどめる。数だけを返す API ができるまでは、今の読み方のまま、その機能の `api.ts` に移す |
+| API から取ったデータ（一覧・詳細） | その機能の hook（`useState`）（くわしくは下） |
+| 検索の条件 | 正は URL（`useSearchParams`）（くわしくは下） |
+| ログインした自分（性別・使える機能） | `shared/session/`（くわしくは下） |
+| 画面をまたぐ数 | その機能の hook（くわしくは下） |
 | 楽観的な表示・送っている間 | その機能の hook |
 | スクロールする枠 | `AppShell` が `shared/ui` の Context で渡す（`document.querySelector` で探さない） |
 | トースト | `shared/ui/Toast`（Context） |
-| 入力中の値 | 失敗のときに戻す値（送れなかったメッセージ）・ほかの所から入れる値（保存した条件・URL）は、hook が持つ。presenter は `value` と `onChange` を受け取るだけ。それ以外（ダイアログが開いているか、など）は presenter の `useState` |
+| 入力中の値 | hook か presenter（くわしくは下） |
+
+### API から取ったデータ（一覧・詳細）
+
+- その機能の hook（`useState`）に置く
+- TanStack Query は使わない（D-005）
+- 画面を離れたら捨てる。相手のプロフィールから戻ったときに、一覧のスクロールの位置は戻さない（今の動きと同じ）
+
+### 検索の条件
+
+- 正は URL（`useSearchParams`）
+- URL にクエリがないとき（タブのリンクから開いたとき）だけ、sessionStorage の最後の条件に戻す（FR-UI-016・043）
+- 読み書きは `useSearchConditions` の1か所
+- フリーワードも URL に入るので、アクセスのログに残してよいかは、まだ確かめていない
+
+### ログインした自分（性別・使える機能）
+
+- `shared/session/` に置く（今は Context、05b で Zustand）
+- `GET /api/me` を読むのは、起動したとき・購入が成功したとき・有料の機能で 403 が返ったとき
+- ログアウトのときは消し、Firebase からも抜ける
+
+### 画面をまたぐ数
+
+未読の数・届いたいいねの数・管理画面のまだ対応していない通報の数。
+
+- その機能の hook に置く（05b からは小さな store）
+- 読み直す関数を `index.ts` から出す
+- 数を読む部品は `TabBar`（管理画面はサイドバー）の中だけにし、描き直しをその部品にとどめる
+- 数だけを返す API ができるまでは、今の読み方のまま、その機能の `api.ts` に移す
+
+### 入力中の値
+
+- 失敗のときに戻す値（送れなかったメッセージ）は、hook が持つ
+- ほかの所から入れる値（保存した条件・URL）も、hook が持つ
+- presenter は `value` と `onChange` を受け取るだけ
+- それ以外（ダイアログが開いているか、など）は presenter の `useState`
 
 ## 6. データの出どころが2つある機能（メッセージ）
 
@@ -213,12 +287,16 @@ flowchart TB
 | 何を | どう試すか | 置き場 |
 | --- | --- | --- |
 | `rules.ts`・`shared/lib` | Vitest の単体（境界値） | 隣の `*.test.ts` |
-| `api.ts`・Repository の実装の変換 | `docs/api/` の改善版の列の応答の例を入れ、画面の形が出るか。API の形を変える PR では、同じ PR で例とこのテストを直す。バックエンドの API テストでも、同じ形を確かめる | 隣の `*.test.ts` |
+| `api.ts`・Repository の実装の変換 | `docs/api/` の応答の例を入れ、画面の形が出るか | 隣の `*.test.ts` |
 | presenter | Testing Library。props を渡して、見えるものとボタンを確かめる（API なし） | 隣の `*.test.tsx` |
 | hook | `api.ts` の関数（Repository を作った機能では、偽物の Repository）を差し替え、中止・重なり・失敗・二重に送らないことを確かめる | 隣の `use*.test.ts` |
 | container | hook を偽物にして、URL と props のつなぎを確かめる | 隣の `*Page.test.tsx` |
 | `RequireAuth`・`client.ts` | 401 で移ること・戻り先・`refresh` を1回だけ試すこと・500・204・中止 | `app/`・`shared/api/` の隣 |
 | 移す前の今の動き | 画面の単位で、`fetch` を偽物にして書く（移したあとも、同じテストが書き換えずに通るように） | 移す画面の隣 |
+
+- `api.ts`・Repository の実装の変換のテストに入れる応答の例は、`docs/api/` の改善版の列のもの
+- API の形を変える PR では、同じ PR で例とこのテストを直す
+- バックエンドの API テストでも、同じ形を確かめる
 
 テストの種類と書き方は [testing.md](testing.md)・[testing-style.md](testing-style.md) に従う。E2E の道具は、まだ決めていない。
 

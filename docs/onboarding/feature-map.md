@@ -2,94 +2,979 @@
 
 機能ごとに、画面・API・コントローラー・表をつなぐ。読みながら埋める（推測で埋めない。コードとルートで確かめた行だけ書く）。
 
-- 読む表・書く表は、コードから読み取り、2026-11-16 に流れる SQL で確かめた（2026-11-16 にあった 38本すべて）。2026-11-17 に 04b（保存した検索条件）の4本と、M1（パスワードを変える）の1本、M3（届いたいいね・スキップ）の4本が増えて 47本、M2（パスワードの再設定。#196）の2本が増えて 49本、M7・A7（通報。#202・#203）の4本が増えて 53本、A7（お知らせ・強制退会。#213）の4本が増えて 57本、A1（対応のメモ。#216）の1本が増えて 58本、A2（やり取りを読む。#221）の1本が増えて 59本、A1・A7（会員ごとの、やり取り・違反・ブロック。#227）の4本が増えて 63本になった。この4本は、curl で実際に呼んで確かめた（`docs/api/04b-saved-searches.md` の「レガシー版で起きること」）。書き込みの API も、トランザクションの中で本当に流してから取り消した（メールと Firestore は偽物に差し替えた）。確かめた結果と SQL の本数は、末尾の「SQL で確かめた結果」
+- 読む表・書く表は、コードから読み取り、2026-11-16 に流れる SQL で確かめた（2026-11-16 にあった 38本すべて）
+- そのあとに増えた API と、全体の本数：
+  - 2026-11-17 に、04b（保存した検索条件）の4本と、M1（パスワードを変える）の1本、M3（届いたいいね・スキップ）の4本が増えて 47本
+  - M2（パスワードの再設定。#196）の2本が増えて 49本
+  - M7・A7（通報。#202・#203）の4本が増えて 53本
+  - A7（お知らせ・強制退会。#213）の4本が増えて 57本
+  - A1（対応のメモ。#216）の1本が増えて 58本
+  - A2（やり取りを読む。#221）の1本が増えて 59本
+  - A1・A7（会員ごとの、やり取り・違反・ブロック。#227）の4本が増えて 63本
+- 04b の4本は、curl で実際に呼んで確かめた（`docs/api/04b-saved-searches.md` の「レガシー版で起きること」）
+- 書き込みの API も、トランザクションの中で本当に流してから取り消した（メールと Firestore は偽物に差し替えた）
+- 確かめた結果と SQL の本数は、末尾の「SQL で確かめた結果」
 - 行の番号は、会員の側は `backend/client/app/Http/Controllers/` のファイルの行（2026-11-16 に `refactored-repo` で読んだ）。移すとずれるので、テストの材料に使うときはメソッドの名前を正にする
-- **形の違う ID（`abc` など。UUID でない文字）は、どの API でも 500** になる。`public_id` は uuid の列なので、比べると PostgreSQL がエラー（22P02）を返す。下の表で「いない会員は 500」「いない相手でも 204」と書いたのは、形の正しい UUID のとき
+- **形の違う ID（`abc` など。UUID でない文字）は、どの API でも 500** になる。`public_id` は uuid の列なので、比べると PostgreSQL がエラー（22P02）を返す。下で「いない会員は 500」「いない相手でも 204」と書いたのは、形の正しい UUID のとき
 - 要件 ID と、返る状態コードの一覧は、ここには書かない。その API を移すチケットで、その API の分だけ書く（PR #132 のレビュー S14）
 
 ## 会員の側（`backend/client`・38本）
 
 全体：ルートにミドルウェアはない。ログインしているかは、各コントローラーの中で JWT を読んで確かめる。業務の処理はすべてコントローラーの中にある。
 
-| 機能 | 画面（frontend） | API（メソッドとパス） | コントローラーのメソッド | 読む表 | 書く表 | 主な処理・レガシーの臭い |
-| --- | --- | --- | --- | --- | --- | --- |
-| 動作の確かめ | ― | `GET /api/health` | `routes/api.php` のクロージャ | `migrations` | ― | DB の名前とマイグレーションの数を返す |
-| 登録 | `RegisterPage` | `POST /api/users` | `UserController::store`（L31） | ― | `users`・`profiles` | 会員とプロフィールを作り、確認のメールを送る。入力を確かめない。トランザクションがない（メールが失敗しても行は残る）。応答に `verification_token` が出る |
-| メールアドレスの確認 | `VerifyPage`（#193。メールのリンクが画面を開き、画面がこの API を呼ぶ。前は、リンクが API を直接開いていた） | `GET /api/email-verifications/{token}` | `EmailVerificationController::show`（L20） | `users` | `users.email_verified_at` | 確認用の文字にインデックスがなく、表を全部読む。文字を消さないので何度でも使え、期限もない |
-| 確認のメールの再送 | `SettingsPage`（#181）・`RegisterPage`・`VerifyBanner`（#193。送り方を3か所にコピーした） | `POST /api/email-verifications` | `EmailVerificationController::store`（L35） | `users` | ―（メールを送る） | 確認済みでも、何回でも送れる。404 で、そのメールアドレスが登録されているかが分かる |
-| ログイン | `LoginPage` | `POST /api/auth/login` | `AuthController::login`（L22） | `users`・`profiles`（nickname） | `users.last_login_at` | 30日の JWT を返す。鍵は `APP_KEY` の使い回し。メッセージの違いと返るまでの時間で、メールアドレスが登録されているかが分かる。止めた会員を断るのはログインだけ |
-| 自分の情報 | `VerifyBanner`（#193。未確認かを見るために、画面が変わるたびに呼ぶ）・`HomePage`・`SettingsPage`・`SearchConditionsPage`・`UserPage`・`TalkPage`・`PlansPage`・`PurchasePage` | `GET /api/me` | `AuthController::me`（L56） | `users` | ― | JWT を読む処理のもと（ほかの API にコピーされた）。壊れた JWT では 500 になる。`users` の行をそのまま返す（`verification_token` も出る） |
-| ログアウト | `SettingsPage`（#181 で、ホームから移した） | `POST /api/auth/logout` | `AuthController::logout`（L70） | ― | ― | サーバーは何もしない |
-| プロフィールを見る | `HomePage`・`SettingsPage`・`UserPage`・`SearchConditionsPage`・`TalkPage`・`MessagesFsPage`・`TalkFsPage` | `GET /api/users/{publicId}` | `ProfileController::show`（L20） | `users`・`profiles` | ― | ログインを確かめない（だれでも見られる）。`users` の行をそのまま返す（メールアドレス・確認用の文字も出る）。UUID の形を確かめず、違う文字は 500。#187 で、見ている人とマッチしていれば `room_id` を足した（トークンがあるときだけ JWT を読む。3本増える。トークンなしでも読めるのは、前のまま） |
-| プロフィールを変える | `HomePage` | `PUT /api/users/{publicId}` | `ProfileController::update`（L28） | `users`（id を引く）・`profiles` | `profiles` | ログインも本人かも確かめない（だれでも他人のプロフィールを書き換えられる）。`$request->all()` をそのまま入れ、`Profile` は `$guarded = []` なので、送った項目がすべて入る。そのため、プロフィールの持ち主（`user_id`）を付け替えられ、性別も変えられる（性別で分けている決まり（購入は男性だけ・無料の男性への制限）を自分で外せる）。会員がいなければ null に `fill` して 500 |
-| 相手を探す | `SearchPage` | `GET /api/users` | `UserController::index`（L46） | `users`・`profiles`・`likes`・`blocks` | ― | 自分の反対の性別・確認済み・退会していない・いいねしていない・ブロックしていない／されていない会員を、最終ログインの順に20人ずつ（OFFSET）。いいねとブロックの相手を PHP に持ってきて `not in` に並べる。プロフィールを1人ずつ読む（1＋N）。身長・生年月日は文字で比べる。身長の条件は男性の無料の会員には 403（`is_paid` だけを見る）。#150（2026-11-17）で、身長を無料にし、有料の機能を4つ足した（最終ログイン・登録して間もない会員・フリーワード・登録が新しい順。男性の無料の会員は 403）。フリーワードは `%` をそのまま渡す（`%` だけで全員に当たる）。#153 で、プロフィールの6項目（体型・お仕事・年収・タバコ・お酒・結婚歴）の条件を足した（`whereIn`。選択肢にない文字も通る。配列でなければ 500。未回答の会員は出ない）。**安全の穴**（#158）：停止した会員が出る。応答に、停止の理由・ほかの会員の有料の期限・最終ログインと登録の日時も入る。#162 で、最終ログインの条件に、一度もログインしていない会員（登録した日時で見る）を足した。年収の幅は、画面が区分の名前の並びに直して送る。#184 で、スキップした相手を除くようにした（ID を PHP に持ってきて `whereNotIn`。1本増える） |
-| いいねする（マッチ・ルームも作る） | `UserPage`・`LikesPage`（#184。マッチする） | `POST /api/me/likes` | `LikeController::store`（L33） | `profiles`・`users`・`likes`・`talk_rooms`（作ったルームを読み直す） | `likes`・`user_matches`・`talk_rooms`・`talk_room_members`・Firestore（`rooms`・`users/{uid}/rooms`） | 男性の無料の会員は1日10回まで（数えてから入れる。ロックなし。日付は UTC）。いない会員の UUID は 500、自分にもいいねでき、2回目は UNIQUE の違反で 500。相手からのいいねがあれば、マッチ・ルーム・参加者2人・Firestore の3件を作る。トランザクションがなく、途中で失敗すると半端な行が残る（Firestore につながらないと 500 なのに、PostgreSQL の行は残る）。ブロックした相手にも、ブロックされた相手にも送れる（`blocks` を読まない）。**自分にいいねすると、今入れた行が逆向きのいいねとして見つかり、自分とのマッチ・参加者が自分2人のルームができる**（Firestore では同じ受信箱に2回書くので、2回目で失敗して 500 になる見込み。Emulator では確かめていない）。#184 で、相手からのいいねがあれば（送り返すとき）、1日10回の上限の確かめを飛ばすようにした（先に2本読む）。#187 で、マッチしたときの応答に `room_id`（トークルームの ID）を足した |
-| いいねした相手の一覧 | `SentLikesPage`（#184 で、いいねのタブから設定の下に移した） | `GET /api/me/likes` | `LikeController::index`（L105） | `blocks`・`likes`・`profiles`・`users` | ― | ブロックした・された相手を除き、新しい順に全件（ページなし）。1件ごとにプロフィール・逆向きのいいね・`public_id` を読む（1＋3N）。「マッチ済み」は `user_matches` ではなく逆向きのいいねで決める（正が2つ）。退会した相手は除かない。生年月日をそのまま返す。#187 で、マッチ済みの行に `room_id` を足した（1件ごとに3本増える） |
-| 届いたいいねの一覧 | `LikesPage`・`TabBar`（バッジの数） | `GET /api/me/received-likes` | `ReceivedLikeController::index`（L29） | `likes`・`blocks`・`skips`・`profiles`・`users` | ― | M3（#184）。無料でも有料でも見られる。もう送り返した・ブロックした／された・スキップした相手を除く（ID を PHP に持ってくる。4本）。1件ごとに2本（5＋2N。20件で 46本）。`likes.to_user_id` にインデックスがなく、表を全部読む。全部を1回で返す。退会した・止められた相手も出る |
-| スキップする | `LikesPage`・`UserPage`（#187） | `POST /api/me/skips` | `SkipController::store`（L26） | `users` | `skips` | M3（#184）。相手には伝えない。UNIQUE がないので、同じ相手を2回スキップすると2行できる。いない相手・形の違う ID は 500。自分もスキップできる。行をそのまま返す |
-| スキップした相手の一覧 | `LikesPage` | `GET /api/me/skips` | `SkipController::index`（L45） | `skips`・`profiles`・`users` | ― | M3（#184）。新しい順。1件ごとに2本（1＋2N）。`skips` にインデックスがなく、表を全部読む。2回スキップした相手は2回出る |
-| スキップを元に戻す | `LikesPage` | `DELETE /api/me/skips/{publicId}` | `SkipController::destroy`（L74） | `users` | `skips` | M3（#184）。自分がスキップした行を消す（2行あれば2行とも）。消えた行がなくても 204 |
-| マッチした相手の一覧 | 呼んでいる画面は見つからない | `GET /api/me/matches` | `UserMatchController::index`（L26） | `blocks`・`user_matches`・`profiles`・`users` | ― | `user1_id`・`user2_id` を OR で探す（インデックスがなく表を全部読む）。全件（ページなし）。1件ごとにプロフィールと `public_id` を読む（1＋2N）。同じ組が2行あれば2回出る。ブロックは PHP で飛ばす。退会した相手は除かない |
-| トークの一覧 | `MessagesPage`・`TalkPage`・`components/TabBar` | `GET /api/me/talk-rooms` | `TalkRoomController::index`（L27） | `blocks`・`talk_room_members`・`talk_rooms`・`profiles`・`users`・`messages` | ― | 自分の参加者の行を全部読み、ルームごとに6本読む（1＋6N）。`talk_room_members.user_id` と `messages.talk_room_id` にインデックスがなく、表を全部読む。相手がいないルームでは 500。未読は時刻で比べる。並べるのは PHP。ページなし。ブロックは PHP で飛ばし、退会した相手は除かない。生年月日をそのまま返す。#187 で、`last_read_at`（自分が最後に開いた日時）を足した。画面が、新しいマッチ（まだ開いていなくて、まだ1通もない）を見分けるのに使う。#190 で、`last_message.mine`（最後の1件が自分のものか）と `partner_last_read_at`（相手が最後に開いた日時）を足した。既読は有料の機能だが、この日時は**無料の会員にも返す**（出さないのは画面だけ）。トーク画面は、既読のために、5秒ごとにこの一覧を全部読み直す |
-| トークの履歴 | `TalkPage` | `GET /api/me/talk-rooms/{publicId}/messages` | `MessageController::index`（L26） | `talk_rooms`・`messages` | `talk_room_members.last_read_at` | **参加者かを確かめない**（UUID を知っていれば、だれでも読める）。ないルームは 500。新しい50件ずつ（OFFSET）。`page` を確かめない（0・負の数・文字は、Laravel の `offset()` が0に丸めるので1ページ目になる。コードのコメントの「`page=0` で 500」は誤り）。GET の中で既読を書く（画面は5秒ごとに呼ぶ）。`messages` の行をそのまま返す（中の連番の `id`・`sender_id` が出る） |
-| メッセージを送る | `TalkPage` | `POST /api/me/talk-rooms/{publicId}/messages` | `MessageController::store`（L55） | `profiles`・`users`・`talk_rooms` | `messages` | **参加者かを確かめない**（マッチしていない人も送れる）。男性の無料の会員は 403（`is_paid` だけを見る）。本文を確かめない（空は NOT NULL の違反で 500・長さの上限なし）。ないルームは `$room->id` を読んで 500。ブロックした相手のルームにも送れる |
-| Firebase のトークン | `firebase.ts`（`MessagesFsPage`・`TalkFsPage` が使う） | `POST /api/me/firebase-token` | `FirebaseTokenController::store`（L21） | `users` | ― | 署名のない JWT（`alg: none`）を返す。Emulator だけで通り、本物の Firebase では通らない。メールアドレスを確認していない会員も使える |
-| ブロックする | `UserPage`・`TalkPage` | `POST /api/me/blocks` | `BlockController::store`（L24） | `users` | `blocks` | いない会員の UUID は 500。自分もブロックでき、2回目は UNIQUE の違反で 500。退会したかは見ない。`blocks` の行をそのまま返す（中の連番の `id` が出る） |
-| 通報する | `components/ReportDialog`（`UserPage`・`TalkPage` から開く） | `POST /api/me/reports` | `ReportController::store`（L29） | `users`・`report_cases` | `report_cases`・`reports`・`blocks`（「ブロックもする」のとき） | M7（#202）。自分も通報できる。指したメッセージの持ち主・理由・文の長さを確かめない。案件を「あるかを見てから作る」ので、同時に 10件で案件が 9つできた。もうブロックしている相手を「ブロックもする」で通報すると 500 で、通報は入ったまま |
-| 運営からのお知らせの一覧 | `NoticesPage`・`components/NoticeBanner`（未読の数を数えるために、画面が変わるたびに呼ぶ） | `GET /api/me/notices` | `NoticeController::index`（L21） | `notices` | ― | A7（#213）。全部を一度に返す。未読の数だけを返す API はない |
-| お知らせを読んだことにする | `NoticesPage`（開いたときに、未読の数だけ呼ぶ） | `POST /api/me/notices/{publicId}/read` | `NoticeController::read`（L47） | ― | `notices.read_at` | A7（#213）。**持ち主を確かめない**（ID を知っていれば、他人のお知らせを読んだことにできる） |
-| ブロックした相手の一覧 | `BlocksPage` | `GET /api/me/blocks` | `BlockController::index`（L43） | `blocks`・`profiles`・`users` | ― | 新しい順に全件（ページなし）。1件ごとにプロフィールと `public_id` を読む（1＋2N）。退会した相手もそのまま出る |
-| ブロックを解く | `BlocksPage` | `DELETE /api/me/blocks/{publicId}` | `BlockController::destroy`（L70） | `users` | `blocks` | 自分がした分だけを消す。消すものがなくても（いない相手・ブロックしていない相手）204 |
-| 退会 | `SettingsPage`（#181 で、ホームから移した） | `DELETE /api/me` | `UserController::destroy`（L121） | `users` | `users.email`・`users.deleted_at` | パスワードを確かめ、メールアドレスを書き換えて空ける（元のメールアドレスは残らない。元が長いと 255文字を超えて 500）。持っていた JWT は止めない（30日のあいだ使える） |
-| パスワードを変える | `SettingsPage` | `PUT /api/me/password` | `PasswordController::update`（L25） | `users` | `users.password` | M1（#181）。今のパスワードを確かめてから変える。新しいパスワードを確かめない（1文字でも通る。ないと 500）。変えても、前のトークンは使えるまま。試す回数の上限がない |
-| パスワードの再設定のメールを送る | `ForgotPasswordPage` | `POST /api/password-resets` | `PasswordResetController::store`（L27） | `users`・`password_reset_tokens` | `password_reset_tokens`（メールも送る） | M2（#196）。ログインしていない人が呼ぶ。再設定用の文字を、平文のまま保存する。404 で、そのメールアドレスが登録されているかが分かる。何回でも送れる |
-| 新しいパスワードを決める | `ResetPasswordPage` | `PUT /api/password-resets/{token}` | `PasswordResetController::update`（L47） | `password_reset_tokens`・`users` | `users.password` | M2（#196）。期限を見ない。使ったあとも消さないので、同じリンクで何度でも変えられる。新しいパスワードを確かめない。変えても、前のトークンは使えるまま |
-| プランの一覧 | `PlansPage`・`PurchasePage` | `GET /api/plans` | `PlanController::index`（L21） | `profiles`・`plans` | ― | 男性だけ（女性は 403）。性別はプロフィールの今の値で決める（編集で書き換えられる）。`plans` の行をそのまま返す |
-| 購入する | `PurchasePage` | `POST /api/me/purchases` | `PurchaseController::store`（L24） | `profiles`・`plans`・`users` | `purchases`・`users.is_paid`・`users.paid_until` | **お金**。決済はせず、押したらすぐ有料。男性だけ。ないプランは 500。トランザクションがない（購入の記録と有料の状態がずれうる）。記録はプランを指すだけで、買ったときの値段を残さない。期限が過ぎていても古い期限から足す。`addMonths()` で月末があふれる |
-| 購入の記録 | `PlansPage` | `GET /api/me/purchases` | `PurchaseController::index`（L55） | `profiles`・`purchases`・`plans` | ― | 男性だけ。全件（ページなし）。1件ごとにプランを読む（1＋N）。値段と期間は「今の」プランのもの（管理画面で値段を変えると、前の記録の値段も変わる） |
-| 保存した検索条件の一覧 | `SearchConditionsPage` | `GET /api/me/search-conditions` | `SearchConditionController::index`（L27） | `search_conditions` | ― | 04b。自分の分を保存した順に。`user_id` にインデックスがなく、表を全部読む。行をそのまま返す（中の `id`・`user_id` も出る）。「使えるか」は返さず、画面が有料かどうかをもう一度判断する |
-| 検索条件を保存する | `SearchConditionsPage` | `POST /api/me/search-conditions` | `SearchConditionController::store`（L43） | `search_conditions`・（有料の条件があれば）`profiles`・`users` | `search_conditions` | 04b。1人5件まで。**数えてから入れるだけ**（ロックもトランザクションもない。同時に10本送ると 11件になった）。条件も名前も確かめない（年齢 17・配列・文字だけも入る。名前なしは 500）。有料かどうかの確かめは検索からコピー（`is_paid` だけ。期限切れの会員が有料の条件を保存できる。#150 で、有料の条件は身長から4つに変わった） |
-| 保存した検索条件を直す | `SearchConditionsPage` | `PUT /api/me/search-conditions/{publicId}` | `SearchConditionController::update`（L81） | `search_conditions` | `search_conditions` | 04b。**安全の穴**（#156）：持ち主を確かめない（他人の条件を直せる）。送られた項目を全部入れるので、`user_id` を送ると他人の条件を自分のものにできる。有料かどうかの確かめがない（無料の男性が身長を足せる）。ない ID は 500。#162 から、画面は名前だけ・条件だけの2通りで呼ぶ |
-| 保存した検索条件を消す | `SearchConditionsPage` | `DELETE /api/me/search-conditions/{publicId}` | `SearchConditionController::destroy`（L99） | ― | `search_conditions` | 04b。**安全の穴**（#156）：持ち主を確かめない（他人の条件を消せる）。ない ID でも 204 |
+機能ごとの中身（画面・コントローラーのメソッド・読む表・書く表・主な処理・レガシーの臭い）は、表の下の見出しに書く。
+
+| 機能 | API（メソッドとパス） |
+| --- | --- |
+| 動作の確かめ | `GET /api/health` |
+| 登録 | `POST /api/users` |
+| メールアドレスの確認 | `GET /api/email-verifications/{token}` |
+| 確認のメールの再送 | `POST /api/email-verifications` |
+| ログイン | `POST /api/auth/login` |
+| 自分の情報 | `GET /api/me` |
+| ログアウト | `POST /api/auth/logout` |
+| プロフィールを見る | `GET /api/users/{publicId}` |
+| プロフィールを変える | `PUT /api/users/{publicId}` |
+| 相手を探す | `GET /api/users` |
+| いいねする（マッチ・ルームも作る） | `POST /api/me/likes` |
+| いいねした相手の一覧 | `GET /api/me/likes` |
+| 届いたいいねの一覧 | `GET /api/me/received-likes` |
+| スキップする | `POST /api/me/skips` |
+| スキップした相手の一覧 | `GET /api/me/skips` |
+| スキップを元に戻す | `DELETE /api/me/skips/{publicId}` |
+| マッチした相手の一覧 | `GET /api/me/matches` |
+| トークの一覧 | `GET /api/me/talk-rooms` |
+| トークの履歴 | `GET /api/me/talk-rooms/{publicId}/messages` |
+| メッセージを送る | `POST /api/me/talk-rooms/{publicId}/messages` |
+| Firebase のトークン | `POST /api/me/firebase-token` |
+| ブロックする | `POST /api/me/blocks` |
+| 通報する | `POST /api/me/reports` |
+| 運営からのお知らせの一覧 | `GET /api/me/notices` |
+| お知らせを読んだことにする | `POST /api/me/notices/{publicId}/read` |
+| ブロックした相手の一覧 | `GET /api/me/blocks` |
+| ブロックを解く | `DELETE /api/me/blocks/{publicId}` |
+| 退会 | `DELETE /api/me` |
+| パスワードを変える | `PUT /api/me/password` |
+| パスワードの再設定のメールを送る | `POST /api/password-resets` |
+| 新しいパスワードを決める | `PUT /api/password-resets/{token}` |
+| プランの一覧 | `GET /api/plans` |
+| 購入する | `POST /api/me/purchases` |
+| 購入の記録 | `GET /api/me/purchases` |
+| 保存した検索条件の一覧 | `GET /api/me/search-conditions` |
+| 検索条件を保存する | `POST /api/me/search-conditions` |
+| 保存した検索条件を直す | `PUT /api/me/search-conditions/{publicId}` |
+| 保存した検索条件を消す | `DELETE /api/me/search-conditions/{publicId}` |
+
+### 動作の確かめ
+
+- 画面：―
+- API：`GET /api/health`
+- メソッド：`routes/api.php` のクロージャ
+- 読む表：`migrations`
+- 書く表：―
+- 主な処理：DB の名前とマイグレーションの数を返す
+
+### 登録
+
+- 画面：`RegisterPage`
+- API：`POST /api/users`
+- メソッド：`UserController::store`（L31）
+- 読む表：―
+- 書く表：`users`・`profiles`
+- 主な処理・レガシーの臭い：
+  - 会員とプロフィールを作り、確認のメールを送る
+  - 入力を確かめない
+  - トランザクションがない（メールが失敗しても行は残る）
+  - 応答に `verification_token` が出る
+
+### メールアドレスの確認
+
+- 画面：`VerifyPage`（#193。メールのリンクが画面を開き、画面がこの API を呼ぶ。前は、リンクが API を直接開いていた）
+- API：`GET /api/email-verifications/{token}`
+- メソッド：`EmailVerificationController::show`（L20）
+- 読む表：`users`
+- 書く表：`users.email_verified_at`
+- 主な処理・レガシーの臭い：
+  - 確認用の文字にインデックスがなく、表を全部読む
+  - 文字を消さないので何度でも使え、期限もない
+
+### 確認のメールの再送
+
+- 画面：`SettingsPage`（#181）・`RegisterPage`・`VerifyBanner`（#193。送り方を3か所にコピーした）
+- API：`POST /api/email-verifications`
+- メソッド：`EmailVerificationController::store`（L35）
+- 読む表：`users`
+- 書く表：―（メールを送る）
+- 主な処理・レガシーの臭い：
+  - 確認済みでも、何回でも送れる
+  - 404 で、そのメールアドレスが登録されているかが分かる
+
+### ログイン
+
+- 画面：`LoginPage`
+- API：`POST /api/auth/login`
+- メソッド：`AuthController::login`（L22）
+- 読む表：`users`・`profiles`（nickname）
+- 書く表：`users.last_login_at`
+- 主な処理・レガシーの臭い：
+  - 30日の JWT を返す
+  - 鍵は `APP_KEY` の使い回し
+  - メッセージの違いと返るまでの時間で、メールアドレスが登録されているかが分かる
+  - 止めた会員を断るのはログインだけ
+
+### 自分の情報
+
+- 画面：
+  - `VerifyBanner`（#193。未確認かを見るために、画面が変わるたびに呼ぶ）
+  - `HomePage`・`SettingsPage`・`SearchConditionsPage`・`UserPage`・`TalkPage`・`PlansPage`・`PurchasePage`
+- API：`GET /api/me`
+- メソッド：`AuthController::me`（L56）
+- 読む表：`users`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - JWT を読む処理のもと（ほかの API にコピーされた）
+  - 壊れた JWT では 500 になる
+  - `users` の行をそのまま返す（`verification_token` も出る）
+
+### ログアウト
+
+- 画面：`SettingsPage`（#181 で、ホームから移した）
+- API：`POST /api/auth/logout`
+- メソッド：`AuthController::logout`（L70）
+- 読む表：―
+- 書く表：―
+- 主な処理・レガシーの臭い：サーバーは何もしない
+
+### プロフィールを見る
+
+- 画面：`HomePage`・`SettingsPage`・`UserPage`・`SearchConditionsPage`・`TalkPage`・`MessagesFsPage`・`TalkFsPage`
+- API：`GET /api/users/{publicId}`
+- メソッド：`ProfileController::show`（L20）
+- 読む表：`users`・`profiles`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - ログインを確かめない（だれでも見られる）
+  - `users` の行をそのまま返す（メールアドレス・確認用の文字も出る）
+  - UUID の形を確かめず、違う文字は 500
+  - #187 で、見ている人とマッチしていれば `room_id` を足した
+    - トークンがあるときだけ JWT を読む。3本増える
+    - トークンなしでも読めるのは、前のまま
+
+### プロフィールを変える
+
+- 画面：`HomePage`
+- API：`PUT /api/users/{publicId}`
+- メソッド：`ProfileController::update`（L28）
+- 読む表：`users`（id を引く）・`profiles`
+- 書く表：`profiles`
+- 主な処理・レガシーの臭い：
+  - ログインも本人かも確かめない（だれでも他人のプロフィールを書き換えられる）
+  - `$request->all()` をそのまま入れ、`Profile` は `$guarded = []` なので、送った項目がすべて入る
+  - そのため、プロフィールの持ち主（`user_id`）を付け替えられ、性別も変えられる
+    - 性別で分けている決まり（購入は男性だけ・無料の男性への制限）を、自分で外せる
+  - 会員がいなければ、null に `fill` して 500
+
+### 相手を探す
+
+- 画面：`SearchPage`
+- API：`GET /api/users`
+- メソッド：`UserController::index`（L46）
+- 読む表：`users`・`profiles`・`likes`・`blocks`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - 出す会員：自分の反対の性別・確認済み・退会していない・いいねしていない・ブロックしていない／されていない会員
+  - 最終ログインの順に、20人ずつ（OFFSET）
+  - いいねとブロックの相手を PHP に持ってきて、`not in` に並べる
+  - プロフィールを1人ずつ読む（1＋N）
+  - 身長・生年月日は、文字で比べる
+  - 身長の条件は、男性の無料の会員には 403（`is_paid` だけを見る）
+  - #150（2026-11-17）で、身長を無料にし、有料の機能を4つ足した
+    - 最終ログイン・登録して間もない会員・フリーワード・登録が新しい順
+    - 男性の無料の会員は 403
+  - フリーワードは、`%` をそのまま渡す（`%` だけで全員に当たる）
+  - #153 で、プロフィールの6項目（体型・お仕事・年収・タバコ・お酒・結婚歴）の条件を足した
+    - `whereIn`。選択肢にない文字も通る
+    - 配列でなければ 500
+    - 未回答の会員は出ない
+  - **安全の穴**（#158）：
+    - 停止した会員が出る
+    - 応答に、停止の理由・ほかの会員の有料の期限・最終ログインと登録の日時も入る
+  - #162 で、最終ログインの条件に、一度もログインしていない会員（登録した日時で見る）を足した
+  - 年収の幅は、画面が区分の名前の並びに直して送る
+  - #184 で、スキップした相手を除くようにした（ID を PHP に持ってきて `whereNotIn`。1本増える）
+
+### いいねする（マッチ・ルームも作る）
+
+- 画面：`UserPage`・`LikesPage`（#184。マッチする）
+- API：`POST /api/me/likes`
+- メソッド：`LikeController::store`（L33）
+- 読む表：`profiles`・`users`・`likes`・`talk_rooms`（作ったルームを読み直す）
+- 書く表：`likes`・`user_matches`・`talk_rooms`・`talk_room_members`・Firestore（`rooms`・`users/{uid}/rooms`）
+- 主な処理・レガシーの臭い：
+  - 男性の無料の会員は、1日10回まで（数えてから入れる。ロックなし。日付は UTC）
+  - いない会員の UUID は 500
+  - 自分にもいいねできる
+  - 2回目は、UNIQUE の違反で 500
+  - 相手からのいいねがあれば、マッチ・ルーム・参加者2人・Firestore の3件を作る
+  - トランザクションがなく、途中で失敗すると半端な行が残る（Firestore につながらないと 500 なのに、PostgreSQL の行は残る）
+  - ブロックした相手にも、ブロックされた相手にも送れる（`blocks` を読まない）
+  - **自分にいいねすると、今入れた行が逆向きのいいねとして見つかり、自分とのマッチ・参加者が自分2人のルームができる**
+    - Firestore では同じ受信箱に2回書くので、2回目で失敗して 500 になる見込み。Emulator では確かめていない
+  - #184 で、相手からのいいねがあれば（送り返すとき）、1日10回の上限の確かめを飛ばすようにした（先に2本読む）
+  - #187 で、マッチしたときの応答に `room_id`（トークルームの ID）を足した
+
+### いいねした相手の一覧
+
+- 画面：`SentLikesPage`（#184 で、いいねのタブから設定の下に移した）
+- API：`GET /api/me/likes`
+- メソッド：`LikeController::index`（L105）
+- 読む表：`blocks`・`likes`・`profiles`・`users`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - ブロックした・された相手を除き、新しい順に全件（ページなし）
+  - 1件ごとに、プロフィール・逆向きのいいね・`public_id` を読む（1＋3N）
+  - 「マッチ済み」は、`user_matches` ではなく逆向きのいいねで決める（正が2つ）
+  - 退会した相手は除かない
+  - 生年月日をそのまま返す
+  - #187 で、マッチ済みの行に `room_id` を足した（1件ごとに3本増える）
+
+### 届いたいいねの一覧
+
+- 画面：`LikesPage`・`TabBar`（バッジの数）
+- API：`GET /api/me/received-likes`
+- メソッド：`ReceivedLikeController::index`（L29）
+- 読む表：`likes`・`blocks`・`skips`・`profiles`・`users`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - M3（#184）
+  - 無料でも有料でも見られる
+  - もう送り返した・ブロックした／された・スキップした相手を除く（ID を PHP に持ってくる。4本）
+  - 1件ごとに2本（5＋2N。20件で 46本）
+  - `likes.to_user_id` にインデックスがなく、表を全部読む
+  - 全部を1回で返す
+  - 退会した・止められた相手も出る
+
+### スキップする
+
+- 画面：`LikesPage`・`UserPage`（#187）
+- API：`POST /api/me/skips`
+- メソッド：`SkipController::store`（L26）
+- 読む表：`users`
+- 書く表：`skips`
+- 主な処理・レガシーの臭い：
+  - M3（#184）
+  - 相手には伝えない
+  - UNIQUE がないので、同じ相手を2回スキップすると2行できる
+  - いない相手・形の違う ID は 500
+  - 自分もスキップできる
+  - 行をそのまま返す
+
+### スキップした相手の一覧
+
+- 画面：`LikesPage`
+- API：`GET /api/me/skips`
+- メソッド：`SkipController::index`（L45）
+- 読む表：`skips`・`profiles`・`users`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - M3（#184）
+  - 新しい順
+  - 1件ごとに2本（1＋2N）
+  - `skips` にインデックスがなく、表を全部読む
+  - 2回スキップした相手は、2回出る
+
+### スキップを元に戻す
+
+- 画面：`LikesPage`
+- API：`DELETE /api/me/skips/{publicId}`
+- メソッド：`SkipController::destroy`（L74）
+- 読む表：`users`
+- 書く表：`skips`
+- 主な処理・レガシーの臭い：
+  - M3（#184）
+  - 自分がスキップした行を消す（2行あれば2行とも）
+  - 消えた行がなくても 204
+
+### マッチした相手の一覧
+
+- 画面：呼んでいる画面は見つからない
+- API：`GET /api/me/matches`
+- メソッド：`UserMatchController::index`（L26）
+- 読む表：`blocks`・`user_matches`・`profiles`・`users`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - `user1_id`・`user2_id` を OR で探す（インデックスがなく、表を全部読む）
+  - 全件（ページなし）
+  - 1件ごとに、プロフィールと `public_id` を読む（1＋2N）
+  - 同じ組が2行あれば、2回出る
+  - ブロックは PHP で飛ばす
+  - 退会した相手は除かない
+
+### トークの一覧
+
+- 画面：`MessagesPage`・`TalkPage`・`components/TabBar`
+- API：`GET /api/me/talk-rooms`
+- メソッド：`TalkRoomController::index`（L27）
+- 読む表：`blocks`・`talk_room_members`・`talk_rooms`・`profiles`・`users`・`messages`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - 自分の参加者の行を全部読み、ルームごとに6本読む（1＋6N）
+  - `talk_room_members.user_id` と `messages.talk_room_id` にインデックスがなく、表を全部読む
+  - 相手がいないルームでは 500
+  - 未読は、時刻で比べる
+  - 並べるのは PHP。ページなし
+  - ブロックは PHP で飛ばし、退会した相手は除かない
+  - 生年月日をそのまま返す
+  - #187 で、`last_read_at`（自分が最後に開いた日時）を足した。画面が、新しいマッチ（まだ開いていなくて、まだ1通もない）を見分けるのに使う
+  - #190 で、`last_message.mine`（最後の1件が自分のものか）と `partner_last_read_at`（相手が最後に開いた日時）を足した
+  - 既読は有料の機能だが、この日時は**無料の会員にも返す**（出さないのは画面だけ）
+  - トーク画面は、既読のために、5秒ごとにこの一覧を全部読み直す
+
+### トークの履歴
+
+- 画面：`TalkPage`
+- API：`GET /api/me/talk-rooms/{publicId}/messages`
+- メソッド：`MessageController::index`（L26）
+- 読む表：`talk_rooms`・`messages`
+- 書く表：`talk_room_members.last_read_at`
+- 主な処理・レガシーの臭い：
+  - **参加者かを確かめない**（UUID を知っていれば、だれでも読める）
+  - ないルームは 500
+  - 新しい50件ずつ（OFFSET）
+  - `page` を確かめない
+    - 0・負の数・文字は、Laravel の `offset()` が0に丸めるので、1ページ目になる
+    - コードのコメントの「`page=0` で 500」は誤り
+  - GET の中で既読を書く（画面は5秒ごとに呼ぶ）
+  - `messages` の行をそのまま返す（中の連番の `id`・`sender_id` が出る）
+
+### メッセージを送る
+
+- 画面：`TalkPage`
+- API：`POST /api/me/talk-rooms/{publicId}/messages`
+- メソッド：`MessageController::store`（L55）
+- 読む表：`profiles`・`users`・`talk_rooms`
+- 書く表：`messages`
+- 主な処理・レガシーの臭い：
+  - **参加者かを確かめない**（マッチしていない人も送れる）
+  - 男性の無料の会員は 403（`is_paid` だけを見る）
+  - 本文を確かめない（空は NOT NULL の違反で 500・長さの上限なし）
+  - ないルームは、`$room->id` を読んで 500
+  - ブロックした相手のルームにも送れる
+
+### Firebase のトークン
+
+- 画面：`firebase.ts`（`MessagesFsPage`・`TalkFsPage` が使う）
+- API：`POST /api/me/firebase-token`
+- メソッド：`FirebaseTokenController::store`（L21）
+- 読む表：`users`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - 署名のない JWT（`alg: none`）を返す
+  - Emulator だけで通り、本物の Firebase では通らない
+  - メールアドレスを確認していない会員も使える
+
+### ブロックする
+
+- 画面：`UserPage`・`TalkPage`
+- API：`POST /api/me/blocks`
+- メソッド：`BlockController::store`（L24）
+- 読む表：`users`
+- 書く表：`blocks`
+- 主な処理・レガシーの臭い：
+  - いない会員の UUID は 500
+  - 自分もブロックできる
+  - 2回目は、UNIQUE の違反で 500
+  - 退会したかは見ない
+  - `blocks` の行をそのまま返す（中の連番の `id` が出る）
+
+### 通報する
+
+- 画面：`components/ReportDialog`（`UserPage`・`TalkPage` から開く）
+- API：`POST /api/me/reports`
+- メソッド：`ReportController::store`（L29）
+- 読む表：`users`・`report_cases`
+- 書く表：`report_cases`・`reports`・`blocks`（「ブロックもする」のとき）
+- 主な処理・レガシーの臭い：
+  - M7（#202）
+  - 自分も通報できる
+  - 指したメッセージの持ち主・理由・文の長さを確かめない
+  - 案件を「あるかを見てから作る」ので、同時に 10件で案件が 9つできた
+  - もうブロックしている相手を「ブロックもする」で通報すると 500 で、通報は入ったまま
+
+### 運営からのお知らせの一覧
+
+- 画面：`NoticesPage`・`components/NoticeBanner`（未読の数を数えるために、画面が変わるたびに呼ぶ）
+- API：`GET /api/me/notices`
+- メソッド：`NoticeController::index`（L21）
+- 読む表：`notices`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - A7（#213）
+  - 全部を一度に返す
+  - 未読の数だけを返す API はない
+
+### お知らせを読んだことにする
+
+- 画面：`NoticesPage`（開いたときに、未読の数だけ呼ぶ）
+- API：`POST /api/me/notices/{publicId}/read`
+- メソッド：`NoticeController::read`（L47）
+- 読む表：―
+- 書く表：`notices.read_at`
+- 主な処理・レガシーの臭い：
+  - A7（#213）
+  - **持ち主を確かめない**（ID を知っていれば、他人のお知らせを読んだことにできる）
+
+### ブロックした相手の一覧
+
+- 画面：`BlocksPage`
+- API：`GET /api/me/blocks`
+- メソッド：`BlockController::index`（L43）
+- 読む表：`blocks`・`profiles`・`users`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - 新しい順に全件（ページなし）
+  - 1件ごとに、プロフィールと `public_id` を読む（1＋2N）
+  - 退会した相手も、そのまま出る
+
+### ブロックを解く
+
+- 画面：`BlocksPage`
+- API：`DELETE /api/me/blocks/{publicId}`
+- メソッド：`BlockController::destroy`（L70）
+- 読む表：`users`
+- 書く表：`blocks`
+- 主な処理・レガシーの臭い：
+  - 自分がした分だけを消す
+  - 消すものがなくても（いない相手・ブロックしていない相手）204
+
+### 退会
+
+- 画面：`SettingsPage`（#181 で、ホームから移した）
+- API：`DELETE /api/me`
+- メソッド：`UserController::destroy`（L121）
+- 読む表：`users`
+- 書く表：`users.email`・`users.deleted_at`
+- 主な処理・レガシーの臭い：
+  - パスワードを確かめ、メールアドレスを書き換えて空ける（元のメールアドレスは残らない）
+  - 元のメールアドレスが長いと、255文字を超えて 500
+  - 持っていた JWT は止めない（30日のあいだ使える）
+
+### パスワードを変える
+
+- 画面：`SettingsPage`
+- API：`PUT /api/me/password`
+- メソッド：`PasswordController::update`（L25）
+- 読む表：`users`
+- 書く表：`users.password`
+- 主な処理・レガシーの臭い：
+  - M1（#181）
+  - 今のパスワードを確かめてから変える
+  - 新しいパスワードを確かめない（1文字でも通る。ないと 500）
+  - 変えても、前のトークンは使えるまま
+  - 試す回数の上限がない
+
+### パスワードの再設定のメールを送る
+
+- 画面：`ForgotPasswordPage`
+- API：`POST /api/password-resets`
+- メソッド：`PasswordResetController::store`（L27）
+- 読む表：`users`・`password_reset_tokens`
+- 書く表：`password_reset_tokens`（メールも送る）
+- 主な処理・レガシーの臭い：
+  - M2（#196）
+  - ログインしていない人が呼ぶ
+  - 再設定用の文字を、平文のまま保存する
+  - 404 で、そのメールアドレスが登録されているかが分かる
+  - 何回でも送れる
+
+### 新しいパスワードを決める
+
+- 画面：`ResetPasswordPage`
+- API：`PUT /api/password-resets/{token}`
+- メソッド：`PasswordResetController::update`（L47）
+- 読む表：`password_reset_tokens`・`users`
+- 書く表：`users.password`
+- 主な処理・レガシーの臭い：
+  - M2（#196）
+  - 期限を見ない
+  - 使ったあとも消さないので、同じリンクで何度でも変えられる
+  - 新しいパスワードを確かめない
+  - 変えても、前のトークンは使えるまま
+
+### プランの一覧
+
+- 画面：`PlansPage`・`PurchasePage`
+- API：`GET /api/plans`
+- メソッド：`PlanController::index`（L21）
+- 読む表：`profiles`・`plans`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - 男性だけ（女性は 403）
+  - 性別は、プロフィールの今の値で決める（編集で書き換えられる）
+  - `plans` の行をそのまま返す
+
+### 購入する
+
+- 画面：`PurchasePage`
+- API：`POST /api/me/purchases`
+- メソッド：`PurchaseController::store`（L24）
+- 読む表：`profiles`・`plans`・`users`
+- 書く表：`purchases`・`users.is_paid`・`users.paid_until`
+- 主な処理・レガシーの臭い：
+  - **お金**
+  - 決済はせず、押したらすぐ有料
+  - 男性だけ
+  - ないプランは 500
+  - トランザクションがない（購入の記録と有料の状態がずれうる）
+  - 記録はプランを指すだけで、買ったときの値段を残さない
+  - 期限が過ぎていても、古い期限から足す
+  - `addMonths()` で、月末があふれる
+
+### 購入の記録
+
+- 画面：`PlansPage`
+- API：`GET /api/me/purchases`
+- メソッド：`PurchaseController::index`（L55）
+- 読む表：`profiles`・`purchases`・`plans`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - 男性だけ
+  - 全件（ページなし）
+  - 1件ごとにプランを読む（1＋N）
+  - 値段と期間は「今の」プランのもの（管理画面で値段を変えると、前の記録の値段も変わる）
+
+### 保存した検索条件の一覧
+
+- 画面：`SearchConditionsPage`
+- API：`GET /api/me/search-conditions`
+- メソッド：`SearchConditionController::index`（L27）
+- 読む表：`search_conditions`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - 04b
+  - 自分の分を、保存した順に返す
+  - `user_id` にインデックスがなく、表を全部読む
+  - 行をそのまま返す（中の `id`・`user_id` も出る）
+  - 「使えるか」は返さず、画面が有料かどうかをもう一度判断する
+
+### 検索条件を保存する
+
+- 画面：`SearchConditionsPage`
+- API：`POST /api/me/search-conditions`
+- メソッド：`SearchConditionController::store`（L43）
+- 読む表：`search_conditions`・（有料の条件があれば）`profiles`・`users`
+- 書く表：`search_conditions`
+- 主な処理・レガシーの臭い：
+  - 04b
+  - 1人5件まで
+  - **数えてから入れるだけ**（ロックもトランザクションもない。同時に10本送ると 11件になった）
+  - 条件も名前も確かめない（年齢 17・配列・文字だけも入る。名前なしは 500）
+  - 有料かどうかの確かめは、検索からコピーした（`is_paid` だけ。期限切れの会員が有料の条件を保存できる）
+    - #150 で、有料の条件は身長から4つに変わった
+
+### 保存した検索条件を直す
+
+- 画面：`SearchConditionsPage`
+- API：`PUT /api/me/search-conditions/{publicId}`
+- メソッド：`SearchConditionController::update`（L81）
+- 読む表：`search_conditions`
+- 書く表：`search_conditions`
+- 主な処理・レガシーの臭い：
+  - 04b
+  - **安全の穴**（#156）：持ち主を確かめない（他人の条件を直せる）
+  - 送られた項目を全部入れるので、`user_id` を送ると、他人の条件を自分のものにできる
+  - 有料かどうかの確かめがない（無料の男性が身長を足せる）
+  - ない ID は 500
+  - #162 から、画面は名前だけ・条件だけの2通りで呼ぶ
+
+### 保存した検索条件を消す
+
+- 画面：`SearchConditionsPage`
+- API：`DELETE /api/me/search-conditions/{publicId}`
+- メソッド：`SearchConditionController::destroy`（L99）
+- 読む表：―
+- 書く表：`search_conditions`
+- 主な処理・レガシーの臭い：
+  - 04b
+  - **安全の穴**（#156）：持ち主を確かめない（他人の条件を消せる）
+  - ない ID でも 204
 
 ## 管理画面（`backend/admin`・25本）
 
 全体：会員の側と同じく、ルートにミドルウェアはなく、各コントローラーの中で管理者の JWT を読む。表は `DB::table()` で直接読む（Model を使わない・会員の側のコードを読み込まない）。画面は `frontend/admin/src/`。行の番号は `backend/admin/app/Http/Controllers/` のファイルの行。
 
-| 機能 | 画面（frontend/admin） | API（メソッドとパス） | コントローラーのメソッド | 読む表 | 書く表 | 主な処理・レガシーの臭い |
-| --- | --- | --- | --- | --- | --- | --- |
-| 動作の確かめ | ― | `GET /api/health` | `routes/api.php` のクロージャ | `migrations` | ― | アプリの名前（`admin`）・DB の名前・マイグレーションの数を返す |
-| ログイン | `LoginPage` | `POST /api/auth/login` | `AuthController::login`（L21） | `admins` | `admins.last_login_at` | 8時間の JWT に役割を入れる（役割を変えても期限まで前の役割のまま）。止める仕組みはない。何回でも試せる |
-| 自分 | 呼んでいる画面は見つからない | `GET /api/me` | `AuthController::me`（L40） | `admins` | ― | JWT を読む処理のもと（ほかの API にコピーされた）。壊れた JWT・会員の JWT は 500 |
-| ダッシュボード | `domains/dashboard/DashboardPage` | `GET /api/dashboard` | `DashboardController::index`（L20） | `users`・`user_matches`・`messages`・`purchases`・`plans` | ― | 開くたびに全部を数える。日ごとの数は 30日 × 3種類を1本ずつ（数のカード6本・日ごと90本・月ごと1本で、97本）。`whereDate` で索引が使えない。日付は UTC。有料会員は `is_paid` だけで数える（期限が過ぎた人も入る）。売上は今のプランの値段で足す。#224 で、今日やること・前の期間との比べを足した（97本 → 108本） |
-| 会員の一覧 | `domains/members/MembersPage`・`MemberSearch`（#224。上の帯の検索窓。打つのをやめるたびに呼ぶ） | `GET /api/members` | `MemberController::index`（L20） | `users`・`profiles`・`purchases` | ― | メールアドレスかニックネームの部分一致（前にも `%` が付き、索引が使えない）。50人ずつ（OFFSET）・毎回の件数・1人ごとに3本（2＋3N。#218 で、性別と年齢のために1本増えた）。#218 で、絞り込み（性別・年齢・都道府県・登録日・最終ログイン・未確認・強制退会・ID）と並びを足した：プロフィールの条件ごとに `profiles` の副問い合わせ・列を計算してから比べる・値を確かめない（測った結果と改善版の案は `docs/api/12-admin.md` の「#218」）。**`users` の行をそのまま返す（パスワードのハッシュ・確認用の文字も出る）**。#224 で、有料の区分（`plan`）で絞れるようにし、行に区分とプランを足した（1人ごとに5本になり、50人で 206本）。区分の決め方を、4か所にコピーした |
-| 会員の詳細 | `domains/members/MemberDetailPage` | `GET /api/members/{publicId}` | `MemberController::show`（L117） | `users`・`purchases`・`plans`・`profiles`・`likes`・`user_matches`・`blocks` | `admin_audit_logs` | 見たことを監査ログに書く（`member.view`）。購入の値段は今のプランのもの（1件ごとに1本） |
-| 停止する | `domains/members/MemberDetailPage` | `POST /api/members/{publicId}/suspension` | `SuspensionController::store`（L20） | `admins`・`users` | `users.suspended_at`・`suspended_reason`・`admin_audit_logs` | owner だけ。理由を確かめない。トランザクションがない（停止と監査ログがずれうる）。断るのは会員の側のログインだけ（持っている JWT は使える） |
-| 停止を解く | `domains/members/MemberDetailPage` | `DELETE /api/members/{publicId}/suspension` | `SuspensionController::destroy`（L57） | ― | `users.suspended_at`・`suspended_reason` | **役割の確かめと監査ログをコピーし忘れている**（止めるほうのコードをコピーして作った）（見るだけの人でも解け、記録も残らない）。いない会員でも 204 |
-| メッセージの一覧 | `domains/messages/MessagesPage` | `GET /api/messages` | `MessageController::index`（L19） | `messages`・`users`・`profiles`・`talk_rooms`・`talk_room_members` | ― | 10万件を並べ替えて OFFSET で50件・毎回の件数・1件ごとに6本（2＋6N）。本文の部分一致。**本文を見られるのに、監査ログを書き忘れている**。中の連番の `id` を返す |
-| トークルームのやり取りを読む | `domains/messages/TalkRoomPage`（メッセージの一覧の「やり取りを見る」から） | `GET /api/talk-rooms/{publicId}` | `TalkRoomController::show`（L22） | `talk_rooms`・`talk_room_members`・`users`・`profiles`・`messages` | ― | A2（#221）。新しい方から 100件ずつ（OFFSET）・毎回の件数・1件ごとに送った人を読む（8＋100 本）。`messages` にインデックスがなく、ルームを読むたびに 10万件を全部読む。読んだことを、監査ログに残さない |
-| 購入の一覧 | `domains/sales/SalesPage` | `GET /api/purchases` | `SalesController::purchases`（L19） | `purchases`・`plans`・`users`・`profiles` | ― | 50件ずつ・1件ごとに3本（2＋3N）。値段は今のプランのもの |
-| 月ごとの売上 | `domains/sales/SalesPage` | `GET /api/sales/monthly` | `SalesController::monthly`（L47） | `purchases`・`plans` | ― | 今のプランの値段で足す（値段を変えると、過去の月の売上も変わる）。全期間 |
-| プランの一覧 | `domains/sales/SalesPage` | `GET /api/plans` | `PlanController::index`（L19） | `plans` | ― | `plans` の行をそのまま返す |
-| 値段を変える | `domains/sales/SalesPage` | `PUT /api/plans/{id}` | `PlanController::update`（L31） | `admins`・`plans` | `plans.price`・`admin_audit_logs` | **お金**。owner だけ。値段を確かめない（0 や負の数も入る）。ないプランでも監査ログを書く。中の連番の id を URL に使う（ほかは `public_id`）。トランザクションがない |
-| 監査ログの一覧 | `domains/audit-logs/AuditLogsPage` | `GET /api/audit-logs` | `AuditLogController::index`（L19） | `admin_audit_logs`・`admins` | ― | **API の設計（`docs/api/12-admin.md`）では owner だけだが、役割の確かめをコピーし忘れている**（見るだけの人も見られる。要件 `docs/requirements/admin.md` には書いていない）。50件ずつ・1件ごとに管理者の名前を読む（2＋N）。#221 で、管理者の名前・操作・対象・期間の絞り込みを足した（どの列にもインデックスがない。期間は UTC で切り、「まで」の日が入らない） |
-| 通報の案件の一覧 | `domains/reports/ReportCasesPage`・`App`（#224。サイドバーの件数のために、画面を移るたびに呼ぶ） | `GET /api/report-cases` | `ReportCaseController::index`（L25） | `report_cases`・`reports`・`users`・`profiles` | ― | A7（#203）。2＋4N 本（20件で 82本）。「通報した人数」に、件数と同じ数を入れている。並びは、案件を作った新しい順 |
-| 通報の案件の中身 | `domains/reports/ReportCaseDetailPage` | `GET /api/report-cases/{publicId}` | `ReportCaseController::show`（L71） | `report_cases`・`reports`・`users`・`profiles`・`messages`・`admins` | ― | A7（#203）。通報を全部返す（通報 50件で 105本）。指したメッセージの持ち主を見ずに、中身を出す。読んだことは、監査ログに残らない |
-| 通報の案件の状態を変える | `domains/reports/ReportCaseDetailPage` | `PUT /api/report-cases/{publicId}` | `ReportCaseController::update`（L125） | `admins`・`report_cases` | `report_cases`・`admin_audit_logs` | A7（#203）。`owner` だけ。送られた値を確かめない（何をしたかなしで済みにできる・済みを「まだ」に戻せる・決まっていない状態が入る） |
-| 会員にお知らせを送る | `domains/members/MemberDetailPage`・`domains/reports/ReportCaseDetailPage`（「注意した」で済みにするとき） | `POST /api/members/{publicId}/notices` | `NoticeController::store`（L24） | `admins`・`users`・`report_cases` | `notices`・`admin_audit_logs` | A7（#213）。`owner` だけ。種類・題・本文を確かめない（題なしは 500）。案件を済みにする API とは別に呼ぶので、片方だけ成功することがある |
-| 会員を強制退会にする | `domains/members/MemberDetailPage` | `POST /api/members/{publicId}/ban` | `NoticeController::ban`（L72） | `admins`・`users` | `users`（`banned_at`・`banned_reason`・`deleted_at`）・`admin_audit_logs` | A7（#213）。`owner` だけ。前に配ったトークンは止めない。もう強制退会の会員にも、もう一度できる（上書き）。戻す操作はない |
-| 会員の対応のメモを足す | `domains/members/MemberDetailPage` | `POST /api/members/{publicId}/notes` | `MemberNoteController::store`（L21） | `users` | `member_notes` | A1（#216）。**役割を確かめない**（`viewer` も、API を直接呼べば書ける）。本文を確かめない（なしは 500・10万文字も入る）。監査ログに残さない |
-| 会員のやり取りの一覧 | `domains/members/MemberActivityTabs`（`RoomsTab`） | `GET /api/members/{publicId}/talk-rooms` | `MemberActivityController::talkRooms`（L22） | `users`・`talk_room_members`・`talk_rooms`・`profiles`・`messages` | ― | A1（#227）。1ルームごとに7本（100ルームで 702本・1.08秒）。`talk_room_members` を会員から探すインデックスがない。読んだことを、監査ログに残さない |
-| 会員の違反 | `domains/members/MemberActivityTabs`（`ViolationsTab`） | `GET /api/members/{publicId}/violations` | `MemberActivityController::violations`（L66） | `users`・`report_cases`・`reports`・`profiles` | ― | A1（#227）。通報された案件と、その会員が通報した記録。全部を一度に返す。注意・停止・強制退会は、会員の詳細の API が返したものを、画面で合わせる |
-| 会員のブロック | `domains/members/MemberActivityTabs`（`BlocksTab`） | `GET /api/members/{publicId}/blocks` | `MemberActivityController::blocks`（L112） | `users`・`blocks`・`profiles`・`user_matches` | ― | A7（#227）。1行ごとに4本（55行で 168本）。ブロックされた相手は、`blocked_id` から探すインデックスがなく、3万件を全部読む |
-| ブロックの多い会員 | `domains/blocks/BlockRankingPage` | `GET /api/block-ranking` | `MemberActivityController::blockRanking`（L139） | `blocks`・`users`・`profiles`・`reports`・`report_cases` | ― | A7（#227）。開くたびに 3万件を数える。1人ごとに4本（50人で 201本） |
+機能ごとの中身は、表の下の見出しに書く。
+
+| 機能 | API（メソッドとパス） |
+| --- | --- |
+| 動作の確かめ | `GET /api/health` |
+| ログイン | `POST /api/auth/login` |
+| 自分 | `GET /api/me` |
+| ダッシュボード | `GET /api/dashboard` |
+| 会員の一覧 | `GET /api/members` |
+| 会員の詳細 | `GET /api/members/{publicId}` |
+| 停止する | `POST /api/members/{publicId}/suspension` |
+| 停止を解く | `DELETE /api/members/{publicId}/suspension` |
+| メッセージの一覧 | `GET /api/messages` |
+| トークルームのやり取りを読む | `GET /api/talk-rooms/{publicId}` |
+| 購入の一覧 | `GET /api/purchases` |
+| 月ごとの売上 | `GET /api/sales/monthly` |
+| プランの一覧 | `GET /api/plans` |
+| 値段を変える | `PUT /api/plans/{id}` |
+| 監査ログの一覧 | `GET /api/audit-logs` |
+| 通報の案件の一覧 | `GET /api/report-cases` |
+| 通報の案件の中身 | `GET /api/report-cases/{publicId}` |
+| 通報の案件の状態を変える | `PUT /api/report-cases/{publicId}` |
+| 会員にお知らせを送る | `POST /api/members/{publicId}/notices` |
+| 会員を強制退会にする | `POST /api/members/{publicId}/ban` |
+| 会員の対応のメモを足す | `POST /api/members/{publicId}/notes` |
+| 会員のやり取りの一覧 | `GET /api/members/{publicId}/talk-rooms` |
+| 会員の違反 | `GET /api/members/{publicId}/violations` |
+| 会員のブロック | `GET /api/members/{publicId}/blocks` |
+| ブロックの多い会員 | `GET /api/block-ranking` |
+
+### 動作の確かめ（管理画面）
+
+- 画面：―
+- API：`GET /api/health`
+- メソッド：`routes/api.php` のクロージャ
+- 読む表：`migrations`
+- 書く表：―
+- 主な処理：アプリの名前（`admin`）・DB の名前・マイグレーションの数を返す
+
+### ログイン（管理画面）
+
+- 画面：`LoginPage`
+- API：`POST /api/auth/login`
+- メソッド：`AuthController::login`（L21）
+- 読む表：`admins`
+- 書く表：`admins.last_login_at`
+- 主な処理・レガシーの臭い：
+  - 8時間の JWT に役割を入れる（役割を変えても、期限まで前の役割のまま）
+  - 止める仕組みはない
+  - 何回でも試せる
+
+### 自分
+
+- 画面：呼んでいる画面は見つからない
+- API：`GET /api/me`
+- メソッド：`AuthController::me`（L40）
+- 読む表：`admins`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - JWT を読む処理のもと（ほかの API にコピーされた）
+  - 壊れた JWT・会員の JWT は 500
+
+### ダッシュボード
+
+- 画面：`domains/dashboard/DashboardPage`
+- API：`GET /api/dashboard`
+- メソッド：`DashboardController::index`（L20）
+- 読む表：`users`・`user_matches`・`messages`・`purchases`・`plans`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - 開くたびに、全部を数える
+  - 日ごとの数は、30日 × 3種類を1本ずつ数える（数のカード6本・日ごと90本・月ごと1本で、97本）
+  - `whereDate` で、索引が使えない
+  - 日付は UTC
+  - 有料会員は、`is_paid` だけで数える（期限が過ぎた人も入る）
+  - 売上は、今のプランの値段で足す
+  - #224 で、今日やること・前の期間との比べを足した（97本 → 108本）
+
+### 会員の一覧
+
+- 画面：`domains/members/MembersPage`・`MemberSearch`（#224。上の帯の検索窓。打つのをやめるたびに呼ぶ）
+- API：`GET /api/members`
+- メソッド：`MemberController::index`（L20）
+- 読む表：`users`・`profiles`・`purchases`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - メールアドレスかニックネームの部分一致（前にも `%` が付き、索引が使えない）
+  - 50人ずつ（OFFSET）
+  - 毎回、全体の件数を数える
+  - 1人ごとに3本（2＋3N。#218 で、性別と年齢のために1本増えた）
+  - #218 で、絞り込み（性別・年齢・都道府県・登録日・最終ログイン・未確認・強制退会・ID）と並びを足した
+    - プロフィールの条件ごとに、`profiles` の副問い合わせ
+    - 列を計算してから比べる
+    - 値を確かめない
+    - 測った結果と改善版の案は、`docs/api/12-admin.md` の「#218」
+  - **`users` の行をそのまま返す（パスワードのハッシュ・確認用の文字も出る）**
+  - #224 で、有料の区分（`plan`）で絞れるようにし、行に区分とプランを足した（1人ごとに5本になり、50人で 206本）
+  - 区分の決め方を、4か所にコピーした
+
+### 会員の詳細
+
+- 画面：`domains/members/MemberDetailPage`
+- API：`GET /api/members/{publicId}`
+- メソッド：`MemberController::show`（L117）
+- 読む表：`users`・`purchases`・`plans`・`profiles`・`likes`・`user_matches`・`blocks`
+- 書く表：`admin_audit_logs`
+- 主な処理・レガシーの臭い：
+  - 見たことを、監査ログに書く（`member.view`）
+  - 購入の値段は、今のプランのもの（1件ごとに1本）
+
+### 停止する
+
+- 画面：`domains/members/MemberDetailPage`
+- API：`POST /api/members/{publicId}/suspension`
+- メソッド：`SuspensionController::store`（L20）
+- 読む表：`admins`・`users`
+- 書く表：`users.suspended_at`・`suspended_reason`・`admin_audit_logs`
+- 主な処理・レガシーの臭い：
+  - owner だけ
+  - 理由を確かめない
+  - トランザクションがない（停止と監査ログがずれうる）
+  - 断るのは、会員の側のログインだけ（持っている JWT は使える）
+
+### 停止を解く
+
+- 画面：`domains/members/MemberDetailPage`
+- API：`DELETE /api/members/{publicId}/suspension`
+- メソッド：`SuspensionController::destroy`（L57）
+- 読む表：―
+- 書く表：`users.suspended_at`・`suspended_reason`
+- 主な処理・レガシーの臭い：
+  - **役割の確かめと監査ログをコピーし忘れている**
+    - 止めるほうのコードをコピーして作った
+    - 見るだけの人でも解け、記録も残らない
+  - いない会員でも 204
+
+### メッセージの一覧
+
+- 画面：`domains/messages/MessagesPage`
+- API：`GET /api/messages`
+- メソッド：`MessageController::index`（L19）
+- 読む表：`messages`・`users`・`profiles`・`talk_rooms`・`talk_room_members`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - 10万件を並べ替えて、OFFSET で50件
+  - 毎回、全体の件数を数える
+  - 1件ごとに6本（2＋6N）
+  - 本文の部分一致
+  - **本文を見られるのに、監査ログを書き忘れている**
+  - 中の連番の `id` を返す
+
+### トークルームのやり取りを読む
+
+- 画面：`domains/messages/TalkRoomPage`（メッセージの一覧の「やり取りを見る」から）
+- API：`GET /api/talk-rooms/{publicId}`
+- メソッド：`TalkRoomController::show`（L22）
+- 読む表：`talk_rooms`・`talk_room_members`・`users`・`profiles`・`messages`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - A2（#221）
+  - 新しい方から 100件ずつ（OFFSET）
+  - 毎回、全体の件数を数える
+  - 1件ごとに、送った人を読む（8＋100 本）
+  - `messages` にインデックスがなく、ルームを読むたびに 10万件を全部読む
+  - 読んだことを、監査ログに残さない
+
+### 購入の一覧
+
+- 画面：`domains/sales/SalesPage`
+- API：`GET /api/purchases`
+- メソッド：`SalesController::purchases`（L19）
+- 読む表：`purchases`・`plans`・`users`・`profiles`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - 50件ずつ
+  - 1件ごとに3本（2＋3N）
+  - 値段は、今のプランのもの
+
+### 月ごとの売上
+
+- 画面：`domains/sales/SalesPage`
+- API：`GET /api/sales/monthly`
+- メソッド：`SalesController::monthly`（L47）
+- 読む表：`purchases`・`plans`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - 今のプランの値段で足す（値段を変えると、過去の月の売上も変わる）
+  - 全期間
+
+### プランの一覧（管理画面）
+
+- 画面：`domains/sales/SalesPage`
+- API：`GET /api/plans`
+- メソッド：`PlanController::index`（L19）
+- 読む表：`plans`
+- 書く表：―
+- 主な処理・レガシーの臭い：`plans` の行をそのまま返す
+
+### 値段を変える
+
+- 画面：`domains/sales/SalesPage`
+- API：`PUT /api/plans/{id}`
+- メソッド：`PlanController::update`（L31）
+- 読む表：`admins`・`plans`
+- 書く表：`plans.price`・`admin_audit_logs`
+- 主な処理・レガシーの臭い：
+  - **お金**
+  - owner だけ
+  - 値段を確かめない（0 や負の数も入る）
+  - ないプランでも、監査ログを書く
+  - 中の連番の id を URL に使う（ほかは `public_id`）
+  - トランザクションがない
+
+### 監査ログの一覧
+
+- 画面：`domains/audit-logs/AuditLogsPage`
+- API：`GET /api/audit-logs`
+- メソッド：`AuditLogController::index`（L19）
+- 読む表：`admin_audit_logs`・`admins`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - **API の設計（`docs/api/12-admin.md`）では owner だけだが、役割の確かめをコピーし忘れている**
+    - 見るだけの人も見られる
+    - 要件 `docs/requirements/admin.md` には書いていない
+  - 50件ずつ
+  - 1件ごとに、管理者の名前を読む（2＋N）
+  - #221 で、管理者の名前・操作・対象・期間の絞り込みを足した
+    - どの列にもインデックスがない
+    - 期間は UTC で切り、「まで」の日が入らない
+
+### 通報の案件の一覧
+
+- 画面：`domains/reports/ReportCasesPage`・`App`（#224。サイドバーの件数のために、画面を移るたびに呼ぶ）
+- API：`GET /api/report-cases`
+- メソッド：`ReportCaseController::index`（L25）
+- 読む表：`report_cases`・`reports`・`users`・`profiles`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - A7（#203）
+  - 2＋4N 本（20件で 82本）
+  - 「通報した人数」に、件数と同じ数を入れている
+  - 並びは、案件を作った新しい順
+
+### 通報の案件の中身
+
+- 画面：`domains/reports/ReportCaseDetailPage`
+- API：`GET /api/report-cases/{publicId}`
+- メソッド：`ReportCaseController::show`（L71）
+- 読む表：`report_cases`・`reports`・`users`・`profiles`・`messages`・`admins`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - A7（#203）
+  - 通報を全部返す（通報 50件で 105本）
+  - 指したメッセージの持ち主を見ずに、中身を出す
+  - 読んだことは、監査ログに残らない
+
+### 通報の案件の状態を変える
+
+- 画面：`domains/reports/ReportCaseDetailPage`
+- API：`PUT /api/report-cases/{publicId}`
+- メソッド：`ReportCaseController::update`（L125）
+- 読む表：`admins`・`report_cases`
+- 書く表：`report_cases`・`admin_audit_logs`
+- 主な処理・レガシーの臭い：
+  - A7（#203）
+  - `owner` だけ
+  - 送られた値を確かめない
+    - 何をしたかなしで、済みにできる
+    - 済みを「まだ」に戻せる
+    - 決まっていない状態が入る
+
+### 会員にお知らせを送る
+
+- 画面：`domains/members/MemberDetailPage`・`domains/reports/ReportCaseDetailPage`（「注意した」で済みにするとき）
+- API：`POST /api/members/{publicId}/notices`
+- メソッド：`NoticeController::store`（L24）
+- 読む表：`admins`・`users`・`report_cases`
+- 書く表：`notices`・`admin_audit_logs`
+- 主な処理・レガシーの臭い：
+  - A7（#213）
+  - `owner` だけ
+  - 種類・題・本文を確かめない（題なしは 500）
+  - 案件を済みにする API とは別に呼ぶので、片方だけ成功することがある
+
+### 会員を強制退会にする
+
+- 画面：`domains/members/MemberDetailPage`
+- API：`POST /api/members/{publicId}/ban`
+- メソッド：`NoticeController::ban`（L72）
+- 読む表：`admins`・`users`
+- 書く表：`users`（`banned_at`・`banned_reason`・`deleted_at`）・`admin_audit_logs`
+- 主な処理・レガシーの臭い：
+  - A7（#213）
+  - `owner` だけ
+  - 前に配ったトークンは止めない
+  - もう強制退会の会員にも、もう一度できる（上書き）
+  - 戻す操作はない
+
+### 会員の対応のメモを足す
+
+- 画面：`domains/members/MemberDetailPage`
+- API：`POST /api/members/{publicId}/notes`
+- メソッド：`MemberNoteController::store`（L21）
+- 読む表：`users`
+- 書く表：`member_notes`
+- 主な処理・レガシーの臭い：
+  - A1（#216）
+  - **役割を確かめない**（`viewer` も、API を直接呼べば書ける）
+  - 本文を確かめない（なしは 500・10万文字も入る）
+  - 監査ログに残さない
+
+### 会員のやり取りの一覧
+
+- 画面：`domains/members/MemberActivityTabs`（`RoomsTab`）
+- API：`GET /api/members/{publicId}/talk-rooms`
+- メソッド：`MemberActivityController::talkRooms`（L22）
+- 読む表：`users`・`talk_room_members`・`talk_rooms`・`profiles`・`messages`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - A1（#227）
+  - 1ルームごとに7本（100ルームで 702本・1.08秒）
+  - `talk_room_members` を会員から探すインデックスがない
+  - 読んだことを、監査ログに残さない
+
+### 会員の違反
+
+- 画面：`domains/members/MemberActivityTabs`（`ViolationsTab`）
+- API：`GET /api/members/{publicId}/violations`
+- メソッド：`MemberActivityController::violations`（L66）
+- 読む表：`users`・`report_cases`・`reports`・`profiles`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - A1（#227）
+  - 通報された案件と、その会員が通報した記録を返す
+  - 全部を一度に返す
+  - 注意・停止・強制退会は、会員の詳細の API が返したものを、画面で合わせる
+
+### 会員のブロック
+
+- 画面：`domains/members/MemberActivityTabs`（`BlocksTab`）
+- API：`GET /api/members/{publicId}/blocks`
+- メソッド：`MemberActivityController::blocks`（L112）
+- 読む表：`users`・`blocks`・`profiles`・`user_matches`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - A7（#227）
+  - 1行ごとに4本（55行で 168本）
+  - ブロックされた相手は、`blocked_id` から探すインデックスがなく、3万件を全部読む
+
+### ブロックの多い会員
+
+- 画面：`domains/blocks/BlockRankingPage`
+- API：`GET /api/block-ranking`
+- メソッド：`MemberActivityController::blockRanking`（L139）
+- 読む表：`blocks`・`users`・`profiles`・`reports`・`report_cases`
+- 書く表：―
+- 主な処理・レガシーの臭い：
+  - A7（#227）
+  - 開くたびに、3万件を数える
+  - 1人ごとに4本（50人で 201本）
 
 ## SQL で確かめた結果（2026-11-16）
 
 `docker compose exec -T app php artisan tinker`（管理画面は `admin-app`）で、ルートを通して1本ずつ呼び、流れた SQL を数えた。会員は `search00001`（男性・無料。マッチ・ルームが多い）。プランと購入は有料の男性、メッセージを送るのは女性の会員で流した。
 
-- 地図の「読む表・書く表」と違ったのは2か所：いいね（マッチする）が `talk_rooms` を読む（上の表に足した）・購入で `users.is_paid` はもう `true` の会員だと書き換わらない（変わった列だけを書くため）
-- 実際に流して、問題をそのまま確かめられたもの：見るだけの管理者でも停止を解ける（204・監査ログなし）／見るだけの管理者でも監査ログを見られる（200）／男性の無料の会員はメッセージを送れない（403）
+- 地図の「読む表・書く表」と違ったのは、2か所
+  - いいね（マッチする）が `talk_rooms` を読む（上の地図に足した）
+  - 購入で、`users.is_paid` がもう `true` の会員だと書き換わらない（変わった列だけを書くため）
+- 実際に流して、問題をそのまま確かめられたもの：
+  - 見るだけの管理者でも、停止を解ける（204・監査ログなし）
+  - 見るだけの管理者でも、監査ログを見られる（200）
+  - 男性の無料の会員は、メッセージを送れない（403）
 
 | API | 状態 | SQL の本数 | 本数が増える理由 |
 | --- | --- | --- | --- |
@@ -107,5 +992,6 @@
 
 ほかの API は1〜9本。
 
-- 本数は、ログインの確かめ（JWT を読むだけで、SQL は流れない）を含む。購入の無料・有料のように、会員の条件で本数が変わる API がある（いいねは、無料の男性だと今日の数を数える1本が増える）
+- 本数は、ログインの確かめ（JWT を読むだけで、SQL は流れない）を含む
+- 購入の無料・有料のように、会員の条件で本数が変わる API がある（いいねは、無料の男性だと今日の数を数える1本が増える）
 - テストでは、開発用のデータの本数をそのまま期待値にするのではなく、N=1 と N=3 で本数を比べて「N で増えないか」を確かめる（テスト用の DB には開発用のデータを入れないため）

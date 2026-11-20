@@ -12,13 +12,26 @@ Pest のテストを、あとから読んだ人が「どの API の、どんな�
 
 | もの | 置き場 | 例 |
 | --- | --- | --- |
-| API テスト | `tests/Feature/<業務のまとまり>/<操作>Test.php`。まとまりは `app/` と同じ名前（`docs/backend.md` の2章）。1つのまとまりに名詞が2つ以上あるときは `<操作><名詞>Test.php`（例：`Profile/ShowAccountTest.php`。2026-11-20 に決めた。今ある `Profile/ShowTest.php`・`UpdateTest.php` の名前は、その API を移すときに見直す） | `tests/Feature/Profile/ShowTest.php`（相手のプロフィールを見る） |
+| API テスト | `tests/Feature/<業務のまとまり>/<操作>Test.php` | `tests/Feature/Profile/ShowTest.php`（相手のプロフィールを見る） |
 | どのまとまりにも入らないもの | `tests/Feature/` の直下 | `HealthTest.php`・`TestEnvironmentTest.php` |
 | DB を使わないロジック | `tests/Unit/`。`app/` と同じフォルダの形にする | `tests/Unit/Models/UserTest.php` |
 | ダミーデータ | `tests/DummyData/Dummy<名詞>.php` | `DummyUser::create()` |
-| テストで呼ぶ API の URL | `tests/Endpoints.php` の1つのクラスに、API ごとにメソッドを1つ。名前は「何の API か」で、業務のまとまりごとに見出しで区切る。URL の文字は、ここにだけ書く。`route()` で作らない（ルートの URL を変えてもテストが落ちず、画面が壊れても気づけないため。2026-11-19 に人が決めた） | `Endpoints::profile($target->publicId)` |
+| テストで呼ぶ API の URL | `tests/Endpoints.php` | `Endpoints::profile($target->publicId)` |
 
 - なぜ：業務の名前で分けると、URL やクラスを移しても、テストの置き場が変わらない
+
+### API テストの名前
+
+- まとまりは `app/` と同じ名前（`docs/backend.md` の2章）
+- 1つのまとまりに名詞が2つ以上あるときは `<操作><名詞>Test.php`（例：`Profile/ShowAccountTest.php`。2026-11-20 に決めた）
+- 今ある `Profile/ShowTest.php`・`UpdateTest.php` の名前は、その API を移すときに見直す
+
+### テストで呼ぶ API の URL
+
+- `tests/Endpoints.php` の1つのクラスに、API ごとにメソッドを1つ書く
+- 名前は「何の API か」で、業務のまとまりごとに見出しで区切る
+- URL の文字は、ここにだけ書く
+- `route()` で作らない。ルートの URL を変えてもテストが落ちず、画面が壊れても気づけないため（2026-11-19 に人が決めた）
 
 ## 2. ファイルの形
 
@@ -78,12 +91,17 @@ describe('ログインしている人が、相手のプロフィールを見る'
 
 | 確かめたいこと | 書き方 | 使わない書き方（理由） |
 | --- | --- | --- |
-| 状態コード | `assertOk()`・`assertNotFound()`・`assertUnauthorized()`・`assertForbidden()`・`assertUnprocessable()`・`assertInternalServerError()` | `assertServerError()`（500〜599 のどれでも通るので、弱くなる） |
+| 状態コード | 状態コードごとの関数（下に一覧） | `assertServerError()`（500〜599 のどれでも通るので、弱くなる） |
 | 返す項目 | `assertJsonPath('profile.nickname', 'さき')` | ― |
 | 返してはいけない項目 | `assertJsonMissingPath('email')` | ― |
-| エラーの文 | `assertExactJson(['message' => '会員が見つかりません'])`。文を文字で書く。状態コードだけでなく、文まで見る | `__('errors.user_not_found')` で読む（文を変えてもテストが一緒に変わり、画面の文が変わったことに気づけない）。状態コードだけを見る（URL を間違えたときの「ルートがない」404 と見分けられない） |
+| エラーの文 | `assertExactJson(['message' => '会員が見つかりません'])` | `__('errors.user_not_found')` で読む・状態コードだけを見る（理由は下） |
 | DB の変化 | `assertDatabaseHas('profiles', [...])`（表の名前で書く） | Model を読む（中の作りに頼る） |
 | ほかの会員の行が変わらない | 書き換えた人のほかに、もう1人作って、その行も `assertDatabaseHas()` で確かめる | 書き換えた人の行だけを見る（全員が変わっても気づけない） |
+
+- 状態コードの関数：`assertOk()`・`assertNotFound()`・`assertUnauthorized()`・`assertForbidden()`・`assertUnprocessable()`・`assertInternalServerError()`
+- エラーの文は、文を文字で書く。状態コードだけでなく、文まで見る
+  - `__('errors.user_not_found')` で読まない。文を変えてもテストが一緒に変わり、画面の文が変わったことに気づけないため
+  - 状態コードだけを見ない。URL を間違えたときの「ルートがない」404 と見分けられないため
 
 ## 6. 要件と違う所（分かっている不具合）
 

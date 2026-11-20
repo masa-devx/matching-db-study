@@ -12,19 +12,53 @@ paths:
 
 実行コマンドは AGENTS.md の「主要コマンド」と同じものを書く。
 
-| 種別 | ツール | 置き場所 | 実行 | 何を確かめるか |
-| --- | --- | --- | --- | --- |
-| 単体 | Pest・Vitest（画面） | `backend/client/tests/Unit/`・`backend/admin/tests/Unit/`（`app/` の構造を再現）・`frontend/client/src/**/*.test.tsx` | `docker compose run --rm app ./vendor/bin/pest tests/Unit`（画面は 03b で決める） | ロジックの境界値・異常系 |
-| 結合（API テスト） | Pest（テスト用の PostgreSQL に対して実行） | `backend/client/tests/Feature/`・`backend/admin/tests/Feature/` | `docker compose run --rm app ./vendor/bin/pest tests/Feature`（管理画面は `admin-app`） | DB や API をまたぐ制御・API の振る舞い |
-| アーキテクチャ | Pest の `arch()`（`pestphp/pest-plugin-arch`） | `backend/client/tests/Arch/`（正本）・`backend/admin/tests/Arch/`（コピー。決まりの部分が正本と同じかを `SameRulesAsClientTest.php` が比べる） | `docker compose run --rm app ./vendor/bin/pest tests/Arch`（管理画面は `admin-app`） | 層の依存の向きと名前（`architecture-backend.md` の8章） |
+| 種別 | ツール | 何を確かめるか |
+| --- | --- | --- |
+| 単体 | Pest・Vitest（画面） | ロジックの境界値・異常系 |
+| 結合（API テスト） | Pest（テスト用の PostgreSQL に対して実行） | DB や API をまたぐ制御・API の振る舞い |
+| アーキテクチャ | Pest の `arch()`（`pestphp/pest-plugin-arch`） | 層の依存の向きと名前（`architecture-backend.md` の8章） |
+| E2E | 03b（React を足す）で決める | 主要フロー・認可・状態遷移 |
 
-- 管理画面（`backend/admin`）も、Pest と、本物の PostgreSQL で動く（#105）。テスト用の DB は `matching_admin_test`（会員の側の `matching_test` とは別。2つを同時に流しても、ぶつからない）。管理画面はマイグレーションを持たないので、表は、会員の側のマイグレーション（`backend/client/database/migrations`）で作る（`backend/admin/tests/TestCase.php`。この仕組みは `tests/Feature/TestEnvironmentTest.php` で確かめる）。ダミーデータは `backend/admin/tests/DummyData/`：`DummyAdmin`（`create()`（役割を引数で）・`actingAs()`）・`DummyMember`（`create()`）。会員の側の `DummyUser` とは、別のもの（管理画面は Model を持たないので、表に直接入れる）
-| E2E | 03b（React を足す）で決める | 03b で決める | 03b で決める | 主要フロー・認可・状態遷移 |
+### 単体
 
-- 単体の置き場所は、実装のパスと対応づける（例: `app/Models/User.php` の `isPaidAt()` → `tests/Unit/Models/UserTest.php`）。Service は DB を使うので、単体ではなく API テスト（`Feature`）で、本物の PostgreSQL に対して確かめる
+- 置き場所：`backend/client/tests/Unit/`・`backend/admin/tests/Unit/`（`app/` の構造を再現）・`frontend/client/src/**/*.test.tsx`
+- 実行：`docker compose run --rm app ./vendor/bin/pest tests/Unit`（画面は 03b で決める）
+
+### 結合（API テスト）
+
+- 置き場所：`backend/client/tests/Feature/`・`backend/admin/tests/Feature/`
+- 実行：`docker compose run --rm app ./vendor/bin/pest tests/Feature`（管理画面は `admin-app`）
+
+### アーキテクチャ
+
+- 置き場所：`backend/client/tests/Arch/`（正本）・`backend/admin/tests/Arch/`（コピー）
+- コピーの決まりの部分が正本と同じかを、`SameRulesAsClientTest.php` が比べる
+- 実行：`docker compose run --rm app ./vendor/bin/pest tests/Arch`（管理画面は `admin-app`）
+
+### E2E
+
+- 置き場所・実行：03b で決める
+
+### 管理画面（`backend/admin`）のテスト
+
+- 管理画面も、Pest と、本物の PostgreSQL で動く（#105）
+- テスト用の DB は `matching_admin_test`。会員の側の `matching_test` とは別なので、2つを同時に流しても、ぶつからない
+- 管理画面はマイグレーションを持たないので、表は、会員の側のマイグレーション（`backend/client/database/migrations`）で作る（`backend/admin/tests/TestCase.php`）
+- この仕組みは `tests/Feature/TestEnvironmentTest.php` で確かめる
+- ダミーデータは `backend/admin/tests/DummyData/`：`DummyAdmin`（`create()`（役割を引数で）・`actingAs()`）・`DummyMember`（`create()`）
+- 会員の側の `DummyUser` とは、別のもの（管理画面は Model を持たないので、表に直接入れる）
+
+### 置き場の決まり
+
+- 単体の置き場所は、実装のパスと対応づける（例: `app/Models/User.php` の `isPaidAt()` → `tests/Unit/Models/UserTest.php`）
+- Service は DB を使うので、単体ではなく API テスト（`Feature`）で、本物の PostgreSQL に対して確かめる
 - 各テストの組（`Unit`・`Feature`・`Arch`）は、`phpunit.xml` の `<testsuites>` に並べる。並べていないフォルダのテストは流れない
-- API テストは、`tests/Feature/<業務のまとまり>/` に置く（例：`tests/Feature/Profile/ShowTest.php`）。まとまりは `app/` と同じ名前（`docs/backend.md` の2章）。どのまとまりにも入らないもの（`HealthTest.php`）は `tests/Feature/` の直下
-- テストのダミーデータ（会員・いいねなどの行と、ログインした状態を作るクラス）は `tests/DummyData/` に置く。ダミーデータのテストは書かない（シードと同じく、データを用意するだけのもの。2026-11-19 に人が決めた）。API テストに Model の名前空間を書かない（`architecture-backend.md` の10章）
+- API テストは、`tests/Feature/<業務のまとまり>/` に置く（例：`tests/Feature/Profile/ShowTest.php`）
+  - まとまりは `app/` と同じ名前（`docs/backend.md` の2章）
+  - どのまとまりにも入らないもの（`HealthTest.php`）は `tests/Feature/` の直下
+- テストのダミーデータ（会員・いいねなどの行と、ログインした状態を作るクラス）は `tests/DummyData/` に置く
+- ダミーデータのテストは書かない。シードと同じく、データを用意するだけのものだから（2026-11-19 に人が決めた）
+- API テストに Model の名前空間を書かない（`architecture-backend.md` の10章）
 - E2Eは実行前にシードデータの投入とアプリ起動が要る（後述）
 
 ## API テストの観点
@@ -62,7 +96,7 @@ API ごとに、下の表から当てはまる観点を選ぶ。「API テスト
 
 | メソッド | 作るもの | 作らないもの |
 | --- | --- | --- |
-| `DummyUser::create()` | 会員とプロフィール。既定は、メールアドレスを確認した・無料の・女性。引数で、性別・有料・退会・停止・強制退会・確認していない（`unverified: true`。確認の日時が空で、確認用の文字を持つ）・ニックネーム・生年月日・都道府県・身長を変える。`withProfile: false` ならプロフィールを作らない | 購入の行（`purchases`）・管理画面の監査ログ |
+| `DummyUser::create()` | 会員とプロフィール（既定と引数は下） | 購入の行（`purchases`）・管理画面の監査ログ |
 | `DummyMatching::match()` | お互いのいいね・マッチ・トークルームと参加者2人。トークルームの番号を返す | Firestore のルーム |
 | `DummyAuth::actingAs()` | その会員のトークンを `Authorization` に付ける。続けて `->getJson(...)` と書く | ― |
 | `DummyAuth::token()` | トークンの文字だけ（期限切れを確かめるときに使う） | ― |
@@ -70,6 +104,10 @@ API ごとに、下の表から当てはまる観点を選ぶ。「API テスト
 | `DummyAuth::tokenSignedWithOtherKey()` | 中身は本物と同じで、ほかの鍵で署名したトークン（署名を確かめているかを見るとき） | ― |
 | `DummyUser::MISSING_PUBLIC_ID` | だれも持っていない `public_id`（UUID の形は正しい）。いない会員の URL に使う | ― |
 
+- `DummyUser::create()` の既定は、メールアドレスを確認した・無料の・女性
+- `DummyUser::create()` の引数で変えられるもの：性別・有料・退会・停止・強制退会・確認していない・ニックネーム・生年月日・都道府県・身長
+  - 確認していない（`unverified: true`）会員は、確認の日時が空で、確認用の文字を持つ
+  - `withProfile: false` ならプロフィールを作らない
 - 引数と返す値は、`tests/DummyData/` の PHPDoc を正とする（この表には書かない）
 - 足りないもの（メッセージ・購入など）は、要るチケットで `tests/DummyData/` のクラスにメソッドを足すか、クラスを足す。この表にも1行足す
 - 引数が6つを超えて読みにくくなったら、作る役のクラス（ビルダー）に移すかを考える（2026-11-19 に人が決めた）

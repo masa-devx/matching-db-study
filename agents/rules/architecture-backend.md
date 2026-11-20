@@ -37,21 +37,56 @@ Controller ──→ Service ──→ Model
    └──→ Resource（出力の形。Service が返した Model から、返してよい項目を選ぶ）
 ```
 
-テストが確かめるのは「使ってはいけない」の列（8章）。「主に使うもの」は目安で、テストでは確かめない。
+テストが確かめるのは「使ってはいけない」の項目（8章）。「主に使うもの」は目安で、テストでは確かめない。
 
-| 置き場 | 受け持ち | 主に使うもの（目安） | 使ってはいけない |
-| --- | --- | --- | --- |
-| Controller | 受け取る → Service を呼ぶ → 返す | Request・Resource・Service | Model・DB（`DB::`・`Schema::`・`Illuminate\Database`）・JWT・`app()`・`resolve()`・`App::`・コンテナ |
-| Request | 入力の形だけを確かめる | Laravel の検証 | Model・DB・JWT・`app()`。DB を読む検証（`exists:`・`unique:`）も使わない（「いるか」は業務の確かめなので Service。8章のレビューで見る） |
-| Resource | 返してよい項目だけを並べる | 受け取った Model の値 | DB・JWT・`app()`・新しいクエリ（`Model::query()`・リレーションの `->count()`。N+1。8章のレビューで見る） |
-| Middleware | トークンを読む（ここだけ）・使えるか（退会・停止）と役割の確かめを Service に頼む | JWT・Service | Model・DB・`app()` |
-| Service | 業務のロジック・手順・トランザクション・監査ログ・ログインのときにトークンを作る | Model・Client・ほかの Service・業務の例外・Laravel の機能（`DB::transaction()`・`now()`・`config()`）・JWT（作るときだけ）・`App\Support` | Http（Request・Resource・`Illuminate\Http`。外の API の `Illuminate\Http\Client` の例外は使ってよい）・`request()`・`auth()`・`session()`・`response()`・`redirect()`・`abort()`・`abort_if()`・`abort_unless()`・`Auth::`・`Request::`・`Session::`・Symfony の HTTP の例外 |
-| Model | DB とのやり取り（クエリの組み立て・リレーション・型・その行の判定） | ほかの Model・Eloquent | Service・Client・Http・ログ（`App\Support\Logging`）・Service と同じ HTTP の関数とファサード・Observer とモデルのイベント（保存したときの裏の動きが、Service から追えなくなる） |
-| Client | 外のサービスを呼ぶ（Firestore・メール） | Laravel の `Http::`・`Mail::` | Http・Service・Model |
-| 業務の例外 | 業務の決まりに反したことを表す | `BusinessException` | Http・`abort()`・Symfony の HTTP の例外（状態コードは `bootstrap/app.php` で決める） |
-| `App\Support` | 基盤 | Laravel の機能 | Http・Service・Model・Client |
+- Controller
+  - 受け持ち：受け取る → Service を呼ぶ → 返す
+  - 主に使うもの（目安）：Request・Resource・Service
+  - 使ってはいけない：Model・DB（`DB::`・`Schema::`・`Illuminate\Database`）・JWT・`app()`・`resolve()`・`App::`・コンテナ
+- Request
+  - 受け持ち：入力の形だけを確かめる
+  - 主に使うもの（目安）：Laravel の検証
+  - 使ってはいけない：Model・DB・JWT・`app()`
+  - DB を読む検証（`exists:`・`unique:`）も使わない。「いるか」は業務の確かめなので Service で行う（8章のレビューで見る）
+- Resource
+  - 受け持ち：返してよい項目だけを並べる
+  - 主に使うもの（目安）：受け取った Model の値
+  - 使ってはいけない：DB・JWT・`app()`
+  - 使ってはいけない：新しいクエリ（`Model::query()`・リレーションの `->count()`）。N+1 になる（8章のレビューで見る）
+- Middleware
+  - 受け持ち：トークンを読む（ここだけ）
+  - 受け持ち：使えるか（退会・停止）と役割の確かめを Service に頼む
+  - 主に使うもの（目安）：JWT・Service
+  - 使ってはいけない：Model・DB・`app()`
+- Service
+  - 受け持ち：業務のロジック・手順・トランザクション・監査ログ・ログインのときにトークンを作る
+  - 主に使うもの（目安）：Model・Client・ほかの Service・業務の例外・`App\Support`
+  - 主に使うもの（目安）：Laravel の機能（`DB::transaction()`・`now()`・`config()`）
+  - 主に使うもの（目安）：JWT（作るときだけ）
+  - 使ってはいけない：Http（Request・Resource・`Illuminate\Http`）。外の API の `Illuminate\Http\Client` の例外は使ってよい
+  - 使ってはいけない：`request()`・`auth()`・`session()`・`response()`・`redirect()`
+  - 使ってはいけない：`abort()`・`abort_if()`・`abort_unless()`
+  - 使ってはいけない：`Auth::`・`Request::`・`Session::`・Symfony の HTTP の例外
+- Model
+  - 受け持ち：DB とのやり取り（クエリの組み立て・リレーション・型・その行の判定）
+  - 主に使うもの（目安）：ほかの Model・Eloquent
+  - 使ってはいけない：Service・Client・Http・ログ（`App\Support\Logging`）
+  - 使ってはいけない：Service と同じ HTTP の関数とファサード
+  - 使ってはいけない：Observer とモデルのイベント。保存したときの裏の動きが、Service から追えなくなるため
+- Client
+  - 受け持ち：外のサービスを呼ぶ（Firestore・メール）
+  - 主に使うもの（目安）：Laravel の `Http::`・`Mail::`
+  - 使ってはいけない：Http・Service・Model
+- 業務の例外
+  - 受け持ち：業務の決まりに反したことを表す
+  - 主に使うもの（目安）：`BusinessException`
+  - 使ってはいけない：Http・`abort()`・Symfony の HTTP の例外（状態コードは `bootstrap/app.php` で決める）
+- `App\Support`
+  - 受け持ち：基盤
+  - 主に使うもの（目安）：Laravel の機能
+  - 使ってはいけない：Http・Service・Model・Client
 
-- この表は `tests/Arch/LayersTest.php` で機械で確かめる（8章）。破るときは、先にこのファイルを直す
+- この一覧は `tests/Arch/LayersTest.php` で機械で確かめる（8章）。破るときは、先にこのファイルを直す
 - Service は HTTP を知らない。だから、同じ Service をコマンド・キュー・テストからも呼べる
 
 ## 3. ディレクトリと名前
@@ -80,11 +115,13 @@ Laravel の公式の名前の付け方（`php artisan make:〇〇` の例）に�
 
 | 種類 | 置き場 | 名前 | 例 |
 | --- | --- | --- | --- |
-| Controller・Request・Resource・Service・Client・例外 | 上の図のとおり | 種類の名前で終える（`〜Controller`・`〜Request`・`〜Resource`・`〜Service`・`〜Client`・`〜Exception`） | `AccountController`・`AuthService`・`UserNotFoundException` |
+| Controller・Request・Resource・Service・Client・例外 | 上の図のとおり | 種類の名前で終える（下に一覧） | `AccountController`・`AuthService`・`UserNotFoundException` |
 | Middleware | `Http/Middleware/` | 何をするかを、動詞から書く。`Middleware` は付けない | `AuthenticateUser`・`EnsureEmailIsVerified` |
 | Listener（出来事を受けて動く） | `Listeners/` | 何をするかを、動詞から書く。`Listener` は付けない | `DeleteAllSessions` |
 | Mail | `Mail/` | `Mail` で終える（今あるものに合わせる） | `VerifyMail`・`ResetPasswordMail` |
 | Model | `Models/` | 表の名前の単数 | `User`・`UserMatch` |
+
+- 種類の名前で終えるのは、`〜Controller`・`〜Request`・`〜Resource`・`〜Service`・`〜Client`・`〜Exception`
 
 - UseCase と Repository は作らない（D-025：Controller → Service → Model）。`〜UseCase`・`〜Repository` という名前のクラスも作らない
 - ほかの種類（Event・Job・Command・Policy・Rule・Enum など）は、初めて作るチケットで決め、この表に足す
@@ -347,10 +384,15 @@ $this->firestore->openRoom($room);                                     // コミ
 
 - 受け止めて、ログに書いて、投げ直すだけの `catch` は書かない。`Log::error()` は `dontReport` を通らないので、業務の例外までエラーのログに出る（記録したいなら `report($e)`。こちらは `dontReport` が効く）
 
-| 場面 | 書き方 |
-| --- | --- |
-| 予想できる DB のエラーを、業務の例外に変える（同時に2回いいねして、UNIQUE で止まった） | `catch (UniqueConstraintViolationException)` で受け、`AlreadyLikedException`（409）を投げる |
-| 外のサービスの失敗を記録して、続ける（DB に保存したあと、Firestore への書き込みが失敗した） | `catch (決まった例外 $e)` で受け、`report($e)` で記録して続ける。やり直しの仕組みは、外のサービスを移すチケットで決める |
+書いてよい場面と書き方は、次の2つ。
+
+- 予想できる DB のエラーを、業務の例外に変える
+  - 例：同時に2回いいねして、UNIQUE で止まった
+  - 書き方：`catch (UniqueConstraintViolationException)` で受け、`AlreadyLikedException`（409）を投げる
+- 外のサービスの失敗を記録して、続ける
+  - 例：DB に保存したあと、Firestore への書き込みが失敗した
+  - 書き方：`catch (決まった例外 $e)` で受け、`report($e)` で記録して続ける
+  - やり直しの仕組みは、外のサービスを移すチケットで決める
 
 ```php
 // ❌ どの失敗も同じ 500 にする（業務の例外の 404 も 500 になる・スタックトレースが消える・Service が HTTP を知る）
@@ -374,7 +416,7 @@ try {
 
 ## 8. アーキテクチャのテスト
 
-2章（「使ってはいけない」の列）と、3章の名前の一部（Controller のメソッドの名前・Service の `final` と名前・Mail の名前・Middleware と Listener に種類の名前を付けないこと・UseCase と Repository がないこと）と、`strict_types` を、Pest の `arch()` で確かめる。
+2章（「使ってはいけない」の項目）と、3章の名前の一部（Controller のメソッドの名前・Service の `final` と名前・Mail の名前・Middleware と Listener に種類の名前を付けないこと・UseCase と Repository がないこと）と、`strict_types` を、Pest の `arch()` で確かめる。
 
 - 置き場：`tests/Arch/LayersTest.php`（中身はファイルを読む。ここにはコピーしない）。`phpunit.xml` のテストの組 `Arch` で、CI でほかのテストと一緒に流れる
 - 正本は会員の側（`backend/client/tests/Arch/`）。管理画面（`backend/admin/tests/Arch/`）には、同じファイルをコピーする。違うのは、ファイルの上の「このアプリだけのもの」（古いコントローラーの一覧 `LEGACY_CONTROLLERS`）だけ。印（`// ==== ここから下は、会員の側…`）より下は、2つのファイルで同じにする。管理画面の `tests/Arch/SameRulesAsClientTest.php` が、印より下を比べ、違えば落ちる。印より上に決まり（`arch(`・`test(` など）が書かれていないことも確かめる。管理画面の CI は `backend/client/tests/Arch/**` が変わったときにも動く

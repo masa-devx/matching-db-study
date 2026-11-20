@@ -46,12 +46,14 @@ Web フォントは使わない（読み込みで LCP と CLS が変わり、04 
 
 | 名前 | 値 |
 | --- | --- |
-| 書体 | `"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif` |
+| 書体 | 表の下に書く |
 | 数字・時刻 | `font-variant-numeric: tabular-nums`（桁がそろう） |
 | 大きさ | 12（バッジ・日時）・14（補足）・16（本文・入力）・20（見出し）・24（画面の見出し）・32（マッチの演出） |
 | 太さ | 400（本文）・600（名前・ボタン）・800（画面の見出し・ロゴ） |
 | 行の高さ | 1.6（本文）・1.3（見出し） |
 | 字間 | 見出しだけ `0.02em` |
+
+書体：`"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif`
 
 ## 余白・角丸・影
 

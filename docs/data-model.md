@@ -181,30 +181,210 @@ erDiagram
 
 ### 表の一覧
 
-| 表 | 一歩 | 中身 | 制約 |
-| --- | --- | --- | --- |
-| `users` | 00（ひな形）・01・01b・#46・04・06・07 | アカウント（ログインのための情報）・最終ログイン・退会した日時（06。論理削除）・有料会員か（07） | 主キー `id`・`email` の UNIQUE（`users_email_unique`。大文字と小文字は区別する）・`public_id` の UNIQUE（`NOT NULL`・既定は `uuidv7()`。D-022）。`last_login_at` は NULL 可でインデックスなし（desc で並べると、ログインしていない会員が先頭に出る。検索は表を全部読む）。`deleted_at` は NULL 可でインデックスなし。退会してもメールアドレスの UNIQUE はそのまま（退会の API が書き換えて空ける）。`is_paid` は既定 false・`paid_until` は NULL 可（07。どちらもインデックスなし）。`suspended_at`・`suspended_reason` は NULL 可（12。管理画面が書く） |
-| `profiles` | 01・#153 | その会員についての情報 | 主キー `id` だけ。`user_id` に外部キーも UNIQUE もないので、1人に2つのプロフィール・ない会員を指すプロフィールができる。#153 で、検索に使う6項目（`body_type`・`job`・`income`・`smoking`・`drinking`・`marital_status`）を、文字の列で足した（NULL は未回答。選択肢にない文字も入る。インデックスなし） |
-| `likes` | 02 | いいね（だれから・だれへ・いつ）。会員と会員をつなぐ中間テーブル | 主キー `id`・`(from_user_id, to_user_id)` の UNIQUE（`likes_from_user_id_to_user_id_unique`）だけ。外部キーがないので、ない会員を指せ、会員を消しても残る。自分から自分も入る。`to_user_id` から探すと表を全部読む |
-| `user_matches` | 03 | マッチ（お互いにいいねした2人の組と、いつ）。Model は `UserMatch`（`match` は PHP の予約語） | 主キー `id` だけ。同じ組が2行入り、(A, B) と (B, A) も両方入る。自分とのマッチ・ない会員を指すマッチも入り、会員を消しても残る。自分のマッチを探す `user1_id = ? or user2_id = ?` は表を全部読む |
-| `talk_rooms` | 05 | トークルーム（やり取りの場所）。マッチしたときに、いいねの API の中で作る（トランザクションなし） | 主キー `id`・`public_id` の UNIQUE（既定は `uuidv7()`）・`match_id` の UNIQUE と外部キー（`ON DELETE CASCADE`）。03 で2行になった組には、ルームも2つできる |
-| `talk_room_members` | 05 | トークルームの参加者（マッチした2人）と、最後に読んだ時刻 | 主キー `id`・`(talk_room_id, user_id)` の UNIQUE・2つの列の外部キー（`ON DELETE CASCADE`）。UNIQUE は `talk_room_id` が先なので、自分のルーム（`user_id = ?`）を探すと表を全部読む |
-| `messages` | 05 | メッセージ（ルーム・送った人・本文・いつ）。受け取った人は持たない | 主キー `id`・`talk_room_id` と `sender_id` の外部キー（`ON DELETE CASCADE`）だけ。外部キーの列にインデックスがないので、ルームのメッセージを探すたびに表を全部読み、会員を消すと CASCADE のために表を全部読む。本文の長さの決まりなし |
-| `blocks` | 06 | ブロック（だれが・だれを・いつ）。マッチ・メッセージは消さずに、読むときに除く | 主キー `id`・`(blocker_id, blocked_id)` の UNIQUE・2つの列の外部キー（`ON DELETE CASCADE`）。自分で自分をブロックする行も入る。UNIQUE は `blocker_id` が先なので、私をブロックした人（`blocked_id = ?`）を探すと表を全部読む |
-| `plans` | 07 | 有料のプラン（期間と今の値段）。1か月 3,980円・3か月 9,800円・6か月 16,800円の3行をマイグレーションで入れる | 主キー `id` だけ。同じ期間が2行入る・値段が0や負の数でも入る |
-| `purchases` | 07 | 購入の記録（だれが・どのプランを・いつ） | 主キー `id`・`user_id`（`ON DELETE CASCADE`）と `plan_id` の外部キーだけ。値段と期間を持たないので、プランの値段を変えると前の記録の値段も変わる。`user_id` から探すと表を全部読む |
-| `search_conditions` | 04b | 保存した検索条件（だれの・名前・条件の中身） | 主キー `id`・`public_id` の UNIQUE だけ。`user_id` に外部キーがないので、会員を消しても残り、ない会員を指せる。インデックスもないので、`user_id` から探すと表を全部読む（6万件で 1549 ページ。表を作り直した直後の数字で、シーダーを流し直すと膨らむ）。`conditions`（`jsonb`）の中身・名前の長さ・1人5件の上限は、DB では確かめない |
-| `skips` | M3（#184） | スキップ（だれが・だれを・いつ） | 主キー `id` だけ。外部キーがないので、会員を消しても残る。`(skipper_id, skipped_id)` の UNIQUE がないので、同じ相手を2回スキップすると2行できる。インデックスがないので、`skipper_id` から探すと表を全部読む（3万件で 251 ページ）。自分で自分もスキップできる |
-| `report_cases` | M7（#201） | 通報の案件（通報された会員ごとに、通報をまとめる。対応の状態・何をしたか・メモ・対応した管理者） | 主キー `id` だけ。外部キーなし。「まだ済みでない案件は、会員に1つ」を止めるものがないので、同時に 10件の通報が来ると、案件が 9つできた。状態（`status`）・何をしたか（`action`）は文字の列で、CHECK がない。`public_id` に UNIQUE がない。インデックスがないので、会員の案件を探すと表を全部読む |
-| `reports` | M7（#201） | 通報（だれが・だれを・どのメッセージを・理由・自由な文・入っている案件） | 主キー `id` だけ。外部キーなし（いない会員・ないメッセージ・ない案件を指す行が入る）。理由（`reason`）に CHECK がない。自由な文の長さを見ない。自分を通報する行も入る。通報された会員を、`report_cases` とこの表の2か所に持つ。インデックスがないので、案件の通報を探すと表を全部読む |
-| `suspensions` | A1（#211） | 会員の利用を止めた・解いた履歴（だれを・だれが・理由・解いた日時・解いた管理者） | 主キー `id` だけ。外部キーなし。今の状態は `users.suspended_at` にも持つので、同じ日時と理由が2か所にある。「まだ解いていない停止は、会員に1つ」を止めるものがなく、止めている会員をもう一度止めると、解いていない行が増える。インデックスがないので、会員の履歴を探すと表を全部読む |
-| `notices` | A7（#213） | 運営から会員へのお知らせ（だれに・種類・題・本文・送った管理者・もとの通報の案件・読んだ日時） | 主キー `id` だけ。外部キーなし。種類（`kind`）に CHECK がない。読んだ日時を行に持つので、1人に送るお知らせしか作れない。インデックスがないので、「私のお知らせ」を探すと表を全部読む |
-| `member_notes` | A1（#216） | 会員ごとの、対応のメモ（どの会員に・どの管理者が・本文・いつ） | 主キー `id` だけ。外部キーなし。本文の長さを見ない。インデックスがないので、会員のメモを探すと表を全部読む。直す・消す仕組みがない |
-| `users`（列を足す） | A7（#213） | `banned_at`・`banned_reason`（強制退会にした日時と理由） | 退会（`deleted_at`）・停止（`suspended_at`）・強制退会（`banned_at`）の3つの日時の列で、会員の状態を表す。強制退会は `deleted_at` も書くので、「退会」は、`banned_at` が空かどうかで見分ける |
-| `admins` | 12 | 管理画面の管理者（会員とは別にログインする）と役割 | 主キー `id`・`email` の UNIQUE。`role` に CHECK はなく、何でも入る。読み書きするのは管理画面（`backend/admin`） |
-| `admin_audit_logs` | 12 | 監査ログ（だれが・いつ・何に・何をしたか） | 主キー `id`・`admin_id` の外部キーだけ。対象は `target_type` と `target_id`（文字）で指すので外部キーはない。書き換え・削除を DB で止めていない |
+表ごとの制約と、レガシー版で起きることは、下の「表ごとの制約」に書く。
+
+| 表 | 一歩 | 中身 |
+| --- | --- | --- |
+| `users` | 00（ひな形）・01・01b・#46・04・06・07 | アカウント（ログインのための情報） |
+| `profiles` | 01・#153 | その会員についての情報 |
+| `likes` | 02 | いいね（だれから・だれへ・いつ） |
+| `user_matches` | 03 | マッチ（お互いにいいねした2人の組と、いつ） |
+| `talk_rooms` | 05 | トークルーム（やり取りの場所） |
+| `talk_room_members` | 05 | トークルームの参加者と、最後に読んだ時刻 |
+| `messages` | 05 | メッセージ（ルーム・送った人・本文・いつ） |
+| `blocks` | 06 | ブロック（だれが・だれを・いつ） |
+| `plans` | 07 | 有料のプラン（期間と今の値段） |
+| `purchases` | 07 | 購入の記録（だれが・どのプランを・いつ） |
+| `search_conditions` | 04b | 保存した検索条件（だれの・名前・条件の中身） |
+| `skips` | M3（#184） | スキップ（だれが・だれを・いつ） |
+| `report_cases` | M7（#201） | 通報の案件（通報された会員ごとにまとめる） |
+| `reports` | M7（#201） | 通報（だれが・だれを・どのメッセージを・理由） |
+| `suspensions` | A1（#211） | 会員の利用を止めた・解いた履歴 |
+| `notices` | A7（#213） | 運営から会員へのお知らせ |
+| `member_notes` | A1（#216） | 会員ごとの、対応のメモ |
+| `users`（列を足す） | A7（#213） | 強制退会にした日時と理由 |
+| `admins` | 12 | 管理画面の管理者と役割 |
+| `admin_audit_logs` | 12 | 監査ログ（だれが・いつ・何に・何をしたか） |
 
 Laravel のひな形が作った表（この学習では扱わない）：`password_reset_tokens`・`sessions`・`cache`・`cache_locks`・`jobs`・`job_batches`・`failed_jobs`・`personal_access_tokens`（`install:api` が足した Sanctum の表。D-014 で JWT にしたので使わない）。
+
+### 表ごとの制約
+
+#### `users`（00（ひな形）・01・01b・#46・04・06・07）
+
+- 中身：アカウント（ログインのための情報）・最終ログイン・退会した日時（06。論理削除）・有料会員か（07）
+- 主キー `id`
+- `email` の UNIQUE（`users_email_unique`）。大文字と小文字は区別する
+- `public_id` の UNIQUE（`NOT NULL`・既定は `uuidv7()`。D-022）
+- `last_login_at` は NULL 可で、インデックスなし
+  - desc で並べると、ログインしていない会員が先頭に出る
+  - 検索は表を全部読む
+- `deleted_at` は NULL 可で、インデックスなし
+- 退会してもメールアドレスの UNIQUE はそのまま（退会の API が書き換えて空ける）
+- `is_paid` は既定 false・`paid_until` は NULL 可（07。どちらもインデックスなし）
+- `suspended_at`・`suspended_reason` は NULL 可（12。管理画面が書く）
+
+#### `users` に足した列（A7（#213））
+
+- 中身：`banned_at`・`banned_reason`（強制退会にした日時と理由）
+- 会員の状態を、3つの日時の列で表す：退会（`deleted_at`）・停止（`suspended_at`）・強制退会（`banned_at`）
+- 強制退会は `deleted_at` も書く。そのため「退会」は、`banned_at` が空かどうかで見分ける
+
+#### `profiles`（01・#153）
+
+- 中身：その会員についての情報
+- 主キー `id` だけ
+- `user_id` に外部キーも UNIQUE もない。そのため、1人に2つのプロフィール・ない会員を指すプロフィールができる
+- #153 で、検索に使う6項目（`body_type`・`job`・`income`・`smoking`・`drinking`・`marital_status`）を、文字の列で足した
+  - NULL は未回答
+  - 選択肢にない文字も入る
+  - インデックスなし
+
+#### `likes`（02）
+
+- 中身：いいね（だれから・だれへ・いつ）。会員と会員をつなぐ中間テーブル
+- 主キー `id` と、`(from_user_id, to_user_id)` の UNIQUE（`likes_from_user_id_to_user_id_unique`）だけ
+- 外部キーがないので、ない会員を指せ、会員を消しても残る
+- 自分から自分も入る
+- `to_user_id` から探すと表を全部読む
+
+#### `user_matches`（03）
+
+- 中身：マッチ（お互いにいいねした2人の組と、いつ）
+- Model は `UserMatch`（`match` は PHP の予約語）
+- 主キー `id` だけ
+- 同じ組が2行入り、(A, B) と (B, A) も両方入る
+- 自分とのマッチ・ない会員を指すマッチも入り、会員を消しても残る
+- 自分のマッチを探す `user1_id = ? or user2_id = ?` は表を全部読む
+
+#### `talk_rooms`（05）
+
+- 中身：トークルーム（やり取りの場所）
+- マッチしたときに、いいねの API の中で作る（トランザクションなし）
+- 主キー `id`
+- `public_id` の UNIQUE（既定は `uuidv7()`）
+- `match_id` の UNIQUE と外部キー（`ON DELETE CASCADE`）
+- 03 で2行になった組には、ルームも2つできる
+
+#### `talk_room_members`（05）
+
+- 中身：トークルームの参加者（マッチした2人）と、最後に読んだ時刻
+- 主キー `id`
+- `(talk_room_id, user_id)` の UNIQUE
+- 2つの列の外部キー（`ON DELETE CASCADE`）
+- UNIQUE は `talk_room_id` が先なので、自分のルーム（`user_id = ?`）を探すと表を全部読む
+
+#### `messages`（05）
+
+- 中身：メッセージ（ルーム・送った人・本文・いつ）。受け取った人は持たない
+- 主キー `id` と、`talk_room_id` と `sender_id` の外部キー（`ON DELETE CASCADE`）だけ
+- 外部キーの列にインデックスがない。そのため、次のときに表を全部読む
+  - ルームのメッセージを探すたび
+  - 会員を消すとき（CASCADE のため）
+- 本文の長さの決まりなし
+
+#### `blocks`（06）
+
+- 中身：ブロック（だれが・だれを・いつ）
+- マッチ・メッセージは消さずに、読むときに除く
+- 主キー `id`
+- `(blocker_id, blocked_id)` の UNIQUE
+- 2つの列の外部キー（`ON DELETE CASCADE`）
+- 自分で自分をブロックする行も入る
+- UNIQUE は `blocker_id` が先なので、私をブロックした人（`blocked_id = ?`）を探すと表を全部読む
+
+#### `plans`（07）
+
+- 中身：有料のプラン（期間と今の値段）
+- 1か月 3,980円・3か月 9,800円・6か月 16,800円の3行を、マイグレーションで入れる
+- 主キー `id` だけ
+- 同じ期間が2行入る・値段が0や負の数でも入る
+
+#### `purchases`（07）
+
+- 中身：購入の記録（だれが・どのプランを・いつ）
+- 主キー `id` と、外部キー（`user_id`（`ON DELETE CASCADE`）と `plan_id`）だけ
+- 値段と期間を持たないので、プランの値段を変えると前の記録の値段も変わる
+- `user_id` から探すと表を全部読む
+
+#### `search_conditions`（04b）
+
+- 中身：保存した検索条件（だれの・名前・条件の中身）
+- 主キー `id` と、`public_id` の UNIQUE だけ
+- `user_id` に外部キーがないので、会員を消しても残り、ない会員を指せる
+- インデックスもないので、`user_id` から探すと表を全部読む
+  - 6万件で 1549 ページ
+  - 表を作り直した直後の数字で、シーダーを流し直すと膨らむ
+- 次のことは、DB では確かめない：`conditions`（`jsonb`）の中身・名前の長さ・1人5件の上限
+
+#### `skips`（M3（#184））
+
+- 中身：スキップ（だれが・だれを・いつ）
+- 主キー `id` だけ
+- 外部キーがないので、会員を消しても残る
+- `(skipper_id, skipped_id)` の UNIQUE がないので、同じ相手を2回スキップすると2行できる
+- インデックスがないので、`skipper_id` から探すと表を全部読む（3万件で 251 ページ）
+- 自分で自分もスキップできる
+
+#### `report_cases`（M7（#201））
+
+- 中身：通報の案件。通報された会員ごとに、通報をまとめる
+  - 持つもの：対応の状態・何をしたか・メモ・対応した管理者
+- 主キー `id` だけ。外部キーなし
+- 「まだ済みでない案件は、会員に1つ」を止めるものがない。同時に 10件の通報が来ると、案件が 9つできた
+- 状態（`status`）・何をしたか（`action`）は文字の列で、CHECK がない
+- `public_id` に UNIQUE がない
+- インデックスがないので、会員の案件を探すと表を全部読む
+
+#### `reports`（M7（#201））
+
+- 中身：通報（だれが・だれを・どのメッセージを・理由・自由な文・入っている案件）
+- 主キー `id` だけ
+- 外部キーなし。いない会員・ないメッセージ・ない案件を指す行が入る
+- 理由（`reason`）に CHECK がない
+- 自由な文の長さを見ない
+- 自分を通報する行も入る
+- 通報された会員を、`report_cases` とこの表の2か所に持つ
+- インデックスがないので、案件の通報を探すと表を全部読む
+
+#### `suspensions`（A1（#211））
+
+- 中身：会員の利用を止めた・解いた履歴（だれを・だれが・理由・解いた日時・解いた管理者）
+- 主キー `id` だけ。外部キーなし
+- 今の状態は `users.suspended_at` にも持つので、同じ日時と理由が2か所にある
+- 「まだ解いていない停止は、会員に1つ」を止めるものがない。止めている会員をもう一度止めると、解いていない行が増える
+- インデックスがないので、会員の履歴を探すと表を全部読む
+
+#### `notices`（A7（#213））
+
+- 中身：運営から会員へのお知らせ
+  - 持つもの：だれに・種類・題・本文・送った管理者・もとの通報の案件・読んだ日時
+- 主キー `id` だけ。外部キーなし
+- 種類（`kind`）に CHECK がない
+- 読んだ日時を行に持つので、1人に送るお知らせしか作れない
+- インデックスがないので、「私のお知らせ」を探すと表を全部読む
+
+#### `member_notes`（A1（#216））
+
+- 中身：会員ごとの、対応のメモ（どの会員に・どの管理者が・本文・いつ）
+- 主キー `id` だけ。外部キーなし
+- 本文の長さを見ない
+- インデックスがないので、会員のメモを探すと表を全部読む
+- 直す・消す仕組みがない
+
+#### `admins`（12）
+
+- 中身：管理画面の管理者（会員とは別にログインする）と役割
+- 主キー `id` と、`email` の UNIQUE
+- `role` に CHECK はなく、何でも入る
+- 読み書きするのは管理画面（`backend/admin`）
+
+#### `admin_audit_logs`（12）
+
+- 中身：監査ログ（だれが・いつ・何に・何をしたか）
+- 主キー `id` と、`admin_id` の外部キーだけ
+- 対象は `target_type` と `target_id`（文字）で指すので、外部キーはない
+- 書き換え・削除を DB で止めていない
 
 ## Firestore（05c。レガシー版）
 
@@ -221,18 +401,132 @@ Laravel のひな形が作った表（この学習では扱わない）：`passw
 
 まだない。01・01b・02・03 を直したら、次の形にする予定（[01 の解説](../explanations/01-members.html)・[01b の解説](../explanations/01b-auth.html)・[02 の解説](../explanations/02-likes.html)・[03 の解説](../explanations/03-matches.html)・D-012〜D-015）。
 
-| 表 | 中身 | 主な制約 |
-| --- | --- | --- |
-| `genders` | 性別のマスタ（男性・女性・その他・回答しない） | 主キー `code`（`smallint`） |
-| `prefectures` | 都道府県のマスタ（JIS の都道府県コード 1〜47） | 主キー `code`（`smallint`） |
-| `users` | アカウント（メールアドレス・パスワード・確認した時刻）と最終ログイン | メールアドレスは小文字にそろえて UNIQUE・`last_login_at` は NOT NULL（登録した時刻を最初の値にする）・`public_id`（UUID v7。URL で会員を指す ID）の UNIQUE。04 の検索のために `(last_login_at, public_id)` のインデックス |
-| `profiles` | その会員についての情報（性別・生年月日・ニックネーム・都道府県・身長・自己紹介・画像） | `user_id` が主キー兼外部キー（1対1）・`gender_code` → `genders.code`・`prefecture_code` → `prefectures.code` の外部キー・`birthdate` は `date`・ニックネームの長さの CHECK。身長は型だけ（範囲はアプリ。D-013）。#153 の6項目は、マスタの表（`body_types`・`jobs`・`incomes`・`smoking_habits`・`drinking_habits`・`marital_statuses`。主キーは `smallint` の `code`、並び順の `sort_order`。`code` は並びを意味せず、大小の比べと並べ替えは `sort_order` で行う。あとで間の区分を足しても、`code` を振り直さずに済む）と、`profiles` の `*_code`（NULL 可＝未回答・外部キー）にする。年収は「◯◯万円 から ◯◯万円」の幅で絞る（2026-11-17 に人が決めた。FR-SEARCH-017）。マスタの表に、区分の下と上の金額（`min_man_yen`・`max_man_yen`）を持たせ、幅と比べる。検索のインデックスは、測ってから決める（解説の 04b の「検索の項目」） |
-| `likes` | いいね（02） | `(from_user_id, to_user_id)` の UNIQUE・2つの列から `users.id` への外部キー（`ON DELETE CASCADE`）・`from_user_id <> to_user_id` の CHECK・`to_user_id` のインデックス |
-| `user_matches` | マッチ（03）。1組を1行で持ち、`user1_id` に小さい ID を入れる | `(user1_id, user2_id)` の UNIQUE・`user1_id < user2_id` の CHECK（`user_matches_user1`）・`user2_id` のインデックス・2つの列から `users.id` への外部キー（`ON DELETE CASCADE`） |
-| `refresh_tokens` | 取り替え用のトークン（01b） | `token_hash` の UNIQUE（SHA-256）・`user_id` → `users.id` の外部キー・家族の番号・期限・使った時刻・止めた時刻 |
-| `search_conditions` | 保存した検索条件（04b） | `user_id` → `users.id` の外部キー（`ON DELETE CASCADE`）・`(user_id, id)` のインデックス（自分の一覧を保存した順に読む）・`public_id` の UNIQUE・`name` は 1〜30文字の CHECK・`conditions` は「オブジェクトであること」の CHECK（`jsonb_typeof(conditions) = 'object'`）。中身の項目と範囲はアプリで確かめる（検索の API と同じ決まり）。1人5件の上限は、会員の行を押さえてから数える（制約では書けない）・日時は `timestamptz` |
-| `skips` | スキップ（M3） | `(skipper_id, skipped_id)` の UNIQUE（この並びのインデックスで「私がスキップした相手」を読む）・2つの列から `users.id` への外部キー（`ON DELETE CASCADE`）・`skipper_id <> skipped_id` の CHECK・日時は `timestamptz`。「私をスキップした人」を読む場面はないので、逆の並びのインデックスは作らない（ブロックは、された側からも読むので両方要る）。届いたいいねのために、`likes` に `(to_user_id, created_at)` のインデックスを足す |
-| `report_cases`・`reports` | 通報（M7） | 部分 UNIQUE インデックス `unique (reported_id) where status <> 'closed'`（まだ済みでない案件は、会員に1つ。2つ目の insert は失敗するので、ある方を読み直す）・状態と理由と「何をしたか」の CHECK・「済みなら、何をしたかがある」の CHECK・外部キーは `restrict`（証拠が消えない）・`reports (report_case_id, created_at)` と `report_cases (status, last_reported_at desc)` のインデックス・通報された会員は案件にだけ持つ。DDL の案は [api/m7-reports.md](api/m7-reports.md) |
-| `suspensions` | 停止の履歴（A1） | 部分 UNIQUE インデックス `unique (user_id) where lifted_at is null`（まだ解いていない停止は、会員に1つ）・3つの列の外部キー（`restrict`）・`(user_id, created_at desc)` のインデックス・理由は 1〜1000文字の CHECK。履歴を正にして、`users.suspended_at` は、残すなら同じトランザクションで書く |
-| `notices`・`users` の状態 | お知らせ・強制退会（A7） | `notices`：3つの外部キー・`kind` と長さの CHECK・`(user_id, created_at desc)` と、未読の数のための部分インデックス `(user_id) where read_at is null`。会員の状態は、3つの日時の列をやめて、1つの列（`status`）と CHECK にし、変えた履歴を表に持つ |
-| `member_notes` | 対応のメモ（A1） | 2つの外部キー（`restrict`）・`(user_id, created_at desc)` のインデックス・本文 1〜2000文字の CHECK・直した日時の列 |
+| 表 | 中身 |
+| --- | --- |
+| `genders` | 性別のマスタ（男性・女性・その他・回答しない） |
+| `prefectures` | 都道府県のマスタ（JIS の都道府県コード 1〜47） |
+| `users` | アカウントと最終ログイン |
+| `profiles` | その会員についての情報 |
+| `likes` | いいね（02） |
+| `user_matches` | マッチ（03） |
+| `refresh_tokens` | 取り替え用のトークン（01b） |
+| `search_conditions` | 保存した検索条件（04b） |
+| `skips` | スキップ（M3） |
+| `report_cases`・`reports` | 通報（M7） |
+| `suspensions` | 停止の履歴（A1） |
+| `notices`・`users` の状態 | お知らせ・強制退会（A7） |
+| `member_notes` | 対応のメモ（A1） |
+
+### 表ごとの主な制約
+
+#### `genders`
+
+- 主キー `code`（`smallint`）
+
+#### `prefectures`
+
+- 主キー `code`（`smallint`）
+
+#### `users`
+
+- 中身：アカウント（メールアドレス・パスワード・確認した時刻）と最終ログイン
+- メールアドレスは小文字にそろえて UNIQUE
+- `last_login_at` は NOT NULL（登録した時刻を最初の値にする）
+- `public_id`（UUID v7。URL で会員を指す ID）の UNIQUE
+- 04 の検索のために `(last_login_at, public_id)` のインデックス
+
+#### `profiles`
+
+- 中身：その会員についての情報（性別・生年月日・ニックネーム・都道府県・身長・自己紹介・画像）
+- `user_id` が主キー兼外部キー（1対1）
+- `gender_code` → `genders.code`・`prefecture_code` → `prefectures.code` の外部キー
+- `birthdate` は `date`
+- ニックネームの長さの CHECK
+- 身長は型だけ（範囲はアプリ。D-013）
+- #153 の6項目は、マスタの表と、`profiles` の `*_code`（NULL 可＝未回答・外部キー）にする
+  - マスタの表：`body_types`・`jobs`・`incomes`・`smoking_habits`・`drinking_habits`・`marital_statuses`
+  - マスタの主キーは `smallint` の `code`。並び順は `sort_order`
+  - `code` は並びを意味しない。大小の比べと並べ替えは `sort_order` で行う
+  - そのため、あとで間の区分を足しても、`code` を振り直さずに済む
+- 年収は「◯◯万円 から ◯◯万円」の幅で絞る（2026-11-17 に人が決めた。FR-SEARCH-017）
+  - マスタの表に、区分の下と上の金額（`min_man_yen`・`max_man_yen`）を持たせ、幅と比べる
+- 検索のインデックスは、測ってから決める（解説の 04b の「検索の項目」）
+
+#### `likes`
+
+- `(from_user_id, to_user_id)` の UNIQUE
+- 2つの列から `users.id` への外部キー（`ON DELETE CASCADE`）
+- `from_user_id <> to_user_id` の CHECK
+- `to_user_id` のインデックス
+
+#### `user_matches`
+
+- 中身：1組を1行で持ち、`user1_id` に小さい ID を入れる
+- `(user1_id, user2_id)` の UNIQUE
+- `user1_id < user2_id` の CHECK（`user_matches_user1`）
+- `user2_id` のインデックス
+- 2つの列から `users.id` への外部キー（`ON DELETE CASCADE`）
+
+#### `refresh_tokens`
+
+- `token_hash` の UNIQUE（SHA-256）
+- `user_id` → `users.id` の外部キー
+- 持つもの：家族の番号・期限・使った時刻・止めた時刻
+
+#### `search_conditions`
+
+- `user_id` → `users.id` の外部キー（`ON DELETE CASCADE`）
+- `(user_id, id)` のインデックス（自分の一覧を保存した順に読む）
+- `public_id` の UNIQUE
+- `name` は 1〜30文字の CHECK
+- `conditions` は「オブジェクトであること」の CHECK（`jsonb_typeof(conditions) = 'object'`）
+  - 中身の項目と範囲はアプリで確かめる（検索の API と同じ決まり）
+- 1人5件の上限は、会員の行を押さえてから数える（制約では書けない）
+- 日時は `timestamptz`
+
+#### `skips`
+
+- `(skipper_id, skipped_id)` の UNIQUE（この並びのインデックスで「私がスキップした相手」を読む）
+- 2つの列から `users.id` への外部キー（`ON DELETE CASCADE`）
+- `skipper_id <> skipped_id` の CHECK
+- 日時は `timestamptz`
+- 逆の並びのインデックスは作らない
+  - 「私をスキップした人」を読む場面はないため
+  - ブロックは、された側からも読むので両方要る
+- 届いたいいねのために、`likes` に `(to_user_id, created_at)` のインデックスを足す
+
+#### `report_cases`・`reports`
+
+- 部分 UNIQUE インデックス `unique (reported_id) where status <> 'closed'`
+  - まだ済みでない案件は、会員に1つ
+  - 2つ目の insert は失敗するので、ある方を読み直す
+- 状態と理由と「何をしたか」の CHECK
+- 「済みなら、何をしたかがある」の CHECK
+- 外部キーは `restrict`（証拠が消えない）
+- インデックス：`reports (report_case_id, created_at)` と `report_cases (status, last_reported_at desc)`
+- 通報された会員は、案件にだけ持つ
+- DDL の案は [api/m7-reports.md](api/m7-reports.md)
+
+#### `suspensions`
+
+- 部分 UNIQUE インデックス `unique (user_id) where lifted_at is null`（まだ解いていない停止は、会員に1つ）
+- 3つの列の外部キー（`restrict`）
+- `(user_id, created_at desc)` のインデックス
+- 理由は 1〜1000文字の CHECK
+- 履歴を正にする。`users.suspended_at` は、残すなら同じトランザクションで書く
+
+#### `notices`・`users` の状態
+
+- `notices`
+  - 3つの外部キー
+  - `kind` と長さの CHECK
+  - インデックス：`(user_id, created_at desc)` と、未読の数のための部分インデックス `(user_id) where read_at is null`
+- 会員の状態は、3つの日時の列をやめて、1つの列（`status`）と CHECK にする
+- 変えた履歴を表に持つ
+
+#### `member_notes`
+
+- 2つの外部キー（`restrict`）
+- `(user_id, created_at desc)` のインデックス
+- 本文 1〜2000文字の CHECK
+- 直した日時の列
