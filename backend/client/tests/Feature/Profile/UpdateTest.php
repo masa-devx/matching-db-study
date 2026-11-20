@@ -27,7 +27,7 @@ describe('ログインしている人が、自分のプロフィールを書き�
         assertDatabaseHas('profiles', ['user_id' => $someone->id, 'nickname' => 'べつのひと']);
     });
 
-    // 内訳：送った人のアカウントの状態（Middleware）・相手の会員の番号・プロフィール・書き換え
+    // 内訳：送った人のアカウントの状態（Middleware）・URL の会員の番号・プロフィール・書き換え
     it('書き換えるときの SQL は、決まった本数で済む（4本）', function (): void {
         $loginUser = DummyUser::create(nickname: 'まえ');
         DB::enableQueryLog();
@@ -57,7 +57,7 @@ describe('ログインしている人が、自分のプロフィールを書き�
     });
 });
 
-describe('他人のプロフィールを書き換えようとする', function (): void {
+describe('ログインしていない人や使えなくなった会員が、プロフィールを書き換えようとする', function (): void {
     it('ログインしていなければ、書き換えられない（401「ログインしてください」。FR-AUTH-020）', function (): void {
         $target = DummyUser::create(nickname: 'まえ');
 
@@ -68,18 +68,38 @@ describe('他人のプロフィールを書き換えようとする', function (
         assertDatabaseHas('profiles', ['user_id' => $target->id, 'nickname' => 'まえ']);
     });
 
-    it('停止させられた会員は、前にもらったトークンでも書き換えられない（401）', function (): void {
-        $loginUser = DummyUser::create(suspended: true);
+    it('壊れたトークンでは、書き換えられない（401「ログインしてください」。FR-AUTH-020）', function (): void {
         $target = DummyUser::create(nickname: 'まえ');
 
-        DummyAuth::actingAs($loginUser)->putJson(Endpoints::profile($target->publicId), ['nickname' => 'かきかえ'])
-            ->assertUnauthorized();
+        DummyAuth::withToken('abc')->putJson(Endpoints::profile($target->publicId), ['nickname' => 'かきかえ'])
+            ->assertUnauthorized()
+            ->assertExactJson(['message' => 'ログインしてください']);
 
         assertDatabaseHas('profiles', ['user_id' => $target->id, 'nickname' => 'まえ']);
     });
 
+    it('停止させられた会員は、前にもらったトークンでは自分のプロフィールも書き換えられない（401。NFR-AUTH-001）', function (): void {
+        $loginUser = DummyUser::create(suspended: true, nickname: 'まえ');
+
+        DummyAuth::actingAs($loginUser)->putJson(Endpoints::profile($loginUser->publicId), ['nickname' => 'かきかえ'])
+            ->assertUnauthorized();
+
+        assertDatabaseHas('profiles', ['user_id' => $loginUser->id, 'nickname' => 'まえ']);
+    });
+
+    it('退会した会員は、前にもらったトークンでは自分のプロフィールも書き換えられない（401。NFR-AUTH-001）', function (): void {
+        $loginUser = DummyUser::create(withdrawn: true, nickname: 'まえ');
+
+        DummyAuth::actingAs($loginUser)->putJson(Endpoints::profile($loginUser->publicId), ['nickname' => 'かきかえ'])
+            ->assertUnauthorized();
+
+        assertDatabaseHas('profiles', ['user_id' => $loginUser->id, 'nickname' => 'まえ']);
+    });
+});
+
+describe('ログインしているほかの会員が、他人のプロフィールを書き換える', function (): void {
     // 分かっている不具合：要件（FR-AUTH-022）は 403 で、変わらない。だれが送ったかと、URL の番号を比べない
-    it('ログインしているほかの会員なら、書き換えられてしまう', function (): void {
+    it('他人のプロフィールでも、書き換えられてしまう', function (): void {
         $loginUser = DummyUser::create(nickname: 'じぶん');
         $target = DummyUser::create(nickname: 'まえ');
 
@@ -110,7 +130,7 @@ describe('ログインしている人が、いない会員やプロフィール�
     });
 
     // 分かっている不具合：要件は 404。会員はいるがプロフィールがないとき、ProfileService が RuntimeException を投げる
-    it('プロフィールのない会員なら、500 になり、エラーのログに出る', function (): void {
+    it('プロフィールのない会員なら、書き換えられずにサーバーのエラーになり、エラーのログに出る（500）', function (): void {
         $loginUser = DummyUser::create();
         $target = DummyUser::create(withProfile: false);
         Exceptions::fake();   // 思っていなかった失敗は、業務の例外と違って記録される（dontReport が広すぎないかも、ここで確かめる）

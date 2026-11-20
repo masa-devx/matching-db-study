@@ -34,7 +34,7 @@ describe('ログインしていない人が、相手のプロフィールを見�
 });
 
 describe('使えなくなった会員が、前にもらったトークンで相手のプロフィールを見る', function (): void {
-    it('停止させられた会員は、見られない（401「ログインしてください」）', function (): void {
+    it('停止させられた会員は、見られない（401「ログインしてください」。NFR-AUTH-001）', function (): void {
         $loginUser = DummyUser::create(suspended: true);
         $target = DummyUser::create();
 
@@ -43,7 +43,7 @@ describe('使えなくなった会員が、前にもらったトークンで相�
             ->assertExactJson(['message' => 'ログインしてください']);
     });
 
-    it('退会した会員は、見られない（401「ログインしてください」）', function (): void {
+    it('退会した会員は、見られない（401「ログインしてください」。NFR-AUTH-001）', function (): void {
         $loginUser = DummyUser::create(withdrawn: true);
         $target = DummyUser::create();
 
@@ -52,7 +52,7 @@ describe('使えなくなった会員が、前にもらったトークンで相�
             ->assertExactJson(['message' => 'ログインしてください']);
     });
 
-    it('強制退会になった会員は、見られない（401「ログインしてください」）', function (): void {
+    it('強制退会になった会員は、見られない（401「ログインしてください」。NFR-AUTH-001）', function (): void {
         $loginUser = DummyUser::create(banned: true);
         $target = DummyUser::create();
 
@@ -61,7 +61,7 @@ describe('使えなくなった会員が、前にもらったトークンで相�
             ->assertExactJson(['message' => 'ログインしてください']);
     });
 
-    it('登録が消えた会員の番号が入ったトークンでは、見られない（401）', function (): void {
+    it('会員の行がもうない番号のトークンでは、見られない（401。NFR-AUTH-001）', function (): void {
         $gone = DummyUser::create();
         $target = DummyUser::create();
         $token = DummyAuth::token($gone);
@@ -125,7 +125,7 @@ describe('ログインしている人が、相手のプロフィールを見る'
             ->assertJsonPath('room_id', $roomId);
     });
 
-    it('2人とも、ほかの人とだけマッチしているなら、トークルームの番号は空', function (): void {
+    it('2人とも、ほかの人とだけマッチしているなら、トークルームの番号は空（`room_id` が null）', function (): void {
         $loginUser = DummyUser::create();
         $target = DummyUser::create();
         DummyMatching::match($loginUser, DummyUser::create());
@@ -162,8 +162,8 @@ describe('ログインしている人が、相手のプロフィールを見る'
     });
 });
 
-describe('壊れた・偽の・期限切れのトークンで、相手のプロフィールを見る', function (): void {
-    it('壊れたトークンでは、見られない（401「ログインしてください」。FR-AUTH-013）', function (): void {
+describe('壊れた・偽の・期限切れのトークンを送る人が、相手のプロフィールを見る', function (): void {
+    it('壊れたトークンでは、見られない（401「ログインしてください」。FR-AUTH-020）', function (): void {
         $target = DummyUser::create();
 
         DummyAuth::withToken('abc')->getJson(Endpoints::profile($target->publicId))
@@ -171,7 +171,7 @@ describe('壊れた・偽の・期限切れのトークンで、相手のプロ�
             ->assertExactJson(['message' => 'ログインしてください']);
     });
 
-    it('ほかの鍵で署名した偽のトークンでは、見られない（401「ログインしてください」。FR-AUTH-013）', function (): void {
+    it('ほかの鍵で署名した偽のトークンでは、見られない（401「ログインしてください」。FR-AUTH-020）', function (): void {
         $loginUser = DummyUser::create();
         $target = DummyUser::create();
         $forged = DummyAuth::tokenSignedWithOtherKey($loginUser);
@@ -181,7 +181,7 @@ describe('壊れた・偽の・期限切れのトークンで、相手のプロ�
             ->assertExactJson(['message' => 'ログインしてください']);
     });
 
-    it('期限の切れたトークンでは、見られない（401「ログインしてください」。FR-AUTH-013）', function (): void {
+    it('JWT の期限（30日）が切れたトークンでは、見られない（401「ログインしてください」。FR-AUTH-020）', function (): void {
         $loginUser = DummyUser::create();
         $target = DummyUser::create();
         $expired = DummyAuth::token($loginUser, expiresAt: time() - 60);
@@ -190,6 +190,18 @@ describe('壊れた・偽の・期限切れのトークンで、相手のプロ�
             ->assertUnauthorized()
             ->assertExactJson(['message' => 'ログインしてください']);
     });
+
+    it('ヘッダーの形がおかしいトークンでも、見られない（401「ログインしてください」。FR-AUTH-020）', function (string $headerJson): void {
+        $target = DummyUser::create();
+
+        DummyAuth::withToken(DummyAuth::tokenWithHeader($headerJson))->getJson(Endpoints::profile($target->publicId))
+            ->assertUnauthorized()
+            ->assertExactJson(['message' => 'ログインしてください']);
+    })->with([
+        'alg が配列' => ['{"alg":["HS256"]}'],
+        'alg がオブジェクト' => ['{"alg":{}}'],
+        'kid が配列' => ['{"alg":"HS256","kid":[1]}'],
+    ]);
 
     it('いない会員の URL でも、先にトークンを確かめて断る（401）', function (): void {
         DummyAuth::withToken('abc')->getJson(Endpoints::profile(DummyUser::MISSING_PUBLIC_ID))
@@ -200,6 +212,7 @@ describe('壊れた・偽の・期限切れのトークンで、相手のプロ�
         Exceptions::fake();   // 決まりどおりに断っただけなので、エラーとして記録しない
 
         DummyAuth::withToken('abc')->getJson(Endpoints::profile(DummyUser::MISSING_PUBLIC_ID))->assertUnauthorized();
+        DummyAuth::withToken(DummyAuth::tokenWithHeader('{"alg":["HS256"]}'))->getJson(Endpoints::profile(DummyUser::MISSING_PUBLIC_ID))->assertUnauthorized();
 
         Exceptions::assertNothingReported();
     });
@@ -224,7 +237,7 @@ describe('ログインしている人が、いない会員や形の違う番号�
     });
 
     // 分かっている不具合：404 が望ましい。形を確かめずに UUID の列を探し、PostgreSQL のエラーになる
-    it('番号が UUID の形でないなら、500 になる', function (): void {
+    it('番号が UUID の形でないと、見られずにサーバーのエラーになる（500）', function (): void {
         $loginUser = DummyUser::create();
 
         DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile('abc'))->assertInternalServerError();

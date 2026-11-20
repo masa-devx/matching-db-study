@@ -44,6 +44,15 @@ final class DummyAuth
         return JWT::encode(self::claims($user, null), str_repeat('x', 64), 'HS256');
     }
 
+    /**
+     * ヘッダーだけを渡した形で作った、署名のないトークン（「ヘッダー.{}.x」）。
+     * ヘッダーの形がおかしいトークン（alg が配列など）を送るときに使う。鍵を知らなくても、だれでも作れる形
+     */
+    public static function tokenWithHeader(string $headerJson): string
+    {
+        return rtrim(strtr(base64_encode($headerJson), '+/', '-_'), '=').'.e30.x';
+    }
+
     /** @return array{sub: int, email: string, nickname: string|null, iat: int, exp: int} */
     private static function claims(TestUser $user, ?int $expiresAt): array
     {
