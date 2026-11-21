@@ -87,9 +87,29 @@ describe('ログインしたあとの API を apiFetch で呼ぶ', () => {
 
     await apiFetch('/api/me/likes', { method: 'POST', body: '{}' })
 
+    expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(fetchMock.mock.calls[0]?.[0]).toBe('http://localhost:8000/sanctum/csrf-cookie')
     expect(fetchMock.mock.calls[0]?.[1]?.credentials).toBe('include')
     expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get('X-XSRF-TOKEN')).toBe('xsrf-new')
+  })
+
+  it('書き込みが 419（CSRF のトークンが古い）なら、トークンをもらい直して1回だけ送り直す（メンテナンスでセッションが消えたあと）', async () => {
+    fetchMock.mockImplementation(async (url) => {
+      if (String(url).endsWith('/sanctum/csrf-cookie')) {
+        setXsrfCookie('xsrf-new')
+        return new Response(null, { status: 204 })
+      }
+      const sent = new Headers(fetchMock.mock.calls.at(-1)?.[1]?.headers).get('X-XSRF-TOKEN')
+      return sent === 'xsrf-new'
+        ? jsonResponse(201, {})
+        : jsonResponse(419, { message: '画面を読み込み直してください' })
+    })
+
+    const res = await apiFetchWithoutLogin('/api/users', { method: 'POST', body: '{}' })
+
+    expect(res.status).toBe(201)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(onUnauthorized).not.toHaveBeenCalled()
   })
 
   it('419（CSRF のトークンが合わない。24時間で切れたあとの書き込み）なら、csrf の印で 401 の処理を呼び、続きを止める', async () => {

@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes, useNavigate } from 'react-router'
+import { MemoryRouter, Route, Routes, useNavigate, useSearchParams } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ToastProvider } from '../components/Toast'
 import type { SessionState } from '../shared/session/SessionProvider'
@@ -25,9 +25,11 @@ const unverified: SessionState = {
 // ブラウザの「戻る」を押せるログインの画面（履歴を置き換えたかを確かめるため）
 function LoginScreen() {
   const navigate = useNavigate()
+  const [params] = useSearchParams()
   return (
     <>
       <p>ログインの画面</p>
+      <p>理由：{params.get('reason') ?? 'なし'}</p>
       <button type="button" onClick={() => navigate(-1)}>
         戻る
       </button>
@@ -74,6 +76,14 @@ describe('ログインしていない人が、ログインが要る画面を開�
     expect(screen.queryByText('ホームの画面')).not.toBeInTheDocument()
   })
 
+  it('アカウント停止なら、理由を付けてログインの画面へ移る（FR-UI-100・NFR-AUTH-001）', () => {
+    state = { status: 'signedOut', reason: 'account-suspended' }
+
+    renderAt('/home')
+
+    expect(screen.getByText('理由：account-suspended')).toBeInTheDocument()
+  })
+
   it('移るときは履歴を置き換える。ログインの画面で戻ると、その前の画面に戻る（FR-UI-011）', async () => {
     state = { status: 'signedOut' }
     renderAt('/home')
@@ -113,8 +123,9 @@ describe('メールアドレスを確認していない会員が、ログイン�
     expect(retry).toHaveBeenCalledTimes(1)
   })
 
-  it('「ログアウト」を押すと、ログアウトの API を呼び、ログインの画面へ移る（FR-UI-014）', async () => {
+  it('「ログアウト」を押すと、ログアウトの API を呼び、204 のあとでログインの画面へ移る（FR-UI-014・FR-AUTH-016）', async () => {
     state = unverified
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }))
     renderAt('/home')
 
     await userEvent.click(screen.getByRole('button', { name: 'ログアウト' }))
@@ -123,6 +134,18 @@ describe('メールアドレスを確認していない会員が、ログイン�
     const logout = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/api/auth/logout'))
     expect(logout?.[1]?.method).toBe('POST')
     expect(screen.getByText('ログインの画面')).toBeInTheDocument()
+  })
+
+  it('ログアウトの API が失敗したら、ログアウトした状態にせず、「ログアウトできませんでした」を出す（Cookie が生きたままなので）', async () => {
+    state = unverified
+    fetchMock.mockResolvedValue(jsonResponse(500))
+    renderAt('/home')
+
+    await userEvent.click(screen.getByRole('button', { name: 'ログアウト' }))
+
+    expect(await screen.findByText('ログアウトできませんでした。もう一度お試しください')).toBeInTheDocument()
+    expect(signOut).not.toHaveBeenCalled()
+    expect(screen.queryByText('ログインの画面')).not.toBeInTheDocument()
   })
 
   it('「確認のメールをもう一度送る」を押すと、自分のメールアドレスで送り直し、送ったことを出す（FR-UI-014）', async () => {

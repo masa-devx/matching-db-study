@@ -81,7 +81,7 @@ describe('ログインしたあとの API が 503（メンテナンス中）を�
     await expect(apiFetch('/api/me')).rejects.toThrow(MaintenanceError)
 
     expect(maintenance.isUnderMaintenance()).toBe(true)
-    expect(sessionStorage.getItem('searchConditions')).not.toBeNull()
+    expect(sessionStorage.getItem('searchConditions')).toBe('{"prefecture":"東京都"}')
     expect(moveTo).not.toHaveBeenCalled()
   })
 })
@@ -99,7 +99,7 @@ describe('メンテナンスに入ったあとに、前に送った要求の 401
 
     await Promise.allSettled([apiFetch('/api/me'), apiFetch('/api/me/talk-rooms')])
 
-    expect(sessionStorage.getItem('searchConditions')).not.toBeNull()
+    expect(sessionStorage.getItem('searchConditions')).toBe('{"prefecture":"東京都"}')
     expect(moveTo).not.toHaveBeenCalled()
   })
 })

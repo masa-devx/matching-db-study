@@ -5,7 +5,7 @@ import { apiFetchWithoutLogin } from './shared/api/client'
 import { useSession } from './shared/session/SessionProvider'
 import { ACCOUNT_SUSPENDED_REASON, SIGNED_OUT_REASON } from './shared/session/session'
 
-// レガシー版（03b）。送る・トークンを置く・失敗を見せる・移るを、この部品にまとめて書く。
+// レガシー版（03b）。送る・失敗を見せる・移るを、この部品にまとめて書く。
 // M2（#193）：パスワードを見せる切り替え・autocomplete・利用を止められたときの案内を足した
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -38,14 +38,18 @@ export default function LoginPage() {
     const data = await res.json()
     setSending(false)
     if (res.ok) {
-      // トークンは受け取らない。セッションの Cookie は HttpOnly なので、画面のスクリプトから読めない（D-027）
-      signIn()
-      navigate('/home')
+      // トークンは受け取らない。セッションの Cookie は HttpOnly なので、画面のスクリプトから読めない（D-027）。
+      // GET /api/me が通らなければ、Cookie が届いていない（127.0.0.1 で開いた・設定の漏れ）。何も出さずに戻さず、文を出す
+      if (await signIn()) {
+        navigate('/home')
+      } else {
+        setError('ログインできませんでした。画面を読み込み直してください')
+      }
     } else {
       // API の言葉をそのまま出す（「メールアドレスが違います」で、登録されているかが分かる）
       setError(data.message)
-      // A7（#213）：強制退会（同じ 403）のときは、停止の案内を出さない。API の言葉で見分ける
-      setSuspended(res.status === 403 && String(data.message).includes('停止'))
+      // A7（#213）：強制退会（同じ 403）のときは、停止の案内を出さない。API の code で見分ける
+      setSuspended(res.status === 403 && data.code === 'account_suspended')
     }
   }
 

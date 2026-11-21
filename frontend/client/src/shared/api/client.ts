@@ -74,8 +74,10 @@ export async function apiFetchWithoutLogin(path: string, init: RequestInit = {})
 }
 
 // どの API も、セッションの Cookie を付けて送る（credentials: 'include'）。
-// 書き込み（GET・HEAD でないもの）には、CSRF のトークンを X-XSRF-TOKEN で付ける。Cookie がまだなければ、先に1回もらう
-async function send(path: string, init: RequestInit): Promise<Response> {
+// 書き込み（GET・HEAD でないもの）には、CSRF のトークンを X-XSRF-TOKEN で付ける。Cookie がまだなければ、先に1回もらう。
+// 書き込みが 419 なら、CSRF のトークンが古い（メンテナンスでセッションが消えた・24時間で切れた）。もらい直して、1回だけ送り直す
+// （419 では何も変わっていないので、送り直しても二重にならない。もう一度 419 なら、呼んだ所が扱う）
+async function send(path: string, init: RequestInit, retried = false): Promise<Response> {
   const headers = new Headers(init.headers)
   if (!headers.has('Accept')) {
     headers.set('Accept', 'application/json')
@@ -84,7 +86,12 @@ async function send(path: string, init: RequestInit): Promise<Response> {
     const token = (await csrfToken()) ?? ''
     headers.set('X-XSRF-TOKEN', token)
   }
-  return fetch(`${API_URL}${path}`, { ...init, headers, credentials: 'include' })
+  const res = await fetch(`${API_URL}${path}`, { ...init, headers, credentials: 'include' })
+  if (res.status === 419 && isWrite(init) && !retried) {
+    await refreshCsrfCookie()
+    return send(path, init, true)
+  }
+  return res
 }
 
 function isWrite(init: RequestInit): boolean {
@@ -96,8 +103,12 @@ function isWrite(init: RequestInit): boolean {
 async function csrfToken(): Promise<string | null> {
   const saved = readXsrfCookie()
   if (saved !== null) return saved
-  await fetch(`${API_URL}/sanctum/csrf-cookie`, { headers: { Accept: 'application/json' }, credentials: 'include' })
+  await refreshCsrfCookie()
   return readXsrfCookie()
+}
+
+async function refreshCsrfCookie(): Promise<void> {
+  await fetch(`${API_URL}/sanctum/csrf-cookie`, { headers: { Accept: 'application/json' }, credentials: 'include' })
 }
 
 function readXsrfCookie(): string | null {
@@ -119,8 +130,8 @@ function noticeMaintenance(res: Response): Response {
   return res
 }
 
-// 401・403 の応答の code を読む。JSON でなければ null
-async function codeOf(res: Response): Promise<string | null> {
+// 401・403 の応答の code を読む。JSON でなければ null（shared/session も、起動のときの 401 の理由を読むのに使う）
+export async function codeOf(res: Response): Promise<string | null> {
   try {
     const body: unknown = await res.clone().json()
     if (typeof body === 'object' && body !== null && 'code' in body && typeof body.code === 'string') {
