@@ -89,7 +89,7 @@ src/
 - 機能の中の `sessionStorage`・`localStorage` も、`noRestrictedGlobals` で止める。例外は、検索の条件を読み書きする `features/search/hooks/useSearchConditions.ts` の1か所（5章）
 - `rules.ts`・`types.ts`・`repository.ts`・`shared/lib`・`shared/constants` の `window`・`document`・ストレージも、`noRestrictedGlobals` で止める
 - `noRestrictedGlobals` は、あとの `overrides` が前の `options` を置き換える。そのため、場所ごとに止める名前を全部書く（`fetch` を何か所にも書いているのはこのため）
-- API の失敗のクラス（`StoppedRequestError`・`UnauthorizedError`・`EmailUnverifiedError`。のちの `ApiError`）は、`shared/api/ApiError.ts` に置く。`shared/api` の中で、hook と container が読んでよいのは、このファイルだけ
+- API の失敗のクラス（`StoppedRequestError`・`UnauthorizedError`・`EmailUnverifiedError`・`MaintenanceError`。のちの `ApiError`）は、`shared/api/ApiError.ts` に置く。`shared/api` の中で、hook と container が読んでよいのは、このファイルだけ
 - `app/` から機能を読むときは `features/<機能>` と書く。`features/<機能>/index` と書いても止まる
 - 画面を移している間は、`app/`・`shared/` から、まだ移していないレガシー版のファイル（`src/components/*` など）を import してよい。そのファイルは、移すチケットで `shared/ui` か機能へ移す（例：`app/RequireAuth.tsx` が使う `components/AwaitingVerification.tsx`）
 
@@ -209,6 +209,11 @@ flowchart TB
   - 401 のとき、`client.ts` は応答の `code` を `app/` に渡して `UnauthorizedError` を投げる。`app/` は `shared/session` の `clearSession()` を呼び、理由を付けてログインの画面へ読み込み直す（FR-UI-100）
   - 401 のときは、まだ読み込み直す形（`configureApi`）。読み込み直すので、ポーリングも止まる。画面の中で移す形にしたら、ポーリングを止めることを、はっきり書く
 - ログアウトは `apiFetchForLogout` で呼ぶ（トークンを付けるが、401 でも移らない）
+- メンテナンス中の 503（FR-MAINT-006）は、`client.ts` の3つの関数が見分け、`app/configureApi.ts` から渡された `onMaintenance` を呼ぶ。`app/MaintenanceGate.tsx` が、どの画面の代わりにも「ただいまメンテナンス中です」を出す（画面ごとに 503 を見分けない）
+  - 続きを止める（`MaintenanceError` を投げる）のは `apiFetch` だけ。ログインが要らない API（`apiFetchWithoutLogin`）とログアウト（`apiFetchForLogout`）は、待たずに呼ぶ所があるので、投げずに応答を返す
+  - トークンがない人は、起動のときに `app/checkMaintenance.ts` が、トークンなしの `GET /api/me` を1本呼んで確かめる（ふだんは 401。メンテナンス中は 503）
+  - メンテナンスに入ったあとに、前に送った要求の 401 が届いても、ログインの画面へは移さない
+  - トークンは消さず、ログインの画面にも移さない。解けたかは、会員が読み込み直して確かめる
 - メールアドレスを確認していない会員の 403（`code: "email_unverified"`。FR-AUTH-021）は、`client.ts` が `EmailUnverifiedError` を投げて、呼んだ画面の続きを止める（画面は移さない）。確認を促すのは、`app/RequireAuth.tsx` が画面の代わりに出す「確認待ち」（`components/AwaitingVerification.tsx`）と、枠のいちばん上の帯（`VerifyBanner`。FR-UI-014）。画面で受け止めるときは、親の `StoppedRequestError` で見分ける
 - PR #268 から、API は、壊れた・期限の切れたトークンにも 401 を返す（前は 500）
 - 403 は、応答の `code` で見分ける（有料が要る・男性でない・確認していない・ブロック）。ステータスだけで「有料が要る」と読まない。API が `code` を返すまでは、誘導のダイアログを 403 で出さず、`plans/rules.ts` の判断で出す
@@ -264,6 +269,7 @@ flowchart TB
 | 楽観的な表示・送っている間 | その機能の hook |
 | スクロールする枠 | `AppShell` が `shared/ui` の Context で渡す（`document.querySelector` で探さない） |
 | トースト | `shared/ui/Toast`（Context） |
+| メンテナンス中か | `app/maintenance.ts`（React の外の変数。`MaintenanceGate` が `useSyncExternalStore` で読む。`client.ts` の 503 から変えるので、React の外に置く） |
 | 入力中の値 | hook か presenter（くわしくは下） |
 
 ### API から取ったデータ（一覧・詳細）

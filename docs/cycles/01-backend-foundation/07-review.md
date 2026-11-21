@@ -1171,3 +1171,38 @@
 
 - テストの角度の must：`SessionProvider.tsx` の古い結果を捨てる判定を外して流し、2本が落ちたので外した
 - 画面の角度の ask：`useEffectEvent` の戻り値を依存に書かなくても、Biome は指摘しなかったので外した
+
+## PR #278
+
+| 番号 | 印 | 何を | 扱い |
+| --- | --- | --- | --- |
+| M1 | must | 手順を `--with-secret` にした（`docs/commands.md`・`bootstrap/app.php`・`Endpoints.php`） | 直した |
+| M2 | must | 401・500 で呼ばないことを確かめる。前の壊し方で16本が落ちる | 直した |
+| M3 | must | `app/checkMaintenance.ts`：トークンなしの `GET /api/me` を起動のときに1本 | 直した（(a)） |
+| M4 | must | 手元の curl で確かめると決め、手順・要件・`05-problems.md` に書いた | 直した（(b)） |
+| S1 | should | 要件の例外とし、手順に「ログを貼るときは消す」 | 直した（(a)） |
+| S2 | should | `phpunit.xml` の `APP_MAINTENANCE_DRIVER` を `array` に | 直した |
+| S3〜S5 | should | 手順に、失敗と出ても入っていること・今の状態の見方・#259 までは curl | 直した |
+| S6 | should | コメントは要点だけ。「正は docs/commands.md」 | 直した（(b)） |
+| S7 | should | `session.connection` の接続で消す | 直した |
+| S8 | should | 見出しにフォーカスを移す（読み上げはブラウザで確かめていない） | 直した |
+| S9・S10・S15 | should | テストのデータ・確かめ・URL | 直した |
+| S11・S12 | should | `docs/api/README.md`・#258 の本文 | 直した |
+| S13・S14 | should | Listener の受け持ち・層のテスト（会員の側と管理画面） | 直した |
+| A1 | ask | 今は 503 を返すのがメンテナンスだけ。見分けは `isMaintenance()` の1か所 | 直さない |
+| A2・A3 | ask | 分かっている不具合として要件に書いた | 記録した |
+| A4 | ask | 表 `sessions` は会員だけ、と要件と Listener に書いた | 記録した |
+| A5 | ask | #259 の「古い Cookie で 401」で確かめる | 直さない |
+| A6 | ask | `logging.md` に Listener の例外 | 直した |
+| A7 | ask | `Listeners/LogMaintenanceDisabled.php` | 直した |
+| A8 | ask | 分かっている不具合のテスト（要件どおりの 401 で落ちるのを見てから、200 にした） | 直した |
+| N1〜N15 | nits | N14：主要コマンドはリンクのまま（AGENTS.md の決まりどおり） | 直した（N14 は今のまま） |
+
+### 決めたこと
+
+- 人が「勧めどおり」と決めた（2026-11-21）。M3 は (a)、M4 は (b)、S1 は (a)、S6 は (b)
+- A1（503 を `code` で見分ける）と A5（テストのセッションの置き場を DB にする）は、今はしない
+
+### 確かめたら起きなかったもの
+
+- なし。8つの角度の指摘を、重なりをまとめて全部載せた

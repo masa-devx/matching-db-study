@@ -5,6 +5,7 @@ import {
   apiFetchWithoutLogin,
   configureApiClient,
   EmailUnverifiedError,
+  MaintenanceError,
   StoppedRequestError,
   UnauthorizedError,
 } from './client'
@@ -13,6 +14,7 @@ import {
 
 const fetchMock = vi.fn<typeof fetch>()
 const onUnauthorized = vi.fn<(code: string | null) => void>()
+const onMaintenance = vi.fn<() => void>()
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(body === null ? null : JSON.stringify(body), {
@@ -30,7 +32,8 @@ beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock)
   fetchMock.mockReset()
   onUnauthorized.mockReset()
-  configureApiClient({ readToken: () => 'token-1', onUnauthorized })
+  onMaintenance.mockReset()
+  configureApiClient({ readToken: () => 'token-1', onUnauthorized, onMaintenance })
 })
 
 describe('ログインしたあとの API を apiFetch で呼ぶ', () => {
@@ -45,7 +48,7 @@ describe('ログインしたあとの API を apiFetch で呼ぶ', () => {
   })
 
   it('トークンがなければ、Authorization を付けない', async () => {
-    configureApiClient({ readToken: () => null, onUnauthorized })
+    configureApiClient({ readToken: () => null, onUnauthorized, onMaintenance })
     fetchMock.mockResolvedValue(jsonResponse(200, []))
 
     await apiFetch('/api/me/likes')
@@ -54,7 +57,7 @@ describe('ログインしたあとの API を apiFetch で呼ぶ', () => {
   })
 
   it('トークンが空の文字でも、Authorization を付けない', async () => {
-    configureApiClient({ readToken: () => '', onUnauthorized })
+    configureApiClient({ readToken: () => '', onUnauthorized, onMaintenance })
     fetchMock.mockResolvedValue(jsonResponse(200, []))
 
     await apiFetch('/api/me/likes')
@@ -117,6 +120,17 @@ describe('ログインしたあとの API を apiFetch で呼ぶ', () => {
     expect(onUnauthorized).not.toHaveBeenCalled()
   })
 
+  it('503（メンテナンス中）なら、メンテナンスの処理を呼び、続きを止める（MaintenanceError。FR-MAINT-006）', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(503, { message: 'ただいまメンテナンス中です' }))
+
+    const error = await apiFetch('/api/me').catch((e: unknown) => e)
+
+    expect(error).toBeInstanceOf(MaintenanceError)
+    expect(error).toBeInstanceOf(StoppedRequestError)
+    expect(onMaintenance).toHaveBeenCalledTimes(1)
+    expect(onUnauthorized).not.toHaveBeenCalled()
+  })
+
   it('ほかの 403（有料が要るなど）は、応答をそのまま返す（画面が見分ける）', async () => {
     fetchMock.mockResolvedValue(jsonResponse(403, { message: '有料の会員だけが使えます' }))
 
@@ -132,6 +146,7 @@ describe('ログインしたあとの API を apiFetch で呼ぶ', () => {
     expect((await apiFetch('/api/me')).status).toBe(500)
     expect((await apiFetch('/api/me/blocks/x', { method: 'DELETE' })).status).toBe(204)
     expect(onUnauthorized).not.toHaveBeenCalled()
+    expect(onMaintenance).not.toHaveBeenCalled()
   })
 })
 
@@ -144,6 +159,25 @@ describe('ログインが要らない API を apiFetchWithoutLogin で呼ぶ', (
     expect(res.status).toBe(401)
     expect(sentHeaders().has('Authorization')).toBe(false)
     expect(onUnauthorized).not.toHaveBeenCalled()
+    expect(onMaintenance).not.toHaveBeenCalled()
+  })
+
+  it('500 は、メンテナンスとは見なさず、応答をそのまま返す', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(500, { message: 'Server Error' }))
+
+    const res = await apiFetchWithoutLogin('/api/auth/login', { method: 'POST' })
+
+    expect(res.status).toBe(500)
+    expect(onMaintenance).not.toHaveBeenCalled()
+  })
+
+  it('503（メンテナンス中）なら、メンテナンスの処理を呼び、応答はそのまま返す（待たずに呼ぶ画面があるので投げない。FR-MAINT-006）', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(503, { message: 'ただいまメンテナンス中です' }))
+
+    const res = await apiFetchWithoutLogin('/api/auth/login', { method: 'POST' })
+
+    expect(res.status).toBe(503)
+    expect(onMaintenance).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -156,5 +190,24 @@ describe('ログアウトの API を apiFetchForLogout で呼ぶ', () => {
     expect(res.status).toBe(401)
     expect(sentHeaders().get('Authorization')).toBe('Bearer token-1')
     expect(onUnauthorized).not.toHaveBeenCalled()
+    expect(onMaintenance).not.toHaveBeenCalled()
+  })
+
+  it('500 は、メンテナンスとは見なさず、応答をそのまま返す', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(500, { message: 'Server Error' }))
+
+    const res = await apiFetchForLogout('/api/auth/logout', { method: 'POST' })
+
+    expect(res.status).toBe(500)
+    expect(onMaintenance).not.toHaveBeenCalled()
+  })
+
+  it('503（メンテナンス中）なら、メンテナンスの処理を呼び、応答はそのまま返す（FR-MAINT-006）', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(503, { message: 'ただいまメンテナンス中です' }))
+
+    const res = await apiFetchForLogout('/api/auth/logout', { method: 'POST' })
+
+    expect(res.status).toBe(503)
+    expect(onMaintenance).toHaveBeenCalledTimes(1)
   })
 })

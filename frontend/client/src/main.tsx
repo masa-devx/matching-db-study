@@ -3,17 +3,22 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
 import './index.css'
 import App from './App.tsx'
+import { checkMaintenanceWithoutLogin } from './app/checkMaintenance'
 import { configureApi } from './app/configureApi'
+import MaintenanceGate from './app/MaintenanceGate'
 import { SessionProvider } from './shared/session/SessionProvider'
 
 configureApi()
+void checkMaintenanceWithoutLogin()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
-      <SessionProvider>
-        <App />
-      </SessionProvider>
+      <MaintenanceGate>
+        <SessionProvider>
+          <App />
+        </SessionProvider>
+      </MaintenanceGate>
     </BrowserRouter>
   </StrictMode>,
 )

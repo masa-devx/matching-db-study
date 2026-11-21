@@ -25,6 +25,7 @@ paths:
 3. **DB とのやり取りか？**（検索・一覧・集計のクエリの組み立て・リレーション・型の変換・その行（1件）の値だけで答えが決まる判定）→ Model
 4. **外のサービスの呼び出しか？**（Firestore・メール・将来の決済）→ Client
 5. どの業務のまとまりにも属さない基盤（SQL のログ・リクエスト ID）→ `app/Support/`
+6. Laravel の出来事（メンテナンスを入れた・解いたなど）を受けて動く処理か？ → `app/Listeners/`
 
 ## 2. 依存の向き
 
@@ -81,6 +82,10 @@ Controller ──→ Service ──→ Model
   - 受け持ち：業務の決まりに反したことを表す
   - 主に使うもの（目安）：`BusinessException`
   - 使ってはいけない：Http・`abort()`・Symfony の HTTP の例外（状態コードは `bootstrap/app.php` で決める）
+- Listener
+  - 受け持ち：Laravel の出来事（Event）を受けて動く処理（例：メンテナンスを入れたら、表 `sessions` の行を全部消す。`Listeners/DeleteAllSessions`）。`App\Support` は、だれかから呼ばれる基盤で、出来事は受けない
+  - 主に使うもの（目安）：Laravel の機能（`DB::`・`Log::`・`config()`）。業務のロジックが要るときは Service を呼ぶ
+  - 使ってはいけない：Http（Request・Resource）・Model のイベントを受けること（2章の Model と同じ理由）
 - `App\Support`
   - 受け持ち：基盤
   - 主に使うもの（目安）：Laravel の機能
@@ -106,6 +111,7 @@ app/
 ├── Exceptions/<まとまり>/〜Exception.php
 ├── Exceptions/〜Exception.php                     いくつものまとまりで使う例外（UserNotFoundException など）
 ├── Models/〜.php                                 Laravel の標準の置き場のまま（移さない）
+├── Listeners/〜.php                              Laravel の出来事を受けて動く処理（DeleteAllSessions など）
 └── Support/                                      基盤（Logging など）
 ```
 
@@ -344,6 +350,7 @@ $this->firestore->openRoom($room);                                     // コミ
 ## 6. ログ
 
 - ログ（`App\Support\Logging`）は、Http と Service から出す。Model からは出さない（テストで確かめる）
+- Listener も、出来事を受けて動いたことを `Log::info` で出してよい（`logging.md` の1の例外。業務のログの共通の関数ができたら、それに寄せる）
 - 出し方と、出してはいけない値（秘密の値・個人情報）は `agents/rules/logging.md`
 
 ## 7. エラー

@@ -1,5 +1,6 @@
 import { configureApiClient } from '../shared/api/client'
 import { ACCOUNT_SUSPENDED_REASON, clearSession, readToken, SIGNED_OUT_REASON } from '../shared/session/session'
+import { enterMaintenance, isUnderMaintenance } from './maintenance'
 
 // 401 が同時に何本も届いても、移るのは1回だけにする（タブのバーや帯も、同じときに API を呼んでいるため）
 let leaving = false
@@ -13,11 +14,14 @@ export function configureApi(moveTo: (url: string) => void = (url) => window.loc
   configureApiClient({
     readToken,
     onUnauthorized: (code) => {
-      if (leaving) return
+      // メンテナンスに入ったあとに、前に送った要求の 401 が届いても、ログインの画面へは移さない（FR-MAINT-006）
+      if (leaving || isUnderMaintenance()) return
       leaving = true
       clearSession()
       const reason = code === 'account_suspended' ? ACCOUNT_SUSPENDED_REASON : SIGNED_OUT_REASON
       moveTo(`/login?reason=${reason}`)
     },
+    // 503（メンテナンス中）は、トークンを消さず、ログインの画面にも移さない。画面の代わりにメンテナンスの画面を出す
+    onMaintenance: enterMaintenance,
   })
 }
