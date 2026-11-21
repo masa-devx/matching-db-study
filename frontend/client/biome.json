@@ -33,5 +33,242 @@
         "organizeImports": "on"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["src/shared/api/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/session/*", "**/app/*", "**/features/**"],
+                    "message": "shared/api は、shared/session・app・features を使わない（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["react", "react-dom", "react-dom/*", "react-router"],
+                    "message": "shared/api は、React を使わない（architecture-frontend.md の3章）"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/shared/session/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/app/*", "**/features/**"],
+                    "message": "shared/session は、app・features を使わない（architecture-frontend.md の3章）"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/shared/ui/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/features/**", "**/api/*", "**/session/*"],
+                    "message": "shared/ui は、features・shared/api・shared/session を使わない（architecture-frontend.md の3章）"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/shared/lib/**", "src/shared/constants/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/features/**", "**/app/*", "**/api/*", "**/session/*", "**/ui/*"],
+                    "message": "shared/lib・shared/constants は、ほかのフォルダを使わない（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["react", "react-dom", "react-dom/*", "react-router"],
+                    "message": "shared/lib・shared/constants は、React を使わない（architecture-frontend.md の3章）"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/features/*/components/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/hooks/*", "**/api", "**/api/*", "**/session/*", "**/repositories/*"],
+                    "message": "presenter（components）は、hooks・api.ts・shared/api・shared/session・repositories を使わない（architecture-frontend.md の3章）"
+                  }
+                ],
+                "paths": {
+                  "react-router": {
+                    "importNames": ["useNavigate", "useParams", "useSearchParams"],
+                    "message": "presenter（components）は、ルーターの hook を使わない。container（pages）から props で受け取る（architecture-frontend.md の3章）"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/features/*/pages/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/api", "**/api/*", "**/firebase/*", "**/repositories/*"],
+                    "message": "container（pages）は、api.ts・shared/api・shared/firebase・repositories を直に使わない。hook を通す（architecture-frontend.md の3章）"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/features/*/hooks/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/shared/api/*"],
+                    "message": "hook は、shared/api を直に使わない。自分の機能の api.ts を通す（architecture-frontend.md の3章）"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/features/*/api.ts",
+        "src/features/*/repositories/**",
+        "src/features/*/rules.ts",
+        "src/features/*/types.ts",
+        "src/features/*/repository.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["react", "react-dom", "react-dom/*", "react-router"],
+                    "message": "api.ts・repositories・rules・types は、React を使わない（architecture-frontend.md の3章）"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/app/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/features/*/**"],
+                    "message": "app は、機能の中のファイルを直に使わない。機能の index.ts を通す（features/<機能> と書く。architecture-frontend.md の3章）"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/**", "!src/shared/api/**", "!src/**/*.test.ts", "!src/**/*.test.tsx"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "fetch": "fetch は shared/api/client.ts の関数（apiFetch など）を通す（architecture-frontend.md の4章）"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/features/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "sessionStorage": "sessionStorage は shared/session か、その機能の hook の1か所で読む（architecture-frontend.md の5章）",
+                  "fetch": "fetch は shared/api/client.ts の関数（apiFetch など）を通す（architecture-frontend.md の4章）"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }
