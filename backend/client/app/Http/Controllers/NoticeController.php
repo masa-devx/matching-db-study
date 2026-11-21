@@ -18,7 +18,7 @@ class NoticeController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
+        $loginUserId = $this->loginUserId($request);
 
         $rows = Notice::where('user_id', $loginUserId)->orderBy('created_at', 'desc')->get();
 
@@ -39,7 +39,6 @@ class NoticeController extends Controller
 
     public function read(Request $request, string $publicId): JsonResponse
     {
-
         // だれのお知らせかを見ない。もう読んでいても、読んだ日時を書き換える
         $count = Notice::where('public_id', $publicId)->update(['read_at' => now()]);
         if ($count === 0) {

@@ -23,7 +23,7 @@ class MessageController extends Controller
 {
     public function index(Request $request, string $publicId): JsonResponse
     {
-        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
+        $loginUserId = $this->loginUserId($request);
 
         // 参加者かを確かめない。ないルームなら null で、次の行が 500
         $room = TalkRoom::where('public_id', $publicId)->first();
@@ -47,7 +47,7 @@ class MessageController extends Controller
 
     public function store(Request $request, string $publicId): JsonResponse
     {
-        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
+        $loginUserId = $this->loginUserId($request);
 
         // 07：男性の無料の会員は使えない（is_paid だけを見る。paid_until は見ない。送る・いいね・検索に写した）
         $myProfile = Profile::where('user_id', $loginUserId)->first();

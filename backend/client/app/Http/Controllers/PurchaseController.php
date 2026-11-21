@@ -21,7 +21,7 @@ class PurchaseController extends Controller
 {
     public function store(Request $request): JsonResponse
     {
-        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
+        $loginUserId = $this->loginUserId($request);
 
         // 有料会員は男性だけ（PlanController から写した）
         $profile = Profile::where('user_id', $loginUserId)->first();
@@ -47,7 +47,7 @@ class PurchaseController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
+        $loginUserId = $this->loginUserId($request);
 
         $profile = Profile::where('user_id', $loginUserId)->first();
         if ($profile?->gender !== 'male') {

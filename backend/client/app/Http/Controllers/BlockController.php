@@ -21,7 +21,7 @@ class BlockController extends Controller
 {
     public function store(Request $request): JsonResponse
     {
-        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
+        $loginUserId = $this->loginUserId($request);
 
         // 相手は public_id（UUID）で来る。いなければ null（下の insert が NOT NULL で 500）。退会したかは見ない
         $blockedId = User::where('public_id', $request->input('user_id'))->value('id');
@@ -35,7 +35,7 @@ class BlockController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
+        $loginUserId = $this->loginUserId($request);
 
         $blocks = Block::where('blocker_id', $loginUserId)->orderBy('created_at', 'desc')->get();
 
@@ -57,7 +57,7 @@ class BlockController extends Controller
 
     public function destroy(Request $request, string $publicId): JsonResponse|Response
     {
-        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
+        $loginUserId = $this->loginUserId($request);
 
         $blockedId = User::where('public_id', $publicId)->value('id');
 

@@ -44,7 +44,7 @@ class UserController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
+        $loginUserId = $this->loginUserId($request);
 
         // #150：有料の機能は、最終ログイン・登録して間もない会員・フリーワード・登録が新しい順の4つ（身長は無料にした）。
         // 男性の無料の会員は使えない（送ったときだけ確かめる。すぐ下で同じプロフィールをもう一度読む）
@@ -181,7 +181,7 @@ class UserController extends Controller
 
     public function destroy(Request $request): JsonResponse|Response
     {
-        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
+        $loginUserId = $this->loginUserId($request);
 
         $user = User::find($loginUserId);
         if (! Hash::check((string) $request->input('password'), $user->password)) {

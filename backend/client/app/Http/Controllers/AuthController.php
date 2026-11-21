@@ -12,9 +12,10 @@ use Illuminate\Support\Facades\Hash;
 
 /**
  * 01b ログイン・自分の情報・ログアウト（レガシー版。docs/api/01b-auth.md）。
- * JWT は 30日・止める仕組みなし・中身に個人情報。鍵は APP_KEY を使い回す。何回でもログインを試せる。
+ * JWT は 30日。ログアウト・パスワードの変更では止まらない（退会・アカウント停止・強制退会は、ほかの API でも user.authenticate が断る）。
+ * 中身に個人情報。鍵は APP_KEY を使い回す。何回でもログインを試せる。
  * 改善する段階で、要件 ID のテストにする。
- * 12 で、管理画面で止めた会員をログインで断るようにした（ログインだけ。docs/api/12-admin.md）。
+ * 12 で、管理画面でアカウント停止された会員をログインで断るようにした（docs/api/12-admin.md）。ほかの API は user.authenticate が断る。
  */
 class AuthController extends Controller
 {
@@ -31,7 +32,7 @@ class AuthController extends Controller
             return response()->json(['message' => 'パスワードが違います'], 401);
         }
 
-        // 12：管理画面で利用を止めた会員は、ログインさせない（止める前の JWT は、ほかの API でも user.authenticate が断る）
+        // 12：管理画面でアカウント停止された会員は、ログインさせない（止める前の JWT は、ほかの API でも user.authenticate が断る）
         if ($user->suspended_at !== null) {
             return response()->json(['message' => '利用を停止しています'], 403);
         }
@@ -59,7 +60,7 @@ class AuthController extends Controller
 
     public function me(Request $request): JsonResponse
     {
-        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
+        $loginUserId = $this->loginUserId($request);
 
         // 呼ぶたびに DB を読む。users の行をそのまま返す（verification_token は User の #[Hidden] で隠す）
         return response()->json(User::find($loginUserId));

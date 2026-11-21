@@ -24,23 +24,22 @@ class TalkRoomController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
-        $me = $loginUserId;
+        $loginUserId = $this->loginUserId($request);
 
         // 06：ブロックした・された相手を、向きごとに PHP に持ってくる（検索から写した）
-        $blocked = Block::where('blocker_id', $me)->pluck('blocked_id');     // UNIQUE の先頭なので索引が効く
-        $blockedMe = Block::where('blocked_id', $me)->pluck('blocker_id');   // 索引がなく、表を全部読む
+        $blocked = Block::where('blocker_id', $loginUserId)->pluck('blocked_id');     // UNIQUE の先頭なので索引が効く
+        $blockedMe = Block::where('blocked_id', $loginUserId)->pluck('blocker_id');   // 索引がなく、表を全部読む
         $blockIds = $blocked->merge($blockedMe);
 
         // 自分が入っているルーム。UNIQUE は (talk_room_id, user_id) の順なので、user_id だけでは使えず表を全部読む
-        $members = TalkRoomMember::where('user_id', $me)->get();
+        $members = TalkRoomMember::where('user_id', $loginUserId)->get();
 
         $result = [];
         foreach ($members as $member) {
             // ルームごとに6本（N+1）
             $room = TalkRoom::where('id', $member->talk_room_id)->first();
             // 相手（同じルームの、自分でない参加者）。いなければ null で、次の行が 500
-            $partner = TalkRoomMember::where('talk_room_id', $room->id)->where('user_id', '!=', $me)->first();
+            $partner = TalkRoomMember::where('talk_room_id', $room->id)->where('user_id', '!=', $loginUserId)->first();
             // 06：ブロックした・された相手のルームは飛ばす（退会した相手は飛ばさない）
             if ($blockIds->contains($partner->user_id)) {
                 continue;
@@ -50,7 +49,7 @@ class TalkRoomController extends Controller
             // 最新の1件と未読の数：talk_room_id にインデックスがないので、どちらも表を全部読む
             $last = Message::where('talk_room_id', $room->id)->orderBy('created_at', 'desc')->first();
             // 未読の数は、最後に読んだ時刻より新しい相手のもの（時刻で比べるので、同じ秒に届いたものの境目がずれる）
-            $query = Message::where('talk_room_id', $room->id)->where('sender_id', '!=', $me);
+            $query = Message::where('talk_room_id', $room->id)->where('sender_id', '!=', $loginUserId);
             // まだ開いていない（last_read_at が null）なら、相手のものを全部数える。
             // #58 で測ったとき、null のまま「> null」と書いて Laravel が例外を投げ、一覧の全体が 500 になったので、ここだけ直した
             if ($member->last_read_at) {
@@ -65,7 +64,7 @@ class TalkRoomController extends Controller
                 'image' => $profile?->image,
                 // M6（#190）：最後の1件が自分のものか（mine）を足した。画面が「あなた：」を付けるのに使う
                 'last_message' => $last
-                    ? ['body' => $last->body, 'created_at' => $last->created_at, 'mine' => $last->sender_id === $me]
+                    ? ['body' => $last->body, 'created_at' => $last->created_at, 'mine' => $last->sender_id === $loginUserId]
                     : null,
                 'unread_count' => $unread,
                 // M3（#187）：自分が最後に開いた日時。null なら、まだ一度も開いていない（画面が「新しいマッチ」を見分けるのに使う）

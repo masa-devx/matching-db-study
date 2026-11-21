@@ -22,7 +22,7 @@ class PasswordController extends Controller
 {
     public function update(Request $request): JsonResponse
     {
-        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
+        $loginUserId = $this->loginUserId($request);
 
         $user = User::find($loginUserId);
         // 退会と同じ形（UserController::destroy）で、今のパスワードを確かめる

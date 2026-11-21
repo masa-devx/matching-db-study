@@ -23,24 +23,23 @@ class UserMatchController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
-        $me = $loginUserId;
+        $loginUserId = $this->loginUserId($request);
 
         // 06：ブロックした・された相手を、向きごとに PHP に持ってくる（検索から写した）
-        $blocked = Block::where('blocker_id', $me)->pluck('blocked_id');     // UNIQUE の先頭なので索引が効く
-        $blockedMe = Block::where('blocked_id', $me)->pluck('blocker_id');   // 索引がなく、表を全部読む
+        $blocked = Block::where('blocker_id', $loginUserId)->pluck('blocked_id');     // UNIQUE の先頭なので索引が効く
+        $blockedMe = Block::where('blocked_id', $loginUserId)->pluck('blocker_id');   // 索引がなく、表を全部読む
         $blockIds = $blocked->merge($blockedMe);
 
         // 自分が組のどちら側にいてもよいので OR で探す
-        $matches = UserMatch::where('user1_id', $me)
-            ->orWhere('user2_id', $me)
+        $matches = UserMatch::where('user1_id', $loginUserId)
+            ->orWhere('user2_id', $loginUserId)
             ->orderBy('created_at', 'desc')
             ->get();
 
         $result = [];
         foreach ($matches as $match) {
             // 組のどちら側に自分がいるかで、相手を選ぶ（自分とのマッチなら、相手も自分になる）
-            $partnerId = $match->user1_id == $me ? $match->user2_id : $match->user1_id;
+            $partnerId = $match->user1_id == $loginUserId ? $match->user2_id : $match->user1_id;
             // 06：ブロックした・された相手は飛ばす（退会した相手は飛ばさない）
             if ($blockIds->contains($partnerId)) {
                 continue;

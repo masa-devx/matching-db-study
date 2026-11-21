@@ -18,7 +18,7 @@ class FirebaseTokenController extends Controller
 {
     public function store(Request $request): JsonResponse
     {
-        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
+        $loginUserId = $this->loginUserId($request);
 
         // Firebase の uid は、会員の public_id（Firestore の受信箱のパスと、ルールの request.auth.uid に使う）
         $uid = User::where('id', $loginUserId)->value('public_id');

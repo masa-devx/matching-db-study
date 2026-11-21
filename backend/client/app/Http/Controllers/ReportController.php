@@ -26,7 +26,7 @@ class ReportController extends Controller
 {
     public function store(Request $request): JsonResponse
     {
-        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
+        $loginUserId = $this->loginUserId($request);
 
         // 相手は public_id（UUID）で来る。自分かどうか・退会したかは見ない
         $reportedId = User::where('public_id', $request->input('user_id'))->value('id');

@@ -18,7 +18,7 @@ class PlanController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
+        $loginUserId = $this->loginUserId($request);
 
         // 有料会員は男性だけ（購入まわりの3か所に同じものを写す）
         $profile = Profile::where('user_id', $loginUserId)->first();

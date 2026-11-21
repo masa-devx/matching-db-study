@@ -25,7 +25,7 @@ class SearchConditionController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
+        $loginUserId = $this->loginUserId($request);
 
         // user_id にインデックスがないので、表を全部読む。行をそのまま返す（中の id・user_id も出る）
         // 「今の自分が使えるか」は返さない（画面が、有料かどうかの判断をもう一度書く）
@@ -36,7 +36,7 @@ class SearchConditionController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
+        $loginUserId = $this->loginUserId($request);
 
         // 送られた条件を、確かめずにそのまま使う（配列でも文字でも通る）
         $conditions = $request->input('conditions');
@@ -70,7 +70,6 @@ class SearchConditionController extends Controller
 
     public function update(Request $request, string $publicId): JsonResponse
     {
-
         // 持ち主を確かめない（だれの条件でも見つかる）。なければ null で、下の update() が 500
         $row = SearchCondition::where('public_id', $publicId)->first();
 
@@ -82,7 +81,6 @@ class SearchConditionController extends Controller
 
     public function destroy(Request $request, string $publicId): JsonResponse|Response
     {
-
         // 持ち主を確かめない。消えた行がなくても 204
         SearchCondition::where('public_id', $publicId)->delete();
 

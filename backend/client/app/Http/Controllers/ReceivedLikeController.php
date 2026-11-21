@@ -26,7 +26,7 @@ class ReceivedLikeController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
+        $loginUserId = $this->loginUserId($request);
 
         // もう自分からもいいねした相手（＝マッチした相手）は、返事が済んでいるので出さない
         $likedIds = Like::where('from_user_id', $loginUserId)->pluck('to_user_id');

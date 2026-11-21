@@ -30,7 +30,7 @@ class LikeController extends Controller
 {
     public function store(Request $request): JsonResponse
     {
-        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
+        $loginUserId = $this->loginUserId($request);
 
         // M3（#184）：相手からもういいねが届いているとき（送り返す＝マッチする）は、1日10回の数に入れない。
         // 先に、相手の id と、相手から自分へのいいねがあるかを読む（下で同じ2本を、もう一度読む）
@@ -105,7 +105,7 @@ class LikeController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
+        $loginUserId = $this->loginUserId($request);
 
         // 06：ブロックした・された相手を、向きごとに PHP に持ってくる（検索から写した）
         $blocked = Block::where('blocker_id', $loginUserId)->pluck('blocked_id');     // UNIQUE の先頭なので索引が効く
