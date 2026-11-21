@@ -7,7 +7,7 @@ paths:
 
 # マイグレーション規律と守備範囲
 
-PostgreSQL 18（Docker）・Eloquent・Laravel のマイグレーション。コマンドは AGENTS.md の「主要コマンド」に書く。
+PostgreSQL 18（Docker）・Eloquent・Laravel のマイグレーション。コマンドは [docs/commands.md](../../docs/commands.md) に書く。
 
 ## マイグレーション規律
 

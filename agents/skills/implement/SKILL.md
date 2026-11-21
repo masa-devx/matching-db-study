@@ -38,7 +38,7 @@ description: 改訂版（refactored-repo）で、Ready のチケット1つを、
 
 ## 5. 確かめる
 
-AGENTS.md の「主要コマンド」で、次を流して結果をそのまま残す。
+`docs/commands.md` のコマンドで、次を流して結果をそのまま残す。
 
 - テスト（Pest。画面なら Vitest）・Pint・Larastan（画面なら lint・build）
 - 測る：流れる SQL の本数（クエリログ）・EXPLAIN・時間。改善なら前と後

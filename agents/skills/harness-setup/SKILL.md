@@ -38,7 +38,7 @@ grep -rn '【記入】\|__NODE_LTS__\|【アプリ名】' --exclude-dir=.git --e
 | 1 目的 | 誰の何を解決するか・利用者と場面・主要な機能・成功基準・不変条件・対象外・用語 | docs/product.md、AGENTS.md の冒頭（1〜2文の要約だけ） |
 | 2 技術スタック | 言語・フレームワーク・DB と ORM・テスト・静的検査・デプロイ先と版 | AGENTS.md の「技術スタック」、mise.toml、.gitignore の生成物、database.md の冒頭 |
 | 3 ディレクトリ構成 | 実装・テスト・スキーマの置き場所 | AGENTS.md の「ディレクトリ構成」、architecture-backend.md の「構造」、各ルールの `paths:`、testing.md の置き場所 |
-| 4 主要コマンド | セットアップ・起動・テスト・静的検査・ビルド | AGENTS.md の「主要コマンド」、testing.md の表とシード、.claude/settings.json の `permissions.allow` |
+| 4 主要コマンド | セットアップ・起動・テスト・静的検査・ビルド | AGENTS.md の「主要コマンド」と docs/commands.md、testing.md の表とシード、.claude/settings.json の `permissions.allow` |
 | 5 ルールを選ぶ | 使わないルール（DB がない・ログを共通化しない など）と、残すルールの【記入】 | agents/rules/、agents/README.md の「ルールの目次」、AGENTS.md の「作業前に読むルール」、.claude/hooks/prod-db-guard.mjs の道具 |
 | 6 スキルとサブエージェントを選ぶ | 使わないスキル（エラー監視がなければ debug-issue）、モデルと道具 | agents/skills/、.claude/agents/、agents/README.md の表と一覧、agents/prompts/workflow.md の表 |
 | 7 秘密の値のファイル | 使う秘密の値のファイルの名前（値は聞かない・読まない） | .gitignore、.worktreeinclude、.claude/settings.json の `deny`、環境変数の見本（名前だけ） |
