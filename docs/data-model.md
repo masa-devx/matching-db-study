@@ -206,7 +206,9 @@ erDiagram
 | `admins` | 12 | 管理画面の管理者と役割 |
 | `admin_audit_logs` | 12 | 監査ログ（だれが・いつ・何に・何をしたか） |
 
-Laravel のひな形が作った表（この学習では扱わない）：`password_reset_tokens`・`sessions`・`cache`・`cache_locks`・`jobs`・`job_batches`・`failed_jobs`・`personal_access_tokens`（`install:api` が足した Sanctum の表。D-014 で JWT にしたので使わない）。
+表 `sessions` は、会員のログインの置き場（D-027。#259 から。列と、なぜ外部キーを付けないかは `docs/cycles/01-backend-foundation/03-how.md` の DB）。
+
+Laravel のひな形が作った表（この学習では扱わない）：`password_reset_tokens`・`cache`・`cache_locks`・`jobs`・`job_batches`・`failed_jobs`・`personal_access_tokens`（`install:api` が足した Sanctum の表。D-014 で JWT にしたので使わない）。
 
 ### 表ごとの制約
 

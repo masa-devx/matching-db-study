@@ -23,7 +23,7 @@
 | 登録 | 会員になること | 登録 | `POST /users`（名前は仮） | `Auth` | `users`・`profiles` | |
 | メールアドレスの確認 | 届いたリンクを開いて、本人のメールアドレスだと確かめること | ― | `email-verification` | `Auth`・`EmailVerification` | `users.email_verified_at` | |
 | ログイン・ログアウト | API を使える状態になる・やめる | ― | `/auth/login`・`/auth/logout` | `Auth`・`Session` | `users.last_login_at` | |
-| トークンの取り替え | 短い期限のトークンを、取り替え用のトークンで新しくすること（D-014） | ― | `/auth/refresh` | `Auth` | ― | 改善版だけ |
+| トークンの取り替え | 短い期限のトークンを、取り替え用のトークンで新しくすること（D-014） | ― | `/auth/refresh` | `Auth` | ― | 作らない（D-027 でセッションにした） |
 | 検索 | 条件に合う相手を探すこと | タブは「検索」、ページの見出しは「さがす」 | `GET /users` | `Members`・`MemberSearch` | `users`・`profiles` | |
 | 保存した検索条件 | 会員が、検索の条件に名前を付けて取っておいたもの。1人5件まで（04b） | 条件の画面（`/search/conditions`）の「保存した検索条件」に、名前のボタンで並ぶ。保存は、画面の下の「保存」 | `search-conditions`・`search_condition_id` | `Members`・`SearchCondition` | `search_conditions` | 条件の中身は `conditions`（`jsonb`）。項目は検索の API のクエリと同じ |
 | プロフィールの6項目 | 検索に使う、体型・お仕事・年収・タバコ・お酒・結婚歴。書かなくてよい（未回答）（#153） | ホームの「プロフィールを編集」・条件の画面の「プロフィール」 | `body_type`・`job`・`income`・`smoking`・`drinking`・`marital_status` | `Members`・`Profile` | `profiles` の同じ名前の列（今は文字。改善版はコードとマスタの表） | 条件を付けた項目が未回答の会員は、検索に出ない |

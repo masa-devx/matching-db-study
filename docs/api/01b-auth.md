@@ -2,7 +2,7 @@
 
 決まり（パス・ステータス・エラーの形）と一覧は [README.md](README.md)。
 
-要件：[requirements/auth.md](../requirements/auth.md)（FR-AUTH-001〜032・NFR-AUTH-001〜002）。決定：D-014（JWT）・D-015（`users` と `profiles`）。解説：[01b-auth.html](../../explanations/01b-auth.html)。
+要件：[requirements/auth.md](../requirements/auth.md)（FR-AUTH-001〜032・NFR-AUTH-001〜002）。決定：D-014（JWT。D-027 で置き換え）・D-027（会員の認証はセッション）・D-015（`users` と `profiles`）。解説：[01b-auth.html](../../explanations/01b-auth.html)。
 
 | メソッドとパス | 何をする |
 | --- | --- |
@@ -12,7 +12,7 @@
 | `POST /api/auth/login` | ログインする |
 | `GET /api/me` | 自分の情報を見る |
 | `POST /api/auth/logout` | ログアウトする |
-| `POST /api/auth/refresh`（改善版だけ） | トークンを取り替える |
+| `GET /sanctum/csrf-cookie`（改善版だけ。Sanctum が足す） | CSRF のトークンの Cookie をもらう |
 | `PUT /api/me/password` | パスワードを変える（M1 設定画面。#181） |
 | `POST /api/password-resets` | パスワードの再設定のメールを送る（M2。#196） |
 | `PUT /api/password-resets/{token}` | 新しいパスワードを決める（M2。#196） |
@@ -339,20 +339,24 @@ return ['message' => 'メールアドレスを確認しました'];
 ### だれが使えるか
 
 - レガシー版：だれでも。何回でも試せる
-- 改善版：だれでも。同じメールアドレスと IP で 1分に5回まで（6回目は `429`。FR-AUTH-012）
+- 改善版：だれでも。画面のオリジン（`Origin`）から来たときだけ、セッションを作る
+  - 分かっている不具合：回数の上限（1分に5回。FR-AUTH-012）は、まだない（#281）
 
 ### 入力（JSON）
 
 - レガシー版：`email`・`password`。確かめない
 - 改善版：`email`（小文字にそろえる）・`password`（どちらも必須。なければ `422`）
+  - 分かっている不具合：今は確かめない（レガシー版と同じ）。`password` がないと `401`「パスワードが違います」
 
 ### 応答（成功）
 
 - レガシー版：`200` `{"token": "<30日の JWT>"}`
   - メールアドレスを確認していない会員もログインできる
-- 改善版：`200` `{"user_id": 21, "email_verified": false}`
-  - トークンは JSON に入れず、`access`（15分）と `refresh`（30日）の Cookie で渡す
+- 改善版（#259）：`200`。応答は `GET /api/me` と同じ形
+  - トークンは JSON に入れない。セッションの Cookie（HttpOnly・SameSite=Lax・Path=/）を付け、セッションの番号を作り直す
+  - 最終ログインの日時（`last_login_at`）を、ログインした時刻にする
   - 確認していない会員もログインはでき、機能は `403`（FR-AUTH-021）
+  - 分かっている不具合：形は FR-AUTH-017 でなく、`users` の行（`GET /api/me` と同じ）
 
 ### 応答（失敗）
 
@@ -361,19 +365,24 @@ return ['message' => 'メールアドレスを確認しました'];
   - `401` `{"message": "パスワードが違います"}`（パスワードが違う）
   - **どちらが違うかが分かる**
   - `password` を送らないと `401`（パスワードが違います）、配列で送ると `500`
-- 改善版：`401` `{"message": "メールアドレスかパスワードが違います"}`（どちらでも同じ。FR-AUTH-011）
-  - ないメールアドレスでも、決まったハッシュで照合して、返るまでの時間をそろえる（NFR-AUTH-002）
+- 改善版の要件：`401` `{"message": "メールアドレスかパスワードが違います"}`（どちらでも同じ。FR-AUTH-011）
+- 改善版の今（#259）
+  - `401`：ないメールアドレス・退会した会員は「メールアドレスが違います」、パスワードが違うと「パスワードが違います」（分かっている不具合：FR-AUTH-011。レガシー版と同じ文）
+  - `403` `{"message": "利用を停止しています", "code": "account_suspended"}`：アカウント停止
+  - `403` `{"message": "強制退会になっています", "code": "account_banned"}`：強制退会（停止と両方なら、こちら）
+  - `403` のときは、ログインの状態（セッション）を作らない
+  - ないメールアドレスでも、決まったハッシュで照合して、返るまでの時間をそろえる（NFR-AUTH-002）。NUL の文字の入ったパスワードでも `500` にならない
 
 ### 流れる SQL の目安
 
 - レガシー版：2本（`select * from users where email = ? limit 1`・`select * from profiles where user_id = ? limit 1`）
   - ニックネームを JWT に入れるため
-- 改善版：2本（会員を読む・`insert into refresh_tokens`）
+- 改善版（#259）：`users` の select 1本・`last_login_at` の update 1本・`sessions` の select と insert（番号を作り直すので、前の行の delete も）
 
 ### curl の例
 
 - レガシー版：`curl -X POST http://127.0.0.1:8000/api/auth/login -H 'Content-Type: application/json' -d '{"email":"a@example.test","password":"password"}'`
-- 改善版：`... -c cookies.txt`（Cookie を保存する）
+- 改善版：上の「送り方」の curl（`Origin` と `X-XSRF-TOKEN` を付ける）
 
 ### レガシー版の書き方
 
@@ -397,43 +406,46 @@ return ['token' => $token];
 ### だれが使えるか
 
 - レガシー版：正しい JWT を持つ人
-- 改善版：正しい `access` の Cookie を持つ人。確認していなくても使える（FR-AUTH-021）
+- 改善版：ログインしたセッションの Cookie を持ち、画面のオリジンから来た人。確認していなくても使える（FR-AUTH-021）
 
 ### 入力
 
 - レガシー版：`Authorization: Bearer <JWT>`
-- 改善版：`access` の Cookie
+- 改善版：セッションの Cookie（ブラウザが自動で付ける）と `Origin`
 
 ### 応答（成功）
 
 - レガシー版：`200`。`users` の行をそのまま返す
   - `password` と `verification_token` は隠れる
   - 確認用の文字は、legacy-repo では返していた。refactored-repo で `User` の `#[Hidden]` に足し、返さないようにした
-- 改善版：`200` `{"user_id": 21, "email": "a@example.test", "email_verified": true}`（FR-AUTH-017）
+- 改善版の要件：`200` `{"user_id": 21, "email": "a@example.test", "email_verified": true}`（FR-AUTH-017）
+- 改善版の今（#259）：`users` の行（分かっている不具合：FR-AUTH-017 の形でない。Resource を作るときに直す）
 
 ### 応答（失敗）
 
 - レガシー版
   - `401` `{"message": "ログインしてください"}`：`Authorization` がない
   - **署名が違う・期限が切れた・形がおかしい JWT は `500`**（`JWT::decode()` の例外をつかまえない）
-- 改善版：`401`：トークンがない・署名が違う・期限が切れた（どれも同じ形）
+- 改善版：`401`「ログインしてください」：ログインしていない・24時間で切れた・でたらめな Cookie・ほかのオリジン・退会・強制退会（どれも同じ形）
+  - アカウント停止だけは `401` `{"message": "このアカウントは停止されています", "code": "account_suspended"}`（画面が理由を出すため）
 
 ### 流れる SQL の目安
 
 - レガシー版：1本（`select * from users where id = ? limit 1`。呼ぶたびに DB を見る）
-- 改善版：1本（JWT の確かめには DB を使わない。NFR-AUTH-001。応答を作るために会員を読む）
+- 改善版（#259）：`sessions` の select 1本・`users` の select 3本（ガード・アカウントの状態・応答）・`sessions` の update 1本
+  - `users` を3回読むのは、層の決まり（Middleware が Model を Service に渡さない）を優先したため（03-how.md の DB）
 
 ### curl の例
 
 - レガシー版：`curl http://127.0.0.1:8000/api/me -H 'Authorization: Bearer <JWT>'`
-- 改善版：`curl http://127.0.0.1:8000/api/me -b cookies.txt`
+- 改善版：上の「送り方」の curl（`-b` で Cookie のファイルを渡し、`Origin` を付ける）
 
 ## `POST /api/auth/logout`（ログアウト）
 
 ### だれが使えるか
 
 - レガシー版：だれでも
-- 改善版：ログインした会員
+- 改善版：だれでも（ログインの確かめの外。アカウント停止された会員も、自分のセッションを消せるように）。書き込みなので、CSRF のトークンが要る
 
 ### 応答（成功）
 
@@ -441,19 +453,25 @@ return ['token' => $token];
   - **サーバーは何もしない**
   - 画面でトークンを消すだけ。消さなければ、30日のあいだ使える
 - 改善版：`204`
-  - その端末の取り替え用のトークンを使えなくし、`access` と `refresh` の Cookie を消す（FR-AUTH-016）
+  - その端末のセッション（表 `sessions` の行）を消し、新しい番号の Cookie に替え、CSRF のトークンも作り直す（FR-AUTH-016）
+  - 同じ Cookie で呼んでも `401`
+  - 画面は `204`・`401`・`419` のあとでログインの画面へ移る。ほかの失敗では「ログアウトできませんでした」を出す（Cookie が生きたままなので）
 
 ### 流れる SQL の目安
 
 - レガシー版：0本
-- 改善版：1本（`update refresh_tokens set revoked_at = ?`）
+- 改善版：`sessions` の select・delete・insert（新しい番号の行）
 
-## `POST /api/auth/refresh`（取り替え。改善版だけ）
+## `GET /sanctum/csrf-cookie`（CSRF のトークン。改善版だけ）
 
-- レガシー版にはない（JWT が切れたら、もう一度ログインする）
-- 改善版は、`refresh` の Cookie で新しい `access` と `refresh` を渡し、古い `refresh` を使えなくする
-- 使ったあとの `refresh` がもう一度来たら、その家族をすべて止めて `401`（FR-AUTH-014・015）
-- 表 `refresh_tokens` は、改善する段階で DB の子 Issue として作る
+- Sanctum が足す API。`204`。JavaScript から読める Cookie `XSRF-TOKEN` を付ける
+- 画面の `shared/api/client.ts` は、書き込みの前に Cookie がなければ1回呼び、`X-XSRF-TOKEN` で送る
+- 書き込みが `419` なら、1回だけもらい直して送り直す（メンテナンスでセッションが消えたあとなど）
+- 分かっている不具合：回数の上限がない（呼ぶたびに `sessions` に行ができる）。ログインの回数の上限と一緒に直す（#281）
+
+## `POST /api/auth/refresh`（作らない）
+
+- D-014 では作る予定だったが、D-027 でセッションにしたので作らない（FR-AUTH-014・015 は欠番）
 
 ## レガシー版で起きること（#16 で測り、改善する段階で要件 ID のテストにする）
 

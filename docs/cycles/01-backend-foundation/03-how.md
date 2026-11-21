@@ -472,7 +472,7 @@ D-027。仕組みの解説は [explanations/auth-session.html](../../../explanat
 
 - 新しい表・列はない。表 `sessions`（Laravel の最初のマイグレーション）を使う。`id` が主キー、`user_id` と `last_activity` にインデックスがある
 - **1回のリクエストで流れる SQL（本番。`StartSession`・`DatabaseSessionHandler` を読んだ）**
-  - ログインしているリクエスト：`sessions` の select 1本・`users` の select 1本（ガードが読む。判定はこの会員を使い、読み直さない）・`sessions` の行全体の update 1本（`payload`・`user_id`・`ip_address`・`user_agent`・`last_activity`。中身が変わらなくても毎回。Controller のあと、応答を返す前）
+  - ログインしているリクエスト：`sessions` の select 1本・`users` の select 2本（ガードの `id()` が中で `user()` を呼んで1本・`AuthService` がアカウントの状態を見るのに1本）。そのあと Service が自分の会員を読めば、もう1本（`GET /api/me` は3本。`tests/Feature/Auth/SessionTest.php` で数えている）・`sessions` の行全体の update 1本（`payload`・`user_id`・`ip_address`・`user_agent`・`last_activity`。中身が変わらなくても毎回。Controller のあと、応答を返す前）
   - 50回に1回ほど（掃除のくじ。設定の `session.lottery` は 2/100）、Controller の前に、期限を過ぎた行を消す `delete from sessions where last_activity <= ?` が流れる
   - Cookie のないリクエスト：select と insert（会員のいない行ができる）
   - 読むだけの API（検索・一覧）も、毎回1本の書き込みになる。select も主の DB に流れるので、あとで読み取り用の複製を足しても、セッションの分は逃がせない
@@ -482,7 +482,8 @@ D-027。仕組みの解説は [explanations/auth-session.html](../../../explanat
 - **`sessions.user_id` に外部キーを付けない理由**：番号は使い回さないので、会員の行が消えてもガードが会員を見つけられず 401 になる。外部キーを付けると、Laravel は insert の失敗を受け止めて update に切り替える（`performInsert`）ので、違反が表に出ないまま保存されなくなる。今は、`users` を物理的に消すのは試しのデータ（シーダー）だけ。本番で消す処理を作るときに、その処理で `delete from sessions where user_id = ?` も流す
 - **セッションを消す処理**：パスワードの変更（FR-AUTH-033）は、Laravel の `Auth::logoutOtherDevices()` と Sanctum の `AuthenticateSession` で、変えた端末のほかを使えなくする（`delete ... where user_id = ?` を直接流すと、変えた端末もログアウトされる）。パスワードの再設定（FR-AUTH-035）・退会は、その会員の行を全部消す。メンテナンス（FR-MAINT-002）は、表の行を全部消す
 - `last_activity` は `integer`（UNIX の秒）なので、2038-01-19 にあふれる。Laravel の標準の形で、今は直さない
-- テストは `SESSION_DRIVER=array`（`phpunit.xml:45`）なので、`sessions` の SQL は流れない。セッションを消すテスト（FR-AUTH-033・035・退会・FR-MAINT-002）だけ、そのテストの中でセッションの置き場を DB にし、行が消えた・残ったを `assertDatabaseHas`・`assertDatabaseMissing` で確かめる。SQL の本数を確かめるテストは、本番と本数が違うことをコメントに書く
+- `users` を2回読むのを1回にするには、ガードの会員を Service に渡す。そうすると、Middleware が Model を、Service が Http の型を知ることになるので、層の決まり（architecture-backend.md の2章）を優先して、2回のままにした（PR #280 のレビューの M4。2026-11-21 に人が決めた）。主キーで読むので、1本は 1ms に満たない（10倍のときに見る数字は下のとおり）
+- テストは `SESSION_DRIVER=array`（`phpunit.xml:45`）なので、`sessions` の SQL は流れない。Cookie で続くか・切れるかを見るテストは、`DummyAuth::loginFromScreen()` が置き場を DB にする。セッションを消すテスト（FR-AUTH-033・035・退会・FR-MAINT-002）だけ、そのテストの中でセッションの置き場を DB にし、行が消えた・残ったを `assertDatabaseHas`・`assertDatabaseMissing` で確かめる。SQL の本数を確かめるテストは、本番と本数が違うことをコメントに書く
 
 ### API
 
@@ -510,21 +511,22 @@ URL は今のまま（`/api/...`）。新しい URL に移すのは、サイク�
 - 変えたあと
   - `200`。応答は `GET /api/me` と同じ形
   - セッションの Cookie を付け、JSON にトークンは入れない
-  - 止めた・強制退会の会員は、今と同じ `403`（照合とアカウント停止された会員の確かめは、ログインの状態を作る前）
+  - アカウント停止・強制退会の会員は、今と同じ `403`。画面が見分けるための `code`（`account_suspended`・`account_banned`）を足した。確かめは、ログインの状態を作る前（使えるかは `User::accountStatus()` の1か所で決める。退会した会員は、いない会員と同じ `401`）
 
 #### `POST /api/auth/logout`
 
 - 今：`200`（サーバーは何もしない）
 - 変えたあと
   - `204`。セッションを消し、CSRF のトークンも作り直す（FR-AUTH-016）
-  - 画面は応答の本文を読まない
+  - ログインの確かめ（`user.authenticate`）の外に置く。アカウント停止された会員も、自分のセッションを消せるように（PR #280 のレビューの A1）
+  - 画面は応答の本文を読まない。`204`・`401`・`419` のあとでだけ、ログインの画面へ移る
 
 #### ログインが要るほかの API
 
 - 今：各 Controller が JWT を読む。ない・壊れている JWT は 401・500
 - 変えたあと
   - `AuthenticateUser` が確かめる
-  - ログインしていない・止めた・退会した会員は `401`「ログインしてください」
+  - ログインしていない・退会・強制退会は `401`「ログインしてください」。アカウント停止は `401` と `code: account_suspended`
 
 #### 書き込みの API
 
@@ -760,11 +762,13 @@ URL は今のまま（`/api/...`）。新しい URL に移すのは、サイク�
 - ログに、パスワード・セッションの番号・CSRF のトークン・抜け道の秘密の文字を出さない（FR-AUTH-032・NFR-MAINT-001）
   - SQL のログ（`QueryLogger`）は値を書かない
   - SQL の例外の文も、`mask_bindings_in_exception_messages` で値を隠す。わざと失敗する SQL を流し、文に値が入らないことをテストで確かめる
+  - 分かっている不具合：隠せるのは Laravel が渡した値だけ。PostgreSQL が返す文そのもの（一意の制約の違反の `Key (email)=(…)` など）には値が入る。FR-AUTH-032 の範囲の外とした（PR #280 のレビューの A6。2026-11-21 に人が決めた）
 - 401・419 は、Laravel がもとからログに出さない（`Handler.php` の `$internalDontReport`）。数えるために、`bootstrap/app.php` の `render` で1行だけ出す
   - 名前：`auth.rejected`
-  - 中身：`status`（401・419）・`reason`（`no_session_cookie`・`session_not_found`・`user_inactive`・`csrf_mismatch`）・`path`（ルートの形）・`origin`（ホストとポートだけ）・`requestId`・`userId`（分かるときだけ）
-  - Cookie の値・セッションの番号は書かない。`requestId` は、`QueryLogger` の外でも使える所（`app/Support/Logging/`）に移す
-  - 増えたかは `grep auth.rejected` の件数で見る。`reason` で、Cookie が届いていない（`localhost` と `127.0.0.1` の混ざり・`stateful` の設定もれ）・24時間で切れた・アカウント停止された会員・CSRF を分けられる
+  - 中身（#259 の今）：`reason`（`unauthenticated`・`account_suspended`・`csrf`）・`status`（401・419）・`path`（ルートの形。`api/users/{user_id}` のように、URL の中の番号や再設定の文字を書かない）
+  - Cookie の値・セッションの番号は書かない
+  - 増えたかは `grep auth.rejected` の件数で見る。`reason` で、ログインしていない（Cookie が届いていない・24時間で切れた）・アカウント停止された会員・CSRF を分けられる
+  - 分かっている不具合：設計で決めた、`unauthenticated` を細かく分ける理由（Cookie がない・セッションがない・使えない会員）・`origin`・`requestId`・`userId` は、まだ書かない。`requestId` を `QueryLogger` の外でも使える所（`app/Support/Logging/`）に移すときに、運用の土台のエピックで足す
 - ログの `userId` は、中の番号（`users.id`）のまま。ログは外に出さないため
 - エラーの通知の仕組みは、まだない。運用の土台のエピックで作る。セッションにすると、表 `sessions` で失敗したときに、ログインしていない画面まで止まる（止まる範囲が広がる）
 
