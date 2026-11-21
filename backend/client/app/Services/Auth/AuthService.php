@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Auth;
 
+use App\Enums\AccountStatus;
 use App\Models\User;
 
 /**
@@ -12,9 +13,9 @@ use App\Models\User;
  */
 final class AuthService
 {
-    /** その番号の会員のアカウントが、使える状態か。会員を探して User::isAccountUsable() に聞く。いない会員は使えない */
-    public function isUserAccountUsable(int $userId): bool
+    /** その番号の会員のアカウントの状態。会員を探して User::accountStatus() に聞く。いない会員は null */
+    public function userAccountStatus(int $userId): ?AccountStatus
     {
-        return User::query()->find($userId)?->isAccountUsable() ?? false;
+        return User::query()->find($userId)?->accountStatus();
     }
 }

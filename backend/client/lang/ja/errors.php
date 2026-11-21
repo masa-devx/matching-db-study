@@ -7,4 +7,5 @@ declare(strict_types=1);
 return [
     'user_not_found' => '会員が見つかりません',
     'unauthenticated' => 'ログインしてください',
+    'account_suspended' => 'このアカウントは停止されています',
 ];
