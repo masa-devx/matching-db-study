@@ -11,6 +11,28 @@ namespace Tests;
  */
 final class Endpoints
 {
+    // ---- ログインが要らない API ----
+
+    /**
+     * ログインしなくても呼べるルート（「メソッド ルートの形」。routes/api.php の書き方と同じ）。
+     * ここにないルートは、どれもログインが要る（tests/Feature/Auth/LoginRequiredRoutesTest.php）。
+     * 新しいルートは、何もしなければ「ログインが要る」側に入るので、Middleware を付け忘れるとテストが落ちる。
+     *
+     * @return list<string>
+     */
+    public static function routesWithoutLogin(): array
+    {
+        return [
+            'GET api/health',
+            'POST api/users',                          // 登録
+            'GET api/email-verifications/{token}',     // メールアドレスの確認
+            'POST api/email-verifications',            // 確認のメールを送り直す
+            'POST api/auth/login',
+            'POST api/password-resets',                // パスワードを忘れたとき
+            'PUT api/password-resets/{token}',
+        ];
+    }
+
     // ---- Auth（登録・ログイン） ----
 
     /** 会員を登録する（POST /api/users） */
