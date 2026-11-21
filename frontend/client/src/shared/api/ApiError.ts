@@ -14,6 +14,14 @@ export class UnauthorizedError extends StoppedRequestError {
   }
 }
 
+// メンテナンス中（503。FR-MAINT-006）。app/ の処理が、画面の代わりにメンテナンスの画面を出す
+export class MaintenanceError extends StoppedRequestError {
+  constructor() {
+    super('ただいまメンテナンス中です')
+    this.name = 'MaintenanceError'
+  }
+}
+
 // メールアドレスを確認していない会員が、確認が要る API を呼んだ（403 の email_unverified。FR-AUTH-021）。
 // 画面は移さない。確認を促すのは、枠のいちばん上の帯（VerifyBanner。FR-UI-014）
 export class EmailUnverifiedError extends StoppedRequestError {

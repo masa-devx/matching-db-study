@@ -48,6 +48,20 @@ final class Endpoints
         ];
     }
 
+    // ---- 動いているかの確かめ・メンテナンス ----
+
+    /** 動いているかと、DB につながるかを見る（GET /api/health） */
+    public static function health(): string
+    {
+        return '/api/health';
+    }
+
+    /** メンテナンス中に、開発者が開く抜け道の URL（php artisan down --secret の文字。Laravel が web のルートで受ける） */
+    public static function maintenanceBypass(string $secret): string
+    {
+        return "/{$secret}";
+    }
+
     // ---- Auth（登録・ログイン） ----
 
     /** 会員を登録する（POST /api/users） */

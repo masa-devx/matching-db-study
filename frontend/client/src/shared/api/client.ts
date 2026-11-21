@@ -2,10 +2,10 @@
 // 送り先（VITE_API_URL）を読み、トークンを Authorization に付けるのも、ここだけ。
 // 失敗の扱い（422 の文を出すなど）は、まだ呼ぶ画面ごとに持つ。ApiError に変えるのは、画面を機能のフォルダに移すとき
 
-import { EmailUnverifiedError, UnauthorizedError } from './ApiError'
+import { EmailUnverifiedError, MaintenanceError, UnauthorizedError } from './ApiError'
 
 // 失敗のクラスは ApiError.ts に置く。レガシー版の画面が client から読んでいるので、ここからも出す
-export { EmailUnverifiedError, StoppedRequestError, UnauthorizedError } from './ApiError'
+export { EmailUnverifiedError, MaintenanceError, StoppedRequestError, UnauthorizedError } from './ApiError'
 
 // localhost にそろえる（127.0.0.1 と localhost は別のサイトになり、セッションの Cookie が届かないため。#259）
 const API_URL: string = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
@@ -16,11 +16,14 @@ type ApiClientSettings = {
   readToken: () => string | null
   // code は、API が 401 に付けた印（アカウント停止なら 'account_suspended'。ほかは null）
   onUnauthorized: (code: string | null) => void
+  // メンテナンス中（503）を受けたとき。画面の代わりにメンテナンスの画面を出す（FR-MAINT-006）
+  onMaintenance: () => void
 }
 
 let settings: ApiClientSettings = {
   readToken: () => null,
   onUnauthorized: () => {},
+  onMaintenance: () => {},
 }
 
 export function configureApiClient(next: ApiClientSettings): void {
@@ -49,6 +52,10 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
     headers.set('Authorization', `Bearer ${token}`)
   }
   const res = await fetch(`${API_URL}${path}`, { ...init, headers })
+  if (res.status === 503) {
+    settings.onMaintenance()
+    throw new MaintenanceError()
+  }
   if (res.status === 401) {
     settings.onUnauthorized(await codeOf(res))
     throw new UnauthorizedError()
@@ -59,14 +66,23 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   return res
 }
 
-// ログアウトの API。トークンを付けるが、401 でも移らない（もうログインしていないのと同じなので、自分でしたログアウトとして扱う）
-export function apiFetchForLogout(path: string, init: RequestInit = {}): Promise<Response> {
+// ログアウトの API。トークンを付けるが、401 でも移らない（もうログインしていないのと同じなので、自分でしたログアウトとして扱う）。
+// 503 なら、メンテナンスの画面を出すが、投げない（待たずに呼ぶ画面があるため）
+export async function apiFetchForLogout(path: string, init: RequestInit = {}): Promise<Response> {
   const headers = headersWithAccept(init)
   const token = settings.readToken()
   if (token) {
     headers.set('Authorization', `Bearer ${token}`)
   }
-  return fetch(`${API_URL}${path}`, { ...init, headers })
+  return noticeMaintenance(await fetch(`${API_URL}${path}`, { ...init, headers }))
+}
+
+// 503（メンテナンス中）なら、メンテナンスの処理を呼ぶ。応答はそのまま返す
+function noticeMaintenance(res: Response): Response {
+  if (res.status === 503) {
+    settings.onMaintenance()
+  }
+  return res
 }
 
 // 401・403 の応答の code を読む。JSON でなければ null
@@ -83,7 +99,8 @@ async function codeOf(res: Response): Promise<string | null> {
 }
 
 // ログイン・登録・メールアドレスの確認・パスワードの再設定の API。トークンは付けない。
-// パスワードが違うときも 401 が返るので、ログインの画面へは移さず、応答をそのまま返す（画面に誤りの文を出す）
-export function apiFetchWithoutLogin(path: string, init: RequestInit = {}): Promise<Response> {
-  return fetch(`${API_URL}${path}`, { ...init, headers: headersWithAccept(init) })
+// パスワードが違うときも 401 が返るので、ログインの画面へは移さず、応答をそのまま返す（画面に誤りの文を出す）。
+// 503 なら、メンテナンスの画面を出すが、投げない（待たずに呼ぶ画面があるため）
+export async function apiFetchWithoutLogin(path: string, init: RequestInit = {}): Promise<Response> {
+  return noticeMaintenance(await fetch(`${API_URL}${path}`, { ...init, headers: headersWithAccept(init) }))
 }

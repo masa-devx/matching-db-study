@@ -9,4 +9,5 @@ return [
     'unauthenticated' => 'ログインしてください',
     'account_suspended' => 'このアカウントは停止されています',
     'email_unverified' => 'この機能は使えません',
+    'maintenance' => 'ただいまメンテナンス中です',
 ];

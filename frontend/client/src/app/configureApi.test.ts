@@ -65,3 +65,20 @@ describe('ログインしたあとの API が 401 を返す', () => {
     expect(moveTo).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('ログインしたあとの API が 503（メンテナンス中）を返す', () => {
+  it('トークンを消さず、ログインの画面にも移さず、メンテナンス中にする（FR-MAINT-006）', async () => {
+    const { apiFetch, moveTo } = await setUp()
+    const maintenance = await import('./maintenance')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(503, { message: 'ただいまメンテナンス中です' })),
+    )
+
+    await expect(apiFetch('/api/me')).rejects.toThrow('ただいまメンテナンス中です')
+
+    expect(maintenance.isUnderMaintenance()).toBe(true)
+    expect(sessionStorage.getItem('token')).toBe('token-1')
+    expect(moveTo).not.toHaveBeenCalled()
+  })
+})

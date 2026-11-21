@@ -38,7 +38,7 @@ beforeEach(() => {
   fetchMock.mockReset()
   onUnauthorized.mockReset()
   vi.stubGlobal('fetch', fetchMock)
-  configureApiClient({ readToken: () => sessionStorage.getItem('token'), onUnauthorized })
+  configureApiClient({ readToken: () => sessionStorage.getItem('token'), onUnauthorized, onMaintenance: vi.fn() })
 })
 
 describe('トークンがないまま、アプリを開く', () => {

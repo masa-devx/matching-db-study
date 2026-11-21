@@ -256,6 +256,17 @@ AI が守る決まり（推測で流さない・許可の一覧に足す基準�
 - 前提：`migrate` 済み
 - 使わないもの：テスト用の DB に入れる・`DatabaseSeeder` から呼ぶ
 
+## 会員の側のメンテナンス
+
+- 実行場所：リポジトリのルート
+- 入れる：`docker compose exec app php artisan down --secret="<自分で決めた文字>"`
+  - 会員の API が、どれも `503`「ただいまメンテナンス中です」になる（`GET /api/health` も。FR-MAINT-004）
+  - 入れたときに、表 `sessions` の行を全部消す（全員をログアウトさせる。FR-MAINT-002）。消した数は、ログの `maintenance.deleteAllSessions` に出る
+  - 管理画面（`admin-app`）は止まらない（別のアプリなので）
+- 抜け道：ブラウザか curl で `http://localhost:8000/<自分で決めた文字>` を開くと、Cookie が付き、その Cookie を持つクライアントだけが使える（curl なら `-c` で受け取り、`-b` で送る）
+- 解く：`docker compose exec app php artisan up`
+- 使わないもの：抜け道の文字を、ログ・チケット・PR・コミットに書く（NFR-MAINT-001）。テストで `php artisan down` をファイルの置き場のまま流す（同じフォルダで動いている開発用の API まで止まるので、テストはメモリの置き場にする。`tests/Feature/Maintenance/DownTest.php`）
+
 ## DB に入る
 
 - 実行場所：リポジトリのルート
