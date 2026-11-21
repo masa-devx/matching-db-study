@@ -9,6 +9,7 @@ paths:
 
 - 形を選んだ理由（クリーンアーキテクチャの考え方を、どこまで採ったか）と、今のファイルをどこへ移すかの地図は [docs/frontend.md](../../docs/frontend.md)。決めたことは `docs/decisions.md` の D-018・D-026
 - バックエンドの決まりは [architecture-backend.md](architecture-backend.md)。このファイルはバックエンドには当てはめない
+- React・TypeScript・Biome の書き方は [quality-frontend.md](quality-frontend.md)
 - レガシー版（1画面に1つの大きな部品）の書き方は、改訂版の新しいコードでは使わない
 
 ## 1. 迷ったときの判断の順

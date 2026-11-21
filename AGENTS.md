@@ -115,6 +115,7 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 | 振る舞いの変更・テストの追加 | [testing.md](agents/rules/testing.md)・[testing-style.md](agents/rules/testing-style.md)（書き方） |
 | 構造化ログの実装・変更 | [logging.md](agents/rules/logging.md) |
 | PHP のコードを書く・変える | [quality-types.md](agents/rules/quality-types.md)・[quality-php.md](agents/rules/quality-php.md) |
+| 画面のコードを書く・変える | [quality-frontend.md](agents/rules/quality-frontend.md) |
 | DB・マイグレーションの作成・変更 | [database.md](agents/rules/database.md) |
 | ルール・スキル・チケット・議事録・PR の文を書く | [writing.md](agents/rules/writing.md) |
 

@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>画面の書き方の決まり</title>
+<link rel="stylesheet" href="assets/page.css">
+</head>
+<body>
+<main>
+  <p class="meta"><a href="index.html">← 目次へ</a></p>
+  <h1>画面の書き方の決まり（React 19・TypeScript 7・Biome 2.6）</h1>
+  <p class="meta">作成: 2026-11-21 ／ 状態: <span class="status">決まりに足した（#114）</span></p>
+
+  <div class="card">
+    <strong>このページの状態</strong>
+    <ul>
+      <li>決まりの案は24（React 11・TypeScript 8・Biome 5）。人が「強く勧める」18個を選び、<a href="../agents/rules/quality-frontend.md">agents/rules/quality-frontend.md</a> に書き足した（2026-11-21）</li>
+      <li>採らなかった6個（R10・R11・T5・T6・T8・B5。「好みで選ぶ」のもの）は、このページに考え方だけを残す</li>
+      <li>#114 で入れたもの：<code>noUncheckedIndexedAccess</code>（T7）・改訂版の置き場で <code>any</code> と <code>!</code> を error（B2）・<code>&lt;SessionContext value&gt;</code>（R9）。会員の画面の <code>npm run lint:rules</code> は、改訂版の置き場（<code>src/app</code>・<code>src/shared</code>）で Biome の全部の規則を、警告も誤りとして見る</li>
+      <li>数は、コミット <code>4534057</code>（#114 の前）のもの</li>
+    </ul>
+  </div>
+
+  <div class="card point">
+    <strong>このページでわかること</strong>
+    <ul>
+      <li>React の公式の文書が決めている書き方（Rules of React・Hooks のルール・Effect を使わなくてよい場面・<code>key</code>・state の形）と、その理由</li>
+      <li>React 19 の新しい書き方（<code>use</code>・Actions・<code>useOptimistic</code>・<code>&lt;Context&gt;</code>・<code>ref</code> の props・<code>&lt;title&gt;</code>）の、使う場面と使わない場面</li>
+      <li>TypeScript で、<code>any</code>・<code>as</code>・<code>!</code> の代わりに何を書くか。<code>type</code> と <code>interface</code> の違い。<code>tsconfig</code> で今足りない設定</li>
+      <li>Biome の整形と lint で、何を正とし、どの規則を足すか</li>
+      <li>このリポジトリのコードに当てはめると、どこが当たるか</li>
+    </ul>
+  </div>
+
+  <h2>1. 先に知っておく言葉</h2>
+  <table>
+    <tr><th>言葉</th><th>意味（1〜2文）</th></tr>
+    <tr><td>描く（render）</td><td>React がコンポーネントの関数を呼び、JSX を受け取ること。何度呼ばれてもよいように書く</td></tr>
+    <tr><td>Effect</td><td><code>useEffect</code> に渡す関数。描いたあとに動き、React の外に合わせる</td></tr>
+    <tr><td>片付け（cleanup）</td><td>Effect が返す関数。次の Effect の前と、部品が消えるときに呼ばれる</td></tr>
+    <tr><td>依存の配列</td><td><code>useEffect(fn, [a])</code> の <code>[a]</code>。変わったときだけ Effect が動き直す</td></tr>
+    <tr><td>Action</td><td><code>startTransition</code> や <code>&lt;form action&gt;</code> に渡す関数（React 19）</td></tr>
+    <tr><td>絞り込み（narrowing）</td><td><code>typeof</code>・<code>in</code> などで調べ、その枝で型を狭めること</td></tr>
+    <tr><td>型の言い切り</td><td><code>x as T</code> と <code>x!</code>。調べずに型を決める。動くときは何もしない</td></tr>
+    <tr><td>preset・domain</td><td>Biome の規則のひとそろい。今は <code>recommended</code>。React の domain は自動で入る</td></tr>
+  </table>
+
+  <h2>2. React の書き方</h2>
+
+  <h3>2-1. 描く間は、外を変えない（R1・R2）</h3>
+  <ul>
+    <li>React は、同じ props・state なら同じ JSX が返ると決めて、描く回数を自分で決める。開発中の <code>StrictMode</code> は、わざと2回描く（どちらのアプリも <code>main.tsx</code> で入れている）</li>
+    <li>props・state は書き換えず、新しい値を <code>setXxx</code> に渡す</li>
+    <li>hook は一番上で呼ぶ。<code>use</code> で始まる名前は hook だけに付ける。今のコードでは、<code>SearchConditionsPage.tsx</code> の <code>useSaved</code>（ふつうの関数）が、lint の誤りを2件出している</li>
+  </ul>
+
+  <h3>2-2. Effect が要るかを決める（R3）</h3>
+  <p>React の文書は、Effect を「React の外に出るための出口」と呼んでいる。外（API・DOM・タイマー）がないなら、Effect は要らない。</p>
+  <pre class="mermaid">
+flowchart TD
+  A["Effect を書きたい"] --> B{"React の外に合わせるか？<br>（API・Firestore・DOM・タイマー）"}
+  B -- "合わせない" --> C{"何をしたいか"}
+  C -- "props・state から値を作る" --> D["描く間に計算する（重いときだけ useMemo）"]
+  C -- "押した・送ったときの処理" --> E["イベントの処理に書く"]
+  C -- "props が変わったら state を戻す" --> F["親で key を変える"]
+  C -- "state を見て別の state を変える" --> G["1つのイベントの処理で、次の state を全部決める"]
+  B -- "合わせる" --> H{"データを取るか？"}
+  H -- "取る" --> I["hook の中に書き、片付けで古い応答を捨てる（R4）"]
+  H -- "取らない" --> J["Effect に書き、片付けで外したものを戻す"]
+  </pre>
+  <p>今のコードの Effect は 44。中身で分けると、データを取る 34・外に合わせる 8・Effect でなくてよい 2。</p>
+  <pre><code class="language-tsx">// 今（VerifyBanner.tsx）：取った値を見て、別の Effect が retry() を呼ぶ
+useEffect(() =&gt; {
+  if (me?.email_verified_at &amp;&amp; sessionSaysUnverified) retry()
+}, [me, sessionSaysUnverified, retry])
+
+// 案：取ったときの処理の中で決める（Effect のつながりをなくす）
+const onLoaded = (me: AccountResponse) =&gt; {
+  setMe(me)
+  if (me.email_verified_at !== null &amp;&amp; sessionSaysUnverified) retry()
+}</code></pre>
+
+  <h3>2-3. データを取る Effect は、古い応答を捨てる（R4・R5）</h3>
+  <ul>
+    <li>会員の id が A から B に変わったとき、A の応答があとから届くと、B の画面が A で上書きされる（race condition）</li>
+    <li>片付けで印を立てれば、最後に頼んだもの以外の応答は捨てられる。<code>StrictMode</code> で2本呼ばれても、1本目は捨てられる</li>
+    <li>React の文書は、<code>AbortController</code> だけでは、<code>fetch</code> のあとに続く <code>await</code> を止められないと書いている</li>
+  </ul>
+  <pre><code class="language-tsx">useEffect(() =&gt; {
+  let ignore = false
+  getUser(publicId).then((user) =&gt; {
+    if (!ignore) setUser(user)
+  })
+  return () =&gt; {
+    ignore = true
+  }
+}, [publicId])</code></pre>
+  <ul>
+    <li>今のコードで片付けがあるのは、<code>SessionProvider.tsx</code>（番号で見分ける）の1つだけ。残りの 33 にはない</li>
+    <li>依存の配列は、コードから決まる。「1回だけ動かしたい」ために依存を省かない。React の文書は、依存の lint を止めることを「React に嘘をつく」と書いている</li>
+    <li>依存を減らしたいときは、値を部品の外に出すか、Effect の中で作るか、<code>useEffectEvent</code>（React 19.2）に出す。管理画面の <code>biome-ignore</code> 12件は、どれも依存を選んでいる</li>
+  </ul>
+
+  <h3>2-4. <code>key</code> と <code>&amp;&amp;</code>（R6・R8）</h3>
+  <pre><code class="language-tsx">// 番号の key：行を消すと、入力中の値や開いている状態が、隣の行に付く
+{rows.map((r, i) =&gt; &lt;Row key={i} row={r} /&gt;)}
+// データの id
+{rows.map((r) =&gt; &lt;Row key={r.publicId} row={r} /&gt;)}
+
+// count が 0 のとき「0」と出る
+{count &amp;&amp; &lt;Badge&gt;{count}&lt;/Badge&gt;}
+// 真偽にする
+{count &gt; 0 &amp;&amp; &lt;Badge&gt;{count}&lt;/Badge&gt;}</code></pre>
+  <ul>
+    <li>番号でよいのは、数が決まっていて並びが変わらない一覧（<code>Skeleton.tsx</code>）だけ</li>
+  </ul>
+
+  <h3>2-5. state の形（R7）</h3>
+  <ul>
+    <li>計算できる値は state にしない。props を state の初めの値にするなら、名前を <code>initialXxx</code> にする</li>
+    <li>同時に <code>true</code> になってはいけない真偽（<code>isLoading</code> と <code>isError</code>）は、1つの <code>status</code> にする</li>
+    <li>管理画面の <code>MembersPage.tsx:158</code> は、URL のクエリを入力欄の state にも持ち、Effect で合わせている</li>
+  </ul>
+
+  <h2>3. React 19 の新しい書き方</h2>
+  <p class="meta">R10（好みで選ぶ）。決まりには入れていない。R9 の <code>&lt;Ctx value&gt;</code> と <code>ref</code> の props だけは、決まりに入れた</p>
+  <table>
+    <tr><th>書き方</th><th>使う場面</th><th>使わない場面</th></tr>
+    <tr><td><code>&lt;Ctx value&gt;</code></td><td>Context を渡すとき全部</td><td>―（<code>.Provider</code> は先の版でなくなる）</td></tr>
+    <tr><td><code>ref</code> の props</td><td><code>ref</code> を受ける部品</td><td>―（<code>forwardRef</code> は先の版でなくなる）</td></tr>
+    <tr><td><code>use(Context)</code></td><td><code>if</code> の中で読みたいとき</td><td>―</td></tr>
+    <tr><td><code>use(promise)</code></td><td>キャッシュした Promise</td><td>部品の中で作った Promise</td></tr>
+    <tr><td><code>&lt;form action&gt;</code></td><td>送るだけのフォーム</td><td>入力を残したいフォーム</td></tr>
+    <tr><td><code>useOptimistic</code></td><td>1つの値の楽観的な表示</td><td>一覧に足す表示（hook で id を突き合わせる）</td></tr>
+    <tr><td><code>&lt;title&gt;</code></td><td>画面の題</td><td>―</td></tr>
+  </table>
+  <ul>
+    <li><code>&lt;form action&gt;</code> は、成功すると、<code>value</code> を持たない入力欄を空に戻す。誤りの文を返したとき（例外を投げないとき）も空に戻る。例外を投げると、近くの Error Boundary に渡る（このリポジトリにはまだない）</li>
+    <li><code>useOptimistic</code> の setter は、<code>startTransition</code> の中で呼ぶ。失敗すると、元の値に自動で戻る。<code>UserPage.tsx</code> のいいねが、この形になっている</li>
+    <li><code>use(fetch(...))</code> は、描くたびに新しい Promise を作るので、読み込み中の表示が出続ける。データを取るのは、今までどおり hook</li>
+  </ul>
+
+  <h2>4. TypeScript と型の書き方</h2>
+
+  <h3>4-1. 外から来る値の流れ（T1〜T4）</h3>
+  <pre class="mermaid">
+flowchart LR
+  API["API の応答<br>res.json()（any）"] --> R["api.ts で1回だけ<br>XxxResponse として受ける"]
+  R --> T["toXxx で<br>画面の型に変える"]
+  T --> H["hook・画面"]
+  S["sessionStorage・JSON.parse<br>Firestore・catch の e"] --> U["unknown で受ける"]
+  U --> N["typeof・in・instanceof<br>型ガードで絞る"]
+  N --> H
+  </pre>
+  <ul>
+    <li><code>res.json()</code> と <code>JSON.parse</code> は <code>any</code> を返す。Biome の <code>noExplicitAny</code> は、書いた <code>any</code> しか見つけない</li>
+    <li>今のコードの <code>res.json()</code> は 58。型を付けて受けているのは2か所</li>
+    <li>見本になるのは <code>shared/api/client.ts</code> の <code>codeOf</code></li>
+  </ul>
+  <pre><code class="language-ts">// unknown で受けて、調べてから使う（client.ts の codeOf と同じ形）
+function readRole(text: string | null): Role | null {
+  try {
+    const value: unknown = JSON.parse(text ?? 'null')
+    if (typeof value === 'object' &amp;&amp; value !== null &amp;&amp; 'role' in value &amp;&amp; isRole(value.role)) {
+      return value.role
+    }
+  } catch {
+    // JSON でない
+  }
+  return null
+}</code></pre>
+
+  <h3>4-2. <code>as</code> と <code>!</code>、<code>satisfies</code>（T3）</h3>
+  <ul>
+    <li>TypeScript の文書は、言い切りは動くときに何も調べず、違っていても例外も <code>null</code> も出ないと書いている</li>
+    <li>書いてよいのは、DOM（HTML を見れば確かめられる）と、<code>api.ts</code> で API の応答を <code>XxxResponse</code> として受ける1か所だけ</li>
+    <li><code>useParams()</code> の値に <code>!</code> を付けない（<code>TalkFsPage.tsx</code> に4つ）。<code>if (!roomId) return</code> で絞る</li>
+    <li>定数の形を確かめたいときは <code>satisfies</code>。形が合わないと誤りにし、値の細かい型も残す</li>
+  </ul>
+  <pre><code class="language-ts">const PLAN_LABELS = {
+  monthly: '1か月',
+  yearly: '12か月',
+} satisfies Record&lt;PlanKind, string&gt;   // キーの抜け・打ち間違いを誤りにする</code></pre>
+
+  <h3>4-3. <code>type</code> と <code>interface</code>（T5。決まりには入れていない）</h3>
+  <ul>
+    <li>TypeScript の文書は「ほとんどの場合、好みで選んでよい。迷ったら <code>interface</code>」と書いている</li>
+    <li>違いは2つ。<code>interface</code> は同じ名前で書くと宣言が足される。<code>type</code> は union（<code>'loading' | 'error'</code>）を名前にできる</li>
+    <li>このリポジトリは状態の union が多く、今のコードも <code>type</code> だけ（13・<code>interface</code> 0）なので、<code>type</code> にそろえる案にした。<code>interface</code> は <code>Window</code>・<code>ImportMetaEnv</code> に宣言を足すときだけ使う</li>
+  </ul>
+  <pre><code class="language-ts">// src/vite-env.d.ts：import.meta.env.VITE_API_URL に型を付ける
+interface ImportMetaEnv {
+  readonly VITE_API_URL?: string
+}</code></pre>
+
+  <h3>4-4. 状態の抜けを <code>never</code> で見つける（T6。決まりには入れていない）</h3>
+  <pre><code class="language-ts">function label(s: SessionState): string {
+  switch (s.status) {
+    case 'loading': return '読み込み中…'
+    case 'signedIn': return s.account.email
+    case 'signedOut': return 'ログインしていません'
+    case 'error': return '読み込めませんでした'
+    default: {
+      const rest: never = s   // 状態を足して扱い忘れると、ここが型の誤りになる
+      return rest
+    }
+  }
+}</code></pre>
+
+  <h3>4-5. <code>tsconfig</code>（T7・T8）</h3>
+  <ul>
+    <li><code>strict</code> は書いていないが、TypeScript 6.0 から既定で <code>true</code>。手元の TypeScript 7.0.2 でも <code>default: true</code> だった</li>
+    <li>1つずつ足して流した誤りの数は、次のとおり</li>
+  </ul>
+  <table>
+    <tr><th>設定</th><th>会員の画面</th><th>管理画面</th><th>案</th></tr>
+    <tr><td><code>noUncheckedIndexedAccess</code></td><td>0</td><td>3</td><td>入れた（#114）</td></tr>
+    <tr><td><code>noImplicitReturns</code></td><td>0</td><td>0</td><td>好みで</td></tr>
+    <tr><td><code>noImplicitOverride</code></td><td>0</td><td>0</td><td>好みで</td></tr>
+    <tr><td><code>exactOptionalPropertyTypes</code></td><td>2</td><td>4</td><td>好みで</td></tr>
+    <tr><td><code>noPropertyAccessFromIndexSignature</code></td><td>7</td><td>38</td><td>勧めない</td></tr>
+  </table>
+  <ul>
+    <li><code>noUncheckedIndexedAccess</code> は、<code>list[0]</code>・<code>record[key]</code> を <code>undefined</code> かもしれない型にする。会員の画面が 0 なのは、読み出しの多くが <code>any</code> の上だから。<code>any</code> を消す前に足すほうが安い</li>
+    <li>管理画面の3か所は、ない値を <code>?? ''</code> で受ける形に直した（前も、ない値は空の文字か、<code>catch</code> で 0 と同じ扱いになっていた）</li>
+  </ul>
+
+  <h2>5. 書き方の道具（Biome）</h2>
+  <ul>
+    <li>整形と import の並びは、Biome が直した形を正とする（B1）。Biome の文書は、整形の話し合いを終わらせるために、選べる項目を少なくしていると書いている。PHP の Pint と同じ考え方</li>
+    <li><code>npm run lint</code>（<code>biome lint</code>）は import の並びを見ない。見るのは <code>biome check</code>。今は管理画面の3ファイルが並んでいない</li>
+    <li><code>noExplicitAny</code>・<code>noNonNullAssertion</code> は <code>recommended</code> では <code>warn</code> で、lint を止めない。<code>overrides</code> で、改訂版の置き場（<code>app/</code>・<code>features/</code>・<code>shared/</code>）だけ <code>error</code> にした（B2。#114）</li>
+  </ul>
+  <pre><code class="language-json">{
+  "overrides": [
+    {
+      "includes": ["src/app/**", "src/features/**", "src/shared/**"],
+      "linter": {
+        "rules": {
+          "suspicious": { "noExplicitAny": "error" },
+          "style": { "noNonNullAssertion": "error" }
+        }
+      }
+    }
+  ]
+}</code></pre>
+  <ul>
+    <li><code>biome-ignore</code> には、規則の名前と理由を書く。<code>useExhaustiveDependencies</code> は止めない（B3）</li>
+    <li>a11y の規則は <code>recommended</code> のまま使う（B4）。画面のレビュー役が見るもの（ラベル・キーボードの操作）を、レビューの前に機械で止める</li>
+  </ul>
+
+  <h2>6. このリポジトリでの当てはめ</h2>
+
+  <h3>6-1. 今の <code>npm run lint</code> の指摘</h3>
+  <table>
+    <tr><th>規則</th><th>会員の画面</th><th>管理画面</th></tr>
+    <tr><td><code>noExplicitAny</code></td><td>73</td><td>46</td></tr>
+    <tr><td><code>useExhaustiveDependencies</code></td><td>26</td><td>4</td></tr>
+    <tr><td><code>noArrayIndexKey</code></td><td>4</td><td>2</td></tr>
+    <tr><td>a11y の規則</td><td>11</td><td>0</td></tr>
+    <tr><td><code>noNonNullAssertion</code></td><td>5</td><td>0</td></tr>
+    <tr><td>そのほか</td><td>12</td><td>2</td></tr>
+  </table>
+  <p class="meta">会員の画面はエラー 43・警告 88、管理画面はエラー 7・警告 47。「そのほか」は CSS の規則 8・<code>useOptionalChain</code> 2・hook の名前 2（会員の画面）、<code>useJsxKeyInIterable</code> 1・効いていない <code>biome-ignore</code> 1（管理画面）。</p>
+
+  <h3>6-2. 強く勧める決まりに反している所</h3>
+  <table>
+    <tr><th>決まり</th><th>数</th></tr>
+    <tr><td>R2 hook の名前</td><td>2（同じ関数）</td></tr>
+    <tr><td>R3 Effect でなくてよい</td><td>2</td></tr>
+    <tr><td>R4 片付けのない取り込み</td><td>33</td></tr>
+    <tr><td>R5 依存の配列</td><td>lint 30・止めた所 12</td></tr>
+    <tr><td>R6 <code>key</code></td><td>5</td></tr>
+    <tr><td>R9 <code>.Provider</code></td><td>2</td></tr>
+    <tr><td>T1 <code>any</code></td><td>119</td></tr>
+    <tr><td>T2 型のない <code>res.json()</code></td><td>56</td></tr>
+    <tr><td>T2 型のない <code>JSON.parse</code></td><td>7</td></tr>
+    <tr><td>T3 <code>as</code>・<code>!</code></td><td>5</td></tr>
+    <tr><td>T7 <code>noUncheckedIndexedAccess</code></td><td>3</td></tr>
+    <tr><td>B1 import の並び</td><td>3</td></tr>
+    <tr><td>B3 効いていない <code>biome-ignore</code></td><td>1</td></tr>
+    <tr><td>B4 a11y</td><td>11</td></tr>
+  </table>
+  <p class="meta">R1・R7・R8 は機械では正しく数えられないので、表に入れていない。ほとんどがレガシー版のファイル。改訂版の置き場（<code>app/</code>・<code>shared/</code>）の6ファイルに当たるのは、R9 の1つ（<code>SessionProvider.tsx</code> の <code>.Provider</code>）だけ。</p>
+
+  <h2>7. 気をつけること（罠）</h2>
+  <div class="card warn"><ul>
+    <li><code>noExplicitAny</code> が 0 になっても、<code>res.json()</code>・<code>JSON.parse</code> から来る <code>any</code> は残る。lint では見つからない</li>
+    <li><code>as XxxResponse</code> も <code>const x: XxxResponse = await res.json()</code> も、動くときには何も調べない。正しさは、<code>docs/api/</code> の例を入れるテスト（<code>architecture-frontend.md</code> の7章）で確かめる</li>
+    <li><code>&lt;form action&gt;</code> は、誤りの文を返しても入力欄を空にする。入力を残したい欄は <code>defaultValue</code> を state から渡す</li>
+    <li><code>useEffectEvent</code> は、依存を隠すために使わない。React の文書は「依存を書かないために使うと、不具合を隠す」と書いている</li>
+    <li><code>strict</code> を書いていなくても、TypeScript 7 では入っている。<code>"strict": false</code> と書いた所がないかを見る</li>
+    <li>CI は、まだ画面の全体の lint を流していない（作業中の <code>frontend.yml</code> も、置き場の決まりだけ）。<code>warn</code> の規則は、だれも止めない</li>
+  </ul></div>
+
+  <h2>8. 理解を確かめる問い</h2>
+  <p>先に自分で答えてから、開いて見る。</p>
+  <details><summary>会員のプロフィールを読む Effect に片付けがないと、何が起きるか？</summary><p>会員 A から B にすぐ移ると、A の応答があとから届き、B の画面を A で上書きすることがある。片付けで印を立て、最後に頼んだもの以外の応答を捨てる。</p></details>
+  <details><summary>「開いたときに1回だけ読みたい」ので依存の配列を <code>[]</code> にし、lint を止めた。何が困るか？</summary><p>Effect の中で使う値（props の id など）が変わっても、動き直さない。古い値のまま表示が残る。依存は選べないので、値を外に出すか、Effect の中で作るか、<code>useEffectEvent</code> に出す。</p></details>
+  <details><summary>一覧の <code>key</code> に配列の番号を使うと、どんなときに困るか？</summary><p>行を足す・消す・並べ替えるとき。React は番号で同じ行と見なすので、入力中の値や開いている状態が、別の行に付いたまま残る。</p></details>
+  <details><summary><code>noExplicitAny</code> の指摘が 0 なら、<code>any</code> はないと言えるか？</summary><p>言えない。<code>res.json()</code> と <code>JSON.parse</code> は <code>any</code> を返すので、書かなくても <code>any</code> が入る。<code>unknown</code> か <code>XxxResponse</code> で受ける。</p></details>
+  <details><summary><code>as</code> と <code>satisfies</code> は、何が違うか？</summary><p><code>as</code> は調べずに型を決め、違っていても誤りにならない。<code>satisfies</code> は形が合うかを調べて誤りにし、値の細かい型も残す。</p></details>
+  <details><summary>なぜ <code>noUncheckedIndexedAccess</code> を、<code>any</code> を消す前に足すのか？</summary><p>今は読み出しの多くが <code>any</code> の上なので、誤りは3件だけで済む。<code>any</code> を消すと読み出しに型が付き、足したときに直す所が増える。</p></details>
+
+  <h2>9. 参考にした文書</h2>
+  <h3>React</h3>
+  <ul>
+    <li>Rules of React：<a href="https://react.dev/reference/rules">https://react.dev/reference/rules</a></li>
+    <li>Components and Hooks must be pure：<a href="https://react.dev/reference/rules/components-and-hooks-must-be-pure">https://react.dev/reference/rules/components-and-hooks-must-be-pure</a></li>
+    <li>Rules of Hooks：<a href="https://react.dev/reference/rules/rules-of-hooks">https://react.dev/reference/rules/rules-of-hooks</a></li>
+    <li>You Might Not Need an Effect：<a href="https://react.dev/learn/you-might-not-need-an-effect">https://react.dev/learn/you-might-not-need-an-effect</a></li>
+    <li>Synchronizing with Effects：<a href="https://react.dev/learn/synchronizing-with-effects">https://react.dev/learn/synchronizing-with-effects</a></li>
+    <li>Removing Effect Dependencies：<a href="https://react.dev/learn/removing-effect-dependencies">https://react.dev/learn/removing-effect-dependencies</a></li>
+    <li>useEffectEvent：<a href="https://react.dev/reference/react/useEffectEvent">https://react.dev/reference/react/useEffectEvent</a>・React 19.2：<a href="https://react.dev/blog/2025/10/01/react-19-2">https://react.dev/blog/2025/10/01/react-19-2</a></li>
+    <li>Rendering Lists：<a href="https://react.dev/learn/rendering-lists">https://react.dev/learn/rendering-lists</a></li>
+    <li>Conditional Rendering：<a href="https://react.dev/learn/conditional-rendering">https://react.dev/learn/conditional-rendering</a></li>
+    <li>Choosing the State Structure：<a href="https://react.dev/learn/choosing-the-state-structure">https://react.dev/learn/choosing-the-state-structure</a></li>
+    <li>React 19：<a href="https://react.dev/blog/2024/12/05/react-19">https://react.dev/blog/2024/12/05/react-19</a></li>
+    <li>use：<a href="https://react.dev/reference/react/use">https://react.dev/reference/react/use</a>・useOptimistic：<a href="https://react.dev/reference/react/useOptimistic">https://react.dev/reference/react/useOptimistic</a>・form：<a href="https://react.dev/reference/react-dom/components/form">https://react.dev/reference/react-dom/components/form</a></li>
+    <li>useMemo：<a href="https://react.dev/reference/react/useMemo">https://react.dev/reference/react/useMemo</a></li>
+  </ul>
+  <h3>TypeScript</h3>
+  <ul>
+    <li>Everyday Types：<a href="https://www.typescriptlang.org/docs/handbook/2/everyday-types.html">https://www.typescriptlang.org/docs/handbook/2/everyday-types.html</a></li>
+    <li>Narrowing：<a href="https://www.typescriptlang.org/docs/handbook/2/narrowing.html">https://www.typescriptlang.org/docs/handbook/2/narrowing.html</a></li>
+    <li>Do's and Don'ts：<a href="https://www.typescriptlang.org/docs/handbook/declaration-files/do-s-and-don-ts.html">https://www.typescriptlang.org/docs/handbook/declaration-files/do-s-and-don-ts.html</a></li>
+    <li>TypeScript 4.9（satisfies）：<a href="https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-9.html">https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-9.html</a></li>
+    <li>TSConfig Reference：<a href="https://www.typescriptlang.org/tsconfig/">https://www.typescriptlang.org/tsconfig/</a></li>
+    <li>TypeScript 6.0（strict の既定）：<a href="https://devblogs.microsoft.com/typescript/announcing-typescript-6-0/">https://devblogs.microsoft.com/typescript/announcing-typescript-6-0/</a></li>
+    <li>Vite の環境変数の型：<a href="https://vite.dev/guide/env-and-mode">https://vite.dev/guide/env-and-mode</a></li>
+  </ul>
+  <h3>Biome</h3>
+  <ul>
+    <li>Formatter：<a href="https://biomejs.dev/formatter/">https://biomejs.dev/formatter/</a></li>
+    <li>Domains：<a href="https://biomejs.dev/linter/domains/">https://biomejs.dev/linter/domains/</a></li>
+    <li>Suppressions：<a href="https://biomejs.dev/analyzer/suppressions/">https://biomejs.dev/analyzer/suppressions/</a></li>
+    <li>Configuration（overrides）：<a href="https://biomejs.dev/reference/configuration/">https://biomejs.dev/reference/configuration/</a></li>
+    <li>useExhaustiveDependencies：<a href="https://biomejs.dev/linter/rules/use-exhaustive-dependencies/">https://biomejs.dev/linter/rules/use-exhaustive-dependencies/</a></li>
+    <li>noExplicitAny：<a href="https://biomejs.dev/linter/rules/no-explicit-any/">https://biomejs.dev/linter/rules/no-explicit-any/</a></li>
+  </ul>
+</main>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+  // page.js が選んだ表示（data-scheme）に合わせる。なければ端末の設定
+  const scheme = document.documentElement.dataset.scheme;
+  const dark = scheme ? scheme.startsWith("dark") : (document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches));
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/page.js"></script>
+</body>
+</html>
