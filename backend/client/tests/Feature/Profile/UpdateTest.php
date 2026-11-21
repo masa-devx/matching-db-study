@@ -27,14 +27,14 @@ describe('ログインしている人が、自分のプロフィールを書き�
         assertDatabaseHas('profiles', ['user_id' => $someone->id, 'nickname' => 'べつのひと']);
     });
 
-    // 内訳：送った人のアカウントの状態（Middleware）・URL の会員の番号・プロフィール・書き換え
-    it('書き換えるときの SQL は、決まった本数で済む（4本）', function (): void {
+    // 内訳：送った人のアカウントの状態と、メールアドレスを確認したか（Middleware が2本）・URL の会員の番号・プロフィール・書き換え
+    it('書き換えるときの SQL は、決まった本数で済む（5本）', function (): void {
         $loginUser = DummyUser::create(nickname: 'まえ');
         DB::enableQueryLog();
 
         DummyAuth::actingAs($loginUser)->putJson(Endpoints::profile($loginUser->publicId), ['nickname' => 'あと'])->assertOk();
 
-        expect(DB::getQueryLog())->toHaveCount(4);
+        expect(DB::getQueryLog())->toHaveCount(5);
     });
 
     // 分かっている不具合：要件（FR-006）は 422 で、保存しない。空の文字は Laravel が null に変える

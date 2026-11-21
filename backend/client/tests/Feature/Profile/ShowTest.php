@@ -136,8 +136,8 @@ describe('ログインしている人が、相手のプロフィールを見る'
             ->assertJsonPath('room_id', null);
     });
 
-    // 内訳：見る人のアカウントの状態（Middleware）・相手の会員・プロフィール・トークルームを探す3本
-    it('マッチしている相手を見るときの SQL は、決まった本数で済む（6本）', function (): void {
+    // 内訳：見る人のアカウントの状態と、メールアドレスを確認したか（Middleware が2本）・相手の会員・プロフィール・トークルームを探す3本
+    it('マッチしている相手を見るときの SQL は、決まった本数で済む（7本）', function (): void {
         $loginUser = DummyUser::create();
         $target = DummyUser::create();
         DummyMatching::match($loginUser, $target);
@@ -145,7 +145,7 @@ describe('ログインしている人が、相手のプロフィールを見る'
 
         DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile($target->publicId))->assertOk();
 
-        expect(DB::getQueryLog())->toHaveCount(6);
+        expect(DB::getQueryLog())->toHaveCount(7);
     });
 
     // 分かっている不具合：自分とのトークルームはないので、null が望ましい。見る人と相手が同じときを分けていない
