@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use App\Exceptions\Auth\AccountSuspendedException;
-use App\Exceptions\Auth\EmailNotVerifiedException;
+use App\Exceptions\Auth\EmailUnverifiedException;
 use App\Exceptions\BusinessException;
 use App\Exceptions\UserNotFoundException;
 use App\Http\Middleware\AuthenticateUser;
@@ -35,7 +35,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // 業務の例外を、状態コードと文に変えるのはここだけ（architecture-backend.md の7章）。例外を足したら、ここに1行足す。文は lang/ja/errors.php
         $exceptions->render(fn (UserNotFoundException $e) => response()->json(['message' => __('errors.user_not_found')], 404));
         // メールアドレスを確認していない会員（EnsureUserEmailIsVerified が投げる）。文は理由を言わず、画面は code で見分ける
-        $exceptions->render(fn (EmailNotVerifiedException $e) => response()->json(['message' => __('errors.email_unverified'), 'code' => 'email_unverified'], 403));
+        $exceptions->render(fn (EmailUnverifiedException $e) => response()->json(['message' => __('errors.email_unverified'), 'code' => 'email_unverified'], 403));
         // アカウント停止された会員（AuthenticateUser が投げる）。画面が理由を出せるように、code を付ける
         $exceptions->render(fn (AccountSuspendedException $e) => response()->json(['message' => __('errors.account_suspended'), 'code' => 'account_suspended'], 401));
         // ログインしていない・アカウント停止された会員など（AuthenticateUser が投げる）。Laravel はもとから、この例外をエラーのログに出さない

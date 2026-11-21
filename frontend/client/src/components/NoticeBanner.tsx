@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router'
 import { apiFetch } from '../shared/api/client'
+import { useSession } from '../shared/session/SessionProvider'
 
 // A7（#213）：運営からのお知らせに、まだ読んでいないものがあるとき、どの画面にも帯を出す。
 // 画面が変わるたびに、お知らせの一覧を全部読んで、未読の数を数える（数だけを返す API はない。
@@ -9,8 +10,12 @@ export default function NoticeBanner() {
   const [unread, setUnread] = useState(0)
   const [warning, setWarning] = useState(false)
   const location = useLocation()
+  const { session } = useSession()
+  // #263：確認していない会員は、お知らせの API も 403 で断られるので、聞かない
+  const canRead = session.status === 'signedIn' && session.account.emailVerified
 
   useEffect(() => {
+    if (!canRead) return
     apiFetch(`/api/me/notices`, {
       headers: { Accept: 'application/json' },
     })
@@ -20,7 +25,7 @@ export default function NoticeBanner() {
         setUnread(list.length)
         setWarning(list.some((n: any) => n.kind === 'warning'))
       })
-  }, [location.pathname])
+  }, [location.pathname, canRead])
 
   // お知らせの画面にいるあいだは、出さない
   if (unread === 0 || location.pathname === '/notices') return null

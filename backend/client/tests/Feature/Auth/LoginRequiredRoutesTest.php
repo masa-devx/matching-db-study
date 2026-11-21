@@ -226,13 +226,17 @@ describe('メールアドレスを確認していない会員が、確認が要�
 });
 
 describe('メールアドレスを確認していない会員が、確認しなくても使える API を呼ぶ', function (): void {
+    it('確認しなくても使える API は、自分の情報とログアウトだけ（FR-AUTH-021）', function (): void {
+        expect(Endpoints::routesWithoutVerifiedEmail())->toBe(['GET api/me', 'POST api/auth/logout']);
+    });
+
     it('一覧の API は、どれも routes/api.php のログインが要るルートにある', function (): void {
         $missing = array_values(array_diff(Endpoints::routesWithoutVerifiedEmail(), array_column(loginRequiredRoutes(), 0)));
 
         expect($missing)->toBe([]);
     });
 
-    it('自分の情報・ログアウトは、断られない（FR-AUTH-021）', function (): void {
+    it('自分の情報・ログアウトは、使える（200。FR-AUTH-021）', function (): void {
         $loginUser = DummyUser::create(unverified: true);
         $withoutVerifiedEmail = array_values(array_filter(
             loginRequiredRoutes(),
@@ -242,7 +246,7 @@ describe('メールアドレスを確認していない会員が、確認しな�
         $unexpected = routesWithUnexpectedResponse(
             $withoutVerifiedEmail,
             fn (string $method, string $url): TestResponse => DummyAuth::actingAs($loginUser)->json($method, $url),
-            fn (TestResponse $response): bool => ! in_array($response->status(), [401, 403], true),
+            fn (TestResponse $response): bool => $response->status() === 200,
         );
 
         expect($withoutVerifiedEmail)->toHaveCount(count(Endpoints::routesWithoutVerifiedEmail()))
@@ -251,7 +255,7 @@ describe('メールアドレスを確認していない会員が、確認しな�
 });
 
 describe('メールアドレスを確認した会員が、確認が要る API を呼ぶ', function (): void {
-    it('どれも、確認していないとして断られない', function (): void {
+    it('どれも、確認していないとして断られない（FR-AUTH-021）', function (): void {
         $loginUser = DummyUser::create();
 
         $unexpected = routesWithUnexpectedResponse(
@@ -261,5 +265,16 @@ describe('メールアドレスを確認した会員が、確認が要る API �
         );
 
         expect($unexpected)->toBe([]);
+    });
+});
+
+describe('メールアドレスを確認しておらず、アカウント停止もされた会員が、確認が要る API を呼ぶ', function (): void {
+    // ログインの確かめ（user.authenticate）が先に動くので、アカウント停止が先に知らされる（NFR-AUTH-001）
+    it('アカウント停止が先に知らされる（401「このアカウントは停止されています」）', function (): void {
+        $loginUser = DummyUser::create(suspended: true, unverified: true);
+
+        DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile($loginUser->publicId))
+            ->assertUnauthorized()
+            ->assertExactJson(['message' => 'このアカウントは停止されています', 'code' => 'account_suspended']);
     });
 });

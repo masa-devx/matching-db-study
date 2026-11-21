@@ -107,7 +107,8 @@ class PaidMembersSeeder extends Seeder
                 DB::table('purchases')->insert($chunk);
             }
             foreach ($updates as [$userId, $until]) {
-                DB::table('users')->where('id', $userId)->update(['is_paid' => true, 'paid_until' => $until]);
+                // #263：確認していない会員は機能の API が 403 なので、有料の会員は確認済みにする（払ったのに使えない形を、試しのデータに作らない）
+                DB::table('users')->where('id', $userId)->update(['is_paid' => true, 'paid_until' => $until, 'email_verified_at' => DB::raw('coalesce(email_verified_at, now())')]);
             }
         });
 

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Middleware;
 
-use App\Exceptions\Auth\EmailNotVerifiedException;
+use App\Exceptions\Auth\EmailUnverifiedException;
 use App\Services\Auth\AuthService;
 use Closure;
 use Illuminate\Http\Request;
@@ -14,7 +14,7 @@ use Symfony\Component\HttpFoundation\Response;
 /**
  * ログインしている会員が、メールアドレスを確認したかを確かめる（FR-AUTH-021・不変条件 2）。
  * user.authenticate のあとに置く（会員の番号は、user.authenticate が載せたものを読む）。
- * 確認していなければ EmailNotVerifiedException を投げるだけで、応答は bootstrap/app.php が作る（403）。
+ * 確認していなければ EmailUnverifiedException を投げるだけで、応答は bootstrap/app.php が作る（403）。
  * 自分の情報・ログアウトは、このグループの外に置く（確認していなくても使える）
  */
 final class EnsureUserEmailIsVerified
@@ -28,7 +28,7 @@ final class EnsureUserEmailIsVerified
             throw new LogicException('ログインしている会員の番号が載っていない。user.verified の前に user.authenticate を付ける');
         }
         if (! $this->auth->hasUserVerifiedEmail($userId)) {
-            throw new EmailNotVerifiedException;
+            throw new EmailUnverifiedException;
         }
 
         return $next($request);

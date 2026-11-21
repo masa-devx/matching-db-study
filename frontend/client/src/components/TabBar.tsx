@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router'
 import { apiFetch } from '../shared/api/client'
+import { useSession } from '../shared/session/SessionProvider'
 import Icon from './Icon'
 
 // 03c：下のタブ（SVG のアイコン・すりガラス・選んだタブの点）。メッセージのタブに未読の合計（FR-UI-032）。
@@ -21,8 +22,12 @@ export default function TabBar() {
   // M3（#184）：届いたいいねのうち、まだ返事をしていない人数（いいねのタブのバッジ）
   const [received, setReceived] = useState(0)
   const location = useLocation()
+  const { session } = useSession()
+  // #263：確認していない会員は、どちらの API も 403 で断られるので、数を聞かない（確認したら、確認の帯が Session を読み直す）
+  const canCount = session.status === 'signedIn' && session.account.emailVerified
 
   useEffect(() => {
+    if (!canCount) return
     const count = () => {
       apiFetch(`/api/me/talk-rooms`, {
         headers: { Accept: 'application/json' },
@@ -55,7 +60,7 @@ export default function TabBar() {
       clearInterval(timer)
       window.removeEventListener('focus', count)
     }
-  }, [location.pathname])
+  }, [location.pathname, canCount])
 
   return (
     <nav className="tabs">
