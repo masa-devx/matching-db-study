@@ -53,7 +53,29 @@ describe('ログインしたあとの API を apiFetch で呼ぶ', () => {
     expect(sentHeaders().has('Authorization')).toBe(false)
   })
 
-  it('401 なら、応答の code を付けて 401 の処理を呼び、続きを止める（UnauthorizedError）', async () => {
+  it('トークンが空の文字でも、Authorization を付けない', async () => {
+    configureApiClient({ readToken: () => '', onUnauthorized })
+    fetchMock.mockResolvedValue(jsonResponse(200, []))
+
+    await apiFetch('/api/me/likes')
+
+    expect(sentHeaders().has('Authorization')).toBe(false)
+  })
+
+  it('呼んだ画面が渡した method・body・signal を、そのまま送る', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(201, {}))
+    const signal = new AbortController().signal
+    const body = JSON.stringify({ to: 'user-b' })
+
+    await apiFetch('/api/me/likes', { method: 'POST', body, signal })
+
+    const init = fetchMock.mock.calls[0]?.[1]
+    expect(init?.method).toBe('POST')
+    expect(init?.body).toBe(body)
+    expect(init?.signal).toBe(signal)
+  })
+
+  it('401 なら、応答の code を付けて 401 の処理を呼び、続きを止める（UnauthorizedError。FR-UI-100）', async () => {
     fetchMock.mockResolvedValue(
       jsonResponse(401, { message: 'このアカウントは停止されています', code: 'account_suspended' }),
     )
@@ -62,11 +84,27 @@ describe('ログインしたあとの API を apiFetch で呼ぶ', () => {
     expect(onUnauthorized).toHaveBeenCalledWith('account_suspended')
   })
 
-  it('401 で code がなければ、code を null にして 401 の処理を呼ぶ', async () => {
+  it('401 で code がなければ、code を null にして 401 の処理を呼ぶ（FR-UI-100）', async () => {
     fetchMock.mockResolvedValue(jsonResponse(401, { message: 'ログインしてください' }))
 
     await expect(apiFetch('/api/me')).rejects.toThrow(UnauthorizedError)
     expect(onUnauthorized).toHaveBeenCalledWith(null)
+  })
+
+  it('401 の本文が JSON でなければ（プロキシの HTML など）、code を null にして 401 の処理を呼ぶ（FR-UI-100）', async () => {
+    fetchMock.mockResolvedValue(new Response('<html>Unauthorized</html>', { status: 401 }))
+
+    await expect(apiFetch('/api/me')).rejects.toThrow(UnauthorizedError)
+    expect(onUnauthorized).toHaveBeenCalledWith(null)
+  })
+
+  it('本文のない 403 は、確認していない会員とは見なさず、応答をそのまま返す', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 403 }))
+
+    const res = await apiFetch('/api/users')
+
+    expect(res.status).toBe(403)
+    expect(onUnauthorized).not.toHaveBeenCalled()
   })
 
   it('403 の email_unverified なら、続きを止める（EmailUnverifiedError）。401 の処理は呼ばない（FR-AUTH-021）', async () => {
@@ -98,7 +136,7 @@ describe('ログインしたあとの API を apiFetch で呼ぶ', () => {
 })
 
 describe('ログインが要らない API を apiFetchWithoutLogin で呼ぶ', () => {
-  it('トークンを付けない。401 でも移らず、応答をそのまま返す（パスワードの誤りを画面に出すため）', async () => {
+  it('トークンを付けない。401 でも移らず、応答をそのまま返す（パスワードの誤りを画面に出すため。FR-UI-100）', async () => {
     fetchMock.mockResolvedValue(jsonResponse(401, { message: 'メールアドレスかパスワードが違います' }))
 
     const res = await apiFetchWithoutLogin('/api/auth/login', { method: 'POST' })

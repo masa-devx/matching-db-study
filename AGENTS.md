@@ -92,7 +92,7 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 - よく使う確認のコマンド（テスト・静的検査）が決まったら、`.claude/settings.json` の `permissions.allow` に足す（記入例: `"Bash(bun test:*)"`）。足すのは、何度実行しても何も壊さないコマンドだけにする
 - ブランチを切り替えたら、docs/commands.md の「ブランチを切り替えたあと」を流す
 
-よく使うもの（どれもリポジトリのルートで流す）：
+よく使うもの（フォルダを書いていないものは、リポジトリのルートで流す）：
 
 - 起動：`docker compose up -d --wait`
 - テスト：`docker compose run --rm app ./vendor/bin/pest`

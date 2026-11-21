@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { toDate } from './date'
 
-// date.ts の toDate：管理画面の API が返す、時刻の帯の印がない日時を、UTC として読む（A6。#216）。画面のテストの見本（#114）
+// date.ts の toDate：管理画面の API が返す、時刻の帯の印がない日時を、UTC として読む（A6）。
+// テストは日本の時刻の帯で流す（vite.config.ts）。UTC の機械では、読み替えを外しても通ってしまうため
 
 describe('管理画面の API が返した日時を、日付に直す', () => {
   it('時刻の帯の印がない「2026-11-17 15:42:17」は、UTC として読む（日本で9時間ずれない）', () => {

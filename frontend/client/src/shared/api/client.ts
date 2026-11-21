@@ -2,6 +2,11 @@
 // 送り先（VITE_API_URL）を読み、トークンを Authorization に付けるのも、ここだけ。
 // 失敗の扱い（422 の文を出すなど）は、まだ呼ぶ画面ごとに持つ。ApiError に変えるのは、画面を機能のフォルダに移すとき
 
+import { EmailUnverifiedError, UnauthorizedError } from './ApiError'
+
+// 失敗のクラスは ApiError.ts に置く。レガシー版の画面が client から読んでいるので、ここからも出す
+export { EmailUnverifiedError, StoppedRequestError, UnauthorizedError } from './ApiError'
+
 // localhost にそろえる（127.0.0.1 と localhost は別のサイトになり、セッションの Cookie が届かないため。#259）
 const API_URL: string = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
@@ -20,28 +25,6 @@ let settings: ApiClientSettings = {
 
 export function configureApiClient(next: ApiClientSettings): void {
   settings = next
-}
-
-// 呼んだ画面の続きの処理（応答を一覧として置くなど）を止めるために投げる失敗の親。
-// 画面で受け止めるときは、この型で見分ける（いいねのように、遷移の中で待つ所）。
-// 失敗の扱いを ApiError（状態コード・code・文）にするとき、ここは「status と code を持つ ApiError」に置き換える
-export class StoppedRequestError extends Error {}
-
-// ログインが切れた（401）。app/ の処理がログインの画面へ移す
-export class UnauthorizedError extends StoppedRequestError {
-  constructor() {
-    super('ログインしてください')
-    this.name = 'UnauthorizedError'
-  }
-}
-
-// メールアドレスを確認していない会員が、確認が要る API を呼んだ（403 の email_unverified。FR-AUTH-021）。
-// 画面は移さない。確認を促すのは、枠のいちばん上の帯（VerifyBanner。FR-UI-014）
-export class EmailUnverifiedError extends StoppedRequestError {
-  constructor() {
-    super('この機能は使えません')
-    this.name = 'EmailUnverifiedError'
-  }
 }
 
 function headersWithAccept(init: RequestInit): Headers {

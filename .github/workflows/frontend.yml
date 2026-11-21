@@ -7,11 +7,13 @@ on:
     branches: [refactored-repo]
     paths:
       - "frontend/**"
+      - "mise.toml"
       - ".github/workflows/frontend.yml"
   push:
-    branches: [refactored-repo, "refactor/**", "feature/**", "fix/**", "hotfix/**", "chore/**", "spike/**"]
+    branches: [refactored-repo, "refactor/**", "feature/**", "fix/**", "hotfix/**", "chore/**"]
     paths:
       - "frontend/**"
+      - "mise.toml"
       - ".github/workflows/frontend.yml"
 
 # 同じブランチで続けて push したら、前の実行は止める
@@ -40,12 +42,16 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: frontend/client/package-lock.json
+      - name: Node の版が mise.toml と同じか
+        run: grep -qx "node = \"$NODE_VERSION\"" ../../mise.toml
       - run: npm ci
       - name: テスト（Vitest）
         run: npm test
       - name: 置き場の決まりと、改訂版の置き場の lint（Biome）
+        if: ${{ !cancelled() }}
         run: npm run lint:rules
       - name: ビルド（型の検査も込み）
+        if: ${{ !cancelled() }}
         run: npm run build
 
   admin:
@@ -61,8 +67,11 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: frontend/admin/package-lock.json
+      - name: Node の版が mise.toml と同じか
+        run: grep -qx "node = \"$NODE_VERSION\"" ../../mise.toml
       - run: npm ci
       - name: テスト（Vitest）
         run: npm test
       - name: ビルド（型の検査も込み）
+        if: ${{ !cancelled() }}
         run: npm run build

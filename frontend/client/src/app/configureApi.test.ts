@@ -13,7 +13,7 @@ async function setUp() {
   const client = await import('../shared/api/client')
   const moveTo = vi.fn<(url: string) => void>()
   configureApi(moveTo)
-  return { apiFetch: client.apiFetch, moveTo }
+  return { apiFetch: client.apiFetch, UnauthorizedError: client.UnauthorizedError, moveTo }
 }
 
 beforeEach(() => {
@@ -23,22 +23,22 @@ beforeEach(() => {
 })
 
 describe('ログインしたあとの API が 401 を返す', () => {
-  it('トークンと前の検索の条件を消し、「ログインが切れました」の理由でログインの画面へ移る', async () => {
-    const { apiFetch, moveTo } = await setUp()
+  it('トークンと前の検索の条件を消し、「ログインが切れました」の理由でログインの画面へ移る（FR-UI-100）', async () => {
+    const { apiFetch, UnauthorizedError, moveTo } = await setUp()
     vi.stubGlobal(
       'fetch',
       vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(401, { message: 'ログインしてください' })),
     )
 
-    await apiFetch('/api/me').catch(() => {})
+    await expect(apiFetch('/api/me')).rejects.toThrow(UnauthorizedError)
 
     expect(sessionStorage.getItem('token')).toBeNull()
     expect(sessionStorage.getItem('searchConditions')).toBeNull()
     expect(moveTo).toHaveBeenCalledWith('/login?reason=signed-out')
   })
 
-  it('アカウント停止（account_suspended）なら、その理由でログインの画面へ移る', async () => {
-    const { apiFetch, moveTo } = await setUp()
+  it('アカウント停止（account_suspended）なら、その理由でログインの画面へ移る（FR-UI-100）', async () => {
+    const { apiFetch, UnauthorizedError, moveTo } = await setUp()
     vi.stubGlobal(
       'fetch',
       vi
@@ -48,12 +48,12 @@ describe('ログインしたあとの API が 401 を返す', () => {
         ),
     )
 
-    await apiFetch('/api/me').catch(() => {})
+    await expect(apiFetch('/api/me')).rejects.toThrow(UnauthorizedError)
 
     expect(moveTo).toHaveBeenCalledWith('/login?reason=account-suspended')
   })
 
-  it('何本の API が同時に 401 を返しても、移るのは1回', async () => {
+  it('何本の API が同時に 401 を返しても、移るのは1回（FR-UI-100）', async () => {
     const { apiFetch, moveTo } = await setUp()
     vi.stubGlobal(
       'fetch',

@@ -192,6 +192,5 @@ features/messages/
 ## まだ決めていないこと
 
 - E2E の道具（[testing.md](../agents/rules/testing.md)）。移す前の今の動きを確かめるテストは、画面の単位で `fetch` を偽物にして書く（architecture-frontend.md の7章）
-- 画面の CI（[ci.md](ci.md)。#114 で入れる）
 - 有料で断るときの 403 に `code` を付けること（要件は `code: paid_required` を決めているが、API は返していない）。「使える機能を `/api/me` で返す」チケットに入れる
 - 検索のフリーワードを URL に入れたとき、アクセスのログに残してよいか

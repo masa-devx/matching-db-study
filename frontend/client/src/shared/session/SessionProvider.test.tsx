@@ -51,11 +51,8 @@ describe('トークンがないまま、アプリを開く', () => {
 })
 
 describe('トークンがあるまま、アプリを開く', () => {
-  beforeEach(() => {
-    sessionStorage.setItem('token', 'token-1')
-  })
-
   it('GET /api/me が通れば、ログインしている状態になり、アカウントを画面の形で持つ', async () => {
+    sessionStorage.setItem('token', 'token-1')
     fetchMock.mockResolvedValue(meResponse(true))
 
     renderSession()
@@ -64,6 +61,7 @@ describe('トークンがあるまま、アプリを開く', () => {
   })
 
   it('500 なら、読み込めなかった状態になり、トークンは消さない（FR-UI-013）', async () => {
+    sessionStorage.setItem('token', 'token-1')
     fetchMock.mockResolvedValue(new Response('{}', { status: 500 }))
 
     renderSession()
@@ -72,7 +70,8 @@ describe('トークンがあるまま、アプリを開く', () => {
     expect(sessionStorage.getItem('token')).toBe('token-1')
   })
 
-  it('つながらなければ、読み込めなかった状態になり、トークンは消さない', async () => {
+  it('つながらなければ、読み込めなかった状態になり、トークンは消さない（FR-UI-013）', async () => {
+    sessionStorage.setItem('token', 'token-1')
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
 
     renderSession()
@@ -81,7 +80,30 @@ describe('トークンがあるまま、アプリを開く', () => {
     expect(sessionStorage.getItem('token')).toBe('token-1')
   })
 
+  it('10秒たっても応答がなければ（時間切れ）、読み込めなかった状態になり、トークンは消さない（FR-UI-013）', async () => {
+    sessionStorage.setItem('token', 'token-1')
+    // AbortSignal.timeout の代わりに、手で止められる signal を渡す（10秒を待たずに、時間切れを起こす）
+    const timer = new AbortController()
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(timer.signal)
+    fetchMock.mockImplementation(
+      (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason))
+        }),
+    )
+    renderSession()
+
+    await act(async () => {
+      timer.abort(new DOMException('時間切れ', 'TimeoutError'))
+    })
+
+    expect(timeout).toHaveBeenCalledWith(10_000)
+    expect(screen.getByText('error')).toBeInTheDocument()
+    expect(sessionStorage.getItem('token')).toBe('token-1')
+  })
+
   it('401 なら、401 の処理（ログインの画面へ移す）に任せ、ここでは状態を変えない', async () => {
+    sessionStorage.setItem('token', 'token-1')
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ message: 'ログインしてください' }), { status: 401 }))
 
     renderSession()
@@ -91,6 +113,7 @@ describe('トークンがあるまま、アプリを開く', () => {
   })
 
   it('読み込めなかったあと、もう一度（retry）で読み直せる', async () => {
+    sessionStorage.setItem('token', 'token-1')
     fetchMock.mockResolvedValueOnce(new Response('{}', { status: 500 }))
     fetchMock.mockResolvedValueOnce(meResponse(true))
     renderSession()
@@ -103,6 +126,7 @@ describe('トークンがあるまま、アプリを開く', () => {
   })
 
   it('起動の読み込みの途中でログインし直したら、古い読み込みの結果は捨てる', async () => {
+    sessionStorage.setItem('token', 'token-1')
     let resolveFirst: (res: Response) => void = () => {}
     fetchMock.mockImplementationOnce(
       () =>
@@ -123,6 +147,7 @@ describe('トークンがあるまま、アプリを開く', () => {
   })
 
   it('読み込みの途中でログアウトしたら、あとから届いた結果は捨てる', async () => {
+    sessionStorage.setItem('token', 'token-1')
     let resolveFirst: (res: Response) => void = () => {}
     fetchMock.mockImplementationOnce(
       () =>
