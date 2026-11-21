@@ -1,0 +1,68 @@
+# 画面（会員の画面と管理画面）のテスト・置き場の決まりの検査・ビルド（#114）。決まりは docs/ci.md
+# 全体の lint（npm run lint）は、レガシー版の前からの指摘が残っているので、まだ流さない（会員の画面は置き場の決まりだけを lint:rules で見る）
+name: frontend
+
+on:
+  pull_request:
+    branches: [refactored-repo]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend.yml"
+  push:
+    branches: [refactored-repo, "refactor/**", "feature/**", "fix/**", "hotfix/**", "chore/**", "spike/**"]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend.yml"
+
+# 同じブランチで続けて push したら、前の実行は止める
+concurrency:
+  group: frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # mise.toml の node と同じ版
+  NODE_VERSION: "26.13.0"
+
+jobs:
+  client:
+    name: 会員の画面
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/client/package-lock.json
+      - run: npm ci
+      - name: テスト（Vitest）
+        run: npm test
+      - name: 置き場の決まり（Biome の noRestrictedImports・noRestrictedGlobals）
+        run: npm run lint:rules
+      - name: ビルド（型の検査も込み）
+        run: npm run build
+
+  admin:
+    name: 管理画面
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/admin/package-lock.json
+      - run: npm ci
+      - name: テスト（Vitest）
+        run: npm test
+      - name: ビルド（型の検査も込み）
+        run: npm run build

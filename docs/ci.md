@@ -23,6 +23,17 @@ PR を出したとき・ブランチに push したときに、GitHub の上で�
   - そのため、`backend/admin/**` のほかに、`backend/client/database/migrations/**` が変わったときも動かす
 - アーキテクチャのテストは、会員の側のファイル（正本）と同じかを比べる。そのため、`backend/client/tests/Arch/**` が変わったときも動かす（#106）
 
+画面（`frontend/client`・`frontend/admin`）には、別のワークフロー（`.github/workflows/frontend.yml`）がある（#114）。`frontend/**` が変わったときに動く。
+
+| ジョブ | コマンド（それぞれのフォルダで） | 落ちる条件 |
+| --- | --- | --- |
+| 会員の画面 | `npm test`・`npm run lint:rules`・`npm run build` | テストが落ちる・置き場の決まりを破る・型が合わない |
+| 管理画面 | `npm test`・`npm run build` | テストが落ちる・型が合わない |
+
+- 全体の lint（`npm run lint`）は、レガシー版の前からの指摘が残っているので、まだ流さない
+- 会員の画面の `lint:rules` は、置き場の決まり（`architecture-frontend.md` の3章）を書いた Biome の規則（`noRestrictedImports`・`noRestrictedGlobals`）だけを見る
+- Node の版は `mise.toml` と同じにする（ワークフローの `NODE_VERSION`）
+
 文書には、別のワークフロー（`.github/workflows/docs.yml`。`refactored-repo` とそこから切ったブランチで動く）がある。
 
 | ジョブ | コマンド（リポジトリのルートで） | 落ちる条件 |

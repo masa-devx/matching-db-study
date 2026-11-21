@@ -100,6 +100,7 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 - 整形の確かめ：`docker compose run --rm app ./vendor/bin/pint --test`
 - 管理画面のテスト：`docker compose run --rm admin-app ./vendor/bin/pest`
 - 文書の言葉の確かめ：`python3 -I agents/tools/check-words.py`
+- 画面のテスト：`frontend/client` で `npm test`（管理画面は `frontend/admin`）
 
 ## 開発ルールの適用
 
