@@ -32,7 +32,7 @@ export default function VerifyPage() {
         {ok === true && (
           <>
             <p className="success">メールアドレスを確認しました</p>
-            <p className="verify-text">これで、ほかの会員の検索に出るようになります。</p>
+            <p className="verify-text">これで、機能を使えるようになります。</p>
             <Link className="button" to={loggedIn ? '/home' : '/login'}>
               {loggedIn ? 'ホームへ' : 'ログインへ'}
             </Link>

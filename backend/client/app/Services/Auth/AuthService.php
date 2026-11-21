@@ -18,4 +18,10 @@ final class AuthService
     {
         return User::query()->find($userId)?->accountStatus();
     }
+
+    /** その番号の会員が、メールアドレスを確認したか。会員を探して User::hasVerifiedEmail()（Laravel の MustVerifyEmail）に聞く。いない会員は false */
+    public function hasUserVerifiedEmail(int $userId): bool
+    {
+        return User::query()->find($userId)?->hasVerifiedEmail() ?? false;
+    }
 }

@@ -145,9 +145,7 @@ export default function SettingsPage() {
         </div>
         {me && !me.email_verified_at && (
           <div className="settings-notice">
-            <p>
-              メールアドレスを確認すると、ほかの会員の検索に出るようになります。届いたメールのリンクを開いてください。
-            </p>
+            <p>メールアドレスを確認すると、機能を使えるようになります。届いたメールのリンクを開いてください。</p>
             <button type="button" className="button button-ghost" disabled={resending} onClick={resend}>
               確認のメールをもう一度送る
             </button>
