@@ -5,7 +5,7 @@ import { SkeletonCards } from './components/Skeleton'
 import { useToast } from './components/Toast'
 import UpsellDialog from './components/UpsellDialog'
 import { apiFetch, apiUrl } from './shared/api/client'
-import { readToken } from './shared/session/session'
+import { readToken, SEARCH_CONDITIONS_KEY } from './shared/session/session'
 
 // レガシー版（04）。検索のタブ（/search）＝条件で相手を探して、2列のカードで見る。
 // 条件・取る・続き・見せるを、全部この部品に書く（03b と同じ形）。
@@ -139,7 +139,7 @@ export default function SearchPage() {
     if (c.keyword) params.append('keyword', c.keyword)
     if (c.sort) params.append('sort', c.sort)
     params.append('page', String(p))
-    // 読み込み中・失敗・401 は考えない
+    // 読み込み中・失敗は考えない（401 は client.ts がログインの画面へ移す）
     apiFetch(`/api/users?${params}`, {
       headers: { Accept: 'application/json' },
     })
@@ -174,7 +174,7 @@ export default function SearchPage() {
     // sessionStorage の中身が壊れていても、画面が止まらないようにする
     let last: any = {}
     try {
-      last = JSON.parse(sessionStorage.getItem('searchConditions') ?? '{}') ?? {}
+      last = JSON.parse(sessionStorage.getItem(SEARCH_CONDITIONS_KEY) ?? '{}') ?? {}
     } catch {
       last = {}
     }
@@ -183,7 +183,7 @@ export default function SearchPage() {
       return
     }
     // #159：今見ている条件を、最後の条件として覚える（URL を直接開いた・「戻る」で見た条件も、ほかのタブから戻ったときに残る）
-    sessionStorage.setItem('searchConditions', JSON.stringify(conditions))
+    sessionStorage.setItem(SEARCH_CONDITIONS_KEY, JSON.stringify(conditions))
     // 戻ってくるたびに、1ページ目から読み直す（どこまで見ていたかは覚えない）
     load(1, conditions)
   }, [searchParams.toString()])

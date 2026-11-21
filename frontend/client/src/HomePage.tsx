@@ -78,7 +78,7 @@ export default function HomePage() {
       navigate('/login')
       return
     }
-    // 読み込み中と失敗は考えない。401 はプロフィールの API だけで見る（/api/me の 401・500 は #257 で扱う）。StrictMode なので、開発中は2本ずつ呼ばれる
+    // 読み込み中と失敗は考えない。401 は client.ts がログインの画面へ移す。StrictMode なので、開発中は2本ずつ呼ばれる
     // 自分の public_id（#46）を知るために /api/me を呼び、そのあとプロフィールを呼ぶ（2本が順に流れる）
     apiFetch(`/api/me`, {
       headers: { Accept: 'application/json' },
@@ -93,7 +93,6 @@ export default function HomePage() {
         return r.json()
       })
       .then((u) => {
-        if (u === null) return
         setMe(u)
         setForm(u.profile ?? {})
       })

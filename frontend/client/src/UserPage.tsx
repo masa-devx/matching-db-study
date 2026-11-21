@@ -7,7 +7,7 @@ import ReportDialog from './components/ReportDialog'
 import { SkeletonProfile } from './components/Skeleton'
 import { useToast } from './components/Toast'
 import UpsellDialog from './components/UpsellDialog'
-import { apiFetch, apiUrl } from './shared/api/client'
+import { apiFetch, apiUrl, UnauthorizedError } from './shared/api/client'
 import { readToken } from './shared/session/session'
 
 // レガシー版（03b）。相手のプロフィール。取る・持つ・見せる・決まりを、全部この部品に書く
@@ -49,7 +49,6 @@ export default function UserPage() {
         return r.json()
       })
       .then((u) => {
-        if (u === null) return
         setUser(u)
         // M3（#187）：もうマッチしていれば、「メッセージを送る」を出す
         setRoomId(u.room_id ?? null)
@@ -59,33 +58,38 @@ export default function UserPage() {
 
   const like = () =>
     startTransition(async () => {
-      setShownLiked(true)
-      const r = await apiFetch(`/api/me/likes`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ user_id: publicId }),
-      })
-      // 07：無料の男性が1日10回を超えると 403。画面では何回目かが分からないので、断られてからモーダルを出す
-      if (r.status === 403) {
-        setUpsell(true)
-        return
-      }
-      if (!r.ok) {
-        // 2回目のいいね（500）などは、失敗のトースト。ハートは元に戻る
-        toast('いいねできませんでした', 'error')
-        return
-      }
-      const d = await r.json()
-      setLiked(true)
-      if (d.matched) {
-        setRoomId(d.room_id ?? null)
-        // マッチの演出に出す自分の写真を、ここで読む（ホームと同じ2本を写す）
-        const me = await apiFetch(`/api/me`, { headers }).then((x) => x.json())
-        const res = await apiFetch(`/api/users/${me.public_id}`, { headers })
-        const mine = await res.json()
-        setMatchedWith(mine.profile ?? {})
-      } else {
-        toast('いいねしました')
+      try {
+        setShownLiked(true)
+        const r = await apiFetch(`/api/me/likes`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ user_id: publicId }),
+        })
+        // 07：無料の男性が1日10回を超えると 403。画面では何回目かが分からないので、断られてからモーダルを出す
+        if (r.status === 403) {
+          setUpsell(true)
+          return
+        }
+        if (!r.ok) {
+          // 2回目のいいね（500）などは、失敗のトースト。ハートは元に戻る
+          toast('いいねできませんでした', 'error')
+          return
+        }
+        const d = await r.json()
+        setLiked(true)
+        if (d.matched) {
+          setRoomId(d.room_id ?? null)
+          // マッチの演出に出す自分の写真を、ここで読む（ホームと同じ2本を写す）
+          const me = await apiFetch(`/api/me`, { headers }).then((x) => x.json())
+          const res = await apiFetch(`/api/users/${me.public_id}`, { headers })
+          const mine = await res.json()
+          setMatchedWith(mine.profile ?? {})
+        } else {
+          toast('いいねしました')
+        }
+      } catch (e) {
+        // 401 は client.ts がログインの画面へ移す。ここで受け止めないと、遷移の中の失敗として画面全体が外れる
+        if (!(e instanceof UnauthorizedError)) throw e
       }
     })
 

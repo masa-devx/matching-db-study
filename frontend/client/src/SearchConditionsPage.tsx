@@ -5,7 +5,7 @@ import ConfirmDialog from './components/ConfirmDialog'
 import { useToast } from './components/Toast'
 import UpsellDialog from './components/UpsellDialog'
 import { apiFetch } from './shared/api/client'
-import { readToken } from './shared/session/session'
+import { readToken, SEARCH_CONDITIONS_KEY } from './shared/session/session'
 
 // レガシー版（#147）。検索の条件の画面（/search/conditions）。
 // 検索の画面（SearchPage）の「絞り込み」から来る。条件を選ぶ欄と、保存した検索条件（04b）は、この画面にだけ出す。
@@ -218,7 +218,7 @@ export default function SearchConditionsPage() {
   const toast = useToast()
   const navigate = useNavigate()
 
-  // 04b：保存した検索条件の一覧を読む（失敗・401 は考えない）
+  // 04b：保存した検索条件の一覧を読む（失敗は考えない。401 は client.ts が移す）
   const loadSaved = () => {
     apiFetch(`/api/me/search-conditions`, {
       headers: { Accept: 'application/json' },
@@ -255,7 +255,7 @@ export default function SearchConditionsPage() {
   // 条件を URL のクエリにして、検索の画面に戻る。この画面の履歴は入れ替えるので、
   // 検索の画面でブラウザの「戻る」を押すと、前の条件の結果に戻る（FR-UI-043）
   const search = (c: any) => {
-    sessionStorage.setItem('searchConditions', JSON.stringify(c))
+    sessionStorage.setItem(SEARCH_CONDITIONS_KEY, JSON.stringify(c))
     navigate(`/search?${toQuery(c)}`, { replace: true })
   }
 

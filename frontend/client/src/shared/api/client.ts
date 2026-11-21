@@ -1,4 +1,4 @@
-// API を呼ぶのは、この2つの関数だけにする（architecture-frontend.md の4章）。
+// API を呼ぶのは、この3つの関数だけにする（architecture-frontend.md の4章）。
 // 送り先（VITE_API_URL）を読み、トークンを Authorization に付けるのも、ここだけ。
 // 失敗の扱い（422 の文を出すなど）は、まだ呼ぶ画面ごとに持つ。ApiError に変えるのは、画面を機能のフォルダに移すとき
 
@@ -9,7 +9,8 @@ const API_URL: string = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 // shared/api は shared/session も画面の移り方も知らない（依存の向き：app → shared/session → shared/api）
 type ApiClientSettings = {
   readToken: () => string | null
-  onUnauthorized: () => void
+  // code は、API が 401 に付けた印（アカウント停止なら 'account_suspended'。ほかは null）
+  onUnauthorized: (code: string | null) => void
 }
 
 let settings: ApiClientSettings = {
@@ -21,7 +22,8 @@ export function configureApiClient(next: ApiClientSettings): void {
   settings = next
 }
 
-// ログインが切れたときに投げる。呼んだ画面の続きの処理（応答を一覧として置くなど）を止めるため
+// ログインが切れたときに投げる。呼んだ画面の続きの処理（応答を一覧として置くなど）を止めるため。
+// 失敗の扱いを ApiError（状態コード・code・文）にするとき、この型は「status が 401 の ApiError」に置き換える
 export class UnauthorizedError extends Error {
   constructor() {
     super('ログインしてください')
@@ -52,10 +54,33 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   }
   const res = await fetch(`${API_URL}${path}`, { ...init, headers })
   if (res.status === 401) {
-    settings.onUnauthorized()
+    settings.onUnauthorized(await codeOf(res))
     throw new UnauthorizedError()
   }
   return res
+}
+
+// ログアウトの API。トークンを付けるが、401 でも移らない（もうログインしていないのと同じなので、自分でしたログアウトとして扱う）
+export function apiFetchForLogout(path: string, init: RequestInit = {}): Promise<Response> {
+  const headers = headersWithAccept(init)
+  const token = settings.readToken()
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`)
+  }
+  return fetch(`${API_URL}${path}`, { ...init, headers })
+}
+
+// 401 の応答の code を読む。JSON でなければ null
+async function codeOf(res: Response): Promise<string | null> {
+  try {
+    const body: unknown = await res.clone().json()
+    if (typeof body === 'object' && body !== null && 'code' in body && typeof body.code === 'string') {
+      return body.code
+    }
+  } catch {
+    // JSON でない応答。理由は分からないので null
+  }
+  return null
 }
 
 // ログイン・登録・メールアドレスの確認・パスワードの再設定の API。トークンは付けない。

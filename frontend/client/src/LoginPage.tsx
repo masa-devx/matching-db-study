@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import Button from './components/Button'
 import { apiFetchWithoutLogin } from './shared/api/client'
-import { SIGNED_OUT_REASON, saveToken } from './shared/session/session'
+import { ACCOUNT_SUSPENDED_REASON, SIGNED_OUT_REASON, saveToken } from './shared/session/session'
 
 // レガシー版（03b）。送る・トークンを置く・失敗を見せる・移るを、この部品にまとめて書く。
 // M2（#193）：パスワードを見せる切り替え・autocomplete・利用を止められたときの案内を足した
@@ -16,16 +16,18 @@ export default function LoginPage(props: any) {
   // 03c：送っている間はボタンにスピナーを出し、押せなくする（FR-UI-026）
   const [sending, setSending] = useState(false)
   const navigate = useNavigate()
-  // #257：ログインしたあとの API が 401 を返して、ここへ移ってきたか（アカウント停止・退会・期限切れ）
+  // #257：ログインしたあとの API が 401 を返して、ここへ移ってきたか（FR-UI-100）
   const [searchParams] = useSearchParams()
-  const signedOut = searchParams.get('reason') === SIGNED_OUT_REASON
+  const reason = searchParams.get('reason')
+  const signedOut = reason === SIGNED_OUT_REASON
+  const suspendedBefore = reason === ACCOUNT_SUSPENDED_REASON
 
   const submit = async (e: any) => {
     e.preventDefault()
     setError('')
     setSuspended(false)
     setSending(true)
-    // 送り先は画面ごとに書く。つながらないとき（API が止まっている）は、例外のまま何も出ない
+    // つながらないとき（API が止まっている）は、例外のまま何も出ない
     const res = await apiFetchWithoutLogin(`/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -54,6 +56,17 @@ export default function LoginPage(props: any) {
       </div>
       <div className="card">
         <h1 className="title">ログイン</h1>
+        {/* FR-UI-100：前の画面で 401 が返って移ってきたとき。題のすぐ下に出す（あとから気づけるように） */}
+        {suspendedBefore && !error && (
+          <p className="error" role="alert">
+            ログインはできません。このアカウントは停止されています
+          </p>
+        )}
+        {signedOut && !error && (
+          <p className="verify-text" role="alert">
+            ログインが切れました。もう一度ログインしてください
+          </p>
+        )}
         <form onSubmit={submit}>
           <label className="label">
             メールアドレス
@@ -79,11 +92,6 @@ export default function LoginPage(props: any) {
             <input type="checkbox" checked={shown} onChange={(e) => setShown(e.target.checked)} />
             パスワードを見せる
           </label>
-          {signedOut && !error && (
-            <p className="verify-text" role="status">
-              ログインが切れました。もう一度ログインしてください
-            </p>
-          )}
           {error && (
             <p className="error" role="alert">
               {error}

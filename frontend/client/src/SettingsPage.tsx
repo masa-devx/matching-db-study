@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router'
 import ConfirmDialog from './components/ConfirmDialog'
 import Icon from './components/Icon'
 import { useToast } from './components/Toast'
-import { apiFetch, apiFetchWithoutLogin } from './shared/api/client'
+import { apiFetch, apiFetchForLogout, apiFetchWithoutLogin } from './shared/api/client'
 import { clearSession, readToken } from './shared/session/session'
 
 // レガシー版（M1。#181）。設定（/settings）。ホームの右上の歯車から来る。
@@ -92,7 +92,7 @@ export default function SettingsPage(props: any) {
 
   const logout = () => {
     // ホームにあった処理を、そのまま持ってきた
-    apiFetch(`/api/auth/logout`, {
+    apiFetchForLogout(`/api/auth/logout`, {
       method: 'POST',
     })
     // 応答を待たずに消す。サーバーは何もしないので、消す前にコピーしたトークンは30日使える

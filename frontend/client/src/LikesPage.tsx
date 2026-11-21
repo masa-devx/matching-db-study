@@ -30,7 +30,7 @@ export default function LikesPage() {
     Accept: 'application/json',
   }
 
-  // 届いたいいねと、スキップした相手を読む（2本。失敗・401 は考えない）
+  // 届いたいいねと、スキップした相手を読む（2本。失敗は考えない。401 は client.ts が移す）
   const load = () => {
     apiFetch(`/api/me/received-likes`, { headers })
       .then((r) => r.json())
