@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * レガシー版（12）：会員の利用を止めた日時と理由（管理画面が書く）。NULL なら止めていない。
- * 止めた会員を断るのは会員の側の API の仕事（#90 で入口に写す）。インデックスは足さない。
+ * アカウント停止された会員を断るのは会員の側の API の仕事（#90 で入口に写す）。インデックスは足さない。
  */
 return new class extends Migration
 {

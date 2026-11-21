@@ -21,7 +21,7 @@ return new class extends Migration
     {
         Schema::create('suspensions', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('user_id');                // 止めた会員
+            $table->unsignedBigInteger('user_id');                // アカウント停止された会員
             $table->text('reason')->nullable();                   // 理由。なくても入る
             $table->unsignedBigInteger('suspended_by');           // 止めた管理者（admins.id）
             $table->timestamp('lifted_at')->nullable();           // 解いた日時。空なら、まだ止めている
