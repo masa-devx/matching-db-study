@@ -76,6 +76,12 @@ final class Endpoints
         return '/api/auth/login';
     }
 
+    /** ログアウトする（POST /api/auth/logout） */
+    public static function logout(): string
+    {
+        return '/api/auth/logout';
+    }
+
     /** メールアドレスを確認する（GET /api/email-verifications/{token}。確認のメールのリンク） */
     public static function emailVerification(string $token): string
     {
