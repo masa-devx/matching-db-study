@@ -951,7 +951,7 @@
 - NFR-UI-001：幅 375px（スマホ）から 1280px までで、横にはみ出さず使える
 - NFR-UI-002：入力にはラベルがあり、キーボードだけで送れる（`<label>`・`<button>`・Enter で送る）
 - NFR-UI-008：読み上げ（スクリーンリーダー）で区別できる。モーダルの見出しは、モーダルごとに別のものを読む。押して選ぶ選択肢のまとまりは、項目の名前（体型・タバコ など）を読む。同じ名前のボタンが並ぶとき（名前を直す・消す）は、対象の名前を読む（#162）
-- NFR-UI-003：API の送り先は1か所で決める（Vite の環境変数 `VITE_API_URL`。既定は `http://127.0.0.1:8000`）
+- NFR-UI-003：API の送り先は1か所で決める（Vite の環境変数 `VITE_API_URL`。既定は `http://localhost:8000`。読むのは `shared/api/client.ts` だけ）
 - NFR-UI-004（03c）：OS で「視差効果を減らす」を選んだ人には、動きを止める（`prefers-reduced-motion: reduce`）。出る・消えるだけにする
 - NFR-UI-005（03c）：押せる場所は 44×44px 以上。キーボードで動かしたとき、今いる場所に枠が出る（`:focus-visible`）。文字と地のコントラストは 4.5 以上（[design.md](../design.md)）
 - NFR-UI-006（03c）：動かすのは `transform` と `opacity` だけ。Lighthouse（スマホ）の CLS を 0.1 以下に保つ。03c の前と後で、LCP・INP・CLS と `vite build` の大きさを測って残す
