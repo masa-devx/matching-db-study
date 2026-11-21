@@ -22,7 +22,11 @@ paths:
 
 ## 書き方
 
-- PHP の版は、`composer.json` の `"php"` の1か所に書く（`^8.5`）。Larastan も Composer も、ここから読む。`phpstan.neon` に `phpVersion` を書かない（2か所に書くと、食い違ったまま残るため。#261）
+- Larastan が読む PHP の版は、`composer.json` の `"php"`（`^8.5`）からだけにする。`phpstan.neon` に `phpVersion` を書かない（2か所に書くと、食い違ったまま残るため。#261）
+- PHP の版を上げるときに直す所は、次の4つ（どれか1つだけを直すと、手元と CI が落ちる）
+  - `backend/client/composer.json`・`backend/admin/composer.json` の `"php"`（と `composer update --lock`）
+  - `docker/php/Dockerfile` の `FROM php:…`
+  - CI の `PHP_VERSION`（`.github/workflows/backend.yml`・`admin-backend.yml`）
 - すべての PHP のファイルの先頭に `declare(strict_types=1);` を書く。`"5"` を `int` の引数に黙って変えさせないため
 - 引数・戻り値・プロパティには、言語の型を必ず書く。コントローラの `$id` も `int $id` か `string $id` にする（ルートの引数は文字で来るので、受けたい型を決める）
 - 戻り値に値がないときは `void`、例外を投げて戻らないときは `never`

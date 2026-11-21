@@ -1,6 +1,7 @@
 ---
 paths:
   - "backend/*/app/**"
+  - "backend/*/bootstrap/**"
   - "backend/*/database/**"
   - "backend/*/routes/**"
   - "backend/*/tests/**"
@@ -26,9 +27,13 @@ PHP のコードを書くときの、Laravel 13 と PHP 8.5 の決まり。型�
 
 ## 2. Laravel のメソッドと関数に、引数を名前で渡さない
 
-- Laravel のメソッドと関数（`DB::transaction()`・`response()->json()` など）には、引数を順番で渡す。`attempts: 3` のように名前で渡さない
-- 自分で書いたクラス（Service・Client・テストのダミーデータ）は、名前で渡してよい
-- 例外：Laravel のひな形がもとから名前で書いている所（`bootstrap/app.php` の `Application::configure(basePath: ...)`・`withRouting(web: ...)`）は、そのままにする
+- Laravel のメソッドと関数（`Illuminate\` の名前空間のもの。`DB::transaction()`・`response()->json()` など）には、引数を順番で渡す。`attempts: 3` のように名前で渡さない
+- 決まりの外（名前で渡してよい）
+  - 自分で書いたクラス（Service・Client・テストのダミーデータ）
+  - Symfony・Pest・PHP の組み込みの関数（`Request::create(..., server: [...])` など。2026-11-21 に人が決めた）
+- 例外（Laravel のものでも、名前で渡してよい）
+  - Laravel のひな形がもとから名前で書いている所（`bootstrap/app.php` の `Application::configure(basePath: ...)`・`withRouting(web: ...)`）
+  - Laravel の文書が名前で書いている値のクラス（メールの `Envelope(subject: ...)`・`Content(text: ..., with: [...])` など）。順番で書くと、何番目が何かを読めなくなるため（2026-11-21 に人が決めた）
 - なぜ：Laravel は、引数の名前を後方互換を約束する範囲に入れていない。小さい版の更新で名前が変わると、名前で渡した所だけが `Error` になる
 - 根拠：https://laravel.com/docs/13.x/releases#named-arguments
 

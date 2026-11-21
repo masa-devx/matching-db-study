@@ -330,9 +330,11 @@ class User extends Model
 
 - トランザクションは Service が `DB::transaction()` で張る。Controller・Model では張らない
 - 読んでから書く処理で、同時に2回来ると壊れるもの（停止・購入・回数の上限）は、`lockForUpdate()`（行のロック）をかけて読む
-- 日時は `now()`（UTC）。今の `now()` は、変えられる型（`Illuminate\Support\Carbon`）を返す（手元で確かめた。#261）。API テストでは `travelTo()` で止める
+- 日時は `now()`（UTC）。API テストでは `travelTo()` で止める
+  - 今の `now()` は、変えられる型（`Illuminate\Support\Carbon`）を返す（手元で確かめた。#261）
+  - どちらの型にそろえるかは、まだ決めていない。`CarbonImmutable` を受けるメソッド（`isPaidAt()` など）に渡すときは、`now()->toImmutable()` にする
 - 外への書き込み（Firestore・メール・将来の決済と AI）は、Client を通し、**トランザクションの外、コミットのあと**で行う（DB が巻き戻っても、外には残るため）
-- キューに入れるメール・出来事・ジョブを、どうしてもトランザクションの中で出すときは、確定のあとに出す形にする（メールは `afterCommit()`、出来事は `ShouldDispatchAfterCommit`、キューの Listener は `ShouldQueueAfterCommit`）。`config/queue.php` の `after_commit` は `false` のままなので、書かなければ確定を待たない（https://laravel.com/docs/13.x/queues#jobs-and-database-transactions 。#261）
+- キューに入れるメール・出来事・ジョブを、どうしてもトランザクションの中で出すときは、コミットのあとに出す形にする（メールは `afterCommit()`、出来事は `ShouldDispatchAfterCommit`、キューの Listener は `ShouldQueueAfterCommit`）。`config/queue.php` の `after_commit` は `false` のままなので、書かなければコミットを待たない（https://laravel.com/docs/13.x/queues#jobs-and-database-transactions 。#261）
 
 ```php
 $room = DB::transaction(fn (): TalkRoom => $this->openRoom($match));   // DB だけ
@@ -382,7 +384,8 @@ $this->firestore->openRoom($room);                                     // コミ
 基本は書かない。思っていなかった失敗（DB が落ちた・コードの誤り）は受け止めずに上へ流し、Laravel に任せる。Laravel が、スタックトレース付きでエラーのログに記録し、500 を返す（本番は `APP_DEBUG=false` で中身を隠す）。2026-11-19 に人が決めた（#241。根拠は Laravel 13.x の公式ドキュメントの Error Handling と Database Transactions）。
 
 - `DB::transaction()` は、中で例外が投げられると自動で戻し（ロールバック）、例外を投げ直す。`DB::rollBack()` を自分で書かない
-- デッドロックでやり直すときは、`DB::transaction(fn () => ..., 3)`（2つ目の引数がやり直しの回数。Laravel のメソッドには、引数を名前で渡さない。`quality-php.md` の2章） と書く（try-catch は要らない）
+- デッドロックでやり直すときは、`DB::transaction(fn () => ..., 3)` と書く（try-catch は要らない）
+  - 2つ目の引数が、やり直しの回数。Laravel のメソッドには、引数を名前で渡さない（`quality-php.md` の2章）
   - やり直しの回数は、一番外の `DB::transaction` に付ける。入れ子の中（ほかの Service の `transaction` の中から呼ばれたとき）では、やり直さずに `DeadlockException` を投げる（Laravel の `ManagesTransactions`）
   - やり直すと、中身が最初から流れ直す。そのため、外への書き込み（Firestore・メール）を中に置かない（5章。置くと2回送られる）
 
@@ -468,7 +471,7 @@ try {
 ### 副作用の分離
 
 - 外への書き込み（メール・Firestore）は Service の中で、トランザクションのあとに、Client を呼ぶ目に見える1行として書く。Model のイベントや Observer に隠さない
-- 環境変数は `config()` で読む。`env()`・`getenv()`・`$_ENV`・`$_SERVER` は `config/` の中だけで使う（`config:cache` のあとは、`env()` が `.env` を読まなくなるため。#261）。分かっている不具合：`LikeController.php` が `getenv()` で Firestore の設定を読んでいる（いいねの API を移すときに直す）
+- 環境変数は `config()` で読む。`env()`・`getenv()`・`$_ENV`・`$_SERVER` は `config/` の中だけで使う（`config:cache` のあとは、`env()` が `.env` を読まなくなるため。#261）。分かっている不具合：`LikeController.php` が `getenv()`、`database/seeders/FirestoreMessagesSeeder.php` が `env()` で、Firestore の設定を読んでいる（いいねの API を移すとき・シーダーを触るときに直す）
 
 ## 10. まだ移していない古いコード
 
@@ -507,7 +510,7 @@ public function updateProfile(int $memberId, array $input): Profile { throw new 
 // ❌ 有料かどうかを、あちこちで書く（期限を見ない所ができる）
 if ($user->is_paid) { ... }
 // ✅ Model の判定を1つだけ置き、全員が呼ぶ
-if ($user->isPaidAt(now())) { ... }
+if ($user->isPaidAt(now()->toImmutable())) { ... }
 
 // ❌ Model を丸ごと返す（パスワードのハッシュ・確認用の文字まで出る）・送られた項目を全部入れる
 return $user;
