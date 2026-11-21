@@ -34,7 +34,8 @@ return [
     |
     */
 
-    'lifetime' => (int) env('SESSION_LIFETIME', 120),
+    // 操作がないまま24時間で切れ、リクエストのたびに延びる（FR-AUTH-013・D-027）
+    'lifetime' => (int) env('SESSION_LIFETIME', 1440),
 
     'expire_on_close' => env('SESSION_EXPIRE_ON_CLOSE', false),
 

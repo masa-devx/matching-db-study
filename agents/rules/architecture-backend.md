@@ -44,6 +44,7 @@ Controller ──→ Service ──→ Model
   - 受け持ち：受け取る → Service を呼ぶ → 返す
   - 主に使うもの（目安）：Request・Resource・Service
   - 使ってはいけない：Model・DB（`DB::`・`Schema::`・`Illuminate\Database`）・JWT・`app()`・`resolve()`・`App::`・コンテナ
+  - セッションを作る・消すのは、ログイン・ログアウトの `Auth/AuthController` だけ（`Auth::guard('web')->login()`・`logout()`・`$request->session()->invalidate()`。D-027）。ほかの Controller はセッションを触らない
 - Request
   - 受け持ち：入力の形だけを確かめる
   - 主に使うもの（目安）：Laravel の検証
@@ -55,15 +56,15 @@ Controller ──→ Service ──→ Model
   - 使ってはいけない：DB・JWT・`app()`
   - 使ってはいけない：新しいクエリ（`Model::query()`・リレーションの `->count()`）。N+1 になる（8章のレビューで見る）
 - Middleware
-  - 受け持ち：トークンを読む（ここだけ）
+  - 受け持ち：ログインしている会員を読む（ここだけ。会員の側はセッションの `Auth::guard('web')->id()`、管理画面は JWT）
   - 受け持ち：使えるか（退会・アカウント停止・強制退会）・メールアドレスを確認したか・役割の確かめを Service に頼む
-  - 主に使うもの（目安）：JWT・Service
+  - 主に使うもの（目安）：セッション（会員の側）・JWT（管理画面）・Service
   - 使ってはいけない：Model・DB・`app()`
 - Service
   - 受け持ち：業務のロジック・手順・トランザクション・監査ログ・ログインのときにトークンを作る
   - 主に使うもの（目安）：Model・Client・ほかの Service・業務の例外・`App\Support`
   - 主に使うもの（目安）：Laravel の機能（`DB::transaction()`・`now()`・`config()`）
-  - 主に使うもの（目安）：JWT（作るときだけ）
+  - 主に使うもの（目安）：JWT（管理画面のログインで作るときだけ。会員の側はセッションなので作らない）
   - 使ってはいけない：Http（Request・Resource・`Illuminate\Http`）。外の API の `Illuminate\Http\Client` の例外は使ってよい
   - 使ってはいけない：`request()`・`auth()`・`session()`・`response()`・`redirect()`
   - 使ってはいけない：`abort()`・`abort_if()`・`abort_unless()`
@@ -183,11 +184,11 @@ Controller は**受け取る → 呼ぶ → 返す**だけ。`if` で業務の�
 // app/Http/Controllers/Profile/AccountController.php（PATCH /me。自分のプロフィールを直す）
 final class AccountController extends Controller
 {
-    public function __construct(private readonly ProfileService $profiles) {}
+    public function __construct(private readonly ProfileService $profileService) {}
 
     public function update(UpdateProfileRequest $request): ProfileResource
     {
-        $profile = $this->profiles->updateProfile(
+        $profile = $this->profileService->updateProfile(
             memberId: $this->loginUserId($request),   // ログインした会員の番号を読むのは、基底の Controller の loginUserId() だけ（載っていなければ 401）
             input: $request->validated(),
         );
@@ -230,14 +231,14 @@ final class ProfileResource extends JsonResource
 }
 ```
 
-トークンを読むのは Middleware だけ。Controller ごとに JWT を読まない。トークンが正しくても、退会・停止・強制退会した会員は通さない（使えるかは Service に聞き、Service は `User::isAccountUsable()` の1か所で決める）。Middleware は応答を作らず、例外を投げる。401 の応答は `bootstrap/app.php` が作る（7章）。
+ログインしている会員を読むのは Middleware だけ。Controller ごとにセッションやトークンを読まない。ログインしていても、退会・停止・強制退会した会員は通さない（使えるかは Service に聞き、Service は `User::isAccountUsable()` の1か所で決める）。Middleware は応答を作らず、例外を投げる。401 の応答は `bootstrap/app.php` が作る（7章）。
 
 ```php
-// app/Http/Middleware/AuthenticateUser.php（#243）
+// app/Http/Middleware/AuthenticateUser.php（#243・#259）
 public function handle(Request $request, Closure $next): Response
 {
-    $userId = $this->userIdFromToken($request);   // JWT を読む。ない・壊れている・期限切れなら null
-    $status = $userId === null ? null : $this->auth->userAccountStatus($userId);   // AuthService：アカウントの状態（AccountStatus）
+    $userId = $this->userIdFromSession();   // セッションの会員の番号。Laravel の id() が会員の行を1回読む。ログインしていない・切れたなら null
+    $status = $userId === null ? null : $this->authService->userAccountStatus($userId);   // AuthService：アカウントの状態（AccountStatus）
     if ($status === AccountStatus::Suspended) {
         throw new AccountSuspendedException;   // bootstrap/app.php が 401「このアカウントは停止されています」にする
     }
@@ -344,7 +345,7 @@ class User extends Model
 
 ```php
 $room = DB::transaction(fn (): TalkRoom => $this->openRoom($match));   // DB だけ
-$this->firestore->openRoom($room);                                     // コミットのあとで、外へ（FirestoreClient）
+$this->firestoreClient->openRoom($room);                               // コミットのあとで、外へ（FirestoreClient）
 ```
 
 ## 6. ログ
@@ -379,7 +380,7 @@ $this->firestore->openRoom($room);                                     // コミ
 
 | 起きること | 止める場所 | 応答 |
 | --- | --- | --- |
-| トークンがない・壊れている・退会した・停止された会員 | Middleware（使えるかは Service に聞く） | 401 |
+| ログインしていない・セッションが切れた・退会・アカウント停止・強制退会 | Middleware（使えるかは Service に聞く） | 401 |
 | メールアドレスを確認していない会員（確認が要る API） | Middleware（`user.verified`。確認したかは Service に聞く） | 403（`code: email_unverified`） |
 | 入力の形が違う | Request | 422（Laravel の形のまま） |
 | 役割が足りない（管理画面） | 書き込みのルートの Middleware（役割は Service に聞く） | 403 |
@@ -493,7 +494,7 @@ try {
 - そのために、API テストは中の作りに頼らない
   - DB は表の名前で確かめる（`assertDatabaseHas('likes', [...])`・`assertDatabaseCount('likes', 0)`）
   - データは `tests/DummyData/` のクラス（例：`DummyUser::create()`・`DummyMatching::match()`）で作る。Model の Factory を呼ぶのは、このクラスの中だけ
-  - 時刻は `travelTo()` で止める。ログインは、本物のトークンを作って送る（`DummyAuth::actingAs()`）。ダミーデータの関数の一覧は `testing.md` の「テストのダミーデータ（会員の側）」
+  - 時刻は `travelTo()` で止める。ログインは `DummyAuth::actingAs()`、Cookie で続くかを見るときは `DummyAuth::loginFromScreen()`。ダミーデータの関数の一覧は `testing.md` の「テストのダミーデータ（会員の側）」
   - 外への書き込み（Firestore）は、移す前と後で同じ方法で確かめる（Emulator の中身を読む）
 - 新しく書くコードは、必ずこの形で書く。古いコントローラー（`app/Http/Controllers/` の直下）に機能を足さない
 - 移すたびに、**次の改善の候補**（移して気づいたこと。例：「検索の条件が増えるたびに `scopeSearch` が長くなる」）を、そのサイクルの `06-walkthrough.md` に1行残す。振り返りと、太ったときの見直しの材料にする
@@ -508,7 +509,7 @@ if ($profile->gender === 'male' && ! $user->is_paid) {
     $today = Like::where('from_user_id', $id)->whereDate('created_at', now()->toDateString())->count();
 }
 // ✅ Controller は Service を呼ぶだけ。判断は Service、数えるクエリ（条件が2つ）は Model のスコープ
-$result = $this->likes->send($memberId, $request->validated());
+$result = $this->likeService->send($memberId, $request->validated());
 
 // ❌ Service が HTTP を知っている（コマンドやテストから呼べない）
 public function updateProfile(Request $request): JsonResponse { abort_if($x, 403); }
@@ -536,13 +537,13 @@ return User::query()->where('public_id', $publicId)->first() ?? throw new UserNo
 protected static function booted(): void { static::created(fn (User $u) => Mail::to($u)->send(...)); }
 // ✅ Service の中で、コミットのあとに書く
 $user = DB::transaction(fn (): User => User::create($input));
-$this->mailer->sendVerification($user);
+$this->mailClient->sendVerification($user);
 
 // ❌ トランザクションの中で外へ書く
-DB::transaction(function () use ($room) { $room->save(); $this->firestore->openRoom($room); });
+DB::transaction(function () use ($room) { $room->save(); $this->firestoreClient->openRoom($room); });
 // ✅ コミットのあと
 DB::transaction(fn () => $room->save());
-$this->firestore->openRoom($room);
+$this->firestoreClient->openRoom($room);
 ```
 
 ## 管理画面での当てはめ

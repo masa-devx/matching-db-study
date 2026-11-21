@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import Avatar from './components/Avatar'
 import Button from './components/Button'
+import ConfirmDialog from './components/ConfirmDialog'
 import Icon from './components/Icon'
 import { SkeletonProfile } from './components/Skeleton'
 import { useToast } from './components/Toast'
 import { apiFetch, apiUrl } from './shared/api/client'
+import { useLogout } from './shared/session/useLogout'
 
 // M4（#198）：プルダウンに出す都道府県と身長（検索の条件の画面にある一覧と同じものを、ここにも書いた）
 const PREFECTURES = [
@@ -62,6 +64,7 @@ for (let cm = 130; cm <= 210; cm++) HEIGHTS.push(cm)
 
 // レガシー版（03b）。ホーム（/home）＝自分のプロフィールを見て直す。全部この部品に書く。
 // M1（#181）：有料会員・ブロックした相手・ログアウト・退会は、設定（SettingsPage）に移した。右上の歯車から行く
+// #259：ログアウトは、ホームのいちばん下にも置いた（設定を開かずに出られるように。人が決めた）
 export default function HomePage() {
   const [me, setMe] = useState<any>(null)
   const [form, setForm] = useState<any>({})
@@ -69,6 +72,9 @@ export default function HomePage() {
   // 03c：保存の結果はトーストで出す（FR-UI-024）
   const toast = useToast()
   const [saving, setSaving] = useState(false)
+  const navigate = useNavigate()
+  const { logout: logoutFromServer, loggingOut } = useLogout()
+  const [confirmLogout, setConfirmLogout] = useState(false)
 
   useEffect(() => {
     // 読み込み中と失敗は考えない。401 は client.ts がログインの画面へ移す。StrictMode なので、開発中は2本ずつ呼ばれる
@@ -133,6 +139,16 @@ export default function HomePage() {
   const age = me?.profile?.birthday ? new Date().getFullYear() - Number(me.profile.birthday.slice(0, 4)) : ''
 
   // 03c：読み込み中は、中身と同じ形のスケルトン（FR-UI-025）
+  // 手順は shared/session/useLogout（設定・確認待ちの画面と同じ）
+  const logout = async () => {
+    if (await logoutFromServer()) {
+      navigate('/login')
+      return
+    }
+    setConfirmLogout(false)
+    toast('ログアウトできませんでした。もう一度お試しください', 'error')
+  }
+
   if (!me) return <SkeletonProfile />
 
   return (
@@ -345,7 +361,24 @@ export default function HomePage() {
             </Button>
           </form>
         )}
+        {/* 直している間は出さない（「やめる」と並んで、押し間違えないように） */}
+        {!editing && (
+          <Button variant="ghost" className="button-space" onClick={() => setConfirmLogout(true)}>
+            ログアウト
+          </Button>
+        )}
       </div>
+
+      {/* ログアウトの前に確かめる（FR-UI-023。設定の画面と同じ） */}
+      <ConfirmDialog
+        open={confirmLogout}
+        title="ログアウトしますか？"
+        confirmLabel="ログアウトする"
+        danger
+        busy={loggingOut}
+        onConfirm={logout}
+        onClose={() => setConfirmLogout(false)}
+      />
     </div>
   )
 }

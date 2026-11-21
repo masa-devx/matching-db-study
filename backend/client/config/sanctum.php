@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
-use Laravel\Sanctum\Http\Middleware\AuthenticateSession;
 use Laravel\Sanctum\Sanctum;
+
+// 会員の画面（FRONTEND_URL）のホストとポート。CORS（config/cors.php）・メールのリンクと同じ値にする
+$frontendUrl = (string) env('FRONTEND_URL', 'http://localhost:5173');
+$frontendPort = parse_url($frontendUrl, PHP_URL_PORT);
+$frontendHostWithPort = ','.parse_url($frontendUrl, PHP_URL_HOST).($frontendPort ? ':'.$frontendPort : '');
 
 return [
 
@@ -23,7 +27,7 @@ return [
     'stateful' => explode(',', env('SANCTUM_STATEFUL_DOMAINS', sprintf(
         '%s%s',
         'localhost,localhost:3000,127.0.0.1,127.0.0.1:8000,::1',
-        Sanctum::currentApplicationUrlWithPort(),
+        Sanctum::currentApplicationUrlWithPort().$frontendHostWithPort,
         // Sanctum::currentRequestHost(),
     ))),
 
@@ -81,7 +85,9 @@ return [
     */
 
     'middleware' => [
-        'authenticate_session' => AuthenticateSession::class,
+        // パスワードを変えたら、ほかの端末のセッションを切る仕組み。#259 の2つ目の PR（FR-AUTH-033）で、logoutOtherDevices() と一緒に入れる。
+        // 今入れると、パスワードを変えた端末まで切れる（03-how.md のレビューの M3）
+        'authenticate_session' => null,
         'encrypt_cookies' => EncryptCookies::class,
         'validate_csrf_token' => ValidateCsrfToken::class,
     ],

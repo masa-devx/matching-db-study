@@ -1,7 +1,6 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { UnauthorizedError } from '../api/ApiError'
-import { apiFetch } from '../api/client'
-import { clearSession, readToken, saveToken } from './session'
+import { apiFetchWithoutLogin, codeOf } from '../api/client'
+import { ACCOUNT_SUSPENDED_REASON, clearSession } from './session'
 
 // GET /api/me の応答の形（レガシー版）。このファイルの外へ出さない（architecture-frontend.md の4章）
 type AccountResponse = {
@@ -22,16 +21,18 @@ function toAccount(res: AccountResponse): Account {
 }
 
 // 読み込み中・ログインしている・していない・読み込めなかった。
-// トークンがなければ API を呼ばずに「していない」。あれば、GET /api/me が通るかで決める（#257 の 2-2）
+// 起動のときに GET /api/me を読み、200 なら「している」、401 なら「していない」（セッションの Cookie で API が決める。D-027）
 export type SessionState =
   | { status: 'loading' }
   | { status: 'signedIn'; account: Account }
-  | { status: 'signedOut' }
+  // reason：ログインの画面に出す理由（アカウント停止）。ないときは、理由を出さない（もとからしていない・切れた・ログアウトした）
+  | { status: 'signedOut'; reason?: typeof ACCOUNT_SUSPENDED_REASON }
   | { status: 'error' }
 
 type SessionValue = {
   session: SessionState
-  signIn: (token: string) => void
+  // ログインの API が通ったあとに呼ぶ。GET /api/me が通れば true（Cookie が届いていない設定なら false）
+  signIn: () => Promise<boolean>
   signOut: () => void
   retry: () => void
 }
@@ -41,50 +42,90 @@ const LOAD_TIMEOUT_MS = 10_000
 
 const SessionContext = createContext<SessionValue | null>(null)
 
-// 起動のときに1回、GET /api/me を読む。
-// 401 なら、client.ts が app/ の処理でトークンを消してログインの画面へ読み込み直すので、ここでは何もしない。
-// 401 でない失敗（500・つながらない・時間切れ）では、トークンを消さない（API が戻れば、もう一度で戻れる）
-export function SessionProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<SessionState>(() =>
-    readToken() ? { status: 'loading' } : { status: 'signedOut' },
-  )
+// 起動のときに1回、GET /api/me を読む。401（ログインしていない）でも、ログインの画面へは移さない（ログインの画面・登録の画面も、この下にあるため）。
+// 401 のときは、前の会員の画面の情報（前の検索の条件・前の JWT）を消し、アカウント停止なら理由を持つ（ログインの画面へ移すのは RequireAuth）。
+// 401 でない失敗（500・つながらない・時間切れ）では、「読み込めませんでした」にする（API が戻れば、もう一度で戻れる）。
+// 503（メンテナンス中）は、client.ts が見分けて、メンテナンスの画面を出す。
+// Cookie はタブのあいだで共有する。タブを開き直したときに読み直し、ほかのタブで別の会員がログインしていたら、画面を読み込み直す（onAccountChanged）
+export function SessionProvider({
+  children,
+  onAccountChanged = () => window.location.reload(),
+}: {
+  children: ReactNode
+  onAccountChanged?: () => void
+}) {
+  const [session, setSession] = useState<SessionState>({ status: 'loading' })
   // 読み込みが重なったとき（起動の読み込みの途中でログインした）、古い結果で上書きしないための番号
   const latest = useRef(0)
+  // タブを開き直したときに、今の会員と比べるため
+  const current = useRef<SessionState>(session)
+  useEffect(() => {
+    current.current = session
+  }, [session])
 
-  const load = useCallback(async () => {
+  const signedOut = useCallback(async (res: Response) => {
+    clearSession()
+    const code = await codeOf(res)
+    setSession(
+      code === 'account_suspended'
+        ? { status: 'signedOut', reason: ACCOUNT_SUSPENDED_REASON }
+        : { status: 'signedOut' },
+    )
+  }, [])
+
+  const load = useCallback(async (): Promise<boolean> => {
     const id = ++latest.current
-    if (!readToken()) {
-      setSession({ status: 'signedOut' })
-      return
-    }
     setSession({ status: 'loading' })
     try {
-      const res = await apiFetch('/api/me', { signal: AbortSignal.timeout(LOAD_TIMEOUT_MS) })
-      if (id !== latest.current) return
+      const res = await apiFetchWithoutLogin('/api/me', { signal: AbortSignal.timeout(LOAD_TIMEOUT_MS) })
+      if (id !== latest.current) return false
+      if (res.status === 401) {
+        await signedOut(res)
+        return false
+      }
       if (!res.ok) {
         setSession({ status: 'error' })
-        return
+        return false
       }
       setSession({ status: 'signedIn', account: toAccount((await res.json()) as AccountResponse) })
-    } catch (e) {
-      if (id !== latest.current || e instanceof UnauthorizedError) return
+      return true
+    } catch {
+      if (id !== latest.current) return false
       // つながらない・時間切れ
       setSession({ status: 'error' })
+      return false
     }
-  }, [])
+  }, [signedOut])
 
   useEffect(() => {
     load()
   }, [load])
 
-  // ログインの画面が呼ぶ。トークンを置いて、もう一度 GET /api/me を読む
-  const signIn = useCallback(
-    (token: string) => {
-      saveToken(token)
-      load()
-    },
-    [load],
-  )
+  // タブを開き直したとき（visibilitychange）に読み直す。読み込み中の表示は出さない（タブを替えるたびにちらつかないように）
+  useEffect(() => {
+    const recheck = async () => {
+      const before = current.current
+      if (document.visibilityState !== 'visible' || before.status !== 'signedIn') return
+      try {
+        const res = await apiFetchWithoutLogin('/api/me')
+        if (res.status === 401) {
+          latest.current++
+          await signedOut(res)
+          return
+        }
+        if (res.ok && toAccount((await res.json()) as AccountResponse).userId !== before.account.userId) {
+          onAccountChanged()
+        }
+      } catch {
+        // つながらないときは、今の画面のまま（次の API の失敗で扱う）
+      }
+    }
+    document.addEventListener('visibilitychange', recheck)
+    return () => document.removeEventListener('visibilitychange', recheck)
+  }, [signedOut, onAccountChanged])
+
+  // ログインの画面が、ログインの API が通ったあとに呼ぶ。セッションの Cookie はもう付いているので、GET /api/me を読み直す
+  const signIn = useCallback(() => load(), [load])
 
   // ログアウト・退会の画面が呼ぶ。読み込みの途中なら、その結果は捨てる
   const signOut = useCallback(() => {

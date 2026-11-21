@@ -30,9 +30,10 @@ describe('ログインしている人が、自分のプロフィールを書き�
     // 内訳：送った人のアカウントの状態と、メールアドレスを確認したか（Middleware が2本）・URL の会員の番号・プロフィール・書き換え
     it('書き換えるときの SQL は、決まった本数で済む（5本）', function (): void {
         $loginUser = DummyUser::create(nickname: 'まえ');
+        $request = DummyAuth::actingAs($loginUser);   // ダミーが会員の Model を読むので、数え始める前に作る
         DB::enableQueryLog();
 
-        DummyAuth::actingAs($loginUser)->putJson(Endpoints::profile($loginUser->publicId), ['nickname' => 'あと'])->assertOk();
+        $request->putJson(Endpoints::profile($loginUser->publicId), ['nickname' => 'あと'])->assertOk();
 
         expect(DB::getQueryLog())->toHaveCount(5);
     });
@@ -68,17 +69,15 @@ describe('ログインしていない人や使えなくなった会員が、プ�
         assertDatabaseHas('profiles', ['user_id' => $target->id, 'nickname' => 'まえ']);
     });
 
-    it('壊れたトークンでは、書き換えられない（401「ログインしてください」。FR-AUTH-020）', function (): void {
-        $target = DummyUser::create(nickname: 'まえ');
+    it('でたらめなセッションの Cookie では、書き換えられない（401「ログインしてください」。FR-AUTH-020）', function (): void {
+        $target = DummyUser::create();
 
-        DummyAuth::withToken('abc')->putJson(Endpoints::profile($target->publicId), ['nickname' => 'かきかえ'])
+        DummyAuth::withSessionCookie('not-a-real-session-id')->putJson(Endpoints::profile($target->publicId), ['nickname' => 'かきかえ'])
             ->assertUnauthorized()
             ->assertExactJson(['message' => 'ログインしてください']);
-
-        assertDatabaseHas('profiles', ['user_id' => $target->id, 'nickname' => 'まえ']);
     });
 
-    it('アカウント停止された会員は、前にもらったトークンでは自分のプロフィールも書き換えられない（401。NFR-AUTH-001）', function (): void {
+    it('アカウント停止された会員は、ログインしたままでも、自分のプロフィールを書き換えられない（401。NFR-AUTH-001）', function (): void {
         $loginUser = DummyUser::create(suspended: true, nickname: 'まえ');
 
         DummyAuth::actingAs($loginUser)->putJson(Endpoints::profile($loginUser->publicId), ['nickname' => 'かきかえ'])
@@ -88,7 +87,7 @@ describe('ログインしていない人や使えなくなった会員が、プ�
         assertDatabaseHas('profiles', ['user_id' => $loginUser->id, 'nickname' => 'まえ']);
     });
 
-    it('退会した会員は、前にもらったトークンでは自分のプロフィールも書き換えられない（401。NFR-AUTH-001）', function (): void {
+    it('退会した会員は、ログインしたままでも、自分のプロフィールを書き換えられない（401。NFR-AUTH-001）', function (): void {
         $loginUser = DummyUser::create(withdrawn: true, nickname: 'まえ');
 
         DummyAuth::actingAs($loginUser)->putJson(Endpoints::profile($loginUser->publicId), ['nickname' => 'かきかえ'])

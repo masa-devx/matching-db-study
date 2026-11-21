@@ -39,7 +39,9 @@ PHP のコードを書くときの、Laravel 13 と PHP 8.5 の決まり。型�
 
 ## 3. 自分のクラスはコンストラクタで受け取り、interface を使わないクラスはコンテナに登録しない
 
-- Service・Client は、使う側のコンストラクタの引数（`private readonly ProfileService $profiles`）で受け取る
+- Service・Client は、使う側のコンストラクタの引数（`private readonly ProfileService $profileService`）で受け取る
+- 受け取る変数の名前は、クラスの名前の頭を小文字にした形にする（`AuthService` → `$authService`・`FirestoreClient` → `$firestoreClient`）。`$auth`・`$profiles` のように縮めたり、複数形にしたりしない
+  - なぜ：名前からクラスが分かり、検索で見つけやすい。同じクラスを、ファイルごとに違う名前で呼ばないため（2026-11-21 に人が決めた。#259）
 - interface を使わないクラスは、`AppServiceProvider` に `bind()`・`singleton()` を書かない。Laravel が引数の型から自分で作る
 - `bind()` を書くのは、interface に対して本物とテスト用の偽物を差し替えるときだけ（`architecture-backend.md` の9章）
 - なぜ：具体的なクラスだけに頼るクラスは、コンテナに教えなくても作れる。要らない登録を書くと、登録とクラスの2か所を直すことになる

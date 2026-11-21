@@ -134,22 +134,24 @@ describe('ログインしていない人が、ログインが要る API を呼�
         expect($unexpected)->toBe([]);
     });
 
-    it('壊れたトークンでも、どれも使えない（401「ログインしてください」。FR-AUTH-024）', function (): void {
+    it('でたらめなセッションの Cookie でも、どれも使えない（401「ログインしてください」。FR-AUTH-024）', function (): void {
         $unexpected = routesWithUnexpectedResponse(
             loginRequiredRoutes(),
-            fn (string $method, string $url): TestResponse => DummyAuth::withToken('abc.def.ghi')->json($method, $url),
+            fn (string $method, string $url): TestResponse => DummyAuth::withSessionCookie('not-a-real-session-id')->json($method, $url),
             isRejectedAsNotLoggedIn(...),
         );
 
         expect($unexpected)->toBe([]);
     });
 
-    it('期限の切れたトークンでも、どれも使えない（401「ログインしてください」。FR-AUTH-024）', function (): void {
-        $token = DummyAuth::token(DummyUser::create(), expiresAt: time() - 60);
+    it('ログインしたあとに会員の行がなくなったセッションでも、どれも使えない（401「ログインしてください」。NFR-AUTH-001）', function (): void {
+        $gone = DummyUser::create(withProfile: false);
+        $cookie = DummyAuth::loginFromScreen($gone);
+        DB::table('users')->where('id', $gone->id)->delete();
 
         $unexpected = routesWithUnexpectedResponse(
             loginRequiredRoutes(),
-            fn (string $method, string $url): TestResponse => DummyAuth::withToken($token)->json($method, $url),
+            fn (string $method, string $url): TestResponse => DummyAuth::withSessionCookie($cookie)->json($method, $url),
             isRejectedAsNotLoggedIn(...),
         );
 
@@ -157,7 +159,7 @@ describe('ログインしていない人が、ログインが要る API を呼�
     });
 });
 
-describe('アカウント停止された会員が、前にもらったトークンで、ログインが要る API を呼ぶ', function (): void {
+describe('アカウント停止された会員が、ログインしたまま、ログインが要る API を呼ぶ', function (): void {
     it('どれも使えず、停止されていると知らされる（401「このアカウントは停止されています」。NFR-AUTH-001）', function (): void {
         $loginUser = DummyUser::create(suspended: true);
 
@@ -226,8 +228,9 @@ describe('メールアドレスを確認していない会員が、確認が要�
 });
 
 describe('メールアドレスを確認していない会員が、確認しなくても使える API を呼ぶ', function (): void {
-    it('確認しなくても使える API は、自分の情報とログアウトだけ（FR-AUTH-021）', function (): void {
-        expect(Endpoints::routesWithoutVerifiedEmail())->toBe(['GET api/me', 'POST api/auth/logout']);
+    // ログアウトは、ログインが要らない API に移した（アカウント停止された会員も、自分のセッションを消せるように）
+    it('ログインは要るが、確認しなくても使える API は、自分の情報だけ（FR-AUTH-021）', function (): void {
+        expect(Endpoints::routesWithoutVerifiedEmail())->toBe(['GET api/me']);
     });
 
     it('一覧の API は、どれも routes/api.php のログインが要るルートにある', function (): void {
@@ -236,7 +239,7 @@ describe('メールアドレスを確認していない会員が、確認しな�
         expect($missing)->toBe([]);
     });
 
-    it('自分の情報・ログアウトは、使える（200。FR-AUTH-021）', function (): void {
+    it('自分の情報は、使える（200。FR-AUTH-021）', function (): void {
         $loginUser = DummyUser::create(unverified: true);
         $withoutVerifiedEmail = array_values(array_filter(
             loginRequiredRoutes(),
@@ -246,7 +249,7 @@ describe('メールアドレスを確認していない会員が、確認しな�
         $unexpected = routesWithUnexpectedResponse(
             $withoutVerifiedEmail,
             fn (string $method, string $url): TestResponse => DummyAuth::actingAs($loginUser)->json($method, $url),
-            fn (TestResponse $response): bool => $response->status() === 200,
+            fn (TestResponse $response): bool => $response->isSuccessful(),
         );
 
         expect($withoutVerifiedEmail)->toHaveCount(count(Endpoints::routesWithoutVerifiedEmail()))

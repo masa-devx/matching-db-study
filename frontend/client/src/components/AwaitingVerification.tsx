@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
-import { apiFetchForLogout, apiFetchWithoutLogin } from '../shared/api/client'
+import { apiFetchWithoutLogin } from '../shared/api/client'
 import { useSession } from '../shared/session/SessionProvider'
+import { useLogout } from '../shared/session/useLogout'
 import Button from './Button'
 import { useToast } from './Toast'
 
@@ -9,7 +10,8 @@ import { useToast } from './Toast'
 // 機能の API は 403 で断られるので、画面ごとに読み込み中のまま止めず、ここ1か所で案内する。
 // 理由は本人にだけ見せる（ログインした人だけが、この画面を開ける）
 export default function AwaitingVerification({ email }: { email: string }) {
-  const { retry, signOut } = useSession()
+  const { retry } = useSession()
+  const { logout: logoutFromServer, loggingOut } = useLogout()
   const [sending, setSending] = useState(false)
   const toast = useToast()
   const navigate = useNavigate()
@@ -30,10 +32,13 @@ export default function AwaitingVerification({ email }: { email: string }) {
     }
   }
 
-  const logout = () => {
-    apiFetchForLogout('/api/auth/logout', { method: 'POST' })
-    signOut()
-    navigate('/login')
+  // 手順は shared/session/useLogout（ホーム・設定の画面と同じ）
+  const logout = async () => {
+    if (await logoutFromServer()) {
+      navigate('/login')
+      return
+    }
+    toast('ログアウトできませんでした。もう一度お試しください', 'error')
   }
 
   return (
@@ -49,7 +54,7 @@ export default function AwaitingVerification({ email }: { email: string }) {
       <button type="button" className="button button-ghost" onClick={retry}>
         確認した
       </button>
-      <button type="button" className="button button-ghost" onClick={logout}>
+      <button type="button" className="button button-ghost" onClick={logout} disabled={loggingOut}>
         ログアウト
       </button>
     </div>

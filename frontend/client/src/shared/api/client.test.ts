@@ -10,7 +10,8 @@ import {
   UnauthorizedError,
 } from './client'
 
-// shared/api/client.ts：API を呼ぶ3つの関数。トークンの付け方と、401・403（email_unverified）のときの動き（architecture-frontend.md の4章・7章）
+// shared/api/client.ts：API を呼ぶ3つの関数。セッションの Cookie と CSRF のトークンの付け方と、401・419・403（email_unverified）のときの動き
+// （architecture-frontend.md の4章・7章。D-027）
 
 const fetchMock = vi.fn<typeof fetch>()
 const onUnauthorized = vi.fn<(code: string | null) => void>()
@@ -28,41 +29,94 @@ function sentHeaders(): Headers {
   return new Headers(init?.headers)
 }
 
+function setXsrfCookie(value: string): void {
+  // biome-ignore lint/suspicious/noDocumentCookie: テストで、API が付ける Cookie の代わりに置く（jsdom には Cookie Store API がない）
+  document.cookie = `XSRF-TOKEN=${encodeURIComponent(value)}; path=/`
+}
+
+function removeXsrfCookie(): void {
+  // biome-ignore lint/suspicious/noDocumentCookie: テストで、API が付ける Cookie の代わりに置く（jsdom には Cookie Store API がない）
+  document.cookie = 'XSRF-TOKEN=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/'
+}
+
 beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock)
   fetchMock.mockReset()
   onUnauthorized.mockReset()
   onMaintenance.mockReset()
-  configureApiClient({ readToken: () => 'token-1', onUnauthorized, onMaintenance })
+  configureApiClient({ onUnauthorized, onMaintenance })
+  // 書き込みの前に CSRF のトークンをもらいに行かないよう、Cookie を置いておく（もらいに行くときのテストは、外してから流す）
+  setXsrfCookie('xsrf-1')
 })
 
 describe('ログインしたあとの API を apiFetch で呼ぶ', () => {
-  it('トークンを Authorization に付け、Accept に JSON を付けて送る', async () => {
+  it('セッションの Cookie を付けて送り（credentials: include）、Accept に JSON を付ける。トークンは付けない（D-027）', async () => {
     fetchMock.mockResolvedValue(jsonResponse(200, []))
 
     await apiFetch('/api/me/likes')
 
     expect(fetchMock.mock.calls[0]?.[0]).toBe('http://localhost:8000/api/me/likes')
-    expect(sentHeaders().get('Authorization')).toBe('Bearer token-1')
+    expect(fetchMock.mock.calls[0]?.[1]?.credentials).toBe('include')
     expect(sentHeaders().get('Accept')).toBe('application/json')
+    expect(sentHeaders().has('Authorization')).toBe(false)
   })
 
-  it('トークンがなければ、Authorization を付けない', async () => {
-    configureApiClient({ readToken: () => null, onUnauthorized, onMaintenance })
+  it('読むだけ（GET）なら、CSRF のトークンを付けない', async () => {
     fetchMock.mockResolvedValue(jsonResponse(200, []))
 
     await apiFetch('/api/me/likes')
 
-    expect(sentHeaders().has('Authorization')).toBe(false)
+    expect(sentHeaders().has('X-XSRF-TOKEN')).toBe(false)
   })
 
-  it('トークンが空の文字でも、Authorization を付けない', async () => {
-    configureApiClient({ readToken: () => '', onUnauthorized, onMaintenance })
-    fetchMock.mockResolvedValue(jsonResponse(200, []))
+  it('書き込みには、Cookie の CSRF のトークンを X-XSRF-TOKEN で付ける（FR-AUTH-018）', async () => {
+    setXsrfCookie('xsrf token/2')
+    fetchMock.mockResolvedValue(jsonResponse(201, {}))
 
-    await apiFetch('/api/me/likes')
+    await apiFetch('/api/me/likes', { method: 'POST', body: '{}' })
 
-    expect(sentHeaders().has('Authorization')).toBe(false)
+    expect(sentHeaders().get('X-XSRF-TOKEN')).toBe('xsrf token/2')
+  })
+
+  it('CSRF のトークンの Cookie がまだなければ、先に GET /sanctum/csrf-cookie を1回呼んでから書き込む', async () => {
+    removeXsrfCookie()
+    fetchMock.mockImplementation(async (url) => {
+      if (String(url).endsWith('/sanctum/csrf-cookie')) setXsrfCookie('xsrf-new')
+      return jsonResponse(201, {})
+    })
+
+    await apiFetch('/api/me/likes', { method: 'POST', body: '{}' })
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('http://localhost:8000/sanctum/csrf-cookie')
+    expect(fetchMock.mock.calls[0]?.[1]?.credentials).toBe('include')
+    expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get('X-XSRF-TOKEN')).toBe('xsrf-new')
+  })
+
+  it('書き込みが 419（CSRF のトークンが古い）なら、トークンをもらい直して1回だけ送り直す（メンテナンスでセッションが消えたあと）', async () => {
+    fetchMock.mockImplementation(async (url) => {
+      if (String(url).endsWith('/sanctum/csrf-cookie')) {
+        setXsrfCookie('xsrf-new')
+        return new Response(null, { status: 204 })
+      }
+      const sent = new Headers(fetchMock.mock.calls.at(-1)?.[1]?.headers).get('X-XSRF-TOKEN')
+      return sent === 'xsrf-new'
+        ? jsonResponse(201, {})
+        : jsonResponse(419, { message: '画面を読み込み直してください' })
+    })
+
+    const res = await apiFetchWithoutLogin('/api/users', { method: 'POST', body: '{}' })
+
+    expect(res.status).toBe(201)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(onUnauthorized).not.toHaveBeenCalled()
+  })
+
+  it('419（CSRF のトークンが合わない。24時間で切れたあとの書き込み）なら、csrf の印で 401 の処理を呼び、続きを止める', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(419, { message: '画面を読み込み直してください' }))
+
+    await expect(apiFetch('/api/me/likes', { method: 'POST', body: '{}' })).rejects.toThrow(UnauthorizedError)
+    expect(onUnauthorized).toHaveBeenCalledWith('csrf')
   })
 
   it('呼んだ画面が渡した method・body・signal を、そのまま送る', async () => {
@@ -151,13 +205,13 @@ describe('ログインしたあとの API を apiFetch で呼ぶ', () => {
 })
 
 describe('ログインが要らない API を apiFetchWithoutLogin で呼ぶ', () => {
-  it('トークンを付けない。401 でも移らず、応答をそのまま返す（パスワードの誤りを画面に出すため。FR-UI-100）', async () => {
+  it('401 でも移らず、応答をそのまま返す（パスワードの誤りを画面に出すため。FR-UI-100）', async () => {
     fetchMock.mockResolvedValue(jsonResponse(401, { message: 'メールアドレスかパスワードが違います' }))
 
     const res = await apiFetchWithoutLogin('/api/auth/login', { method: 'POST' })
 
     expect(res.status).toBe(401)
-    expect(sentHeaders().has('Authorization')).toBe(false)
+    expect(fetchMock.mock.calls[0]?.[1]?.credentials).toBe('include')
     expect(onUnauthorized).not.toHaveBeenCalled()
     expect(onMaintenance).not.toHaveBeenCalled()
   })
@@ -182,13 +236,14 @@ describe('ログインが要らない API を apiFetchWithoutLogin で呼ぶ', (
 })
 
 describe('ログアウトの API を apiFetchForLogout で呼ぶ', () => {
-  it('トークンを付ける。401 でも移らない（自分でしたログアウトとして扱う）', async () => {
+  it('セッションの Cookie と CSRF のトークンを付ける。401 でも移らない（自分でしたログアウトとして扱う）', async () => {
     fetchMock.mockResolvedValue(jsonResponse(401, { message: 'ログインしてください' }))
 
     const res = await apiFetchForLogout('/api/auth/logout', { method: 'POST' })
 
     expect(res.status).toBe(401)
-    expect(sentHeaders().get('Authorization')).toBe('Bearer token-1')
+    expect(fetchMock.mock.calls[0]?.[1]?.credentials).toBe('include')
+    expect(sentHeaders().get('X-XSRF-TOKEN')).toBe('xsrf-1')
     expect(onUnauthorized).not.toHaveBeenCalled()
     expect(onMaintenance).not.toHaveBeenCalled()
   })

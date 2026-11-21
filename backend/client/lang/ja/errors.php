@@ -10,4 +10,10 @@ return [
     'account_suspended' => 'このアカウントは停止されています',
     'email_unverified' => 'この機能は使えません',
     'maintenance' => 'ただいまメンテナンス中です',
+    'csrf' => '画面を読み込み直してください',
+    // ログインの失敗。分かっている不具合：要件は、どちらが違うかを教えない同じ文（FR-AUTH-011）
+    'login_unknown_email' => 'メールアドレスが違います',
+    'login_wrong_password' => 'パスワードが違います',
+    'login_suspended' => '利用を停止しています',
+    'login_banned' => '強制退会になっています',
 ];

@@ -31,6 +31,7 @@ final class Endpoints
             'POST api/auth/login',
             'POST api/password-resets',                // パスワードを忘れたとき
             'PUT api/password-resets/{token}',
+            'POST api/auth/logout',                    // ログアウト。アカウント停止された会員も、自分のセッションを消せるように
         ];
     }
 
@@ -44,7 +45,6 @@ final class Endpoints
     {
         return [
             'GET api/me',            // 自分の情報（確認を促す帯が、確認したかを読む）
-            'POST api/auth/logout',
         ];
     }
 
@@ -74,6 +74,30 @@ final class Endpoints
     public static function login(): string
     {
         return '/api/auth/login';
+    }
+
+    /** パスワードを変える（PUT /api/me/password） */
+    public static function password(): string
+    {
+        return '/api/me/password';
+    }
+
+    /** 検索の条件を保存する（POST /api/me/search-conditions） */
+    public static function searchConditions(): string
+    {
+        return '/api/me/search-conditions';
+    }
+
+    /** パスワードを再設定する（PUT /api/password-resets/{token}。再設定のメールのリンク） */
+    public static function passwordReset(string $token): string
+    {
+        return "/api/password-resets/{$token}";
+    }
+
+    /** ログアウトする（POST /api/auth/logout） */
+    public static function logout(): string
+    {
+        return '/api/auth/logout';
     }
 
     /** メールアドレスを確認する（GET /api/email-verifications/{token}。確認のメールのリンク） */

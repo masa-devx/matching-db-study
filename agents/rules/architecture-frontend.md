@@ -192,30 +192,37 @@ flowchart TB
 - API を呼ぶのは、`shared/api/client.ts` を通した各機能の `api.ts` だけ。Repository を作った機能では、Repository の実装が `api.ts` の受け持ち（`client.ts` を呼び、`toXxx` で形を変える）も持ち、`api.ts` は作らない
 - API の形が画面の形と同じでも、必ず `api.ts` を通し、画面の型を返す
 - API・Firestore の形（`XxxResponse`・ドキュメントの形）は、`api.ts` か Repository の実装の中で1回だけ画面の形に変える。その型を、このファイルの外へ出さない
-- 送り先（`VITE_API_URL`）を読むのは `client.ts` だけ。Cookie（D-014）の API ができるまでは、`Authorization` を付けるのも `client.ts` だけ
+- 送り先（`VITE_API_URL`）を読むのは `client.ts` だけ。セッションの Cookie を送る（`credentials: 'include'`）のと、書き込みに CSRF のトークン（`X-XSRF-TOKEN`）を付けるのも `client.ts` だけ（D-027）
 - 同じ呼び出しが重なるとき（検索の連打）は、hook が `AbortController` で古い方を止める
 
 ### 401 と 403
 
 - 401 の扱いを当てるのは、ログインしたあとの API だけ。ログイン・登録・メールの確認・パスワードの再設定の API には当てない（パスワードが違うときも 401 が返るので、画面に誤りの文を出す）。`client.ts` を呼ぶときに、当てないことを指定する
-- 改善版の認証（D-014）では、401 が来たら `refresh` を1回だけ試し、元の要求を送り直す。同時に来た 401 は、1本の `refresh` を待つ
-- それでも 401 なら、`shared/session` が自分の情報を消し、ポーリングを止める。`RequireAuth` が今の URL を覚えて、ログインの画面へ移す。戻り先は、アプリの中のパス（`/` で始まり、`//` で始まらない）だけにする
-- 今のつなぎ方（#257 の 2-1・2-2）
-  - ログインしているかは、`shared/session/SessionProvider.tsx` が決める。トークンがなければ API を呼ばずに「していない」。あれば、起動のときに `GET /api/me` を1回読み、通るかで決める
-  - 決まるまでは、`app/SessionGate.tsx` が「読み込み中…」を出す。401 でない失敗（500・つながらない・10秒の時間切れ）は、トークンを消さずに「読み込めませんでした」と、もう一度のボタンを出す
-  - ログインが要る画面は、`app/RequireAuth.tsx` の下に置き、画面ごとに確かめない。開こうとした画面は、まだ覚えない（FR-UI-011 の分かっている不具合）
+- 会員の認証はセッション（D-027）。取り替え用のトークン（`refresh`）はないので、送り直さない
+- 401 なら、`shared/session` が自分の情報を消し、ポーリングを止め、ログインの画面へ移す
+  - 決まり：`RequireAuth` が今の URL を覚え、ログインのあとに戻す。戻り先は、アプリの中のパス（`/` で始まり、`//` で始まらない）だけにする
+  - 分かっている不具合：今は覚えない（FR-UI-011）
+- 今のつなぎ方（#257・#259）
+  - ログインしているかは、`shared/session/SessionProvider.tsx` が決める。起動のときに `GET /api/me` を1回読み、通るかで決める（Cookie は HttpOnly なので、画面からは読めない）
+  - 401 なら、前の会員の画面の情報（前の検索の条件・前の JWT）を消し、「していない」にする。`code` が `account_suspended` なら、理由を持ち、`RequireAuth` が `/login?reason=account-suspended` へ移す
+  - タブを開き直したとき（`visibilitychange`）に `GET /api/me` を読み直す。ほかのタブで別の会員がログインしていたら、画面を読み込み直す（Cookie はタブのあいだで共有するため）
+  - 分かっている不具合：ログインが要らない画面（ログイン・登録）も、起動の `GET /api/me` を待ってから出る（PR #280 のレビューの A2）
+  - 決まるまでは、`app/SessionGate.tsx` が「読み込み中…」を出す。401 でない失敗（500・つながらない・10秒の時間切れ）は、「読み込めませんでした」と、もう一度のボタンを出す
+  - ログインの画面は、ログインの API のあとに `signIn()` を呼び、`GET /api/me` が通らなければ「ログインできませんでした。画面を読み込み直してください」を出す（Cookie が届いていない設定のとき）
+  - ログインが要る画面は、`app/RequireAuth.tsx` の下に置き、画面ごとに確かめない
   - コードでは「自分」を `Me` と呼ばず、`Account` と呼ぶ（`docs/glossary.md` の「アカウント」）
-  - `shared/api` は `shared/session` を使えないので、`app/configureApi.ts` が起動のときに、トークンの読み方と 401 のときの動きを `configureApiClient()` で `client.ts` に渡す
-  - 401 のとき、`client.ts` は応答の `code` を `app/` に渡して `UnauthorizedError` を投げる。`app/` は `shared/session` の `clearSession()` を呼び、理由を付けてログインの画面へ読み込み直す（FR-UI-100）
+  - `shared/api` は `shared/session` を使えないので、`app/configureApi.ts` が起動のときに、401 のときの動きを `configureApiClient()` で `client.ts` に渡す
+  - ログインしたあとの API の 401・419 のとき、`client.ts` は応答の `code`（419 は `'csrf'`）を `app/` に渡して `UnauthorizedError` を投げる。`app/` は `shared/session` の `clearSession()` を呼び、理由を付けてログインの画面へ読み込み直す（FR-UI-100）
+  - 書き込みが 419 なら、`client.ts` が CSRF のトークンをもらい直して、1回だけ送り直す（419 では何も変わっていないので、二重にならない）
   - 401 のときは、まだ読み込み直す形（`configureApi`）。読み込み直すので、ポーリングも止まる。画面の中で移す形にしたら、ポーリングを止めることを、はっきり書く
-- ログアウトは `apiFetchForLogout` で呼ぶ（トークンを付けるが、401 でも移らない）
+- ログアウトの手順は、`shared/session/useLogout.ts` の1か所に書く（ホーム・設定・確認待ちの画面が使う）。移る先とトーストは、呼ぶ画面が決める
+  - `apiFetchForLogout` で呼ぶ（401 でも移らない）。応答を待ち、`204`・`401`・`419` のあとでだけ「していない」にする（サーバーのセッションが消えないと、Cookie が生きたままなので）
 - メンテナンス中の 503（FR-MAINT-006）は、`client.ts` の3つの関数が見分け、`app/configureApi.ts` から渡された `onMaintenance` を呼ぶ。`app/MaintenanceGate.tsx` が、どの画面の代わりにも「ただいまメンテナンス中です」を出す（画面ごとに 503 を見分けない）
   - 続きを止める（`MaintenanceError` を投げる）のは `apiFetch` だけ。ログインが要らない API（`apiFetchWithoutLogin`）とログアウト（`apiFetchForLogout`）は、待たずに呼ぶ所があるので、投げずに応答を返す
-  - トークンがない人は、起動のときに `app/checkMaintenance.ts` が、トークンなしの `GET /api/me` を1本呼んで確かめる（ふだんは 401。メンテナンス中は 503）
+  - 起動のときの `GET /api/me` が 503 を返すので、ログインしていない人にもメンテナンスの画面が出る
   - メンテナンスに入ったあとに、前に送った要求の 401 が届いても、ログインの画面へは移さない
-  - トークンは消さず、ログインの画面にも移さない。解けたかは、会員が読み込み直して確かめる
+  - 解けたかは、会員が読み込み直して確かめる。メンテナンスでセッションを全部消すので、解いたあとはログインの画面に移る（FR-MAINT-002）
 - メールアドレスを確認していない会員の 403（`code: "email_unverified"`。FR-AUTH-021）は、`client.ts` が `EmailUnverifiedError` を投げて、呼んだ画面の続きを止める（画面は移さない）。確認を促すのは、`app/RequireAuth.tsx` が画面の代わりに出す「確認待ち」（`components/AwaitingVerification.tsx`）と、枠のいちばん上の帯（`VerifyBanner`。FR-UI-014）。画面で受け止めるときは、親の `StoppedRequestError` で見分ける
-- PR #268 から、API は、壊れた・期限の切れたトークンにも 401 を返す（前は 500）
 - 403 は、応答の `code` で見分ける（有料が要る・男性でない・確認していない・ブロック）。ステータスだけで「有料が要る」と読まない。API が `code` を返すまでは、誘導のダイアログを 403 で出さず、`plans/rules.ts` の判断で出す
 
 ### 失敗と読み込み中

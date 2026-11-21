@@ -3,8 +3,9 @@ import { Link, useNavigate } from 'react-router'
 import ConfirmDialog from './components/ConfirmDialog'
 import Icon from './components/Icon'
 import { useToast } from './components/Toast'
-import { apiFetch, apiFetchForLogout, apiFetchWithoutLogin } from './shared/api/client'
+import { apiFetch, apiFetchWithoutLogin } from './shared/api/client'
 import { useSession } from './shared/session/SessionProvider'
+import { useLogout } from './shared/session/useLogout'
 
 // レガシー版（M1。#181）。設定（/settings）。ホームの右上の歯車から来る。
 // アカウント（メールアドレスの確認・パスワード）・有料会員・検索・安全・案内・ログアウト・退会を、ここにまとめる。
@@ -14,6 +15,7 @@ export default function SettingsPage() {
   const toast = useToast()
   const navigate = useNavigate()
   const { signOut } = useSession()
+  const { logout: logoutFromServer, loggingOut } = useLogout()
   // 確認のメールをもう一度送る
   const [resending, setResending] = useState(false)
   // パスワードを変えるモーダル
@@ -86,14 +88,14 @@ export default function SettingsPage() {
     })
   }
 
-  const logout = () => {
-    // ホームにあった処理を、そのまま持ってきた
-    apiFetchForLogout(`/api/auth/logout`, {
-      method: 'POST',
-    })
-    // 応答を待たずに消す。サーバーは何もしないので、消す前にコピーしたトークンは30日使える
-    signOut()
-    navigate('/login')
+  // 手順は shared/session/useLogout（ホーム・確認待ちの画面と同じ）
+  const logout = async () => {
+    if (await logoutFromServer()) {
+      navigate('/login')
+      return
+    }
+    setConfirmLogout(false)
+    toast('ログアウトできませんでした。もう一度お試しください', 'error')
   }
 
   // 06：退会する。422 のときだけ、モーダルの中に出す（ほかの失敗は考えない）
@@ -303,6 +305,7 @@ export default function SettingsPage() {
         title="ログアウトしますか？"
         confirmLabel="ログアウトする"
         danger
+        busy={loggingOut}
         onConfirm={logout}
         onClose={() => setConfirmLogout(false)}
       />

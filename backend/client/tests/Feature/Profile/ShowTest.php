@@ -33,7 +33,7 @@ describe('ログインしていない人が、相手のプロフィールを見�
     });
 });
 
-describe('使えなくなった会員が、前にもらったトークンで相手のプロフィールを見る', function (): void {
+describe('使えなくなった会員が、ログインしたまま、相手のプロフィールを見る', function (): void {
     it('アカウント停止された会員は、見られず、停止されていると知らされる（401「このアカウントは停止されています」。NFR-AUTH-001）', function (): void {
         $loginUser = DummyUser::create(suspended: true);
         $target = DummyUser::create();
@@ -61,14 +61,14 @@ describe('使えなくなった会員が、前にもらったトークンで相�
             ->assertExactJson(['message' => 'ログインしてください']);
     });
 
-    it('会員の行がもうない番号のトークンでは、見られない（401。NFR-AUTH-001）', function (): void {
+    it('ログインしたあとに会員の行がなくなったセッションでは、見られない（401。NFR-AUTH-001）', function (): void {
         $gone = DummyUser::create();
         $target = DummyUser::create();
-        $token = DummyAuth::token($gone);
+        $cookie = DummyAuth::loginFromScreen($gone);
         DB::table('profiles')->where('user_id', $gone->id)->delete();
         DB::table('users')->where('id', $gone->id)->delete();
 
-        DummyAuth::withToken($token)->getJson(Endpoints::profile($target->publicId))
+        DummyAuth::withSessionCookie($cookie)->getJson(Endpoints::profile($target->publicId))
             ->assertUnauthorized();
     });
 });
@@ -141,9 +141,10 @@ describe('ログインしている人が、相手のプロフィールを見る'
         $loginUser = DummyUser::create();
         $target = DummyUser::create();
         DummyMatching::match($loginUser, $target);
+        $request = DummyAuth::actingAs($loginUser);   // ダミーが会員の Model を読むので、数え始める前に作る
         DB::enableQueryLog();
 
-        DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile($target->publicId))->assertOk();
+        $request->getJson(Endpoints::profile($target->publicId))->assertOk();
 
         expect(DB::getQueryLog())->toHaveCount(7);
     });
@@ -162,57 +163,24 @@ describe('ログインしている人が、相手のプロフィールを見る'
     });
 });
 
-describe('壊れた・偽の・期限切れのトークンを送る人が、相手のプロフィールを見る', function (): void {
-    it('壊れたトークンでは、見られない（401「ログインしてください」。FR-AUTH-020）', function (): void {
+describe('でたらめなセッションの Cookie を送る人が、相手のプロフィールを見る', function (): void {
+    it('見られない（401「ログインしてください」。FR-AUTH-020）', function (): void {
         $target = DummyUser::create();
 
-        DummyAuth::withToken('abc')->getJson(Endpoints::profile($target->publicId))
+        DummyAuth::withSessionCookie('not-a-real-session-id')->getJson(Endpoints::profile($target->publicId))
             ->assertUnauthorized()
             ->assertExactJson(['message' => 'ログインしてください']);
     });
 
-    it('ほかの鍵で署名した偽のトークンでは、見られない（401「ログインしてください」。FR-AUTH-020）', function (): void {
-        $loginUser = DummyUser::create();
-        $target = DummyUser::create();
-        $forged = DummyAuth::tokenSignedWithOtherKey($loginUser);
-
-        DummyAuth::withToken($forged)->getJson(Endpoints::profile($target->publicId))
-            ->assertUnauthorized()
-            ->assertExactJson(['message' => 'ログインしてください']);
-    });
-
-    it('JWT の期限（30日）が切れたトークンでは、見られない（401「ログインしてください」。FR-AUTH-020）', function (): void {
-        $loginUser = DummyUser::create();
-        $target = DummyUser::create();
-        $expired = DummyAuth::token($loginUser, expiresAt: time() - 60);
-
-        DummyAuth::withToken($expired)->getJson(Endpoints::profile($target->publicId))
-            ->assertUnauthorized()
-            ->assertExactJson(['message' => 'ログインしてください']);
-    });
-
-    it('ヘッダーの形がおかしいトークンでも、見られない（401「ログインしてください」。FR-AUTH-020）', function (string $headerJson): void {
-        $target = DummyUser::create();
-
-        DummyAuth::withToken(DummyAuth::tokenWithHeader($headerJson))->getJson(Endpoints::profile($target->publicId))
-            ->assertUnauthorized()
-            ->assertExactJson(['message' => 'ログインしてください']);
-    })->with([
-        'alg が配列' => ['{"alg":["HS256"]}'],
-        'alg がオブジェクト' => ['{"alg":{}}'],
-        'kid が配列' => ['{"alg":"HS256","kid":[1]}'],
-    ]);
-
-    it('いない会員の URL でも、先にトークンを確かめて断る（401）', function (): void {
-        DummyAuth::withToken('abc')->getJson(Endpoints::profile(DummyUser::MISSING_PUBLIC_ID))
+    it('いない会員の URL でも、先にログインを確かめて断る（401）', function (): void {
+        DummyAuth::withSessionCookie('not-a-real-session-id')->getJson(Endpoints::profile(DummyUser::MISSING_PUBLIC_ID))
             ->assertUnauthorized();
     });
 
-    it('トークンで断ったことは、エラーのログに出さない', function (): void {
+    it('ログインしていないので断ったことは、エラーのログに出さない', function (): void {
         Exceptions::fake();   // 決まりどおりに断っただけなので、エラーとして記録しない
 
-        DummyAuth::withToken('abc')->getJson(Endpoints::profile(DummyUser::MISSING_PUBLIC_ID))->assertUnauthorized();
-        DummyAuth::withToken(DummyAuth::tokenWithHeader('{"alg":["HS256"]}'))->getJson(Endpoints::profile(DummyUser::MISSING_PUBLIC_ID))->assertUnauthorized();
+        DummyAuth::withSessionCookie('not-a-real-session-id')->getJson(Endpoints::profile(DummyUser::MISSING_PUBLIC_ID))->assertUnauthorized();
 
         Exceptions::assertNothingReported();
     });
