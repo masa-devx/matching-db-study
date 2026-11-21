@@ -1910,3 +1910,95 @@ setSession({ status: 'signedIn', account: toAccount(await res.json()) })
 
 - 「401 はログインしていない、500 はサーバーの不具合。だから、ログアウトさせるのは 401 のときだけ」を、自分の言葉で言う
 - 「どの API か」と「何を返したか」を分けて答える
+
+## PR #273（#263：メールアドレスを確認していない会員を、機能の API で 403 にする）
+
+### ディレクトリの設計
+
+```text
+backend/client/app/
+├── Http/Middleware/EnsureUserEmailIsVerified.php   別名 user.verified。user.authenticate のあとに置く
+└── Exceptions/Auth/EmailUnverifiedException.php     403 {"message": "この機能は使えません", "code": "email_unverified"}
+frontend/client/src/
+├── shared/api/client.ts                              403 の email_unverified で EmailUnverifiedError を投げる
+└── components/AwaitingVerification.tsx               確認していない会員に、画面の代わりに出す「確認待ち」
+```
+
+- 確かめる所を `user.authenticate` の中にしなかったのは、ログインしているか（401）と、使ってよいか（403）が別のことだから。中にすると、確認していなくても使える API（自分の情報・ログアウト）まで断り、画面がログインの画面へ戻し続ける（`05-problems.md` の #263）
+
+### クラスの責務
+
+- `EnsureUserEmailIsVerified`：ログインしている会員が確認したかを、`AuthService` に聞く。だめなら例外を投げるだけで、応答は作らない
+- `AwaitingVerification`：確認していない会員に、送り直し・確認した・ログアウトを出す。機能の API は呼ばない
+- `RequireAuth`：ログインしていない → ログインの画面へ。確認していない → `AwaitingVerification`。どちらでもなければ画面
+
+### ルートの形
+
+```php
+Route::middleware('user.authenticate')->group(function (): void {
+    Route::get('/me', ...);              // 確認していなくても使える
+    Route::post('/auth/logout', ...);
+    Route::middleware('user.verified')->group(function (): void {
+        // ここから下は、確認が要る（入れ子なので、user.authenticate が先に動く）
+    });
+});
+```
+
+### 呼び出しの流れ
+
+```mermaid
+sequenceDiagram
+    participant P as 画面
+    participant A as user.authenticate
+    participant V as user.verified
+    participant C as Controller
+    P->>A: GET /api/me/likes（トークン）
+    A->>A: アカウントの状態を見る（users を1本）
+    A->>V: 会員の番号を載せて渡す
+    V->>V: 確認したかを見る（users をもう1本）
+    alt 確認していない
+        V-->>P: 403 email_unverified（Controller まで届かない）
+    else 確認した
+        V->>C: そのまま
+        C-->>P: 200
+    end
+```
+
+### 名前
+
+- `EnsureUserEmailIsVerified`：Laravel の `EnsureEmailIsVerified` とぶつからないように `User` を入れ、`AuthenticateUser` とそろえた
+- `EmailUnverifiedException`：応答の `code`（`email_unverified`）と言い方をそろえた（レビューで `EmailNotVerified` から変えた）
+- 別名 `user.verified`：Laravel の標準の `verified` にそろえた（「だれ.何をするか」の形の例外）
+
+### 直した課題と、現場での意味
+
+- 他人のメールアドレスで登録した人が、確認しないまま、いいねやメッセージを送れなくなった（不変条件 2）
+- 確認していない会員は、どの画面でも「確認待ち」を見て、送り直し・確認した・ログアウトができる（画面が止まらない）
+
+### 次の改善の候補
+
+- Middleware が会員の行を2回読む。会員の行を読む Middleware が3つ目になったら、リクエストの間に1回だけ読む形を考える
+- Firestore のルールは、確認したかを見ない（手元の Emulator だけの作り）
+
+### 説明の練習
+
+#### 1回目：新しい API を、確認が要るグループの外に書いた（2026-11-21）
+
+リーダーが聞いた：「お気に入りの API を、user.authenticate の中で user.verified の外に書いた。確認していない会員が呼ぶと何が返るか。どのテストが見つけるか」
+
+##### 問い1：何が返るか
+
+- 人の答え：401 のエラーを返す
+- 結果：ずれていた
+  - 返るのは成功（200・201）。確認していない会員もログインはできているので user.authenticate を通り、user.verified の外なので確かめられない
+
+##### 問い2：どのテストが見つけるか
+
+- 人の答え：Middleware のテスト、認証まわりのテスト
+- 結果：一部合っている
+  - 具体的には `LoginRequiredRoutesTest.php` の「確認していない会員が、確認が要る API を呼ぶ」。一覧にない API が 403 でなければ「メソッド URL → 201」と出して落ちる
+  - 一覧に足して通そうとすると、「確認しなくても使える API は、自分の情報とログアウトだけ」が落ちる
+
+##### 次にやること
+
+- 「ログインしているか（401）」と「使ってよいか（403）」を分けて、どの Middleware を通るか・通らないかで答える
