@@ -25,7 +25,7 @@
 | 管理者（すべてできる） | `owner@admin.example.test` | `password` |
 | 管理者（見るだけ） | `viewer@admin.example.test` | `password` |
 
-入れ方と起動の仕方は AGENTS.md の「主要コマンド」。
+入れ方と起動の仕方は [docs/commands.md](../commands.md)。
 
 ## ファイル
 
