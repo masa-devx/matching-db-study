@@ -1456,3 +1456,192 @@ Middleware は Model を使わない（`tests/Arch/LayersTest.php` の「Request
 
 - Middleware と Controller の「動く順番」で考える
 - 「止める」（Middleware を付ける）と「読む所を1か所にする」（Controller のコピーを消す）は、別の作業として分けて言う
+
+## PR #268（#257 の1：ログインが要る API の全部に、ログインを確かめる Middleware を付ける）
+
+#243（PR #262）で作った `user.authenticate` を、プロフィールの2本から、ログインが要る全部の API（31本）に広げた。Controller の中の、トークンを読むコピー（28か所）を消した。
+
+### ディレクトリの設計
+
+```text
+backend/client/
+├── routes/api.php                                  ログインが要らない7本と、要る31本（グループ）に分けた
+├── app/Http/Controllers/*.php（16）                コピーを消し、loginUserId() を呼ぶ
+└── tests/
+    ├── Endpoints.php                               ログインが要らないルートの一覧（routesWithoutLogin()）を足した
+    └── Feature/Auth/LoginRequiredRoutesTest.php    新しい。全部のルートを呼び、断るか・断らないかを見る
+```
+
+- 新しいクラスは作っていない。#243 で作った Middleware と `loginUserId()` を使い回した
+- テストは `tests/Feature/Auth/` に置いた。ログインを確かめるのは、業務のまとまり `Auth` の受け持ちのため（`testing-style.md` の1章）
+- ログインが要らない一覧は、URL の文字なので `tests/Endpoints.php` に置いた（URL の文字は、ここにだけ書く）
+- ほかに置ける場所：一覧を `routes/api.php` の中に置き、テストがそれを読む形もある。置かなかったのは、ルートのファイルとテストが同じ一覧を見ると、片方をまちがえても気づけないため（2か所に書いて、テストが食い違いを見つける）
+
+### クラスの責務
+
+#### `routes/api.php`
+
+- 知っていること：どのルートが、ログインが要るか
+- すること：ログインが要るルートを、`Route::middleware('user.authenticate')->group()` に入れる
+- しないこと：トークンを読む・会員の状態を見る（Middleware の受け持ち）
+
+#### `LoginRequiredRoutesTest.php`
+
+- 知っていること：ログインが要らないルートの一覧（`Endpoints::routesWithoutLogin()`）
+- すること：`routes/api.php` の全部のルートを呼び、一覧にないものは断る・一覧にあるものは断らない、を確かめる
+- しないこと：それぞれの API が何を返すか（それぞれの API のテストの受け持ち）
+
+#### 16の古い Controller
+
+- 知っていること：ログインしている会員の番号は、`loginUserId()` が返す
+- すること：前と同じ業務の処理（中身は変えていない）
+- しないこと：トークンを読む（前は、それぞれが `JWT::decode` を持っていた）
+
+### メソッドの表
+
+#### `Controller::loginUserId(Request $request): int`（#243 で作った。今回、呼ぶ所が増えた）
+
+- 入力：リクエスト
+- 戻り値：Middleware が載せた会員の番号
+- 副作用：なし
+- 失敗のしかた：載っていなければ `LogicException`（500。エラーのログに残る）。ルートに Middleware を付け忘れたことを、開発者に知らせる
+- 呼ぶ所：16の Controller の28か所と、プロフィールの Controller
+
+```php
+protected function loginUserId(Request $request): int
+{
+    $id = $request->attributes->get(AuthenticateUser::LOGIN_USER_ID);
+    if (! is_int($id)) {
+        throw new LogicException('ログインしている会員の番号が載っていない。このルートに user.authenticate を付け忘れている');
+    }
+
+    return $id;
+}
+```
+
+#### テストの `routesWithUnexpectedResponse(array $routes, callable $call, callable $isExpected): array`
+
+- 入力：呼ぶルートの一覧・1本の呼び方・期待した応答かを決める関数
+- 戻り値：期待と違ったルートの「メソッド URL → 状態」の一覧（空なら全部が期待どおり）
+- 副作用：なし（1本ごとにセーブポイントまで戻す）
+- 失敗のしかた：呼んだときに例外が出たら、`finally` で戻してから、テストを落とす
+- 呼ぶ所：このテストの6本
+
+```php
+DB::beginTransaction();       // セーブポイントを作る
+try {
+    $response = $call((string) $method, $url);
+} finally {
+    DB::rollBack();           // セーブポイントまで戻す
+}
+```
+
+- なぜ戻すか：PostgreSQL は、SQL のエラーが1つ起きると、同じトランザクションのそのあとの SQL を全部失敗にする（25P02）。退会のような、成功した書き込みも残る。どちらも、次のルートの結果を変えてしまう
+- 最初の形は戻していなかった。そのため「ログインした会員は 401 にならない」のテストが、500 も通してしまい、中身を確かめずに通っていた
+
+#### 置き換えた Controller の形（例：`LikeController::store`）
+
+```php
+// 前（16の Controller に28か所）
+$token = $request->bearerToken();
+if (! $token) {
+    return response()->json(['message' => 'ログインしてください'], 401);
+}
+$payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));   // 壊れていると 500。アカウント停止は見ない
+
+// 後
+$loginUserId = $this->loginUserId($request);
+```
+
+### 呼び出しの流れ
+
+```mermaid
+sequenceDiagram
+    participant B as 画面
+    participant R as routes/api.php
+    participant M as user.authenticate
+    participant S as AuthService
+    participant C as LikeController
+    participant D as DB
+    B->>R: GET /api/me/likes（Bearer トークン）
+    R->>M: グループの中なので、先に Middleware
+    M->>M: トークンを読む（壊れている・期限切れなら null）
+    M->>S: isUserAccountUsable(会員の番号)
+    S->>D: select * from users where id = ?（1本）
+    D-->>S: 会員の行
+    alt 使えない（退会・アカウント停止・強制退会）
+        M-->>B: 401「ログインしてください」（Controller まで届かない）
+    else 使える
+        M->>C: 番号を載せて渡す
+        C->>C: loginUserId() で番号を読む
+        C->>D: いいねの一覧の SQL
+        C-->>B: 200
+    end
+```
+
+### 名前
+
+- `routesWithoutLogin()`：ログインが要る側を「何もしなければ入る側」にしたので、例外の側（要らない側）に名前を付けた。候補の `publicRoutes()` は、「公開」が画面の公開と紛れるので選ばなかった
+- `LoginRequiredRoutesTest`：何を確かめるか（ログインが要るルート）を名前にした。候補の `AuthenticateUserTest` は、Middleware そのもののテスト（壊れたトークンの細かな場面）に見えるので選ばなかった（その細かな場面は `Profile/ShowTest.php` にある）
+- `isRejectedAsNotLoggedIn()`：状態コード（401）ではなく、「ログインしていないとして断られたか」を名前にした。ログインの失敗も 401 を返すので、状態コードだけでは区別できないため
+
+### 依存の向き
+
+```mermaid
+flowchart LR
+  R["routes/api.php"] --> M["user.authenticate"]
+  M --> S["AuthService"]
+  S --> U["User::isAccountUsable"]
+  R --> C["古い Controller（16）"]
+  C --> B["Controller::loginUserId"]
+  T["LoginRequiredRoutesTest"] -.->|"ルートを読む"| R
+  T -.-> E["Endpoints::routesWithoutLogin"]
+```
+
+- 前は、Controller が JWT のライブラリ（`Firebase\JWT`）を直接使っていた。今は、JWT を使うのは Middleware とログイン（トークンを作る）だけ
+- セッションに切り替える（#259）ときは、Middleware の中身を変えるだけで、Controller は変わらない
+
+### レガシー版との違い
+
+- レガシー版：16の Controller が、それぞれ6行のコピーを持っていた（28か所）。どれも署名と期限しか見ず、壊れていると 500
+- 改善版：ルートのグループに1行（`Route::middleware('user.authenticate')->group()`）。Controller は1行（`$this->loginUserId($request)`）
+
+### 直した課題と、現場での意味
+
+- 課題は `05-problems.md` の #257
+- アカウント停止された会員は、前のトークンを持っていても、次のリクエストから、どの API も使えない（前は、検索・いいね・トークの一覧などの12本が 200）
+- 壊れたトークン・期限の切れたトークンは、どの API も 401 になり、エラーのログに 500 が残らない（前は13本が 500）
+- 新しい API を足して Middleware を付け忘れると、テストが落ちる
+
+### 次の改善の候補
+
+- 1回のリクエストで、同じ会員の行を2回読む API が9つある（`design-topics.md` の「改善の候補」）
+- 画面が 401 を見ない（2つ目の PR）
+- アカウント停止された会員が、ほかの会員から見えたまま（`design-topics.md` の「改善の候補」）
+
+### 説明の練習
+
+#### 1回目：新しい API で、Middleware を付け忘れた（2026-11-21）
+
+リーダーが聞いた：「担当者が `routes/api.php` のいちばん下（グループの外）に `POST /me/favorites` を書き、Controller では `loginUserId()` で番号を読んだ。この誤りは、どこで・どう見つかるか」
+
+##### 問い1：手元で呼ぶと、何が返るか。CI では、どう落ちるか
+
+- 人の答え：Middleware を通っていないので 401 にならない。認証のエラーが出る。CI は認証まわりで落ちる
+- 結果：一部合っている
+  - 合っている：401 にならない・CI で落ちる
+  - ずれていた：返るのは 500。番号が載っていないので `loginUserId()` が `LogicException` を投げ、エラーのログに「付け忘れている」と残る。401 は利用者への答え、500 は開発者への知らせ
+  - 足りない：落ちるのは `LoginRequiredRoutesTest` の4本（トークンなし・壊れた・期限切れ・アカウント停止）。どれも「POST /api/me/favorites → 500」と出る
+
+##### 問い2：付け忘れたのが、`loginUserId()` を呼ばない API（`NoticeController::read` など）だったら
+
+- 人の答え：ログインしなくても使えてしまう。テストは落ちないので気づかない
+- 結果：一部合っている
+  - 合っている：ログインしなくても使えてしまう（500 にもならず、204 が返る）
+  - ずれていた：テストは落ちる。`LoginRequiredRoutesTest` は Controller の中身を見ず、ルートを全部読んでトークンなしで呼ぶ。401 が返らないので落ちる
+  - この API にとっては、このテストが唯一の歯止め（`loginUserId()` の 500 は働かない）
+
+##### 次にやること
+
+- 付け忘れを見つける仕組みが2つ重なっていること（`loginUserId()` の 500 と、ルートを全部読むテスト）を、どの API にどちらが効くかで分けて言う
+- 401 と 500 の違いを「だれへの知らせか」で言う
