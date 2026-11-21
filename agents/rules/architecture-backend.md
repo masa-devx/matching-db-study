@@ -237,7 +237,7 @@ final class ProfileResource extends JsonResource
 // app/Http/Middleware/AuthenticateUser.php（#243・#259）
 public function handle(Request $request, Closure $next): Response
 {
-    $userId = $this->userIdFromSession();   // セッションから会員の番号だけを読む（会員の行は読まない）。ログインしていない・切れたなら null
+    $userId = $this->userIdFromSession();   // セッションの会員の番号。Laravel の id() が会員の行を1回読む。ログインしていない・切れたなら null
     $status = $userId === null ? null : $this->authService->userAccountStatus($userId);   // AuthService：アカウントの状態（AccountStatus）
     if ($status === AccountStatus::Suspended) {
         throw new AccountSuspendedException;   // bootstrap/app.php が 401「このアカウントは停止されています」にする
@@ -345,7 +345,7 @@ class User extends Model
 
 ```php
 $room = DB::transaction(fn (): TalkRoom => $this->openRoom($match));   // DB だけ
-$this->firestore->openRoom($room);                                     // コミットのあとで、外へ（FirestoreClient）
+$this->firestoreClient->openRoom($room);                               // コミットのあとで、外へ（FirestoreClient）
 ```
 
 ## 6. ログ
@@ -380,7 +380,7 @@ $this->firestore->openRoom($room);                                     // コミ
 
 | 起きること | 止める場所 | 応答 |
 | --- | --- | --- |
-| トークンがない・壊れている・退会した・停止された会員 | Middleware（使えるかは Service に聞く） | 401 |
+| ログインしていない・セッションが切れた・退会・アカウント停止・強制退会 | Middleware（使えるかは Service に聞く） | 401 |
 | メールアドレスを確認していない会員（確認が要る API） | Middleware（`user.verified`。確認したかは Service に聞く） | 403（`code: email_unverified`） |
 | 入力の形が違う | Request | 422（Laravel の形のまま） |
 | 役割が足りない（管理画面） | 書き込みのルートの Middleware（役割は Service に聞く） | 403 |
@@ -494,7 +494,7 @@ try {
 - そのために、API テストは中の作りに頼らない
   - DB は表の名前で確かめる（`assertDatabaseHas('likes', [...])`・`assertDatabaseCount('likes', 0)`）
   - データは `tests/DummyData/` のクラス（例：`DummyUser::create()`・`DummyMatching::match()`）で作る。Model の Factory を呼ぶのは、このクラスの中だけ
-  - 時刻は `travelTo()` で止める。ログインは、本物のトークンを作って送る（`DummyAuth::actingAs()`）。ダミーデータの関数の一覧は `testing.md` の「テストのダミーデータ（会員の側）」
+  - 時刻は `travelTo()` で止める。ログインは `DummyAuth::actingAs()`、Cookie で続くかを見るときは `DummyAuth::loginFromScreen()`。ダミーデータの関数の一覧は `testing.md` の「テストのダミーデータ（会員の側）」
   - 外への書き込み（Firestore）は、移す前と後で同じ方法で確かめる（Emulator の中身を読む）
 - 新しく書くコードは、必ずこの形で書く。古いコントローラー（`app/Http/Controllers/` の直下）に機能を足さない
 - 移すたびに、**次の改善の候補**（移して気づいたこと。例：「検索の条件が増えるたびに `scopeSearch` が長くなる」）を、そのサイクルの `06-walkthrough.md` に1行残す。振り返りと、太ったときの見直しの材料にする
@@ -509,7 +509,7 @@ if ($profile->gender === 'male' && ! $user->is_paid) {
     $today = Like::where('from_user_id', $id)->whereDate('created_at', now()->toDateString())->count();
 }
 // ✅ Controller は Service を呼ぶだけ。判断は Service、数えるクエリ（条件が2つ）は Model のスコープ
-$result = $this->likes->send($memberId, $request->validated());
+$result = $this->likeService->send($memberId, $request->validated());
 
 // ❌ Service が HTTP を知っている（コマンドやテストから呼べない）
 public function updateProfile(Request $request): JsonResponse { abort_if($x, 403); }
@@ -537,13 +537,13 @@ return User::query()->where('public_id', $publicId)->first() ?? throw new UserNo
 protected static function booted(): void { static::created(fn (User $u) => Mail::to($u)->send(...)); }
 // ✅ Service の中で、コミットのあとに書く
 $user = DB::transaction(fn (): User => User::create($input));
-$this->mailer->sendVerification($user);
+$this->mailClient->sendVerification($user);
 
 // ❌ トランザクションの中で外へ書く
-DB::transaction(function () use ($room) { $room->save(); $this->firestore->openRoom($room); });
+DB::transaction(function () use ($room) { $room->save(); $this->firestoreClient->openRoom($room); });
 // ✅ コミットのあと
 DB::transaction(fn () => $room->save());
-$this->firestore->openRoom($room);
+$this->firestoreClient->openRoom($room);
 ```
 
 ## 管理画面での当てはめ
