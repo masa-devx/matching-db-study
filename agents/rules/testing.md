@@ -98,8 +98,10 @@ API ごとに、下の表から当てはまる観点を選ぶ。「API テスト
 | --- | --- | --- |
 | `DummyUser::create()` | 会員とプロフィール（既定と引数は下） | 購入の行（`purchases`）・管理画面の監査ログ |
 | `DummyMatching::match()` | お互いのいいね・マッチ・トークルームと参加者2人。トークルームの番号を返す | Firestore のルーム |
-| `DummyAuth::actingAs()` | その会員のトークンを `Authorization` に付ける。続けて `->getJson(...)` と書く | ― |
-| `DummyAuth::token()` | トークンの文字だけ（期限切れを確かめるときに使う） | ― |
+| `DummyAuth::actingAs()` | その会員でログインした状態（セッション。Laravel の `actingAs`）にし、画面のオリジン（`Origin`）を付ける。続けて `->getJson(...)` と書く | ― |
+| `DummyAuth::useSessionTable()` | セッションの置き場を DB（表 `sessions`）にする。Cookie だけでログインが続くか・切れるかを見るテストの最初に呼ぶ | ― |
+| `DummyAuth::forgetLoginBetweenRequests()` | 次のリクエストの前に、ログインした会員とセッションを忘れさせる（Laravel のテストは、1つのテストの中で覚えたままにするため） | ― |
+| `DummyAuth::token()` | トークンの文字だけ（会員の側はセッションに移ったので、送っても「ログインしていない」になる。JWT を消すチケットで外す） | ― |
 | `DummyAuth::withToken()` | 渡したトークンを `Authorization` に付ける（壊れたトークン・期限切れのトークンを送るとき）。続けて `->getJson(...)` と書く | ― |
 | `DummyAuth::tokenSignedWithOtherKey()` | 中身は本物と同じで、ほかの鍵で署名したトークン（署名を確かめているかを見るとき） | ― |
 | `DummyUser::MISSING_PUBLIC_ID` | だれも持っていない `public_id`（UUID の形は正しい）。いない会員の URL に使う | ― |
@@ -118,7 +120,10 @@ travelTo(Carbon::parse('2026-11-10 12:00:00'));
 $loginUser = DummyUser::create(paid: true);   // users.created_at は 2026-11-10 12:00:00・有料の期限は 2026-12-10 12:00:00
 ```
 
-- トークンの期限だけは、本物の時計で決まる（JWT のライブラリが `time()` を見るため、`travelTo()` は効かない）。`DummyAuth::token()` に期限を渡すときは、`time()` をもとに書く（期限切れなら `time() - 60`）
+- セッション（会員の側）の期限は、Laravel の時計で決まるので、`travel()` が効く（FR-AUTH-013 のテスト）
+- Cookie を渡すリクエストは、`withCredentials()` を付ける（Laravel のテストの `getJson()`・`postJson()` は、付けないと Cookie を送らない）
+- CSRF の確かめは、Laravel がテストの中では飛ばす。確かめるテスト（FR-AUTH-018）だけ、`config()->set('sanctum.middleware.validate_csrf_token', ValidateCsrfTokenInTests::class)` で、飛ばさない形（`tests/Support/`）に替える
+- トークン（管理画面と、`DummyAuth::token()`）の期限だけは、本物の時計で決まる（JWT のライブラリが `time()` を見るため、`travelTo()` は効かない）。`DummyAuth::token()` に期限を渡すときは、`time()` をもとに書く（期限切れなら `time() - 60`）
 
 ### テストの書き方
 
