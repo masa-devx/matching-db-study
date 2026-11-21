@@ -19,7 +19,7 @@ use Symfony\Component\HttpFoundation\Response;
  */
 final class EnsureUserEmailIsVerified
 {
-    public function __construct(private readonly AuthService $auth) {}
+    public function __construct(private readonly AuthService $authService) {}
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -27,7 +27,7 @@ final class EnsureUserEmailIsVerified
         if (! is_int($userId)) {
             throw new LogicException('ログインしている会員の番号が載っていない。user.verified の前に user.authenticate を付ける');
         }
-        if (! $this->auth->hasUserVerifiedEmail($userId)) {
+        if (! $this->authService->hasUserVerifiedEmail($userId)) {
             throw new EmailUnverifiedException;
         }
 

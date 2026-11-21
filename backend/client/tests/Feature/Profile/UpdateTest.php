@@ -30,9 +30,10 @@ describe('ログインしている人が、自分のプロフィールを書き�
     // 内訳：送った人のアカウントの状態と、メールアドレスを確認したか（Middleware が2本）・URL の会員の番号・プロフィール・書き換え
     it('書き換えるときの SQL は、決まった本数で済む（5本）', function (): void {
         $loginUser = DummyUser::create(nickname: 'まえ');
+        $request = DummyAuth::actingAs($loginUser);   // ダミーが会員の Model を読むので、数え始める前に作る
         DB::enableQueryLog();
 
-        DummyAuth::actingAs($loginUser)->putJson(Endpoints::profile($loginUser->publicId), ['nickname' => 'あと'])->assertOk();
+        $request->putJson(Endpoints::profile($loginUser->publicId), ['nickname' => 'あと'])->assertOk();
 
         expect(DB::getQueryLog())->toHaveCount(5);
     });

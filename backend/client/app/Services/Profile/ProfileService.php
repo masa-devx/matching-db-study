@@ -18,6 +18,12 @@ use RuntimeException;
  */
 final class ProfileService
 {
+    /** 自分のアカウント（GET /api/me）。users の行をそのまま返す（返さない列は User の #[Hidden]） */
+    public function showAccount(int $userId): User
+    {
+        return User::query()->findOrFail($userId);
+    }
+
     /**
      * 会員1人とプロフィールを読む。見ている人（$viewerId）がいれば、2人のトークルームの番号も探す。
      *

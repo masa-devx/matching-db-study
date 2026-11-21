@@ -11,7 +11,6 @@ declare(strict_types=1);
 // まだ移していない古いコントローラー（app/Http/Controllers の直下）。この一覧が、そのまま移行の残り。移したら消す。
 // ignoring は、渡した名前で始まる「使われる側」の依存も消すので、古いコントローラーの名前だけを渡す
 const LEGACY_CONTROLLERS = [
-    'App\Http\Controllers\AuthController',
     'App\Http\Controllers\BlockController',
     'App\Http\Controllers\EmailVerificationController',
     'App\Http\Controllers\FirebaseTokenController',

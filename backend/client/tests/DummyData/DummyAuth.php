@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\DummyData;
 
+use App\Models\User;
 use Firebase\JWT\JWT;
 use Illuminate\Foundation\Testing\TestCase;
 
+use function Pest\Laravel\actingAs;
 use function Pest\Laravel\withHeader;
 
 /**
@@ -17,10 +19,36 @@ final class DummyAuth
 {
     private const int THIRTY_DAYS = 60 * 60 * 24 * 30;
 
-    /** その会員としてログインした状態にする。使い方：DummyAuth::actingAs($loginUser)->getJson('/api/me') */
+    /**
+     * その会員としてログインした状態にする（セッション。D-027）。使い方：DummyAuth::actingAs($loginUser)->getJson('/api/me')。
+     * 画面のオリジン（Origin）も付ける（Sanctum は、画面からのリクエストだけでセッションを使う）
+     */
     public static function actingAs(TestUser $user): TestCase
     {
-        return self::withToken(self::token($user));
+        return actingAs(User::query()->findOrFail($user->id), 'web')
+            ->withHeader('Origin', config()->string('app.frontend_url'));
+    }
+
+    /**
+     * 次のリクエストの前に、ログインした会員を忘れさせる。
+     * Laravel のテストは、1つのテストの中で、ログインした会員を覚えたままにする（本番は、リクエストごとに Cookie から読み直す）。
+     * Cookie だけでログインが続くか・切れるかを確かめるときに呼ぶ
+     */
+    public static function forgetLoginBetweenRequests(): void
+    {
+        auth()->forgetGuards();
+        // セッションも、Cookie の番号から読み直させる（前のリクエストで読んだ中身を使い続けないように）
+        app('session')->forgetDrivers();
+        app()->forgetInstance('session.store');
+    }
+
+    /**
+     * セッションの置き場を DB（表 sessions）にする。Cookie だけでログインが続くか・切れるかを見るテストの最初に呼ぶ。
+     * テストの置き場（phpunit.xml の SESSION_DRIVER=array）は、forgetLoginBetweenRequests() で中身ごと消えるため
+     */
+    public static function useSessionTable(): void
+    {
+        config()->set('session.driver', 'database');
     }
 
     /** 渡したトークンを Authorization に付ける。壊れたトークンや期限切れのトークンを送るときに使う */

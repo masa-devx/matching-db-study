@@ -236,7 +236,7 @@ describe('メールアドレスを確認していない会員が、確認しな�
         expect($missing)->toBe([]);
     });
 
-    it('自分の情報・ログアウトは、使える（200。FR-AUTH-021）', function (): void {
+    it('自分の情報・ログアウトは、使える（200・204。FR-AUTH-021）', function (): void {
         $loginUser = DummyUser::create(unverified: true);
         $withoutVerifiedEmail = array_values(array_filter(
             loginRequiredRoutes(),
@@ -246,7 +246,7 @@ describe('メールアドレスを確認していない会員が、確認しな�
         $unexpected = routesWithUnexpectedResponse(
             $withoutVerifiedEmail,
             fn (string $method, string $url): TestResponse => DummyAuth::actingAs($loginUser)->json($method, $url),
-            fn (TestResponse $response): bool => $response->status() === 200,
+            fn (TestResponse $response): bool => $response->isSuccessful(),
         );
 
         expect($withoutVerifiedEmail)->toHaveCount(count(Endpoints::routesWithoutVerifiedEmail()))

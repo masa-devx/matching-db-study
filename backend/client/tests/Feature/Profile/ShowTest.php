@@ -141,9 +141,10 @@ describe('ログインしている人が、相手のプロフィールを見る'
         $loginUser = DummyUser::create();
         $target = DummyUser::create();
         DummyMatching::match($loginUser, $target);
+        $request = DummyAuth::actingAs($loginUser);   // ダミーが会員の Model を読むので、数え始める前に作る
         DB::enableQueryLog();
 
-        DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile($target->publicId))->assertOk();
+        $request->getJson(Endpoints::profile($target->publicId))->assertOk();
 
         expect(DB::getQueryLog())->toHaveCount(7);
     });

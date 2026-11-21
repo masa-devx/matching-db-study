@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Http\Controllers\AuthController;
+use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\BlockController;
 use App\Http\Controllers\EmailVerificationController;
 use App\Http\Controllers\FirebaseTokenController;
@@ -12,6 +12,7 @@ use App\Http\Controllers\NoticeController;
 use App\Http\Controllers\PasswordController;
 use App\Http\Controllers\PasswordResetController;
 use App\Http\Controllers\PlanController;
+use App\Http\Controllers\Profile\AccountController;
 use App\Http\Controllers\Profile\ProfileController;
 use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\ReceivedLikeController;
@@ -40,7 +41,7 @@ Route::post('/users', [UserController::class, 'store']);
 Route::get('/email-verifications/{token}', [EmailVerificationController::class, 'show']);
 Route::post('/email-verifications', [EmailVerificationController::class, 'store']);
 
-// 01b ログイン（docs/api/01b-auth.md）。レガシー版は、JWT を JSON で返す
+// 01b ログイン（docs/api/01b-auth.md）。セッションの Cookie を付ける（D-027）。画面は、先に GET /sanctum/csrf-cookie を呼ぶ
 Route::post('/auth/login', [AuthController::class, 'login']);
 
 // M2 パスワードを忘れたときの再設定（#196。docs/api/01b-auth.md）。ログインしていない人が使う
@@ -52,7 +53,7 @@ Route::put('/password-resets/{token}', [PasswordResetController::class, 'update'
 // 新しいルートは、ログインが要らないと決めたもののほかは、このグループに入れる（入れ忘れると LoginRequiredRoutesTest が落ちる）
 Route::middleware('user.authenticate')->group(function (): void {
     // 01b 自分の情報・ログアウト（docs/api/01b-auth.md）。メールアドレスを確認していなくても使える（FR-AUTH-021）
-    Route::get('/me', [AuthController::class, 'me'])->name('legacy.profile.account.show');   // 名前は docs/glossary.md の「アカウント」
+    Route::get('/me', [AccountController::class, 'show'])->name('profile.account.show');   // 名前は docs/glossary.md の「アカウント」
     Route::post('/auth/logout', [AuthController::class, 'logout']);
 
     // ここから下は、メールアドレスの確認が要る（user.verified。だめなら 403。FR-AUTH-021・不変条件 2）。

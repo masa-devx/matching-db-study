@@ -98,6 +98,8 @@ return [
             'prefix' => '',
             'prefix_indexes' => true,
             'search_path' => 'public',
+            // SQL の例外の文に、渡した値（セッションの番号・メールアドレスなど）を入れない（FR-AUTH-032）
+            'mask_bindings_in_exception_messages' => true,
             'sslmode' => env('DB_SSLMODE', 'prefer'),
         ],
 
