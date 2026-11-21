@@ -1,5 +1,6 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { apiFetch, UnauthorizedError } from '../api/client'
+import { UnauthorizedError } from '../api/ApiError'
+import { apiFetch } from '../api/client'
 import { clearSession, readToken, saveToken } from './session'
 
 // GET /api/me の応答の形（レガシー版）。このファイルの外へ出さない（architecture-frontend.md の4章）
@@ -92,7 +93,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setSession({ status: 'signedOut' })
   }, [])
 
-  return <SessionContext.Provider value={{ session, signIn, signOut, retry: load }}>{children}</SessionContext.Provider>
+  return <SessionContext value={{ session, signIn, signOut, retry: load }}>{children}</SessionContext>
 }
 
 export function useSession(): SessionValue {

@@ -21,8 +21,8 @@ paths:
 
 ### 単体
 
-- 置き場所：`backend/client/tests/Unit/`・`backend/admin/tests/Unit/`（`app/` の構造を再現）・`frontend/client/src/**/*.test.tsx`
-- 実行：`docker compose run --rm app ./vendor/bin/pest tests/Unit`（画面は 03b で決める）
+- 置き場所：`backend/client/tests/Unit/`・`backend/admin/tests/Unit/`（`app/` の構造を再現）・`frontend/*/src/**/*.test.ts(x)`（確かめるファイルの隣）
+- 実行：`docker compose run --rm app ./vendor/bin/pest tests/Unit`。画面は `frontend/client`（管理画面は `frontend/admin`）で `npm test`（Vitest・Testing Library・jsdom。#114）
 
 ### 結合（API テスト）
 

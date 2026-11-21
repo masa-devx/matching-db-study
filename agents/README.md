@@ -72,6 +72,7 @@ architecture-frontend.md の中身：
 | ルール | 読むとき | 中身 |
 | --- | --- | --- |
 | [quality-php.md](rules/quality-php.md) | PHP のコードを書く・変える | Pint の形・引数の渡し方・コンテナ・Model のプロパティ |
+| [quality-frontend.md](rules/quality-frontend.md) | 画面のコードを書く・変える | React の書き方・Effect・`key`・state の形・`any` と `as`・Biome |
 | [quality-types.md](rules/quality-types.md) | PHP のコードを書く・変える | `strict_types`・言語の型と PHPDoc の使い分け・PHPStan のレベル（レガシー版 6・改善版 9）・してはいけないこと |
 
 使わない領域のルールは外し、この目次からも消す（例：DB を使わないなら database.md）。

@@ -81,6 +81,16 @@ AI が守る決まり（推測で流さない・許可の一覧に足す基準�
 - 前提：`mise install` 済み・API が起動している
 - 使わないもの：`http://127.0.0.1:5173` で開く（`localhost` とは別のオリジンになり、改善版で Cookie が届かなくなるため）
 
+## 画面のテスト・置き場の決まり
+
+- 実行場所：`frontend/client/`（管理画面は `frontend/admin/`）
+- コマンド
+  - テスト：`npm test`（Vitest。1回流して終わる）。直しながら流し続けるなら `npm run test:watch`
+  - 置き場の決まり：`npm run lint:rules`（会員の画面だけ。`architecture-frontend.md` の3章を書いた Biome の規則を全体に流し、改訂版の置き場（`src/app`・`src/shared`）では `recommended` の規則と `overrides` で足した規則を、警告も誤りとして見る。`quality-frontend.md`）
+- 前提：`npm install` 済み
+- テストは、確かめるファイルの隣に `*.test.ts(x)` で置く。画面は jsdom の上で描く（`vite.config.ts` の `test`）
+- 使わないもの：全体の lint（`npm run lint`）で置き場の決まりを確かめる（レガシー版の前からの指摘が混ざり、見分けにくいため）
+
 ## 管理画面を起動
 
 - 実行場所：リポジトリのルート（API）・`frontend/admin/`（画面）
@@ -264,7 +274,7 @@ AI が守る決まり（推測で流さない・許可の一覧に足す基準�
 ## CI
 
 - 実行場所：GitHub（PR と push で自動）
-- 設定：`.github/workflows/backend.yml`（会員の側）・`admin-backend.yml`（管理画面）
+- 設定：`.github/workflows/backend.yml`（会員の側）・`admin-backend.yml`（管理画面）・`frontend.yml`（画面）・`docs.yml`（文書の言葉）
 - 中身と決まりは [docs/ci.md](ci.md)
 - 結果は `gh pr checks <番号>` で見る
 - 使わないもの：CI の設定を緩めて通す（レベルを下げる・対象から外す）

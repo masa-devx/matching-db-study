@@ -1,6 +1,7 @@
 ---
 paths:
   - "frontend/*/src/**"
+  - "frontend/*/biome.json"
 ---
 
 # architecture-frontend（改訂版の画面）
@@ -9,6 +10,7 @@ paths:
 
 - 形を選んだ理由（クリーンアーキテクチャの考え方を、どこまで採ったか）と、今のファイルをどこへ移すかの地図は [docs/frontend.md](../../docs/frontend.md)。決めたことは `docs/decisions.md` の D-018・D-026
 - バックエンドの決まりは [architecture-backend.md](architecture-backend.md)。このファイルはバックエンドには当てはめない
+- React・TypeScript・Biome の書き方は [quality-frontend.md](quality-frontend.md)
 - レガシー版（1画面に1つの大きな部品）の書き方は、改訂版の新しいコードでは使わない
 
 ## 1. 迷ったときの判断の順
@@ -80,7 +82,23 @@ src/
 
 ## 3. 依存の向き
 
-下の一覧の「使ってよい」に書いたものだけを使う（一覧は、許すものを並べたものとして読む）。#114 で Biome の `noRestrictedImports` に書き、`npm run lint` で止める。Biome で書けない決まりが出たら、dependency-cruiser を足すかを決める。
+下の一覧の「使ってよい」に書いたものだけを使う（一覧は、許すものを並べたものとして読む）。#114 で Biome の `noRestrictedImports`（`biome.json` の `overrides`）に書き、`npm run lint:rules` と CI で止める。Biome で書けない決まりが出たら、dependency-cruiser を足すかを決める。
+
+- Biome は import の文字そのもので比べるので、規則はフォルダの名前で書く（`shared/api` から見た `shared/session` は `../session/session` なので `**/session/*`）。`**/shared/session/**` と書くと、同じ `shared/` の中の相対の import を止められない（#114 で確かめた）
+- `fetch` を使ってよいのは `shared/api/client.ts` だけ。ほかは `noRestrictedGlobals` で止める（テストのファイルは外す）。`shared/firebase` は Firebase の SDK を使い、`fetch` は使わない
+- 機能の中の `sessionStorage`・`localStorage` も、`noRestrictedGlobals` で止める。例外は、検索の条件を読み書きする `features/search/hooks/useSearchConditions.ts` の1か所（5章）
+- `rules.ts`・`types.ts`・`repository.ts`・`shared/lib`・`shared/constants` の `window`・`document`・ストレージも、`noRestrictedGlobals` で止める
+- `noRestrictedGlobals` は、あとの `overrides` が前の `options` を置き換える。そのため、場所ごとに止める名前を全部書く（`fetch` を何か所にも書いているのはこのため）
+- API の失敗のクラス（`StoppedRequestError`・`UnauthorizedError`・`EmailUnverifiedError`。のちの `ApiError`）は、`shared/api/ApiError.ts` に置く。`shared/api` の中で、hook と container が読んでよいのは、このファイルだけ
+- `app/` から機能を読むときは `features/<機能>` と書く。`features/<機能>/index` と書いても止まる
+- 画面を移している間は、`app/`・`shared/` から、まだ移していないレガシー版のファイル（`src/components/*` など）を import してよい。そのファイルは、移すチケットで `shared/ui` か機能へ移す（例：`app/RequireAuth.tsx` が使う `components/AwaitingVerification.tsx`）
+
+Biome で止められないもの（レビューで見る。#114 で確かめた）：
+
+- 機能どうしが、互いの `index.ts` を import し合う形
+- 機能の中から、ほかの機能の中のファイル（`../../likes/hooks/useX`）を直に import する形
+- `window.fetch`・`globalThis.fetch`・`window.sessionStorage` のように、`window.` を付けて書く形（`noRestrictedGlobals` は、グローバルの名前をそのまま書いた所だけを見る）
+- hook が JSX を返す形
 
 - `app/`
   - 使ってよい：すべての機能の `index.ts`・`shared/`
@@ -89,7 +107,7 @@ src/
   - 使ってよい：自分の機能の `components/`・`hooks/`・`types.ts`・`rules.ts`
   - 使ってよい：ほかの機能の `index.ts`
   - 使ってよい：`shared/`（`shared/api`・`shared/firebase` を除く）
-  - 使ってはいけない（よくある間違い）：`fetch`・`shared/api`・`api.ts`・`repositories/`
+  - 使ってはいけない（よくある間違い）：`fetch`・`shared/api`（`ApiError.ts` を除く）・`api.ts`・`repositories/`
   - hook を通す。Repository の実装は `app/` から props で受け取る
 - `features/*/components/`
   - 使ってよい：自分の機能の `types.ts`・`rules.ts`
@@ -102,7 +120,7 @@ src/
   - 使ってよい：自分の機能の `api.ts`・`repository.ts`・`types.ts`・`rules.ts`
   - 使ってよい：ほかの機能の `index.ts`（hook・型・読み直す関数）
   - 使ってよい：`shared/session`・`shared/lib`
-  - 使ってはいけない（よくある間違い）：JSX を返す・`fetch`・`shared/api` を直接
+  - 使ってはいけない（よくある間違い）：JSX を返す・`fetch`・`shared/api` を直接（`ApiError.ts` を除く）
 - `features/*/api.ts`
   - 使ってよい：`shared/api`・自分の機能の `types.ts`・`shared/lib`
   - 使ってはいけない（よくある間違い）：React・hook・store
@@ -116,7 +134,7 @@ src/
   - 使ってよい：`shared/api`・`shared/firebase`・`shared/lib`・React
   - 使ってはいけない（よくある間違い）：`features/`・`app/`
 - `shared/api/`・`shared/firebase/`
-  - 使ってよい：ブラウザの `fetch`・Firebase の SDK
+  - 使ってよい：ブラウザの `fetch`（`shared/api/client.ts` だけ）・Firebase の SDK（`shared/firebase`）
   - 使ってはいけない（よくある間違い）：`features/`・`app/`・React
 - `shared/ui/`
   - 使ってよい：`shared/lib`・React
@@ -342,7 +360,7 @@ flowchart TB
 
 - 部品の中で `fetch` を書く・`import.meta.env.VITE_API_URL` を読む・トークンを読む
 - `res.ok` を見ずに、応答をそのまま状態に置く
-- `any` を使う（API の形は `XxxResponse` に書く）
+- `any` を使う（代わりに何を書くかは [quality-frontend.md](quality-frontend.md) の T1・T2）
 - API の形（snake_case・生年月日）を、`api.ts`・Repository の実装の外で読む
 - ログインの守りを画面ごとに書く（`app/RequireAuth.tsx` の1か所）
 - presenter の中で、機能の hook・`shared/session`・ルーターの hook を使う

@@ -352,7 +352,7 @@ export default function MembersPage() {
             variant="subtle"
             size="compact-sm"
             onClick={() => {
-              const empty = Object.fromEntries(KEYS.map((k) => [k, k === 'sort' ? form.sort : '']))
+              const empty = Object.fromEntries(KEYS.map((k) => [k, k === 'sort' ? (form.sort ?? '') : '']))
               setForm(empty)
               apply(empty)
             }}

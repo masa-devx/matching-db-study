@@ -40,7 +40,7 @@ export default function App() {
       if (!now) return
       let exp = 0
       try {
-        exp = JSON.parse(atob(now.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).exp ?? 0
+        exp = JSON.parse(atob((now.split('.')[1] ?? '').replace(/-/g, '+').replace(/_/g, '/'))).exp ?? 0
       } catch {
         exp = 0
       }

@@ -92,7 +92,7 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 - よく使う確認のコマンド（テスト・静的検査）が決まったら、`.claude/settings.json` の `permissions.allow` に足す（記入例: `"Bash(bun test:*)"`）。足すのは、何度実行しても何も壊さないコマンドだけにする
 - ブランチを切り替えたら、docs/commands.md の「ブランチを切り替えたあと」を流す
 
-よく使うもの（どれもリポジトリのルートで流す）：
+よく使うもの（フォルダを書いていないものは、リポジトリのルートで流す）：
 
 - 起動：`docker compose up -d --wait`
 - テスト：`docker compose run --rm app ./vendor/bin/pest`
@@ -100,6 +100,7 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 - 整形の確かめ：`docker compose run --rm app ./vendor/bin/pint --test`
 - 管理画面のテスト：`docker compose run --rm admin-app ./vendor/bin/pest`
 - 文書の言葉の確かめ：`python3 -I agents/tools/check-words.py`
+- 画面のテスト：`frontend/client` で `npm test`（管理画面は `frontend/admin`）
 
 ## 開発ルールの適用
 
@@ -114,6 +115,7 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
 | 振る舞いの変更・テストの追加 | [testing.md](agents/rules/testing.md)・[testing-style.md](agents/rules/testing-style.md)（書き方） |
 | 構造化ログの実装・変更 | [logging.md](agents/rules/logging.md) |
 | PHP のコードを書く・変える | [quality-types.md](agents/rules/quality-types.md)・[quality-php.md](agents/rules/quality-php.md) |
+| 画面のコードを書く・変える | [quality-frontend.md](agents/rules/quality-frontend.md) |
 | DB・マイグレーションの作成・変更 | [database.md](agents/rules/database.md) |
 | ルール・スキル・チケット・議事録・PR の文を書く | [writing.md](agents/rules/writing.md) |
 

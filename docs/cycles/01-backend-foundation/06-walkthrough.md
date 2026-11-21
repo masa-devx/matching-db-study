@@ -2002,3 +2002,139 @@ sequenceDiagram
 ##### 次にやること
 
 - 「ログインしているか（401）」と「使ってよいか（403）」を分けて、どの Middleware を通るか・通らないかで答える
+
+## PR #274（#114：画面のテストの道具と、置き場・書き方の決まりを Biome で止める）
+
+### ディレクトリの設計
+
+```text
+frontend/client/
+├── vite.config.ts            test の設定（jsdom・時刻の帯は日本・差し替えをテストごとに戻す）
+├── biome.json                overrides：置き場ごとに使ってはいけない import とグローバルの名前
+├── package.json              test・test:watch・lint:rules
+└── src/
+    ├── test-setup.ts         jest-dom の確かめ方を足し、テストごとに片付ける
+    ├── shared/api/ApiError.ts       失敗のクラス（client.ts から移した）
+    ├── shared/api/client.test.ts    トークンの付け方・401・403・送る中身
+    ├── shared/session/SessionProvider.test.tsx   起動の読み込み（200・500・つながらない・時間切れ・401・重なり）
+    ├── app/configureApi.test.ts     401 でトークンを消し、理由を付けて1回だけ移る
+    ├── app/SessionGate.test.tsx     読み込み中・読み込めなかった
+    └── app/RequireAuth.test.tsx     ログインしていない・確認待ち・戻るの動き
+frontend/admin/src/date.test.ts      見本（時刻の帯の印がない日時を UTC として読む）
+.github/workflows/frontend.yml       テスト・置き場の決まり・ビルド
+agents/rules/quality-frontend.md     画面の書き方の決まり（18個）
+```
+
+- テストは、確かめるファイルの隣に置く（`architecture-frontend.md` の2章・7章）。`tests/` のようなフォルダに集めると、移すときに一緒に動かし忘れる
+- 失敗のクラスを `ApiError.ts` に分けたのは、hook と container に「`shared/api` の中で、このファイルだけ読んでよい」と Biome で書けるようにするため。`client.ts` に置いたままだと、hook が `apiFetch` まで読めてしまう
+
+### 何を、どこで止めるか
+
+| 止めるもの | 道具 | どこで流れるか |
+| --- | --- | --- |
+| 振る舞い（401 で移る・時間切れ） | Vitest のテスト | `npm test`・CI |
+| 置き場の決まり（import の向き） | Biome の `noRestrictedImports` | `npm run lint:rules`・CI |
+| `fetch`・ストレージの使い場所 | Biome の `noRestrictedGlobals` | `npm run lint:rules`・CI |
+| `any`・`!`・hook の呼び方（改訂版の置き場） | Biome の `recommended` と B2 | `npm run lint:rules`・CI |
+| 型が合っているか・`list[0]` の `undefined` | TypeScript（`noUncheckedIndexedAccess`） | `npm run build`・CI |
+| 機械で止められないもの（`window.fetch` など） | レビュー | `architecture-frontend.md` の3章に一覧 |
+
+### 大事な設定とメソッド
+
+#### `configureApi(moveTo = (url) => window.location.assign(url))`
+
+- 入力：移り方の関数（ふだんは渡さない。テストだけが偽物を渡す）
+- 副作用：`client.ts` に、トークンの読み方と 401 のときの処理を渡す。401 ではトークンと検索の条件を消し、`moveTo` を1回だけ呼ぶ
+- テストのために引数にしたのは、jsdom が読み込み直し（`location.assign`）を動かせないため。外（ブラウザ）だけを差し替える形なので、決まりの8章の「テストで外を偽物にしたいとき」に当たる
+
+#### `vite.config.ts` の `process.env.TZ = 'Asia/Tokyo'`
+
+- 時刻の帯の印がない日時（`2026-11-17 15:42:17`）は、`new Date()` が手元の時刻として読む
+- CI（UTC）では、UTC として読む直しを外しても同じ値になり、テストが通ってしまった。日本の時刻の帯で流すと、直しを外したときに落ちる
+
+```ts
+// テストの時刻の帯を日本に決める。CI（UTC）でも、日時の読み替え（時刻の帯の印がない日時）が効いているかを確かめるため
+process.env.TZ = 'Asia/Tokyo'
+```
+
+#### `biome.json` の `overrides`
+
+- 置き場（`includes`）ごとに、使ってはいけない import（`group`）と、そのときの文（`message`）を書く
+- import の文字そのもので比べるので、フォルダの名前で書く（`shared/api` から見た `shared/session` は `../session/session`。`**/session/*` で止まる）
+- `!**/api/ApiError` のように `!` で始めると、その形だけを許せる
+
+```json
+{
+  "includes": ["src/features/*/hooks/**"],
+  "group": ["**/shared/api/*", "!**/api/ApiError", "**/firebase/*", "**/ui/*", "**/components/*"],
+  "message": "hook は、shared/api … を直に使わない。自分の機能の api.ts か repository.ts を通す（失敗のクラスは shared/api/ApiError から読んでよい）"
+}
+```
+
+### 呼び出しの流れ（PR の CI）
+
+```mermaid
+sequenceDiagram
+    participant D as 開発する人
+    participant G as GitHub Actions
+    participant T as npm test
+    participant L as npm run lint:rules
+    participant B as npm run build
+    D->>G: push（frontend/ か mise.toml が変わった）
+    G->>G: Node の版が mise.toml と同じか
+    G->>T: Vitest（日本の時刻の帯・jsdom）
+    G->>L: 置き場の決まり（全体）と、改訂版の置き場の規則
+    G->>B: 型の検査とビルド
+    Note over T,B: 前が落ちても、残りも流す（どれが落ちたかを1回で見る）
+```
+
+### 名前
+
+- `lint:rules`：全体の lint（`lint`）と分けるため。全体の lint は、レガシー版の前からの指摘（会員の画面 誤り42）があり、CI に入れると、いつも落ちる
+- `ApiError.ts`：決まりの2章の地図にある名前。今は3つの失敗のクラスだけで、状態コードを持つ `ApiError` は、画面を移すときに足す
+- `quality-frontend.md`：PHP の `quality-php.md` にそろえた
+
+### レガシー版との違い
+
+- 前：画面のテストは0本。置き場の決まりは、人がレビューで見るだけ
+- 後：39本（会員の画面）と3本（管理画面）。置き場の決まりのうち、import で書けるものは CI で止まる
+
+### 直した課題と、現場での意味
+
+- `05-problems.md` に #114 の節はない。人が外出している間に進めたので、実装の前の「課題を理解する」（`understand-problem`）を飛ばした。土台づくりで、直す不具合はない
+- 画面を移すチケット（#115〜#122 など）で、移す前の動きをテストで確かめられるようになった。移したあとに 401 の扱いや確認待ちが壊れても、CI で気づける
+- 決まりを破った import（container から API を直に呼ぶなど）は、レビューの前に CI で止まる
+
+### 次の改善の候補
+
+- 全体の lint を CI で流す（レガシー版の画面を移し終えたら）
+- 管理画面の置き場の決まり（#123 に引き継いだ）
+- push と PR で CI が2回ずつ流れる（4つのワークフローとも。別のチケットの案）
+
+### 説明の練習
+
+#### 1回目：日時のテストが、CI では効いていなかった（2026-11-21）
+
+リーダーが聞いた：「運営から『管理画面の日時が9時間前になっている』と問い合わせが来た。`toDate` の読み替えが消されていたのに、その PR の CI は緑だった。なぜか。どう直したか。どう確かめたか」
+
+##### 問い1：なぜ CI で落ちなかったか
+
+- 人の答え：CI が UTC で動いていて、日本の時刻ではないから
+- 突っ込み：UTC の機械で読み替えを消すと、結果は消す前と同じか、違うか
+- 人の答え：違う
+- 結果：一部（2回詰まったので答えを出した）
+  - 手元の時刻が UTC だと、「手元の時刻として読む」と「UTC として読む」が同じ意味になる。読み替えを消しても `15:42:17Z` のままで、テストは通る
+
+##### 問い2：どう直したか
+
+- 人の答え：最初は「日付を UTC でない方法で直した」。ヒント（変えたのはテストの設定の側）のあと、「`vite.config.ts` で時刻の帯を日本に決めた」
+- 結果：答えられた（ヒント1）
+
+##### 問い3：どう確かめたか
+
+- 人の答え：`TZ=UTC` で読み替えを外して、テストが落ちるかを見た
+- 結果：答えられた
+
+##### 次にやること
+
+- テストを書いたら、「直しを外すと落ちるか」を、CI と同じ条件で1回見る
