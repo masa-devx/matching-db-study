@@ -183,7 +183,9 @@ flowchart TB
 - 改善版の認証（D-014）では、401 が来たら `refresh` を1回だけ試し、元の要求を送り直す。同時に来た 401 は、1本の `refresh` を待つ
 - それでも 401 なら、`shared/session` が自分の情報を消し、ポーリングを止める。`RequireAuth` が今の URL を覚えて、ログインの画面へ移す。戻り先は、アプリの中のパス（`/` で始まり、`//` で始まらない）だけにする
 - 今のつなぎ方（#257 の 2-1・2-2）
-  - ログインしているかは、`shared/session/SessionProvider.tsx` が起動のときに `GET /api/me` を1回読んで決める（トークンがあるかでは決めない）。ログインが要る画面は、`app/RequireAuth.tsx` の下に置き、画面ごとに確かめない
+  - ログインしているかは、`shared/session/SessionProvider.tsx` が決める。トークンがなければ API を呼ばずに「していない」。あれば、起動のときに `GET /api/me` を1回読み、通るかで決める
+  - 決まるまでは、`app/SessionGate.tsx` が「読み込み中…」を出す。401 でない失敗（500・つながらない・10秒の時間切れ）は、トークンを消さずに「読み込めませんでした」と、もう一度のボタンを出す
+  - ログインが要る画面は、`app/RequireAuth.tsx` の下に置き、画面ごとに確かめない。開こうとした画面は、まだ覚えない（FR-UI-011 の分かっている不具合）
   - コードでは「自分」を `Me` と呼ばず、`Account` と呼ぶ（`docs/glossary.md` の「アカウント」）
   - `shared/api` は `shared/session` を使えないので、`app/configureApi.ts` が起動のときに、トークンの読み方と 401 のときの動きを `configureApiClient()` で `client.ts` に渡す
   - 401 のとき、`client.ts` は応答の `code` を `app/` に渡して `UnauthorizedError` を投げる。`app/` は `shared/session` の `clearSession()` を呼び、理由を付けてログインの画面へ読み込み直す（FR-UI-100）
