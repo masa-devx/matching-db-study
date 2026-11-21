@@ -31,7 +31,8 @@ PR を出したとき・ブランチに push したときに、GitHub の上で�
 | 管理画面 | `npm test`・`npm run build` | テストが落ちる・型が合わない |
 
 - 全体の lint（`npm run lint`）は、レガシー版の前からの指摘が残っているので、まだ流さない
-- 会員の画面の `lint:rules` は、置き場の決まり（`architecture-frontend.md` の3章）を書いた Biome の規則（`noRestrictedImports`・`noRestrictedGlobals`）だけを見る
+- 会員の画面の `lint:rules` は、置き場の決まり（`architecture-frontend.md` の3章）を書いた Biome の規則（`noRestrictedImports`・`noRestrictedGlobals`）を全体に流す
+- あわせて、改訂版の置き場（`src/app`・`src/shared`）では、Biome の全部の規則を、警告も誤りとして見る（`quality-frontend.md`）。`src/features` は、作るときに足す
 - Node の版は `mise.toml` と同じにする（ワークフローの `NODE_VERSION`）
 
 文書には、別のワークフロー（`.github/workflows/docs.yml`。`refactored-repo` とそこから切ったブランチで動く）がある。

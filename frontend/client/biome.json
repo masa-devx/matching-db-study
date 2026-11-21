@@ -269,6 +269,19 @@
           }
         }
       }
+    },
+    {
+      "includes": ["src/app/**", "src/shared/**", "src/features/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noExplicitAny": "error"
+          },
+          "style": {
+            "noNonNullAssertion": "error"
+          }
+        }
+      }
     }
   ]
 }

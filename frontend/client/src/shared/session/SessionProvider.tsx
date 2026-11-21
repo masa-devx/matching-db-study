@@ -92,7 +92,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setSession({ status: 'signedOut' })
   }, [])
 
-  return <SessionContext.Provider value={{ session, signIn, signOut, retry: load }}>{children}</SessionContext.Provider>
+  return <SessionContext value={{ session, signIn, signOut, retry: load }}>{children}</SessionContext>
 }
 
 export function useSession(): SessionValue {

@@ -43,7 +43,7 @@ jobs:
       - run: npm ci
       - name: テスト（Vitest）
         run: npm test
-      - name: 置き場の決まり（Biome の noRestrictedImports・noRestrictedGlobals）
+      - name: 置き場の決まりと、改訂版の置き場の lint（Biome）
         run: npm run lint:rules
       - name: ビルド（型の検査も込み）
         run: npm run build
