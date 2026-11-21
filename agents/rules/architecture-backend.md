@@ -120,11 +120,12 @@ Laravel の公式の名前の付け方（`php artisan make:〇〇` の例）に�
 | Listener（出来事を受けて動く） | `Listeners/` | 何をするかを、動詞から書く。`Listener` は付けない | `DeleteAllSessions` |
 | Mail | `Mail/` | `Mail` で終える（今あるものに合わせる） | `VerifyMail`・`ResetPasswordMail` |
 | Model | `Models/` | 表の名前の単数 | `User`・`UserMatch` |
+| Enum（決まった値のどれか） | `Enums/` | 何の値かを名詞で書く。`Enum` は付けない | `AccountStatus` |
 
 - 種類の名前で終えるのは、`〜Controller`・`〜Request`・`〜Resource`・`〜Service`・`〜Client`・`〜Exception`
 
 - UseCase と Repository は作らない（D-025：Controller → Service → Model）。`〜UseCase`・`〜Repository` という名前のクラスも作らない
-- ほかの種類（Event・Job・Command・Policy・Rule・Enum など）は、初めて作るチケットで決め、この表に足す
+- ほかの種類（Event・Job・Command・Policy・Rule など）は、初めて作るチケットで決め、この表に足す
 - 層のテスト（`tests/Arch/LayersTest.php`）で、Service・Mail の終わりの名前と、Middleware・Listener に種類の名前を付けないこと、UseCase・Repository がないことを確かめる
 
 
@@ -138,7 +139,7 @@ Model・Service・Middleware・Controller など、どのクラスのメソッ�
 - 真偽の引数で、メソッドの動きを変えない（`book($user, true)` は、呼ぶ所で true の意味が分からない）。動きごとにメソッドを分ける（Martin Fowler「FlagArgument」）。テストのダミーデータの、名前を付けて渡す引数（`DummyUser::create(banned: true)`）は、呼ぶ所で意味が読めるので外す（`unverified` も同じ）
 - 状態が3つ以上あるなら、真偽ではなく enum で持ち、真偽のメソッドはそこから作る（真偽の値は「何を調べた結果か」を持たないため）。DB の列は日時のままでもよく、Model が PHP の enum を返す形も含む（会員の状態：退会・停止・強制退会・どれでもない。列を1つにするかは、ロードマップの「会員の状態を1つにする」で決める）
 - 一度だけ起きて「いつか」に意味がある出来事は、日時の列（`〇〇_at`。null なら起きていない）で持ち、Model の真偽のメソッドで読む（Laravel の `email_verified_at` と `hasVerifiedEmail()`・`deleted_at` と `trashed()` と同じ形）
-- Model と Service で同じ事実を確かめるときは、同じ言葉を使う。番号から探して答える Service のメソッドは、主語（だれの何か）を名前に入れる（Model の `$user->isAccountUsable()` と、Service の `$auth->isUserAccountUsable($userId)`。`$auth->hasUsableAccount($userId)` は「AuthService が持つか」と読めてしまう）。引数の形（`ById`）は名前に出さない
+- Model と Service で同じ事実を確かめるときは、同じ言葉を使う。番号から探して答える Service のメソッドは、主語（だれの何か）を名前に入れる（Model の `$user->accountStatus()` と、Service の `$auth->userAccountStatus($userId)`。`$auth->accountStatus($userId)` や `$auth->hasUsableAccount($userId)` は「AuthService が持つか」と読めてしまう）。引数の形（`ById`）は名前に出さない
 - Middleware の別名は「だれ.何をするか」の形にする（会員の側の `user.authenticate`・管理画面の `admin.authenticate`・`admin.can-write`）
 ### Controller の分け方
 
@@ -230,8 +231,12 @@ final class ProfileResource extends JsonResource
 public function handle(Request $request, Closure $next): Response
 {
     $userId = $this->userIdFromToken($request);   // JWT を読む。ない・壊れている・期限切れなら null
-    if ($userId === null || ! $this->auth->isUserAccountUsable($userId)) {   // AuthService：退会・停止・強制退会していないか
-        throw new AuthenticationException;   // bootstrap/app.php が 401「ログインしてください」にする
+    $status = $userId === null ? null : $this->auth->userAccountStatus($userId);   // AuthService：アカウントの状態（AccountStatus）
+    if ($status === AccountStatus::Suspended) {
+        throw new AccountSuspendedException;   // bootstrap/app.php が 401「このアカウントは停止されています」にする
+    }
+    if ($userId === null || $status !== AccountStatus::Usable) {
+        throw new AuthenticationException;     // bootstrap/app.php が 401「ログインしてください」にする
     }
     $request->attributes->set('login_user_id', $userId);
 
