@@ -84,6 +84,12 @@ function routesWithUnexpectedResponse(array $routes, callable $call, callable $i
 }
 
 /** @param  TestResponse<Response>  $response */
+function isRejectedAsSuspended(TestResponse $response): bool
+{
+    return $response->status() === 401 && $response->json('code') === 'account_suspended';
+}
+
+/** @param  TestResponse<Response>  $response */
 function isRejectedAsNotLoggedIn(TestResponse $response): bool
 {
     return $response->status() === 401 && $response->json('message') === 'ログインしてください';
@@ -131,13 +137,13 @@ describe('ログインしていない人が、ログインが要る API を呼�
 });
 
 describe('アカウント停止された会員が、前にもらったトークンで、ログインが要る API を呼ぶ', function (): void {
-    it('どれも使えない（401「ログインしてください」。NFR-AUTH-001）', function (): void {
+    it('どれも使えず、停止されていると知らされる（401「このアカウントは停止されています」。NFR-AUTH-001）', function (): void {
         $loginUser = DummyUser::create(suspended: true);
 
         $unexpected = routesWithUnexpectedResponse(
             loginRequiredRoutes(),
             fn (string $method, string $url): TestResponse => DummyAuth::actingAs($loginUser)->json($method, $url),
-            isRejectedAsNotLoggedIn(...),
+            isRejectedAsSuspended(...),
         );
 
         expect($unexpected)->toBe([]);

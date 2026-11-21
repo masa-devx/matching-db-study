@@ -34,13 +34,13 @@ describe('ログインしていない人が、相手のプロフィールを見�
 });
 
 describe('使えなくなった会員が、前にもらったトークンで相手のプロフィールを見る', function (): void {
-    it('停止させられた会員は、見られない（401「ログインしてください」。NFR-AUTH-001）', function (): void {
+    it('アカウント停止された会員は、見られず、停止されていると知らされる（401「このアカウントは停止されています」。NFR-AUTH-001）', function (): void {
         $loginUser = DummyUser::create(suspended: true);
         $target = DummyUser::create();
 
         DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile($target->publicId))
             ->assertUnauthorized()
-            ->assertExactJson(['message' => 'ログインしてください']);
+            ->assertExactJson(['message' => 'このアカウントは停止されています', 'code' => 'account_suspended']);
     });
 
     it('退会した会員は、見られない（401「ログインしてください」。NFR-AUTH-001）', function (): void {
