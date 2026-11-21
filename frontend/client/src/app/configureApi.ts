@@ -8,7 +8,8 @@ let leaving = false
 // 401 なら、ログインした自分の情報を消し、理由を付けてログインの画面へ移す（画面を読み込み直すので、SessionProvider の状態も、ポーリングも消える）。
 // ログアウト・退会は SessionProvider の signOut() で消すので、消す入口が2つある。読み込み直しをやめるときに、
 // SessionProvider が configureApiClient() に 401 の処理を渡す形にして、1つにする（docs/cycles/01-backend-foundation/05-problems.md の #257）
-export function configureApi(): void {
+// moveTo はテストのために受け取る（jsdom は読み込み直しを動かせないため）。ふだんは渡さない
+export function configureApi(moveTo: (url: string) => void = (url) => window.location.assign(url)): void {
   configureApiClient({
     readToken,
     onUnauthorized: (code) => {
@@ -16,7 +17,7 @@ export function configureApi(): void {
       leaving = true
       clearSession()
       const reason = code === 'account_suspended' ? ACCOUNT_SUSPENDED_REASON : SIGNED_OUT_REASON
-      window.location.assign(`/login?reason=${reason}`)
+      moveTo(`/login?reason=${reason}`)
     },
   })
 }
