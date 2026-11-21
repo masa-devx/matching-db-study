@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PHP の書き方の決まり</title>
+<link rel="stylesheet" href="assets/page.css">
+</head>
+<body>
+<main>
+  <p class="meta"><a href="index.html">← 目次へ</a></p>
+  <h1>PHP の書き方の決まり（Laravel 13・PHP 8.5）</h1>
+  <p class="meta">作成: 2026-11-21 ／ 状態: <span class="status">決まりに足した（#261）</span></p>
+
+  <div class="card">
+    <strong>決まりに足したもの（2026-11-21 に人が決めた）</strong>
+    <ul>
+      <li>強く勧める6つだけを足した：Pint の形を正とする・Laravel に引数を名前で渡さない・コンテナに登録しない・Model にプロパティを宣言しない（<code>agents/rules/quality-php.md</code>）、環境変数は <code>config/</code> の中だけ・キューは確定のあと（<code>agents/rules/architecture-backend.md</code>）</li>
+      <li>PHP の版は <code>composer.json</code> の <code>^8.5</code> の1か所に書く（<code>agents/rules/quality-types.md</code>）</li>
+      <li>このページのほかの書き方（PHP 8.4・8.5 の新しい書き方など）は、好みで選ぶもの。決まりにはしていない</li>
+    </ul>
+  </div>
+
+  <div class="card point">
+    <strong>このページでわかること</strong>
+    <ul>
+      <li>PHP の書き方の決まり（PSR-2・PSR-12・PER Coding Style）と、Laravel の Pint が直す形の違い。このリポジトリで、どちらを正とするか</li>
+      <li>Laravel 13 の公式の文書が勧めている書き方と、その理由</li>
+      <li>PHP 8.4・8.5 で書けるようになった形（プロパティのフック・<code>private(set)</code>・パイプ演算子・clone with・<code>#[\NoDiscard]</code>）と、使う場面・使わない場面</li>
+      <li>真偽と状態の名前の付け方（#243 で決めたことの根拠の資料）</li>
+      <li>このリポジトリのコードに当てはめると、どこが当たるか</li>
+    </ul>
+  </div>
+
+  <h2>1. 先に知っておく言葉</h2>
+  <table>
+    <tr><th>言葉</th><th>意味（1〜2文）</th></tr>
+    <tr><td>PSR</td><td>PHP-FIG（PHP の主なフレームワークの集まり）が決めた勧め。PSR-4 は読み込み、PSR-12 は書き方</td></tr>
+    <tr><td>PER Coding Style</td><td>PSR-12 を引き継いで、新しい PHP の書き方に合わせて直し続ける書き方の決まり。今は 3.1</td></tr>
+    <tr><td>Pint</td><td>Laravel の整形の道具。<code>pint.json</code> の <code>"preset": "laravel"</code> で、Laravel 本体と同じ形に直す</td></tr>
+    <tr><td>preset</td><td>Pint が持っている、決まりのひとそろい。<code>laravel</code>・<code>psr12</code>・<code>per</code> などがある</td></tr>
+    <tr><td>RFC</td><td>PHP に新しい書き方を足すときの提案の文書。投票で決まると、次の版に入る</td></tr>
+    <tr><td>ファサード</td><td><code>DB::</code>・<code>Mail::</code> のように、静的なメソッドの形で Laravel の機能を呼ぶ書き方</td></tr>
+    <tr><td>コンテナ</td><td>クラスを作って渡す Laravel の仕組み。コンストラクタの引数の型を見て、自分で作る</td></tr>
+  </table>
+
+  <h2>2. 書き方の正本はどれか</h2>
+  <p>PHP の書き方の決まりは、PSR-2（2012）→ PSR-12（2019）→ PER Coding Style（2022〜）と引き継がれてきた。Laravel の <code>contributions.md</code> は、今も「PSR-2 に従う」と書いている。実際に Laravel 本体とアプリのコードを直しているのは、Pint の <code>laravel</code> の preset。</p>
+  <pre class="mermaid">
+flowchart TD
+  A["書き方で迷った"] --> B{"Pint が直すか？"}
+  B -- "直す" --> C["Pint が直した形にする（決まり 1）"]
+  B -- "直さない" --> D{"PER Coding Style 3.1 に決まりがあるか？"}
+  D -- "ある" --> E["PER に合わせてもよい（好みで選ぶもの）"]
+  D -- "ない" --> F["quality-php.md に決まりを足すか、人に聞く"]
+  </pre>
+  <p>Pint の <code>laravel</code> の preset は、PER と逆の形に直す所がある。手元の Pint 1.32.2 で確かめた。</p>
+  <table>
+    <tr><th>書くもの</th><th>PER Coding Style 3.1</th><th>Pint の laravel</th></tr>
+    <tr><td>引数のない <code>new</code></td><td><code>new Box()</code></td><td><code>new Box</code></td></tr>
+    <tr><td>文字をつなぐ</td><td><code>'a' . 'b'</code></td><td><code>'a'.'b'</code></td></tr>
+    <tr><td>否定</td><td><code>!$flag</code>（空白を入れない）</td><td><code>! $flag</code></td></tr>
+    <tr><td>短い無名関数</td><td><code>fn($x)</code></td><td><code>fn ($x)</code></td></tr>
+    <tr><td>引数の最後の <code>,</code></td><td>複数行なら必ず</td><td>配列だけ足す</td></tr>
+    <tr><td>パイプ演算子の空白</td><td>前後に1つ</td><td>直さない</td></tr>
+    <tr><td><code>private(set)</code> だけ</td><td>書いてよい</td><td><code>public</code> を足す</td></tr>
+  </table>
+  <div class="card point"><strong>このリポジトリで選ぶもの</strong>：Pint が直す所は Pint の形（<code>quality-php.md</code> の1章）。Pint が直さない所（パイプ演算子の空白・引数の最後の <code>,</code>）は、決まりにしていない（好みで選ぶもの。PER に合わせてもよい）。</div>
+
+  <h2>3. Laravel 13 の公式の文書が勧めていること</h2>
+
+  <h3>3-1. Http と Console は、業務の処理を持たない</h3>
+  <ul>
+    <li>Laravel の文書は、<code>Console</code> と <code>Http</code> のフォルダを「アプリの中心への API」と呼び、アプリのロジックを持たないと書いている</li>
+    <li>このリポジトリでは、<code>architecture-backend.md</code> の Controller → Service → Model の形が、これに当たる</li>
+  </ul>
+
+  <h3>3-2. interface に頼らないクラスは、登録しなくても注入される</h3>
+  <ul>
+    <li>コンストラクタに <code>private readonly ProfileService $profiles</code> と書けば、Laravel が <code>ProfileService</code> を作って渡す。<code>AppServiceProvider</code> に何も書かなくてよい</li>
+    <li>登録（<code>bind()</code>）が要るのは、interface の型を書いて、本物とテスト用の偽物を差し替えたいときだけ</li>
+  </ul>
+
+  <h3>3-3. ファサードは便利だが、クラスが大きくなったら分ける</h3>
+  <ul>
+    <li>文書は、ファサードの一番の危なさを「クラスの受け持ちが知らないうちに広がること」と書いている</li>
+    <li>コンストラクタで受け取る形なら、引数が増えて目に見える。ファサードは、使う所が増えても見た目が変わらない</li>
+  </ul>
+
+  <h3>3-4. <code>env()</code> は <code>config/</code> の中だけ</h3>
+  <ul>
+    <li><code>php artisan config:cache</code> をすると、<code>.env</code> を読まなくなり、<code>env()</code> は OS の環境変数しか返さない</li>
+    <li>アプリのコードは <code>config('...')</code> で読む</li>
+  </ul>
+
+  <h3>3-5. トランザクションの中のメールと出来事は、確定のあとに送る</h3>
+  <ul>
+    <li>キューのワーカーは、トランザクションの確定を待たない。確定の前に動くと、まだ見えない行を読みにいく</li>
+    <li>メールは <code>afterCommit()</code>、出来事は <code>ShouldDispatchAfterCommit</code>、キューの Listener は <code>ShouldQueueAfterCommit</code> で、確定のあとにする</li>
+    <li>このリポジトリの <code>config/queue.php</code> は <code>'after_commit' =&gt; false</code>（ひな形のまま）</li>
+  </ul>
+
+  <h3>3-6. Laravel のメソッドに、引数を名前で渡さない</h3>
+  <ul>
+    <li>リリースノートに「名前付き引数は、Laravel の後方互換の約束に入らない」とある。引数の名前は、小さい版の更新で変わることがある</li>
+    <li><code>DB::transaction(fn () =&gt; ..., 3)</code> のように順番で渡す（<code>attempts: 3</code> と書かない）</li>
+    <li>例外：Laravel の文書が名前で書いている値のクラス（メールの <code>Envelope</code>・<code>Content</code>）と、Symfony・Pest・PHP の組み込みの関数は、名前で渡してよい（<code>quality-php.md</code> の2章）</li>
+  </ul>
+
+  <h2>4. PHP 8.4・8.5 の新しい書き方</h2>
+  <p>どれも、手元の PHP 8.5.12 で動かして確かめた。Larastan は、前は PHP 8.3 として読み、プロパティのフックを誤りにしていた（6章。#261 で直した）。</p>
+
+  <h3>4-1. プロパティのフック（PHP 8.4）</h3>
+  <pre><code class="language-php">final class Nickname
+{
+    // 書くときに、前後の空白を取る
+    public string $value {
+        set(string $value) {
+            $this-&gt;value = trim($value);
+        }
+    }
+}</code></pre>
+  <ul>
+    <li>使う場面：Model 以外の小さなクラスで、1〜2行の整え・作り</li>
+    <li>使わない場面：DB を読む・外のサービスを呼ぶ処理。呼ぶ所からは、ただの代入に見えるため</li>
+    <li><strong>Eloquent の Model には使わない</strong>。手元で確かめると、フック付きのプロパティを宣言した Model は、代入しても <code>getAttributes()</code> が <code>[]</code> のままだった（列に入らない）</li>
+  </ul>
+
+  <h3>4-2. 非対称の可視性 <code>private(set)</code>（PHP 8.4）</h3>
+  <pre><code class="language-php">final class LikeLimit
+{
+    // 読むのはだれでも、書くのはこのクラスだけ
+    public private(set) int $sentToday = 0;
+
+    public function record(): void
+    {
+        $this-&gt;sentToday++;
+    }
+}</code></pre>
+  <ul>
+    <li><code>getSentToday()</code> のような、読むためだけのメソッドが要らなくなる</li>
+    <li>Pint は、<code>private(set) int $x</code> と書くと <code>public</code> を足す</li>
+  </ul>
+
+  <h3>4-3. <code>new</code> を括弧で包まずにつなぐ（PHP 8.4）</h3>
+  <pre><code class="language-php">$label = new Box()-&gt;label;     // PHP 8.4 から
+$label = (new Box)-&gt;label;     // 前からの書き方</code></pre>
+  <ul>
+    <li>Pint 1.32.2 は、どちらの形も直さなかった。どちらにするかを決めておく</li>
+  </ul>
+
+  <h3>4-4. パイプ演算子 <code>|&gt;</code>（PHP 8.5）</h3>
+  <pre><code class="language-php">$slug = $title
+    |&gt; trim(...)
+    |&gt; strtolower(...)
+    |&gt; (fn (string $s): string =&gt; str_replace(' ', '-', $s));</code></pre>
+  <ul>
+    <li>左の値を、右の関数に1つ目の引数として渡す。入れ子の呼び出しを、上から下へ読めるようにする</li>
+    <li>矢印関数は、括弧で包まないと文法の誤りになる</li>
+    <li>Pint は、<code>|&gt;</code> の前後の空白を直さない。PER の形（前後に空白・行の始めに置く）で書く</li>
+  </ul>
+
+  <h3>4-5. clone with（PHP 8.5）</h3>
+  <pre><code class="language-php">final readonly class Point
+{
+    public function __construct(public int $x, public int $y) {}
+
+    #[\NoDiscard]
+    public function withX(int $x): self
+    {
+        return clone ($this, ['x' =&gt; $x]);   // Pint は clone のあとに空白を入れる
+    }
+}</code></pre>
+  <ul>
+    <li><code>readonly</code> のプロパティを、複製しながら変えられる。PHP 8.4 までは、コンストラクタに全部の値を渡し直していた</li>
+    <li>Pint 1.32.2 は <code>clone($this, ...)</code> を <code>clone ($this, ...)</code> に直した。動きは同じ</li>
+  </ul>
+
+  <h3>4-6. <code>#[\NoDiscard]</code>（PHP 8.5）</h3>
+  <ul>
+    <li>戻り値を使わないと、PHP が警告を出す。上の <code>$point-&gt;withX(3);</code> と書いて、<code>$point</code> が変わったと思い込む誤りを見つける</li>
+    <li>手元で確かめた警告：<code>The return value of method ... should either be used or intentionally ignored by casting it as (void)</code></li>
+    <li>わざと捨てるときは <code>(void) $point-&gt;withX(3);</code> と書く</li>
+  </ul>
+
+  <h3>4-7. 配列の関数（PHP 8.4・8.5）</h3>
+  <ul>
+    <li>PHP 8.4：<code>array_find()</code>・<code>array_find_key()</code>・<code>array_any()</code>・<code>array_all()</code></li>
+    <li>PHP 8.5：<code>array_first()</code>・<code>array_last()</code>（空の配列なら <code>null</code>）</li>
+    <li>Eloquent の結果（Collection）には、今までどおり <code>-&gt;first(fn ...)</code> を使う</li>
+  </ul>
+
+  <h2>5. 真偽と状態の名前</h2>
+  <p>#243 で、真偽を返すメソッドの名前の決まりを <code>architecture-backend.md</code> の3章に足した。ここでは、その根拠にした資料を並べる。資料は #243 のときに読んだもので、このページを作るときには読み直していない。</p>
+
+  <h3>5-1. 真偽を返すメソッドは、受け取る側についての主張として読める形にする</h3>
+  <ul>
+    <li>Swift の API Design Guidelines は、真偽を返すメソッドやプロパティを「受け取る側についての主張」として読める名前にする（<code>x.isEmpty</code>）と書いている</li>
+    <li>.NET の Framework Design Guidelines は、肯定の形にし、<code>Is</code>・<code>Can</code>・<code>Has</code> を頭に付けると書いている</li>
+    <li>Apple の Cocoa の命名も、<code>is</code>・<code>can</code>・<code>should</code> と、三人称単数の動詞を使う</li>
+    <li>PHP の世界（PER Coding Style・Symfony・Laravel の文書）には、真偽の頭の言葉の決まりはない。Laravel 本体（手元の <code>vendor/laravel/framework/src</code>）の <code>public function</code> の頭の言葉を数えると、<code>has</code> が 162・<code>is</code> が 121・<code>should</code> が 30・<code>can</code> が 1（同じ名前を1つに数えると、108・74・22・1）</li>
+  </ul>
+
+  <h3>5-2. 真偽の引数で、メソッドの動きを変えない</h3>
+  <ul>
+    <li>Martin Fowler の「FlagArgument」：<code>book($user, true)</code> は、呼ぶ所で <code>true</code> の意味が分からない。動きごとにメソッドを分ける</li>
+    <li>.NET の Parameter Design：真偽の引数が2つ以上になるなら、enum にする</li>
+  </ul>
+
+  <h3>5-3. 状態が3つ以上なら、真偽ではなく enum で持つ</h3>
+  <ul>
+    <li>Robert Harper の「Boolean Blindness」：<code>true</code>・<code>false</code> の値は、何を調べた結果かを持たない。値を受け取った側は、何が分かったのかを覚えておく必要がある</li>
+    <li>会員のアカウントの状態は4つある。このリポジトリでは、列は日時のまま（<code>deleted_at</code>・<code>suspended_at</code>・<code>banned_at</code>）にし、<code>User::accountStatus()</code> が PHP の enum（<code>AccountStatus</code>）を返す</li>
+  </ul>
+  <pre class="mermaid">
+flowchart LR
+  R["users の行"] --> Q{"User::accountStatus()"}
+  Q -- "banned_at がある" --> B["Banned（強制退会）"]
+  Q -- "deleted_at がある" --> W["Withdrawn（退会）"]
+  Q -- "suspended_at がある" --> S["Suspended（アカウント停止）"]
+  Q -- "どれもない" --> U["Usable"]
+  U --> T["isAccountUsable() が true"]
+  </pre>
+  <p class="meta">上から順に確かめる（戻せないものを先にする）。<code>User::accountStatus()</code>（<code>backend/client/app/Models/User.php</code>）。</p>
+
+  <h3>5-4. 一度だけ起きる出来事は、日時の列で持つ</h3>
+  <ul>
+    <li>「You might as well timestamp it」：真偽の列（<code>is_verified</code>）より、日時の列（<code>verified_at</code>）のほうが、「いつか」も分かる。コメント欄には、列の意味が二つになるという反論もある</li>
+    <li>Laravel も、<code>email_verified_at</code> と <code>hasVerifiedEmail()</code>、<code>deleted_at</code> と <code>trashed()</code> の形を使っている</li>
+  </ul>
+
+  <h2>6. このリポジトリでの当てはめ</h2>
+
+  <h3>6-1. Larastan が PHP 8.3 として読んでいた（#261 で直した）</h3>
+  <ul>
+    <li><code>composer.json</code> が <code>"php": "^8.3"</code> で、<code>phpstan.neon</code> に <code>phpVersion</code> がない。PHPStan は <code>composer.json</code> の版を読む</li>
+    <li>手元で確かめると、プロパティのフックだけが <code>Property hooks are supported only on PHP 8.4 and later.</code> になった</li>
+    <li><code>phpVersion: 80500</code> を書いても、<code>composer.json</code> を <code>^8.5</code> にしても、この誤りは消えた。今のコードは、どちらでも両方のアプリで <code>[OK] No errors</code></li>
+    <li><code>composer.json</code> を <code>^8.5</code> にした（人が決めた）。Larastan が読む版を書く所が1か所で済む。版を上げるときに直す所は、<code>quality-types.md</code> に並べた</li>
+  </ul>
+
+  <h3>6-2. 今のコードで、決まりから外れている所（分かっている不具合）</h3>
+  <table>
+    <tr><th>決まり</th><th>当たる所</th></tr>
+    <tr><td>環境変数は <code>config/</code> だけ</td><td><code>LikeController.php</code> の <code>getenv()</code>・<code>FirestoreMessagesSeeder.php</code> の <code>env()</code></td></tr>
+  </table>
+  <p class="meta">#261 で、決まりの見本の <code>attempts: 3</code>・<code>new 〜Exception()</code>・<code>now()</code> の型の書き方は直した。Model の設定を属性で書く・日時を変えられない型にそろえるは、好みで選ぶものとして決まりにしなかった。</p>
+
+  <h2>7. 気をつけること（罠）</h2>
+  <div class="card warn"><ul>
+    <li>Eloquent の Model に、列と同じ名前のプロパティ（フック・<code>private(set)</code> を含む）を宣言すると、Eloquent を通らなくなり、列に入らない</li>
+    <li>Larastan が PHP 8.3 として読んでいても、<code>private(set)</code>・パイプ演算子・clone with は誤りにならなかった。誤りにならないからといって、PHP 8.3 で動くわけではない</li>
+    <li>手元の <code>now()</code> は変えられる型（<code>Illuminate\Support\Carbon</code>）を返す。<code>$now-&gt;addDays(7)</code> は <code>$now</code> も変える。<code>CarbonImmutable</code> を受けるメソッドには <code>now()-&gt;toImmutable()</code> で渡す</li>
+    <li>Laravel の <code>contributions.md</code> の「PSR-2」は、Laravel 本体に PR を出す人向けの古い文。アプリの書き方は Pint の preset が正</li>
+  </ul></div>
+
+  <h2>8. 理解を確かめる問い</h2>
+  <p>先に自分で答えてから、開いて見る。</p>
+  <details><summary>PER Coding Style と Pint の形が違うとき、なぜ Pint に合わせるのか？</summary><p>CI の <code>pint --test</code> が Pint の形を確かめるので、PER の形で書いても、Pint が直す。人が覚える決まりを減らし、文書とコードの形をそろえるため。</p></details>
+  <details><summary>Laravel のメソッドに名前で引数を渡すと、何が困るか？</summary><p>引数の名前は後方互換の約束に入らないので、小さい版の更新で名前が変わると、名前で渡した所だけが <code>Error</code> になる。順番で渡せば、名前が変わっても動く。</p></details>
+  <details><summary>Model にプロパティのフックを使うと、なぜ列に入らないのか？</summary><p>Eloquent は、宣言していないプロパティへの読み書きを <code>__get</code>・<code>__set</code> で受けて、<code>$attributes</code> に入れる。プロパティを宣言すると、PHP はそちらに直接書くので、<code>__set</code> が呼ばれない。</p></details>
+  <details><summary><code>phpVersion: 80500</code> と <code>composer.json</code> の <code>^8.5</code>、どちらで直すか？</summary><p><code>composer.json</code>。PHP の版を書く所が1か所になり、Composer も 8.5 より前の PHP に入れなくなる。<code>phpVersion</code> だと、<code>composer.json</code> の <code>^8.3</code> と食い違ったまま残る。</p></details>
+  <details><summary>会員のアカウントの状態を、真偽の列4つで持つと何が困るか？</summary><p>退会と強制退会の両方が入っているときにどちらとするかを、読む所ごとに決めることになる。enum を1か所（<code>User::accountStatus()</code>）で作れば、順番の決まりが1つになる。</p></details>
+  <details><summary>パイプ演算子を使わないほうがよいのはどんなときか？</summary><p>通す関数が1つ・2つのとき（ふつうの呼び出しのほうが短い）と、Collection の処理（<code>-&gt;map()</code> でつなぐほうが Laravel の文書と同じ形になる）。</p></details>
+
+  <h2>9. 参考にした文書</h2>
+  <h3>書き方の決まり</h3>
+  <ul>
+    <li>PER Coding Style 3.1：<a href="https://www.php-fig.org/per/coding-style/">https://www.php-fig.org/per/coding-style/</a></li>
+    <li>PER Coding Style 3.0：<a href="https://github.com/php-fig/per-coding-style/blob/3.0.0/spec.md">https://github.com/php-fig/per-coding-style/blob/3.0.0/spec.md</a></li>
+    <li>Pint の laravel の preset：<a href="https://github.com/laravel/pint/blob/main/resources/presets/laravel.php">https://github.com/laravel/pint/blob/main/resources/presets/laravel.php</a></li>
+    <li>Laravel の Pint：<a href="https://laravel.com/docs/13.x/pint">https://laravel.com/docs/13.x/pint</a></li>
+    <li>Laravel の Contribution Guide（Coding Style）：<a href="https://laravel.com/docs/13.x/contributions#coding-style">https://laravel.com/docs/13.x/contributions#coding-style</a></li>
+  </ul>
+  <h3>Laravel 13</h3>
+  <ul>
+    <li>Directory Structure：<a href="https://laravel.com/docs/13.x/structure">https://laravel.com/docs/13.x/structure</a></li>
+    <li>Service Container：<a href="https://laravel.com/docs/13.x/container">https://laravel.com/docs/13.x/container</a></li>
+    <li>Facades：<a href="https://laravel.com/docs/13.x/facades">https://laravel.com/docs/13.x/facades</a></li>
+    <li>Configuration：<a href="https://laravel.com/docs/13.x/configuration">https://laravel.com/docs/13.x/configuration</a></li>
+    <li>Mail：<a href="https://laravel.com/docs/13.x/mail">https://laravel.com/docs/13.x/mail</a>・Events：<a href="https://laravel.com/docs/13.x/events">https://laravel.com/docs/13.x/events</a>・Queues：<a href="https://laravel.com/docs/13.x/queues">https://laravel.com/docs/13.x/queues</a></li>
+    <li>Release Notes：<a href="https://laravel.com/docs/13.x/releases">https://laravel.com/docs/13.x/releases</a></li>
+    <li>Eloquent：<a href="https://laravel.com/docs/13.x/eloquent">https://laravel.com/docs/13.x/eloquent</a>・Mutators &amp; Casting：<a href="https://laravel.com/docs/13.x/eloquent-mutators">https://laravel.com/docs/13.x/eloquent-mutators</a></li>
+  </ul>
+  <h3>PHP 8.4・8.5</h3>
+  <ul>
+    <li>PHP 8.4：<a href="https://www.php.net/releases/8.4/en.php">https://www.php.net/releases/8.4/en.php</a>・PHP 8.5：<a href="https://www.php.net/releases/8.5/en.php">https://www.php.net/releases/8.5/en.php</a></li>
+    <li>プロパティのフック：<a href="https://wiki.php.net/rfc/property-hooks">https://wiki.php.net/rfc/property-hooks</a></li>
+    <li>非対称の可視性：<a href="https://wiki.php.net/rfc/asymmetric-visibility-v2">https://wiki.php.net/rfc/asymmetric-visibility-v2</a></li>
+    <li>括弧なしの new：<a href="https://wiki.php.net/rfc/new_without_parentheses">https://wiki.php.net/rfc/new_without_parentheses</a></li>
+    <li>パイプ演算子：<a href="https://wiki.php.net/rfc/pipe-operator-v3">https://wiki.php.net/rfc/pipe-operator-v3</a></li>
+    <li>clone with：<a href="https://wiki.php.net/rfc/clone_with_v2">https://wiki.php.net/rfc/clone_with_v2</a></li>
+    <li>#[\NoDiscard]：<a href="https://wiki.php.net/rfc/marking_return_value_as_important">https://wiki.php.net/rfc/marking_return_value_as_important</a></li>
+    <li>配列の関数：<a href="https://wiki.php.net/rfc/array_find">https://wiki.php.net/rfc/array_find</a>・<a href="https://wiki.php.net/rfc/array_first_last">https://wiki.php.net/rfc/array_first_last</a></li>
+    <li>PHPStan の設定（phpVersion）：<a href="https://phpstan.org/config-reference">https://phpstan.org/config-reference</a></li>
+  </ul>
+  <h3>真偽と状態の名前</h3>
+  <ul>
+    <li>Swift の API Design Guidelines：<a href="https://www.swift.org/documentation/api-design-guidelines/">https://www.swift.org/documentation/api-design-guidelines/</a></li>
+    <li>.NET の Names of Type Members：<a href="https://learn.microsoft.com/en-us/dotnet/standard/design-guidelines/names-of-type-members">https://learn.microsoft.com/en-us/dotnet/standard/design-guidelines/names-of-type-members</a></li>
+    <li>.NET の Parameter Design：<a href="https://learn.microsoft.com/en-us/dotnet/standard/design-guidelines/parameter-design">https://learn.microsoft.com/en-us/dotnet/standard/design-guidelines/parameter-design</a></li>
+    <li>Apple の Cocoa の命名：<a href="https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/CodingGuidelines/Articles/NamingMethods.html">https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/CodingGuidelines/Articles/NamingMethods.html</a></li>
+    <li>Martin Fowler「FlagArgument」：<a href="https://martinfowler.com/bliki/FlagArgument.html">https://martinfowler.com/bliki/FlagArgument.html</a></li>
+    <li>Robert Harper「Boolean Blindness」：<a href="https://existentialtype.wordpress.com/2011/03/15/boolean-blindness/">https://existentialtype.wordpress.com/2011/03/15/boolean-blindness/</a></li>
+    <li>You might as well timestamp it：<a href="https://changelog.com/posts/you-might-as-well-timestamp-it">https://changelog.com/posts/you-might-as-well-timestamp-it</a></li>
+  </ul>
+</main>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+  // page.js が選んだ表示（data-scheme）に合わせる。なければ端末の設定
+  const scheme = document.documentElement.dataset.scheme;
+  const dark = scheme ? scheme.startsWith("dark") : (document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches));
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/page.js"></script>
+</body>
+</html>
