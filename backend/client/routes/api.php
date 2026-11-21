@@ -44,6 +44,9 @@ Route::post('/email-verifications', [EmailVerificationController::class, 'store'
 // 01b ログイン（docs/api/01b-auth.md）。セッションの Cookie を付ける（D-027）。画面は、先に GET /sanctum/csrf-cookie を呼ぶ
 Route::post('/auth/login', [AuthController::class, 'login']);
 
+// 01b ログアウト。ログインの確かめ（user.authenticate）の外に置く。アカウント停止された会員も、自分のセッションを消せるように
+Route::post('/auth/logout', [AuthController::class, 'logout']);
+
 // M2 パスワードを忘れたときの再設定（#196。docs/api/01b-auth.md）。ログインしていない人が使う
 Route::post('/password-resets', [PasswordResetController::class, 'store']);
 Route::put('/password-resets/{token}', [PasswordResetController::class, 'update']);
@@ -52,9 +55,8 @@ Route::put('/password-resets/{token}', [PasswordResetController::class, 'update'
 // user.authenticate がトークンを読み、使える会員か（退会・停止・強制退会でないか）を確かめる。だめなら 401（FR-AUTH-024・NFR-AUTH-001）。
 // 新しいルートは、ログインが要らないと決めたもののほかは、このグループに入れる（入れ忘れると LoginRequiredRoutesTest が落ちる）
 Route::middleware('user.authenticate')->group(function (): void {
-    // 01b 自分の情報・ログアウト（docs/api/01b-auth.md）。メールアドレスを確認していなくても使える（FR-AUTH-021）
+    // 01b 自分の情報（docs/api/01b-auth.md）。メールアドレスを確認していなくても使える（FR-AUTH-021）
     Route::get('/me', [AccountController::class, 'show'])->name('profile.account.show');   // 名前は docs/glossary.md の「アカウント」
-    Route::post('/auth/logout', [AuthController::class, 'logout']);
 
     // ここから下は、メールアドレスの確認が要る（user.verified。だめなら 403。FR-AUTH-021・不変条件 2）。
     // 確認していなくても使える API は、tests/Endpoints.php の routesWithoutVerifiedEmail() と同じ一覧にする

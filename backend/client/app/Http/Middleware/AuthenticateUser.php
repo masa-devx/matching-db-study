@@ -45,7 +45,8 @@ final class AuthenticateUser
 
     /**
      * セッションに載っている会員の番号。ログインしていない・セッションが切れた・ログアウトしたときは null。
-     * 番号だけを読み、会員の行は読まない（使えるかは AuthService が1回だけ読む）
+     * Laravel の id() は、中で user() を呼び、会員の行を1回読む（SessionGuard::id()）。そのあと AuthService がもう一度読む。
+     * ガードの会員を Service に渡せば1回で済むが、Middleware が Model を、Service が Http の型を知ることになるので、2回のままにした（03-how.md の DB）
      */
     private function userIdFromSession(): ?int
     {

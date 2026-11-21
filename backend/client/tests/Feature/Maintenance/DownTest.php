@@ -115,14 +115,13 @@ describe('開発者がメンテナンスを解く', function (): void {
     });
 });
 
-describe('ログインしていた会員が、メンテナンスを解いたあとに、前のトークンで API を呼ぶ', function (): void {
-    // 分かっている不具合：要件は 401（FR-MAINT-002・007）。会員の認証が JWT の間は、サーバーに消せる行がない
-    it('ログインしたまま使える（200）', function (): void {
-        $loginUser = DummyUser::create();
+describe('ログインしていた会員が、メンテナンスを解いたあとに、前の Cookie で API を呼ぶ', function (): void {
+    it('ログインが切れていて、使えない（401。FR-MAINT-002・007）', function (): void {
+        $cookie = DummyAuth::loginFromScreen(DummyUser::create());
         artisan('down');
         artisan('up');
 
-        DummyAuth::actingAs($loginUser)->getJson(Endpoints::account())
-            ->assertOk();
+        DummyAuth::withSessionCookie($cookie)->getJson(Endpoints::account())
+            ->assertUnauthorized();
     });
 });

@@ -7,12 +7,15 @@ namespace Tests\DummyData;
 use App\Models\User;
 use Firebase\JWT\JWT;
 use Illuminate\Foundation\Testing\TestCase;
+use Illuminate\Testing\TestResponse;
+use Symfony\Component\HttpFoundation\Response;
+use Tests\Endpoints;
 
 use function Pest\Laravel\actingAs;
 use function Pest\Laravel\withHeader;
 
 /**
- * テストの、ログインした状態（トークン）を作る。
+ * テストの、ログインした状態を作る。会員の側はセッション（D-027）。トークン（token()・withToken()）は、JWT を消すチケットで外す。
  * ログインの API は呼ばない（呼ぶと last_login_at が変わり、テストの前提が動くため）。
  */
 final class DummyAuth
@@ -20,8 +23,8 @@ final class DummyAuth
     private const int THIRTY_DAYS = 60 * 60 * 24 * 30;
 
     /**
-     * その会員としてログインした状態にする（セッション。D-027）。使い方：DummyAuth::actingAs($loginUser)->getJson('/api/me')。
-     * 画面のオリジン（Origin）も付ける（Sanctum は、画面からのリクエストだけでセッションを使う）
+     * その会員としてログインした状態にする（Laravel の actingAs。ガードに会員を直に置く）。使い方：DummyAuth::actingAs($loginUser)->getJson('/api/me')。
+     * セッションの Cookie を通らないので、Cookie で続くか・切れるかを見るテストは loginFromScreen() と withSessionCookie() を使う
      */
     public static function actingAs(TestUser $user): TestCase
     {
@@ -40,6 +43,44 @@ final class DummyAuth
         // セッションも、Cookie の番号から読み直させる（前のリクエストで読んだ中身を使い続けないように）
         app('session')->forgetDrivers();
         app()->forgetInstance('session.store');
+    }
+
+    /**
+     * 画面からログインし（画面のオリジンを付けた POST /api/auth/login）、セッションの Cookie の値を返す。
+     * 置き場を DB にし、ログインが通ったこと（200）を確かめ、そのあとは Cookie だけでログインが続くかを見られるようにする
+     */
+    public static function loginFromScreen(TestUser $user): string
+    {
+        self::useSessionTable();
+        $cookie = (string) self::fromScreen()
+            ->postJson(Endpoints::login(), ['email' => $user->email, 'password' => 'password'])
+            ->assertOk()
+            ->getCookie(config()->string('session.cookie'))?->getValue();
+        self::forgetLoginBetweenRequests();
+
+        return $cookie;
+    }
+
+    /** 画面のオリジンを付け、渡したセッションの Cookie を送る（Laravel のテストは、withCredentials() がないと Cookie を送らない） */
+    public static function withSessionCookie(string $cookie): TestCase
+    {
+        return self::fromScreen()->withCredentials()->withCookie(config()->string('session.cookie'), $cookie);
+    }
+
+    /**
+     * 応答が付けた CSRF のトークンの Cookie（暗号のまま）。画面と同じく X-XSRF-TOKEN に入れて送る
+     *
+     * @param  TestResponse<Response>  $response
+     */
+    public static function xsrfTokenOf(TestResponse $response): string
+    {
+        return (string) $response->getCookie('XSRF-TOKEN', false)?->getValue();
+    }
+
+    /** 画面のオリジン（Origin）を付ける。Sanctum は、画面からのリクエストだけでセッションを使う */
+    public static function fromScreen(): TestCase
+    {
+        return withHeader('Origin', config()->string('app.frontend_url'));
     }
 
     /**
