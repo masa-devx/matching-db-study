@@ -2254,3 +2254,183 @@ sequenceDiagram
 ##### 次にやること
 
 - コマンドが失敗と出たときは、「どこまで進んだか」を順番から考え、実際の状態を確かめてから、やり直す
+
+## PR #280（#259 の1つ目：会員の認証を、Sanctum のセッションに切り替える）
+
+### ディレクトリの設計
+
+```text
+backend/client/
+├── bootstrap/app.php                          statefulApi()・401/403/419 の文・auth.rejected のログ
+├── config/cors.php・sanctum.php・session.php  画面のオリジンだけ・24時間
+├── app/Http/Controllers/Auth/AuthController.php      login・logout（セッションを作る・消す）
+├── app/Http/Controllers/Profile/AccountController.php GET /api/me
+├── app/Http/Middleware/AuthenticateUser.php   セッションの会員が使えるかを確かめる
+├── app/Services/Auth/AuthService.php          login()：照合・アカウントの状態・最終ログイン
+├── app/Services/Profile/AccountService.php    showAccount()：自分のアカウント
+├── app/Exceptions/Auth/LoginFailedException.php・LoginRefusedException.php
+└── tests/DummyData/DummyAuth.php              loginFromScreen()・withSessionCookie() など
+frontend/client/src/
+├── shared/api/client.ts                       Cookie・X-XSRF-TOKEN・419 の送り直し
+├── shared/session/SessionProvider.tsx         GET /api/me で決める・401 で消す・タブを開き直したとき
+├── shared/session/useLogout.ts                ログアウトの手順（ホーム・設定・確認待ち）
+├── app/RequireAuth.tsx                        停止なら理由を付けて /login へ
+└── HomePage.tsx                               ホームのログアウトのボタン
+```
+
+- セッションを作る・消すのは Controller（`architecture-backend.md` の2章：HTTP の形は Http）。照合と「使えるか」は Service
+  - ほかの置き場：`AuthService::login()` の中で `Auth::login()` を呼ぶ → Service がセッション（HTTP の道具）を知るので、選ばなかった
+- 自分の情報は、`ProfileService` から `Profile/AccountService` に分けた（業務のまとまりは Profile のまま。退会を移すときも、ここに置く）
+- ログアウトの手順は `shared/session/useLogout.ts` に置いた。`shared/session` は `shared/api` を使ってよい（`architecture-frontend.md` の3章）。移る先とトーストは画面が決める（`shared/session` は画面の移り方を知らない）
+
+### クラスの責務
+
+- `AuthController`：リクエストの形を知っていて、ログインの状態を作る・消す。照合も「使えるか」の判断もしない
+- `AuthService`：会員の行とパスワードのハッシュを知っていて、ログインしてよい会員を返す。セッションは作らない
+- `AuthenticateUser`：セッションの会員の番号を知っていて、使えなければ例外を投げる。応答は作らない
+- `AccountService`：自分のアカウントの行を返す。見つからなければ `UserNotFoundException`
+- `SessionProvider`：画面の「ログインした自分」を持つ。Cookie は読めないので、`GET /api/me` が通るかで決める
+- `useLogout`：サーバーのセッションが消えたときだけ、画面の自分の情報を消す。どこへ移るかは知らない
+
+### メソッドの表
+
+| メソッド | 入力 | 戻り値 | 副作用 | 失敗 | 呼ぶ所 |
+| --- | --- | --- | --- | --- | --- |
+| `AuthService::login()` | メールアドレス・パスワード | `User` | `last_login_at` を書く | 401・403 の業務の例外 | `AuthController::login` |
+| `AuthController::login()` | Request | 200 の JSON | セッションを作り、番号を作り直す | 例外は `bootstrap/app.php` | `POST /api/auth/login` |
+| `AuthController::logout()` | Request | 204 | セッションの行を消し、CSRF を作り直す | なし | `POST /api/auth/logout` |
+| `AuthenticateUser::handle()` | Request | 次の処理の応答 | `login_user_id` を置く | 401（停止は `code`） | `user.authenticate` のグループ |
+| `AccountService::showAccount()` | 会員の番号 | `User` | なし | `UserNotFoundException` | `AccountController::show` |
+| `useLogout().logout()` | なし | `Promise<boolean>` | 204・401・419 なら `signOut()` | false（500・つながらない） | ホーム・設定・確認待ち |
+
+```php
+// AuthService::login()：ないメールアドレスでも照合して時間をそろえ、使えるかは accountStatus() の1か所で決める
+$user = User::query()->where('email', $email)->first();
+if ($user === null) {
+    Hash::check($password, self::HASH_FOR_UNKNOWN_EMAIL);   // Hash::make() だと NUL で例外になり、500 と 401 に分かれる
+    throw new LoginFailedException('login_unknown_email');
+}
+...
+$status = $user->accountStatus();
+if ($status !== AccountStatus::Usable) { throw new LoginRefusedException($status); }   // セッションを作る前に断る
+```
+
+```php
+// AuthController::login()：番号の作り直しは Laravel の login() が中でする（自分で regenerate すると2回になる）
+Auth::guard('web')->login($user);
+return response()->json($user);
+```
+
+```ts
+// useLogout：消えたときだけ画面の情報を消す（消えないと Cookie が生きたままで、読み込み直すと戻る）
+const res = await apiFetchForLogout('/api/auth/logout', { method: 'POST' })
+if (res.status === 204 || res.status === 401 || res.status === 419) {
+  signOut()
+  return true
+}
+return false
+```
+
+### 呼び出しの流れ
+
+```mermaid
+sequenceDiagram
+    participant UI as 画面
+    participant S as Sanctum と StartSession
+    participant M as AuthenticateUser
+    participant A as AuthService
+    participant DB as PostgreSQL
+    UI->>S: GET /sanctum/csrf-cookie
+    S->>DB: insert into sessions（会員のいない行）
+    S-->>UI: 204・XSRF-TOKEN
+    UI->>S: POST /api/auth/login（Origin・X-XSRF-TOKEN）
+    S->>A: AuthController が login() を呼ぶ
+    A->>DB: select * from users where email = ?
+    A->>DB: update users set last_login_at = ?
+    S->>DB: 前の行を消し、新しい番号の行を書く
+    S-->>UI: 200・HttpOnly のセッションの Cookie
+    UI->>S: GET /api/me（Cookie）
+    S->>DB: select * from sessions where id = ?
+    S->>M: ガードの id()
+    M->>DB: select * from users where id = ?（ガード）
+    M->>A: userAccountStatus()
+    A->>DB: select * from users where id = ?
+    M->>DB: select * from users where id = ?（AccountService）
+    S->>DB: update sessions set ...
+    S-->>UI: 200
+```
+
+### 名前
+
+- `AccountService`・`AccountController`：`docs/glossary.md` の「アカウント」。`MeService` は API の言葉（`/me`）なので選ばなかった
+- `LoginRefusedException`：パスワードは合っているが断った。`LoginFailedException`（合わない）と分けた。`AccountSuspendedException` は、ログインしたあとの 401 で使っているので、同じ名前にしなかった
+- `useLogout`：hook の名前は `use` から。`logoutFromServer` は、画面の中で「サーバーのセッションを消す」ことを読めるように付けた
+- `loginFromScreen`（テスト）：画面のオリジンから来たログインだけがセッションを使う、ということを名前に入れた
+
+### 依存の向き
+
+```mermaid
+flowchart LR
+  route["routes/api.php"] --> ctrl["AuthController・AccountController"]
+  route --> mw["AuthenticateUser"]
+  mw --> auth["AuthService"]
+  ctrl --> auth
+  ctrl --> acc["AccountService"]
+  auth --> user["User（Model）"]
+  acc --> user
+  boot["bootstrap/app.php"] --> exc["Exceptions/Auth"]
+  auth --> exc
+  home["HomePage・SettingsPage・AwaitingVerification"] --> logout["shared/session/useLogout"]
+  logout --> provider["shared/session/SessionProvider"]
+  logout --> client["shared/api/client.ts"]
+  provider --> client
+  guard["app/RequireAuth"] --> provider
+```
+
+- 逆向きはない。Middleware は Model を Service に渡さない（そのため `users` を2回読む。下の「直した課題」）
+
+### レガシー版との違い
+
+- 前：ログインは 30日の JWT を JSON で返し、画面が sessionStorage に置いて `Authorization` で送った。ログアウトはサーバーで何もせず、コピーしたトークンは30日使えた。CSRF の確かめはなかった
+- 後：画面はトークンを持たない。HttpOnly の Cookie で、操作がないまま24時間で切れる。ログアウトとメンテナンスで行が消え、同じ Cookie は 401。書き込みには CSRF のトークンが要る（419）
+
+### 直した課題と、現場での意味
+
+- `05-problems.md` の #259
+- 盗まれたトークンや、ログアウトしたはずの端末が、30日使える状態がなくなった。アカウント停止は次のリクエストから効き、ログインの画面に理由が出る
+- 運用は `grep auth.rejected` で、ログインしていない・停止・CSRF を分けて数えられる（URL の番号や再設定の文字は書かない）
+- 引き換えに、ログインが要る API で `users` を2回読む（`GET /api/me` は3回）。主キーで読むので、1本は 1ms に満たない。10倍のときは `03-how.md` の DB の数字を見る
+
+### 次の改善の候補
+
+- `routes/api.php:55` のコメントが「`user.authenticate` がトークンを読み」のままだった。人が決めて、この PR で直した
+- 応答の形（FR-AUTH-017）は、ログインと `GET /api/me` の両方で `users` の行のまま。Resource を作るときに一緒に直す
+
+### 説明の練習
+
+#### 1回目：ログアウトしたのに戻った、という問い合わせ（2026-11-21）
+
+リーダーが聞いた：「ホームでログアウトを押したのに、読み込み直したらログインしたままだった、と問い合わせが来た。`useLogout` の `logout()` は何をどの順でしているか。どこから見るか」
+
+##### 問い1：`logout()` は何をどの順でしているか
+
+- 人の答え：`SessionProvider` の処理を `useLogout` に渡して、ログアウトしている
+- 返し：`signOut()` を使うのは合っている。大事なのは、いつ呼ぶか。先に API を呼んで応答を待ち、204・401・419 のときだけ呼ぶ
+- 結果：一部
+
+##### 突っ込み1：読み込み直したとき、`GET /api/me` は何を返したか
+
+- 人の答え：セッションが残っていたから
+- 返し：合っている。表 `sessions` の行が残り、`GET /api/me` が 200 を返した
+
+##### 突っ込み2：セッションが残るのはどんなときか
+
+- 人の答え：認証情報が残っているとき・「ログインし直してください」が出る・Console と Network の Cookie を見る
+- 答えを出した：ログアウトの API が失敗したとき（500・つながらない・503）。画面はホームのまま「ログアウトできませんでした」。見るのは Network の状態コードと `Set-Cookie`・Cookie の値・`sessions` の行
+- 結果：答えられなかった（答えを出した）
+
+##### 次にやること
+
+- 「なぜ残るのか」を、どの処理が失敗したかで答える練習
+- ログアウトの成功・失敗は Laravel のログに出ない。問い合わせが増えるなら、1行残すかを決める（次の改善の候補）
+
