@@ -71,6 +71,7 @@ architecture-frontend.md の中身：
 
 | ルール | 読むとき | 中身 |
 | --- | --- | --- |
+| [quality-php.md](rules/quality-php.md) | PHP のコードを書く・変える（`backend/` を触ると読み込まれる） | Pint の形を正とする・Laravel に引数を名前で渡さない・コンテナに登録しない・Model にプロパティを宣言しない |
 | [quality-types.md](rules/quality-types.md) | PHP のコードを書く・変える | `strict_types`・言語の型と PHPDoc の使い分け・PHPStan のレベル（レガシー版 6・改善版 9）・してはいけないこと |
 
 使わない領域のルールは外し、この目次からも消す（例：DB を使わないなら database.md）。

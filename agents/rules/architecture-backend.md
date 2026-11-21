@@ -265,7 +265,7 @@ final class ProfileService
     {
         // 1つの条件で1件を読むだけなので、Service に書いてよい（下の「クエリの置き場の線」）
         return Profile::query()->where('user_id', $memberId)->first()
-            ?? throw new ProfileNotFoundException();   // bootstrap/app.php で 404 と「プロフィールが見つかりません」に変える（7章）
+            ?? throw new ProfileNotFoundException;   // bootstrap/app.php で 404 と「プロフィールが見つかりません」に変える（7章）
     }
 }
 ```
@@ -330,8 +330,9 @@ class User extends Model
 
 - トランザクションは Service が `DB::transaction()` で張る。Controller・Model では張らない
 - 読んでから書く処理で、同時に2回来ると壊れるもの（停止・購入・回数の上限）は、`lockForUpdate()`（行のロック）をかけて読む
-- 日時は `now()`（`CarbonImmutable`・UTC）。API テストでは `travelTo()` で止める
+- 日時は `now()`（UTC）。今の `now()` は、変えられる型（`Illuminate\Support\Carbon`）を返す（手元で確かめた。#261）。API テストでは `travelTo()` で止める
 - 外への書き込み（Firestore・メール・将来の決済と AI）は、Client を通し、**トランザクションの外、コミットのあと**で行う（DB が巻き戻っても、外には残るため）
+- キューに入れるメール・出来事・ジョブを、どうしてもトランザクションの中で出すときは、確定のあとに出す形にする（メールは `afterCommit()`、出来事は `ShouldDispatchAfterCommit`、キューの Listener は `ShouldQueueAfterCommit`）。`config/queue.php` の `after_commit` は `false` のままなので、書かなければ確定を待たない（https://laravel.com/docs/13.x/queues#jobs-and-database-transactions 。#261）
 
 ```php
 $room = DB::transaction(fn (): TalkRoom => $this->openRoom($match));   // DB だけ
@@ -381,8 +382,8 @@ $this->firestore->openRoom($room);                                     // コミ
 基本は書かない。思っていなかった失敗（DB が落ちた・コードの誤り）は受け止めずに上へ流し、Laravel に任せる。Laravel が、スタックトレース付きでエラーのログに記録し、500 を返す（本番は `APP_DEBUG=false` で中身を隠す）。2026-11-19 に人が決めた（#241。根拠は Laravel 13.x の公式ドキュメントの Error Handling と Database Transactions）。
 
 - `DB::transaction()` は、中で例外が投げられると自動で戻し（ロールバック）、例外を投げ直す。`DB::rollBack()` を自分で書かない
-- デッドロックでやり直すときは、`DB::transaction(fn () => ..., attempts: 3)` と書く（try-catch は要らない）
-  - `attempts` は、一番外の `DB::transaction` に付ける。入れ子の中（ほかの Service の `transaction` の中から呼ばれたとき）では、やり直さずに `DeadlockException` を投げる（Laravel の `ManagesTransactions`）
+- デッドロックでやり直すときは、`DB::transaction(fn () => ..., 3)`（2つ目の引数がやり直しの回数。Laravel のメソッドには、引数を名前で渡さない。`quality-php.md` の2章） と書く（try-catch は要らない）
+  - やり直しの回数は、一番外の `DB::transaction` に付ける。入れ子の中（ほかの Service の `transaction` の中から呼ばれたとき）では、やり直さずに `DeadlockException` を投げる（Laravel の `ManagesTransactions`）
   - やり直すと、中身が最初から流れ直す。そのため、外への書き込み（Firestore・メール）を中に置かない（5章。置くと2回送られる）
 
 書いてよいのは、その失敗に、意味のある別の動きができるときだけ。受け止めるのは、決まった種類の例外だけにする（`\Exception`・`\Throwable` をまとめて受け止めない）。
@@ -467,7 +468,7 @@ try {
 ### 副作用の分離
 
 - 外への書き込み（メール・Firestore）は Service の中で、トランザクションのあとに、Client を呼ぶ目に見える1行として書く。Model のイベントや Observer に隠さない
-- 環境変数は `config()` で読む（`env()` は `config/` の中だけ）
+- 環境変数は `config()` で読む。`env()`・`getenv()`・`$_ENV`・`$_SERVER` は `config/` の中だけで使う（`config:cache` のあとは、`env()` が `.env` を読まなくなるため。#261）。分かっている不具合：`LikeController.php` が `getenv()` で Firestore の設定を読んでいる（いいねの API を移すときに直す）
 
 ## 10. まだ移していない古いコード
 
@@ -501,7 +502,7 @@ $result = $this->likes->send($memberId, $request->validated());
 // ❌ Service が HTTP を知っている（コマンドやテストから呼べない）
 public function updateProfile(Request $request): JsonResponse { abort_if($x, 403); }
 // ✅ 値を受け取り、Model を返す。断るときは業務の例外
-public function updateProfile(int $memberId, array $input): Profile { throw new ProfileNotFoundException(); }
+public function updateProfile(int $memberId, array $input): Profile { throw new ProfileNotFoundException; }
 
 // ❌ 有料かどうかを、あちこちで書く（期限を見ない所ができる）
 if ($user->is_paid) { ... }
@@ -518,7 +519,7 @@ $profile->update($request->validated());
 // ❌ 見つからないときを Laravel に任せる（Model のクラス名が応答に出る）
 return User::query()->where('public_id', $publicId)->firstOrFail();
 // ✅ 業務の例外にする
-return User::query()->where('public_id', $publicId)->first() ?? throw new UserNotFoundException();
+return User::query()->where('public_id', $publicId)->first() ?? throw new UserNotFoundException;
 
 // ❌ 保存したときに、裏でメールを送る（Service を読んでも見えない）
 protected static function booted(): void { static::created(fn (User $u) => Mail::to($u)->send(...)); }
@@ -556,7 +557,7 @@ public function suspend(int $adminId, string $memberPublicId, string $reason): v
 {
     DB::transaction(function () use ($adminId, $memberPublicId, $reason): void {
         $member = User::query()->where('public_id', $memberPublicId)->lockForUpdate()->first()
-            ?? throw new MemberNotFoundException();
+            ?? throw new MemberNotFoundException;
         $member->update(['suspended_at' => now(), 'suspended_reason' => $reason]);
         AuditLog::record($adminId, 'member.suspend', $member, ['reason' => $reason]);   // 同じトランザクションで
     });
