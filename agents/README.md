@@ -6,11 +6,12 @@ agents/ の目次。作業内容に合うルールを読み、スキルで進め
 
 | 文書 | 中身 |
 | --- | --- |
-| [../AGENTS.md](../AGENTS.md) | 地図（技術スタック・ディレクトリ構成・主要コマンド・開発ルールの適用） |
+| [../AGENTS.md](../AGENTS.md) | 地図（技術スタック・ディレクトリ構成・よく使うコマンド・開発ルールの適用） |
+| [../docs/commands.md](../docs/commands.md) | 主要コマンド（操作ごとの実行場所・前提・使わないもの） |
 | [background.md](background.md) | 背景・作業の決まり・まだ決めていないこと・参考にするノート（新しい会話で最初に読む） |
 | [../docs/README.md](../docs/README.md) | 何を作るか（product・requirements）と、なぜそうしたか（decisions）の目次 |
 
-コマンドの一覧は AGENTS.md の「主要コマンド」を正とし、ここには書かない。
+コマンドの一覧は [docs/commands.md](../docs/commands.md) を正とし、ここには書かない。
 
 ## ルールの目次
 

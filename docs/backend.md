@@ -121,7 +121,7 @@
 
 - 管理者本人を見る Controller と、`Admins/AuthService` の本人を見る操作の名前は、移すチケットで決める
   - `Me` は使わない（`docs/glossary.md` の「アカウント」）
-- `canWrite` は、書き込みのルートの Middleware `admin.can-write` から呼ぶ
+- `canAdminWrite` は、書き込みのルートの Middleware `admin.can-write` から呼ぶ
 - `MemberActivityController` は、名詞ごとに4つの Controller に分ける
 
 移す順は、画面・機能ごと。最初はホーム（#237：`ProfileController`）。そのあとは、機能を足すとき・不具合を直すときに、触る所を移す。移し方の決まりは [architecture-backend.md](../agents/rules/architecture-backend.md) の10章。移す前に、その API が「API テストがある」状態（成功1本と、`docs/api/` に書いた失敗ごとに1本）にする。
