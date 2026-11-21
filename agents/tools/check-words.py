@@ -14,7 +14,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 TARGETS = ["docs", "agents", ".claude/agents", ".github", "AGENTS.md"]
 SKIP = {"agents/rules/writing.md", "agents/tools/check-words.py"}
 # 意味が1つに決まる言葉だけを機械で見る。「守る」「入口」「まとまり」は文脈で決まるので、レビューで見る
-WORDS = ["固めるテスト", "固定するテスト", "テストで固め", "守るテスト", "テストで守", "骨抜き", "既知のリスク", "凍結", "写す", "写した", "写して", "写し忘れ"]
+WORDS = ["固めるテスト", "固定するテスト", "テストで固め", "守るテスト", "テストで守", "骨抜き", "既知のリスク", "凍結", "写す", "写した", "写して", "写し忘れ", "止めた会員"]
 PATTERN = re.compile("|".join(map(re.escape, WORDS)))
 QUOTED = re.compile("「[^」]*」")
 

@@ -107,7 +107,7 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | 管理者 | 管理画面を使う運営の人 | ― | `/me`（管理画面の API。コードの名前に `Me` を使わない。名前は、管理画面のログインを移すチケットで決める） | `Admins`・`Admin` | `admins` | |
 | 会員 | 運営から見た会員 | ― | `members`・`member_id` | `Members` | `users` | 会員の側の API の `users` と同じ人。運営から見るときは `members` と呼ぶ |
-| 停止 | 運営が会員の利用を止めること | ― | `suspension` | `Members`・`MemberSuspension` | `users.suspended_at` | |
+| アカウント停止 | 運営が、会員のアカウントを、いったん使えなくすること。解けば元に戻る（強制退会は戻せない）。「止めた会員」とは書かない | ― | `suspension` | `Members`・`MemberSuspension` | `users.suspended_at` | |
 | 監査ログ | 管理者がだれの何を見た・変えたかの記録 | ― | `audit-logs` | `AuditLogs`・`AuditLog` | `admin_audit_logs` | |
 | 売上 | 購入の合計 | ― | `sales` | `Sales` | `purchases` | |
 | ダッシュボード | 会員・マッチ・メッセージ・売上の数とグラフ | ダッシュボード | `dashboard` | `Dashboard` | `users`・`user_matches`・`messages`・`purchases` | |

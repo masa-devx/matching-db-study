@@ -8,9 +8,32 @@ namespace Tests;
  * テストで呼ぶ API の URL を作る。URL の文字は、このファイルにだけ書く（変わったときに1か所で直すため）。
  * route() では作らない（ルートの URL を変えてもテストが落ちず、画面が壊れても気づけないため）。
  * メソッドの名前は「何の API か」。業務のまとまりごとに見出しで区切り、API を移すチケットで足す。
+ * ログインが要らないルートの一覧（routesWithoutLogin()）も、URL の文字なので、ここに置く。
  */
 final class Endpoints
 {
+    // ---- ログインが要らない API ----
+
+    /**
+     * ログインしなくても呼べるルート（「メソッド ルートの形」。Laravel の Route::uri() の形で、先頭に / を付けない）。
+     * ここにないルートは、どれもログインが要る（tests/Feature/Auth/LoginRequiredRoutesTest.php）。
+     * 新しいルートは、何もしなければ「ログインが要る」側に入るので、Middleware を付け忘れるとテストが落ちる。
+     *
+     * @return list<string>
+     */
+    public static function routesWithoutLogin(): array
+    {
+        return [
+            'GET api/health',
+            'POST api/users',                          // 登録
+            'GET api/email-verifications/{token}',     // メールアドレスの確認
+            'POST api/email-verifications',            // 確認のメールを送り直す。分かっている不具合：FR-AUTH-007 はログインが要る。登録の画面がログインの前に呼ぶので、改善版の URL に移すまで、このまま
+            'POST api/auth/login',
+            'POST api/password-resets',                // パスワードを忘れたとき
+            'PUT api/password-resets/{token}',
+        ];
+    }
+
     // ---- Auth（登録・ログイン） ----
 
     /** 会員を登録する（POST /api/users） */

@@ -19,7 +19,7 @@ test('FR-ADMIN-004 会員の一覧に、会員と全部の件数が出る（見�
         ->assertOk()
         ->assertJsonPath('total', 3);
 
-    // 絞り込みなしなら、退会した会員も、止めた会員も出る。並びには頼らず、ID の集まりで比べる
+    // 絞り込みなしなら、退会した会員も、アカウント停止された会員も出る。並びには頼らず、ID の集まりで比べる
     /** @var list<array{public_id: string, nickname: string|null}> $rows */
     $rows = $response->json('data');
     $actual = array_column($rows, 'nickname', 'public_id');

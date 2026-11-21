@@ -9,15 +9,13 @@ use App\Models\Like;
 use App\Models\Profile;
 use App\Models\Skip;
 use App\Models\User;
-use Firebase\JWT\JWT;
-use Firebase\JWT\Key;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
  * M3 届いたいいねの一覧（レガシー版。docs/api/02-likes.md の「#184」）。
  * 無料でも有料でも見られる（2026-11-17 に決めた）。
- * だれが使うかは、AuthController::me() の JWT の処理をコピーして決める（これで 22か所目）。
+ * だれが使うかは、ルートの user.authenticate（ログインを確かめる Middleware）が決め、loginUserId() で番号を読む。
  * 送ったいいねの一覧（LikeController::index）と同じ形で、向きだけを逆にした。
  * - もう送り返した相手（マッチした相手）・ブロックした／された相手・スキップした相手を、PHP に ID を持ってきて除く
  * - 1件ごとに、プロフィールと public_id を読む（1＋2N 本）
@@ -28,25 +26,20 @@ class ReceivedLikeController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        // AuthController::me() からコピーした（トークンがなければ 401、壊れていれば 500）
-        $token = $request->bearerToken();
-        if (! $token) {
-            return response()->json(['message' => 'ログインしてください'], 401);
-        }
-        $payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));
+        $loginUserId = $this->loginUserId($request);
 
         // もう自分からもいいねした相手（＝マッチした相手）は、返事が済んでいるので出さない
-        $likedIds = Like::where('from_user_id', $payload->sub)->pluck('to_user_id');
+        $likedIds = Like::where('from_user_id', $loginUserId)->pluck('to_user_id');
 
         // 06：ブロックした・された相手（送ったいいねの一覧からコピーした）
-        $blocked = Block::where('blocker_id', $payload->sub)->pluck('blocked_id');
-        $blockedMe = Block::where('blocked_id', $payload->sub)->pluck('blocker_id');   // 索引がなく、表を全部読む
+        $blocked = Block::where('blocker_id', $loginUserId)->pluck('blocked_id');
+        $blockedMe = Block::where('blocked_id', $loginUserId)->pluck('blocker_id');   // 索引がなく、表を全部読む
         $blockIds = $blocked->merge($blockedMe);
 
         // スキップした相手。索引がなく、表を全部読む
-        $skipIds = Skip::where('skipper_id', $payload->sub)->pluck('skipped_id');
+        $skipIds = Skip::where('skipper_id', $loginUserId)->pluck('skipped_id');
 
-        $likes = Like::where('to_user_id', $payload->sub)
+        $likes = Like::where('to_user_id', $loginUserId)
             ->whereNotIn('from_user_id', $likedIds)
             ->whereNotIn('from_user_id', $blockIds)
             ->whereNotIn('from_user_id', $skipIds)

@@ -7,15 +7,13 @@ namespace App\Http\Controllers;
 use App\Models\Block;
 use App\Models\Profile;
 use App\Models\User;
-use Firebase\JWT\JWT;
-use Firebase\JWT\Key;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 /**
  * 06 ブロックする・ブロックした相手の一覧・解除する（レガシー版。docs/api/06-blocks-withdrawal.md）。
- * だれが使うかは、AuthController::me() の JWT の処理を、メソッドごとに写して決める（これで10〜12か所目）。
+ * だれが使うかは、ルートの user.authenticate（ログインを確かめる Middleware）が決め、loginUserId() で番号を読む。
  * 会員がいるか・退会したかは見ない。入力も確かめず、エラーは扱わない（UNIQUE の違反も 500）。
  * 一覧は 1＋2N 本。改善する段階で、要件 ID のテストにする。
  */
@@ -23,18 +21,13 @@ class BlockController extends Controller
 {
     public function store(Request $request): JsonResponse
     {
-        // AuthController::me() から写した（トークンがなければ 401、壊れていれば 500）
-        $token = $request->bearerToken();
-        if (! $token) {
-            return response()->json(['message' => 'ログインしてください'], 401);
-        }
-        $payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));
+        $loginUserId = $this->loginUserId($request);
 
         // 相手は public_id（UUID）で来る。いなければ null（下の insert が NOT NULL で 500）。退会したかは見ない
         $blockedId = User::where('public_id', $request->input('user_id'))->value('id');
 
         // 自分でも入る。2回目は UNIQUE の違反で 500
-        $block = Block::create(['blocker_id' => $payload->sub, 'blocked_id' => $blockedId]);
+        $block = Block::create(['blocker_id' => $loginUserId, 'blocked_id' => $blockedId]);
 
         // blocks の行をそのまま返す（中の連番の id が出る）
         return response()->json($block, 201);
@@ -42,14 +35,9 @@ class BlockController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        // store() と同じ処理を、もう一度写した
-        $token = $request->bearerToken();
-        if (! $token) {
-            return response()->json(['message' => 'ログインしてください'], 401);
-        }
-        $payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));
+        $loginUserId = $this->loginUserId($request);
 
-        $blocks = Block::where('blocker_id', $payload->sub)->orderBy('created_at', 'desc')->get();
+        $blocks = Block::where('blocker_id', $loginUserId)->orderBy('created_at', 'desc')->get();
 
         $result = [];
         foreach ($blocks as $block) {
@@ -69,17 +57,12 @@ class BlockController extends Controller
 
     public function destroy(Request $request, string $publicId): JsonResponse|Response
     {
-        // store() と同じ処理を、もう一度写した
-        $token = $request->bearerToken();
-        if (! $token) {
-            return response()->json(['message' => 'ログインしてください'], 401);
-        }
-        $payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));
+        $loginUserId = $this->loginUserId($request);
 
         $blockedId = User::where('public_id', $publicId)->value('id');
 
         // 自分がした分だけを消す。消すものがなくても（いない相手・ブロックしていない相手）204
-        Block::where('blocker_id', $payload->sub)->where('blocked_id', $blockedId)->delete();
+        Block::where('blocker_id', $loginUserId)->where('blocked_id', $blockedId)->delete();
 
         return response()->noContent();
     }

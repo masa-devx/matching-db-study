@@ -10,8 +10,6 @@ use App\Models\Like;
 use App\Models\Profile;
 use App\Models\Skip;
 use App\Models\User;
-use Firebase\JWT\JWT;
-use Firebase\JWT\Key;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -46,43 +44,38 @@ class UserController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        // AuthController::me() から写した（トークンがなければ 401、壊れていれば 500）。これで5か所目
-        $token = $request->bearerToken();
-        if (! $token) {
-            return response()->json(['message' => 'ログインしてください'], 401);
-        }
-        $payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));
+        $loginUserId = $this->loginUserId($request);
 
         // #150：有料の機能は、最終ログイン・登録して間もない会員・フリーワード・登録が新しい順の4つ（身長は無料にした）。
         // 男性の無料の会員は使えない（送ったときだけ確かめる。すぐ下で同じプロフィールをもう一度読む）
         if ($request->filled('last_login') || $request->filled('new_member') || $request->filled('keyword') || $request->input('sort') === 'new') {
             // 07：男性の無料の会員は使えない（is_paid だけを見る。paid_until は見ない。送る・いいね・検索に写した）
-            $myProfile = Profile::where('user_id', $payload->sub)->first();
-            $myUser = User::find($payload->sub);
+            $myProfile = Profile::where('user_id', $loginUserId)->first();
+            $myUser = User::find($loginUserId);
             if ($myProfile?->gender === 'male' && ! $myUser->is_paid) {
                 return response()->json(['message' => '有料会員になると使えます'], 403);
             }
         }
 
         // 性別を送らなければ、自分の反対の性別（male でなければ、みな male を探す）
-        $me = Profile::where('user_id', $payload->sub)->first();
+        $me = Profile::where('user_id', $loginUserId)->first();
         $gender = $request->input('gender', $me?->gender === 'male' ? 'female' : 'male');
 
         // いいねした相手を全部 PHP に持ってきて、not in に並べる（いいねが増えるほど SQL が長くなる）
-        $likedIds = Like::where('from_user_id', $payload->sub)->pluck('to_user_id');
+        $likedIds = Like::where('from_user_id', $loginUserId)->pluck('to_user_id');
 
         // 06：ブロックした・された相手を、向きごとに PHP に持ってくる（いいねを除くのと同じ形。ほかの一覧にも写す）
-        $blocked = Block::where('blocker_id', $payload->sub)->pluck('blocked_id');     // UNIQUE の先頭なので索引が効く
-        $blockedMe = Block::where('blocked_id', $payload->sub)->pluck('blocker_id');   // 索引がなく、表を全部読む
+        $blocked = Block::where('blocker_id', $loginUserId)->pluck('blocked_id');     // UNIQUE の先頭なので索引が効く
+        $blockedMe = Block::where('blocked_id', $loginUserId)->pluck('blocker_id');   // 索引がなく、表を全部読む
         $blockIds = $blocked->merge($blockedMe);
 
         // M3（#184）：スキップした相手も、同じ形で PHP に持ってきて除く（索引がなく、表を全部読む）
-        $skipIds = Skip::where('skipper_id', $payload->sub)->pluck('skipped_id');
+        $skipIds = Skip::where('skipper_id', $loginUserId)->pluck('skipped_id');
 
         $page = (int) $request->input('page', 1);
 
         $query = User::whereNotNull('email_verified_at')
-            ->where('id', '!=', $payload->sub)
+            ->where('id', '!=', $loginUserId)
             ->whereNotIn('id', $likedIds)
             ->whereNotIn('id', $blockIds)
             ->whereNotIn('id', $skipIds)
@@ -188,20 +181,15 @@ class UserController extends Controller
 
     public function destroy(Request $request): JsonResponse|Response
     {
-        // AuthController::me() から写した（これで13か所目）。退会した人の JWT でも、ここまで来る
-        $token = $request->bearerToken();
-        if (! $token) {
-            return response()->json(['message' => 'ログインしてください'], 401);
-        }
-        $payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));
+        $loginUserId = $this->loginUserId($request);
 
-        $user = User::find($payload->sub);
+        $user = User::find($loginUserId);
         if (! Hash::check((string) $request->input('password'), $user->password)) {
             return response()->json(['message' => 'パスワードが違います'], 422);
         }
 
         // メールアドレスの UNIQUE とぶつからないよう、書き換えて空ける（元のメールアドレスは残らない）。
-        // 元が 237文字以上だと 255文字を超えて 500。持っていた JWT は止めない（30日のあいだ使える）
+        // 元が 237文字以上だと 255文字を超えて 500。持っていた JWT は、次のリクエストから user.authenticate が断る
         $user->update([
             'email' => $user->email.'#deleted#'.time(),
             'deleted_at' => now(),

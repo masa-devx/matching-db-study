@@ -36,6 +36,15 @@ API の正本。作る前に設計を書き、確かめてもらってから実�
 
 - 入力がおかしい `422`／見つからない `404`／ログインしていない `401`／権限がない `403`／同じものが2つになる `409`
 
+### ログインが要るか
+
+- ログインが要らない API の決まりは、要件の FR-AUTH-024。今の一覧は `backend/client/tests/Endpoints.php` の `routesWithoutLogin()`（ここには書かない）
+- 改善版は、ログインが要る API を、ルートの `user.authenticate`（ログインを確かめる Middleware）のグループに入れる。トークンがない・壊れている・期限切れ・退会・アカウント停止・強制退会は `401`「ログインしてください」
+- 新しい API がグループに入っていないと、`tests/Feature/Auth/LoginRequiredRoutesTest.php` が落ちる
+- 各ページの「レガシー版で起きること」の「`500`：JWT が壊れている」は、`legacy-repo` の動き。`refactored-repo` では、どれも `401` になった（#257）
+- `refactored-repo` では、ログインが要る API は、各ページの「流れる SQL の目安」より1本多い（Middleware が `users` を主キーで1本読む。NFR-AUTH-001）
+- ログアウト（`POST /api/auth/logout`）も、`refactored-repo` では、ログインが要る（トークンがなければ `401`）
+
 ### エラーの形
 
 - `{"message": "...", "errors": {"<項目>": ["..."]}}`（Laravel の標準の形）
@@ -108,7 +117,7 @@ API の正本。作る前に設計を書き、確かめてもらってから実�
 | [12](12-admin.md) | `POST`・`DELETE /api/members/{public_id}/suspension` | 利用を止める・解く | 実装済み（レガシー版） |
 | [12](12-admin.md) | `GET /api/messages`・`GET /api/purchases`・`GET /api/sales/monthly` | メッセージ・購入の一覧と月ごとの売上 | 実装済み（レガシー版） |
 | [12](12-admin.md) | `GET /api/plans`・`PUT /api/plans/{id}`・`GET /api/audit-logs` | 値段の変更・監査ログ | 実装済み（レガシー版） |
-| [12](12-admin.md) | `POST /api/auth/login`（会員の側。12 の変更） | 止めた会員をログインで断る | 実装済み（レガシー版） |
+| [12](12-admin.md) | `POST /api/auth/login`（会員の側。12 の変更） | アカウント停止された会員をログインで断る | 実装済み（レガシー版） |
 | [M7](m7-reports.md) | `POST /api/me/reports`（会員の側） | 通報する（M7・A7） | 実装済み（レガシー版） |
 | [M7](m7-reports.md) | `GET /api/report-cases`（管理画面） | 案件の一覧（M7・A7） | 実装済み（レガシー版） |
 | [M7](m7-reports.md) | `GET /api/report-cases/{publicId}`（管理画面） | 案件の中身（M7・A7） | 実装済み（レガシー版） |

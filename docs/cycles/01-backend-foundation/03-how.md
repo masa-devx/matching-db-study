@@ -421,7 +421,7 @@ D-027。仕組みの解説は [explanations/auth-session.html](../../../explanat
 
 | 案 | 良いところ | 弱いところ | 手間 |
 | --- | --- | --- | --- |
-| A：D-014 のまま（JWT 15分と取り替え用のトークン） | 表の設計・使い回しの見つけ方を学べる | 止めた会員を毎回 DB で確かめるので、JWT の強み（DB を見ない）が使えない。自分で作る部分が多い | 大 |
+| A：D-014 のまま（JWT 15分と取り替え用のトークン） | 表の設計・使い回しの見つけ方を学べる | アカウント停止された会員を毎回 DB で確かめるので、JWT の強み（DB を見ない）が使えない。自分で作る部分が多い | 大 |
 | B：Sanctum の SPA 認証（セッション） | Laravel の標準。行を消せば止まる。会員の台帳とパスワードが自分の DB に残り、移しやすい | ネイティブアプリには、あとで API トークンを足す | 中 |
 | C：Firebase Authentication | パスワードを自分で持たない。SNS・SMS でのログインが早く用意できる | Google に縛られる。画面の SDK がトークンを JavaScript から読める所に置くので、#246 の目的（XSS で持ち出させない）と合わない | 中 |
 | D：自分で一から書く | 仕組みを細かく学べる | 書き損じが、そのまま会員のなりすましになる。現場の形と違う | 大 |
@@ -509,7 +509,7 @@ URL は今のまま（`/api/...`）。新しい URL に移すのは、サイク�
 - 変えたあと
   - `200`。応答は `GET /api/me` と同じ形
   - セッションの Cookie を付け、JSON にトークンは入れない
-  - 止めた・強制退会の会員は、今と同じ `403`（照合と止めた会員の確かめは、ログインの状態を作る前）
+  - 止めた・強制退会の会員は、今と同じ `403`（照合とアカウント停止された会員の確かめは、ログインの状態を作る前）
 
 #### `POST /api/auth/logout`
 
@@ -599,7 +599,7 @@ URL は今のまま（`/api/...`）。新しい URL に移すのは、サイク�
 
 - 名前は、`docs/backend.md` の移行の地図の名前
 - 責務
-  - `login(email, password): User`：照合（失敗と成功で時間をそろえる。NFR-AUTH-002）・止めた会員の業務の例外・`last_login_at`
+  - `login(email, password): User`：照合（失敗と成功で時間をそろえる。NFR-AUTH-002）・アカウント停止された会員の業務の例外・`last_login_at`
   - `isUserAccountUsable(int $userId): bool`
 - 置き場の理由：業務の決まりは Service。`Auth::` と `session()` は使わない（2章）
 
@@ -763,7 +763,7 @@ URL は今のまま（`/api/...`）。新しい URL に移すのは、サイク�
   - 名前：`auth.rejected`
   - 中身：`status`（401・419）・`reason`（`no_session_cookie`・`session_not_found`・`user_inactive`・`csrf_mismatch`）・`path`（ルートの形）・`origin`（ホストとポートだけ）・`requestId`・`userId`（分かるときだけ）
   - Cookie の値・セッションの番号は書かない。`requestId` は、`QueryLogger` の外でも使える所（`app/Support/Logging/`）に移す
-  - 増えたかは `grep auth.rejected` の件数で見る。`reason` で、Cookie が届いていない（`localhost` と `127.0.0.1` の混ざり・`stateful` の設定もれ）・24時間で切れた・止めた会員・CSRF を分けられる
+  - 増えたかは `grep auth.rejected` の件数で見る。`reason` で、Cookie が届いていない（`localhost` と `127.0.0.1` の混ざり・`stateful` の設定もれ）・24時間で切れた・アカウント停止された会員・CSRF を分けられる
 - ログの `userId` は、中の番号（`users.id`）のまま。ログは外に出さないため
 - エラーの通知の仕組みは、まだない。運用の土台のエピックで作る。セッションにすると、表 `sessions` で失敗したときに、ログインしていない画面まで止まる（止まる範囲が広がる）
 
@@ -774,7 +774,7 @@ URL は今のまま（`/api/...`）。新しい URL に移すのは、サイク�
 2. `php artisan down --with-secret` でメンテナンスに入れる（全員のセッションが消える）。出た抜け道の URL を、確かめるブラウザで開く
 3. 取り込み、`docker compose restart app`・画面の `npm run dev` を起こし直す
 4. 値を1つずつ確かめる：`php artisan config:show session.lifetime`・`session.driver`・`sanctum.stateful`・`app.frontend_url`（まとめて出すと鍵の値も出るので、キーを1つずつ指定する）
-5. 抜け道のブラウザで確かめる：ログイン・`sessions` に行ができる・`sessionStorage` にトークンがない・書き込みで CSRF・ログアウトで 401・止めた会員で 401・抜け道のないブラウザは 503。health は `Origin` がなくセッションを通らないので、これだけでは確かめにならない
+5. 抜け道のブラウザで確かめる：ログイン・`sessions` に行ができる・`sessionStorage` にトークンがない・書き込みで CSRF・ログアウトで 401・アカウント停止された会員で 401・抜け道のないブラウザは 503。health は `Origin` がなくセッションを通らないので、これだけでは確かめにならない
 6. 戻し方を1回試し、もう一度出す
 7. `php artisan up` でメンテナンスを解く。会員はログインし直す
 
@@ -833,9 +833,9 @@ URL は今のまま（`/api/...`）。新しい URL に移すのは、サイク�
 
 - 指摘
   - ログインの処理の置き場が決まっていない
-  - `Auth::attempt()` を先に呼ぶと、止めた会員の確かめより前にログインの状態ができる
+  - `Auth::attempt()` を先に呼ぶと、アカウント停止された会員の確かめより前にログインの状態ができる
 - 扱い
-  - 直した：`AuthService::login()` が照合と止めた会員の確かめ、Controller がセッション
+  - 直した：`AuthService::login()` が照合とアカウント停止された会員の確かめ、Controller がセッション
   - `architecture-backend.md` の2章に書き足す（4）
 
 #### M3（must）：パスワードの変更で変えた端末も消える

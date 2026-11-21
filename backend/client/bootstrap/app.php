@@ -30,7 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // 業務の例外を、状態コードと文に変えるのはここだけ（architecture-backend.md の7章）。例外を足したら、ここに1行足す。文は lang/ja/errors.php
         $exceptions->render(fn (UserNotFoundException $e) => response()->json(['message' => __('errors.user_not_found')], 404));
-        // ログインしていない・止めた会員など（AuthenticateUser が投げる）。Laravel はもとから、この例外をエラーのログに出さない
+        // ログインしていない・アカウント停止された会員など（AuthenticateUser が投げる）。Laravel はもとから、この例外をエラーのログに出さない
         $exceptions->render(fn (AuthenticationException $e) => response()->json(['message' => __('errors.unauthenticated')], 401));
 
         // 業務の例外は、決まりどおりに断っただけなので、エラーのログに出さない。親の1つだけを書く

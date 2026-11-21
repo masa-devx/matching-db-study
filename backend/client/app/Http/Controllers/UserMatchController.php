@@ -8,14 +8,12 @@ use App\Models\Block;
 use App\Models\Profile;
 use App\Models\User;
 use App\Models\UserMatch;
-use Firebase\JWT\JWT;
-use Firebase\JWT\Key;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
  * 03 マッチした相手の一覧（レガシー版。docs/api/03-matches.md）。
- * だれが見るかは、AuthController::me() の JWT の処理を写して決める（これで4か所目）。
+ * だれが使うかは、ルートの user.authenticate（ログインを確かめる Middleware）が決め、loginUserId() で番号を読む。
  * user_matches にインデックスがないので OR は表を全部読み、相手のプロフィールは1件ごとに読む（1＋N 本）。
  * 同じ組が2行あれば、同じ相手が2回出る。改善する段階で、要件 ID のテストにする。
  * #46 で、相手を public_id（UUID）で返すようにした（1件ごとに1本増え、1＋2N 本）。
@@ -25,29 +23,23 @@ class UserMatchController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        // AuthController::me() から写した（トークンがなければ 401、壊れていれば 500）
-        $token = $request->bearerToken();
-        if (! $token) {
-            return response()->json(['message' => 'ログインしてください'], 401);
-        }
-        $payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));
-        $me = $payload->sub;
+        $loginUserId = $this->loginUserId($request);
 
         // 06：ブロックした・された相手を、向きごとに PHP に持ってくる（検索から写した）
-        $blocked = Block::where('blocker_id', $me)->pluck('blocked_id');     // UNIQUE の先頭なので索引が効く
-        $blockedMe = Block::where('blocked_id', $me)->pluck('blocker_id');   // 索引がなく、表を全部読む
+        $blocked = Block::where('blocker_id', $loginUserId)->pluck('blocked_id');     // UNIQUE の先頭なので索引が効く
+        $blockedMe = Block::where('blocked_id', $loginUserId)->pluck('blocker_id');   // 索引がなく、表を全部読む
         $blockIds = $blocked->merge($blockedMe);
 
         // 自分が組のどちら側にいてもよいので OR で探す
-        $matches = UserMatch::where('user1_id', $me)
-            ->orWhere('user2_id', $me)
+        $matches = UserMatch::where('user1_id', $loginUserId)
+            ->orWhere('user2_id', $loginUserId)
             ->orderBy('created_at', 'desc')
             ->get();
 
         $result = [];
         foreach ($matches as $match) {
             // 組のどちら側に自分がいるかで、相手を選ぶ（自分とのマッチなら、相手も自分になる）
-            $partnerId = $match->user1_id == $me ? $match->user2_id : $match->user1_id;
+            $partnerId = $match->user1_id == $loginUserId ? $match->user2_id : $match->user1_id;
             // 06：ブロックした・された相手は飛ばす（退会した相手は飛ばさない）
             if ($blockIds->contains($partnerId)) {
                 continue;

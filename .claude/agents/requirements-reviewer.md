@@ -28,7 +28,7 @@ Bash は `git diff`・`git log`・`gh issue view`・`gh pr view` などの読み
 ```text
 [must] backend/client/app/Http/Middleware/AuthenticateUser.php:42
 何が起きるか：停止した会員のトークンで GET /api/me を呼ぶと 200 が返る
-現場で起きること：運営が止めた会員が、ログインしたまま使い続ける。ほかの会員から「止めたはずの人から、まだメッセージが来る」と問い合わせが来る
+現場で起きること：運営がアカウント停止した会員が、ログインしたまま使い続ける。ほかの会員から「止めたはずの人から、まだメッセージが来る」と問い合わせが来る
 なぜ：suspended_at を見ていない
 どう直すか：会員を引いたあとに suspended_at を見て 403 を返す
 ```
