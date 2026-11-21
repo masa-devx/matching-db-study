@@ -2138,3 +2138,119 @@ sequenceDiagram
 ##### 次にやること
 
 - テストを書いたら、「直しを外すと落ちるか」を、CI と同じ条件で1回見る
+
+## PR #278（#258：会員の側のメンテナンス）
+
+### ディレクトリの設計
+
+```text
+backend/client/
+├── bootstrap/app.php                      メンテナンス中の 503 を日本語の JSON にする（手順の要点のコメント）
+├── app/Listeners/DeleteAllSessions.php    down を入れたら、表 sessions を全部消す
+├── app/Listeners/LogMaintenanceDisabled.php  up で解いたことをログに残す
+├── lang/ja/errors.php                     「ただいまメンテナンス中です」
+└── tests/Feature/Maintenance/DownTest.php FR-MAINT-001〜004・007 と、分かっている不具合
+frontend/client/src/
+├── shared/api/client.ts                   503 を見分ける（isMaintenance()）。apiFetch だけが MaintenanceError を投げる
+├── app/maintenance.ts                     メンテナンス中かを1か所で持つ（React の外の変数）
+├── app/MaintenanceGate.tsx                メンテナンス中なら、どの画面の代わりにもメンテナンスの画面を出す
+├── app/checkMaintenance.ts                トークンがない人も、起動のときに確かめる
+└── app/configureApi.ts                    503 で enterMaintenance()。メンテナンス中は 401 でも移らない
+```
+
+- 503 の文を決めるのは `bootstrap/app.php` の1か所（決まりの7章：状態コードと文は1か所）
+- 全員をログアウトさせる処理は Listener にした。Laravel の `down` が出す出来事（`MaintenanceModeEnabled`）を受ければ、コマンドを書き足さずに済む
+  - ほかの置き場：`down` を包む自分のコマンドを作る → 標準の `down` を流すと消えないので、選ばなかった
+- 画面は、401 と同じく `client.ts` が見分け、`app/` が1か所で出す。画面ごとに 503 を見分けない
+
+### クラスの責務
+
+- `DeleteAllSessions`：メンテナンスを入れたことを知っていて、セッションの表を全部消す。会員の認証が JWT の間は、ログインは切れない（JWT を消す行がないため）
+- `LogMaintenanceDisabled`：解いたことを知っていて、ログに1行出す。ほかは何もしない
+- `MaintenanceGate`：メンテナンス中かを読み、画面を入れ替える。API は呼ばない
+- `checkMaintenanceWithoutLogin`：トークンがないときだけ、トークンなしの `GET /api/me` を1本呼ぶ。結果は読まない（503 なら `client.ts` が知らせる）
+
+### メソッドの表
+
+#### `DeleteAllSessions::handle(MaintenanceModeEnabled $event): void`
+
+- 入力：出来事（中身は使わない）
+- 副作用：表 `sessions` を全部消す（`delete from "sessions"` が1本）。消した数を `maintenance.deleteAllSessions` で出す
+- 失敗のしかた：DB につながらないと例外。Laravel は「Failed to enter maintenance mode」と出すが、メンテナンスには入っている（手順に書いた）
+- 呼ぶ所：Laravel（`php artisan down` の中）
+
+```php
+$connection = config('session.connection');
+$deleted = DB::connection(is_string($connection) ? $connection : null)
+    ->table(config()->string('session.table'))
+    ->delete();
+```
+
+#### `apiFetch` の 503（`client.ts`）
+
+```ts
+if (isMaintenance(res)) {
+  settings.onMaintenance()       // app/configureApi.ts → enterMaintenance()
+  throw new MaintenanceError()   // 呼んだ画面の続き（一覧に置くなど）を止める
+}
+```
+
+- ログインが要らない API とログアウトは、投げずに応答を返す（待たずに呼ぶ所があり、投げると捕まえられないため）
+
+### 呼び出しの流れ
+
+```mermaid
+sequenceDiagram
+    participant Dev as 開発者
+    participant L as Laravel
+    participant DB as PostgreSQL
+    participant UI as 画面
+    Dev->>L: php artisan down --with-secret
+    L->>L: メンテナンスに入れる（storage/framework/down）
+    L->>DB: delete from "sessions"（DeleteAllSessions）
+    UI->>L: GET /api/me
+    L-->>UI: 503 {"message":"ただいまメンテナンス中です"}（ルートの前で断る。SQL は流れない）
+    UI->>UI: client.ts → enterMaintenance() → MaintenanceGate がメンテナンスの画面
+    Dev->>L: php artisan up
+    L->>L: maintenance.disabled をログに（LogMaintenanceDisabled）
+```
+
+### 名前
+
+- `DeleteAllSessions`：決まりの3章の見本の名前。何をするかを動詞から書き、`Listener` は付けない
+- `MaintenanceGate`：`SessionGate` とそろえた（決まるまで、または条件が合うまで通さない）
+- `checkMaintenanceWithoutLogin`：トークンなしで確かめることを名前に入れた
+
+### レガシー版との違い
+
+- 前：`php artisan down` は英語の `Service Unavailable` と例外のクラスの名前を返し、画面は「読み込めませんでした」や真っ白になった。ログインも切れなかった
+- 後：503 は日本語の文。画面はどこでもメンテナンスの画面。表 `sessions` は消える（ログインが切れるのは #259 のあと）
+
+### 直した課題と、現場での意味
+
+- `05-problems.md` の #258
+- 会員はメンテナンス中だと分かり、サポートは障害と見分けられる。開発者は手順どおりに入れて、抜け道で確かめ、解いた時刻をログで答えられる
+- #259（Sanctum に切り替える）を、全員をログアウトさせてから始められる準備ができた
+
+### 説明の練習
+
+#### 1回目：DB を止めたまま `down` を流した（2026-11-21）
+
+リーダーが聞いた：「#259 を出す夜、`down --with-secret` で『Failed to enter maintenance mode』と出た。PostgreSQL を止めていた。メンテナンスに入っているか。`sessions` は消えたか。次に何をするか」
+
+##### 問い1・2：メンテナンスに入っているか・`sessions` は消えたか
+
+- 人の答え：入っていない・消えている
+- ヒント：Laravel の `down` は、メンテナンスに入れてから、出来事を出してセッションを消す
+- 人の答え：入っている・消えていない
+- 結果：答えられた（ヒント1）
+
+##### 問い3：次に何をするか
+
+- 人の答え：最初は「メンテナンスの画面を出すための調査」。ヒントのあと「`down` をもう一度流す」
+- 結果：一部
+  - 足りなかったこと：DB が戻ってから流す・その前に `storage/framework/down` で本当にメンテナンス中かを確かめる
+
+##### 次にやること
+
+- コマンドが失敗と出たときは、「どこまで進んだか」を順番から考え、実際の状態を確かめてから、やり直す
