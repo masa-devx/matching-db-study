@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import Icon from './components/Icon'
 import { SkeletonRows } from './components/Skeleton'
+import { apiFetch } from './shared/api/client'
+import { readToken } from './shared/session/session'
 
 // レガシー版（07）。プランの一覧（/plans）。男性の会員だけ。今の状態・プラン・購入の記録を、全部この部品に書く
 export default function PlansPage() {
@@ -11,17 +13,16 @@ export default function PlansPage() {
   const navigate = useNavigate()
   // M8（#198）：どの画面から来たか（トーク・検索など）。買ったあと、そこに戻す
   const from = useLocation().state?.from
-  const api = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
-  const headers = { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+  const headers = { Accept: 'application/json' }
 
   useEffect(() => {
     // ログインが要るかの守りを、ここにも書く
-    if (!sessionStorage.getItem('token')) {
+    if (!readToken()) {
       navigate('/login')
       return
     }
     // 男性でなければ API が 403 を返すので、ホームに戻す（画面では性別を確かめない）
-    fetch(`${api}/api/plans`, { headers }).then(async (r) => {
+    apiFetch(`/api/plans`, { headers }).then(async (r) => {
       if (r.status === 403) {
         navigate('/home')
         return
@@ -29,10 +30,10 @@ export default function PlansPage() {
       setPlans(await r.json())
     })
     // 今の状態（is_paid・paid_until）は /api/me の users の行から読む
-    fetch(`${api}/api/me`, { headers })
+    apiFetch(`/api/me`, { headers })
       .then((r) => r.json())
       .then(setMe)
-    fetch(`${api}/api/me/purchases`, { headers })
+    apiFetch(`/api/me/purchases`, { headers })
       .then((r) => r.json())
       .then((rows) => setHistory(Array.isArray(rows) ? rows : []))
   }, [])

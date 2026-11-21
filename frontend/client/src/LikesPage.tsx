@@ -7,6 +7,8 @@ import MatchCelebration from './components/MatchCelebration'
 import { SkeletonRows } from './components/Skeleton'
 import { useToast } from './components/Toast'
 import UpsellDialog from './components/UpsellDialog'
+import { apiFetch } from './shared/api/client'
+import { readToken } from './shared/session/session'
 
 // レガシー版（M3。#184）。いいねのタブ（/likes）＝相手から届いたいいねの一覧。
 // 1人ずつ「マッチする」（いいねを送り返す）か「スキップ」（見送る。相手には伝わらない）を選ぶ。
@@ -23,26 +25,24 @@ export default function LikesPage() {
   const toast = useToast()
   const navigate = useNavigate()
 
-  const api = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
   const headers = {
     'Content-Type': 'application/json',
     Accept: 'application/json',
-    Authorization: `Bearer ${sessionStorage.getItem('token')}`,
   }
 
-  // 届いたいいねと、スキップした相手を読む（2本。失敗・401 は考えない）
+  // 届いたいいねと、スキップした相手を読む（2本。失敗は考えない。401 は client.ts が移す）
   const load = () => {
-    fetch(`${api}/api/me/received-likes`, { headers })
+    apiFetch(`/api/me/received-likes`, { headers })
       .then((r) => r.json())
       .then(setLikes)
-    fetch(`${api}/api/me/skips`, { headers })
+    apiFetch(`/api/me/skips`, { headers })
       .then((r) => r.json())
       .then(setSkips)
   }
 
   useEffect(() => {
     // ログインが要るかの守りを、ここにも書く
-    if (!sessionStorage.getItem('token')) {
+    if (!readToken()) {
       navigate('/login')
       return
     }
@@ -52,7 +52,7 @@ export default function LikesPage() {
   // マッチする：いいねを送り返す（今ある POST /api/me/likes）。相手からのいいねがあるので、マッチになる
   const match = async (like: any) => {
     setBusy(like.user_id)
-    const r = await fetch(`${api}/api/me/likes`, {
+    const r = await apiFetch(`/api/me/likes`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ user_id: like.user_id }),
@@ -68,8 +68,8 @@ export default function LikesPage() {
       return
     }
     // マッチの演出に出す自分の写真を、ここで読む（相手のプロフィールの画面と同じ2本を、ここにも書いた）
-    const me = await fetch(`${api}/api/me`, { headers }).then((x) => x.json())
-    const mine = await fetch(`${api}/api/users/${me.public_id}`, { headers }).then((x) => x.json())
+    const me = await apiFetch(`/api/me`, { headers }).then((x) => x.json())
+    const mine = await apiFetch(`/api/users/${me.public_id}`, { headers }).then((x) => x.json())
     // M3（#187）：応答のトークルームの ID を、演出の「メッセージを送る」に渡す
     const d = await r.json()
     setMatched({ me: mine.profile ?? {}, partner: like, roomId: d.room_id })
@@ -79,7 +79,7 @@ export default function LikesPage() {
   // スキップ：この相手を、届いたいいねと検索に出さないようにする
   const skip = (like: any) => {
     setBusy(like.user_id)
-    fetch(`${api}/api/me/skips`, { method: 'POST', headers, body: JSON.stringify({ user_id: like.user_id }) }).then(
+    apiFetch(`/api/me/skips`, { method: 'POST', headers, body: JSON.stringify({ user_id: like.user_id }) }).then(
       (r) => {
         setBusy('')
         if (!r.ok) {
@@ -95,7 +95,7 @@ export default function LikesPage() {
   // スキップを元に戻す：また、届いたいいねと検索に出るようになる
   const restore = (s: any) => {
     setBusy(s.user_id)
-    fetch(`${api}/api/me/skips/${s.user_id}`, { method: 'DELETE', headers }).then((r) => {
+    apiFetch(`/api/me/skips/${s.user_id}`, { method: 'DELETE', headers }).then((r) => {
       setBusy('')
       if (!r.ok) {
         toast('元に戻せませんでした', 'error')
@@ -163,7 +163,8 @@ export default function LikesPage() {
                     {s.nickname ?? '退会した会員'} <span className="row-age">{age(s.birthday)}</span>
                   </div>
                   <div className="row-sub">
-                    {new Date(s.skipped_at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })} にスキップ
+                    {new Date(s.skipped_at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })}{' '}
+                    にスキップ
                   </div>
                 </div>
                 <button
@@ -182,12 +183,14 @@ export default function LikesPage() {
       )}
 
       <UpsellDialog open={upsell} onClose={() => setUpsell(false)} />
-      {matched && <MatchCelebration
+      {matched && (
+        <MatchCelebration
           me={matched.me}
           partner={matched.partner}
           roomId={matched.roomId}
           onClose={() => setMatched(null)}
-        />}
+        />
+      )}
     </div>
   )
 }

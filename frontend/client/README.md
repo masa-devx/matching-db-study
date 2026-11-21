@@ -11,4 +11,4 @@ npm run build   # 型の検査とビルド
 npm run lint    # oxlint
 ```
 
-API の送り先は `VITE_API_URL`（既定は `http://127.0.0.1:8000`）。変えるときは `.env.example` を写して `.env.local` を作る。
+API の送り先は `VITE_API_URL`（既定は `http://localhost:8000`。読むのは `src/shared/api/client.ts` だけ）。変えるときは `.env.example` をコピーして `.env.local` を作る。

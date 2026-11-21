@@ -41,6 +41,7 @@ API の正本。作る前に設計を書き、確かめてもらってから実�
 - ログインが要らない API の決まりは、要件の FR-AUTH-024。今の一覧は `backend/client/tests/Endpoints.php` の `routesWithoutLogin()`（ここには書かない）
 - 改善版は、ログインが要る API を、ルートの `user.authenticate`（ログインを確かめる Middleware）のグループに入れる。トークンがない・壊れている・期限切れ・退会・アカウント停止・強制退会は `401`「ログインしてください」
 - 新しい API がグループに入っていないと、`tests/Feature/Auth/LoginRequiredRoutesTest.php` が落ちる
+- アカウント停止された会員だけは、`401` `{"message": "このアカウントは停止されています", "code": "account_suspended"}` を返す（画面が理由を出すため。NFR-AUTH-001）。退会・強制退会は、理由を言わずに `401`「ログインしてください」
 - 各ページの「レガシー版で起きること」の「`500`：JWT が壊れている」は、`legacy-repo` の動き。`refactored-repo` では、どれも `401` になった（#257）
 - `refactored-repo` では、ログインが要る API は、各ページの「流れる SQL の目安」より1本多い（Middleware が `users` を主キーで1本読む。NFR-AUTH-001）
 - ログアウト（`POST /api/auth/logout`）も、`refactored-repo` では、ログインが要る（トークンがなければ `401`）

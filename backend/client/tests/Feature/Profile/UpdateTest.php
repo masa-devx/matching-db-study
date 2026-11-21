@@ -78,11 +78,12 @@ describe('ログインしていない人や使えなくなった会員が、プ�
         assertDatabaseHas('profiles', ['user_id' => $target->id, 'nickname' => 'まえ']);
     });
 
-    it('停止させられた会員は、前にもらったトークンでは自分のプロフィールも書き換えられない（401。NFR-AUTH-001）', function (): void {
+    it('アカウント停止された会員は、前にもらったトークンでは自分のプロフィールも書き換えられない（401。NFR-AUTH-001）', function (): void {
         $loginUser = DummyUser::create(suspended: true, nickname: 'まえ');
 
         DummyAuth::actingAs($loginUser)->putJson(Endpoints::profile($loginUser->publicId), ['nickname' => 'かきかえ'])
-            ->assertUnauthorized();
+            ->assertUnauthorized()
+            ->assertJsonPath('code', 'account_suspended');
 
         assertDatabaseHas('profiles', ['user_id' => $loginUser->id, 'nickname' => 'まえ']);
     });

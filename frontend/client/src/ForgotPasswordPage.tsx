@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 import Button from './components/Button'
+import { apiFetchWithoutLogin } from './shared/api/client'
 
 // レガシー版（M2。#196）。パスワードを忘れたとき（/forgot-password）。ログインの画面から来る。
 // メールアドレスを入れると、再設定のメールを送る。送る・結果を見せるを、この部品にまとめて書く
@@ -18,7 +19,7 @@ export default function ForgotPasswordPage() {
       return
     }
     setSending(true)
-    const res = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/password-resets`, {
+    const res = await apiFetchWithoutLogin(`/api/password-resets`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ email }),
@@ -45,7 +46,8 @@ export default function ForgotPasswordPage() {
           <>
             <p className="success">再設定のメールを送りました</p>
             <p className="verify-text">
-              <strong className="verify-email">{email}</strong> に送りました。メールの中のリンクを開いて、新しいパスワードを決めてください。
+              <strong className="verify-email">{email}</strong>{' '}
+              に送りました。メールの中のリンクを開いて、新しいパスワードを決めてください。
             </p>
             <p className="muted">
               <Link to="/login">ログインへ戻る</Link>

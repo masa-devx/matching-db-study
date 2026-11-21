@@ -3,11 +3,13 @@ import { Link, useNavigate, useParams } from 'react-router'
 import Avatar from './components/Avatar'
 import Button from './components/Button'
 import ConfirmDialog from './components/ConfirmDialog'
-import ReportDialog from './components/ReportDialog'
 import Icon from './components/Icon'
+import ReportDialog from './components/ReportDialog'
 import { SkeletonTalk } from './components/Skeleton'
 import { useToast } from './components/Toast'
 import UpsellDialog from './components/UpsellDialog'
+import { apiFetch } from './shared/api/client'
+import { readToken } from './shared/session/session'
 
 // レガシー版（05）。トーク画面（/messages/:roomId）。取る・続き・5秒ごとの読み直し・送る・見せるを、全部この部品に書く。
 // M6（#190）：作り直した。相手のプロフィールへのリンク・日付の区切り・相手の吹き出しに写真・改行できる入力欄・
@@ -37,12 +39,11 @@ export default function TalkPage() {
   const toast = useToast()
   const navigate = useNavigate()
 
-  const api = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
-  const headers = { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+  const headers = { Accept: 'application/json' }
 
   // 1ページ（新しい50件）を取る。1ページ目は今の一覧と入れ替え、2ページ目からは上に足す
   const load = (p: number) => {
-    fetch(`${api}/api/me/talk-rooms/${roomId}/messages?page=${p}`, { headers })
+    apiFetch(`/api/me/talk-rooms/${roomId}/messages?page=${p}`, { headers })
       .then((r) => r.json())
       .then((rows) => {
         // API は新しい順で返すので、逆にして古い順にする
@@ -59,24 +60,24 @@ export default function TalkPage() {
 
   useEffect(() => {
     // ログインが要るかの守りを、ここにも書く
-    if (!sessionStorage.getItem('token')) {
+    if (!readToken()) {
       navigate('/login')
       return
     }
     // 自分のメッセージかを見分けるために、自分の id を読む（ホームでも読んでいるが、もう一度読む）
-    fetch(`${api}/api/me`, { headers })
+    apiFetch(`/api/me`, { headers })
       .then((r) => r.json())
       .then((u) => {
         setMe(u)
         // 07：性別を知るために、自分のプロフィールを読む（ホームと同じ2本を、ここにも写す）
-        return fetch(`${api}/api/users/${u.public_id}`, { headers })
+        return apiFetch(`/api/users/${u.public_id}`, { headers })
       })
       .then((r) => r.json())
       .then((u) => setMyGender(u.profile?.gender ?? ''))
     // 相手の名前と写真を出すために、トークの一覧を全部読んで、このルームを探す。
     // M6：既読（相手が最後に開いた日時）もここに入っているので、5秒ごとに、一覧も全部読み直す
     const loadPartner = () =>
-      fetch(`${api}/api/me/talk-rooms`, { headers })
+      apiFetch(`/api/me/talk-rooms`, { headers })
         .then((r) => r.json())
         .then((rooms) => setPartner(rooms.find((r: any) => r.room_id === roomId)))
     loadPartner()
@@ -148,7 +149,7 @@ export default function TalkPage() {
       if (box) box.scrollTop = box.scrollHeight
     }, 50)
     // 入力を確かめない。空のまま送ると API が 500 を返す（03c から、失敗はトーストで出す）
-    fetch(`${api}/api/me/talk-rooms/${roomId}/messages`, {
+    apiFetch(`/api/me/talk-rooms/${roomId}/messages`, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ body: temp.body }),
@@ -166,7 +167,7 @@ export default function TalkPage() {
 
   // 06：相手をブロックする（相手の public_id は、トークの一覧から探したもの）。ステータスを見ない
   const block = () => {
-    fetch(`${api}/api/me/blocks`, {
+    apiFetch(`/api/me/blocks`, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: partner?.user_id }),

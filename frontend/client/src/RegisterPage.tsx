@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 import Button from './components/Button'
+import { apiFetchWithoutLogin } from './shared/api/client'
 
 // レガシー版（03b）。入力の項目ごとに useState を並べる。
 // M2（#193）：入力の決まりを欄のそばに出し、パスワードの確かめ（2回目）・見せる切り替え・生年月日のプルダウン・
@@ -77,7 +78,7 @@ export default function RegisterPage() {
     }
     setSending(true)
     // 同意したこと・確かめたことは、API に送らない（サーバーには、同意の記録が残らない）
-    const res = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/users`, {
+    const res = await apiFetchWithoutLogin(`/api/users`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ email, password, nickname, gender, birthday }),
@@ -94,7 +95,7 @@ export default function RegisterPage() {
   // M2：確認のメールをもう一度送る（設定の画面に書いた送り方を、ここにもコピーした）
   const resend = () => {
     setResent('')
-    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/email-verifications`, {
+    apiFetchWithoutLogin(`/api/email-verifications`, {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
@@ -110,7 +111,8 @@ export default function RegisterPage() {
         <div className="card">
           <h1 className="title">確認のメールを送りました</h1>
           <p className="verify-text">
-            <strong className="verify-email">{email}</strong> に、確認のメールを送りました。メールの中のリンクを開くと、登録が終わります。
+            <strong className="verify-email">{email}</strong>{' '}
+            に、確認のメールを送りました。メールの中のリンクを開くと、登録が終わります。
           </p>
           <h2 className="section-title">メールが届かないとき</h2>
           <ul className="verify-list">
@@ -203,7 +205,12 @@ export default function RegisterPage() {
                   </option>
                 ))}
               </select>
-              <select className="input" aria-label="生まれた月" value={month} onChange={(e) => setMonth(e.target.value)}>
+              <select
+                className="input"
+                aria-label="生まれた月"
+                value={month}
+                onChange={(e) => setMonth(e.target.value)}
+              >
                 <option value="">月</option>
                 {MONTHS.map((m) => (
                   <option key={m} value={m}>
@@ -220,7 +227,9 @@ export default function RegisterPage() {
                 ))}
               </select>
             </div>
-            <span className="hint">18歳以上の方だけが登録できます。登録のあとは、変えられません。ほかの会員には、年齢だけが見えます</span>
+            <span className="hint">
+              18歳以上の方だけが登録できます。登録のあとは、変えられません。ほかの会員には、年齢だけが見えます
+            </span>
           </fieldset>
           <label className="check">
             <input type="checkbox" checked={adult} onChange={(e) => setAdult(e.target.checked)} />

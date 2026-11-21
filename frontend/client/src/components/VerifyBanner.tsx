@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router'
+import { apiFetch, apiFetchWithoutLogin } from '../shared/api/client'
 import { useToast } from './Toast'
 
 // M2（#193）：メールアドレスを確認していない会員に、どの画面でも、確認をうながす帯を出す（FR-UI-014）。
@@ -12,8 +13,8 @@ export default function VerifyBanner() {
   const toast = useToast()
 
   useEffect(() => {
-    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me`, {
-      headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+    apiFetch(`/api/me`, {
+      headers: { Accept: 'application/json' },
     })
       .then((r) => r.json())
       .then(setMe)
@@ -25,7 +26,7 @@ export default function VerifyBanner() {
   // 確認のメールをもう一度送る（設定・登録の画面に書いた送り方を、ここにもコピーした）
   const resend = () => {
     setSending(true)
-    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/email-verifications`, {
+    apiFetchWithoutLogin(`/api/email-verifications`, {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: me.email }),

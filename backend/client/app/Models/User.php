@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\AccountStatus;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -69,13 +70,25 @@ class User extends Authenticatable
     }
 
     /**
-     * この会員のアカウントが、使える状態か（退会・利用の停止・強制退会のどれでもない）。行の値だけで決まるので、ここに1つだけ置く。
+     * この会員のアカウントの状態。行の値だけで決まるので、ここに1つだけ置く。
+     * いくつも入っているときは、戻せないものを先にする（強制退会 → 退会 → アカウント停止）。
      * ログインを確かめる Middleware（AuthenticateUser）から、AuthService を通して使う。
      * 古いログインの API（AuthController::login）にも停止・強制退会の判定があり、#259 でここに移す
      */
+    public function accountStatus(): AccountStatus
+    {
+        return match (true) {
+            $this->banned_at !== null => AccountStatus::Banned,
+            $this->deleted_at !== null => AccountStatus::Withdrawn,
+            $this->suspended_at !== null => AccountStatus::Suspended,
+            default => AccountStatus::Usable,
+        };
+    }
+
+    /** この会員のアカウントが、使える状態か（退会・アカウント停止・強制退会のどれでもない） */
     public function isAccountUsable(): bool
     {
-        return $this->deleted_at === null && $this->suspended_at === null && $this->banned_at === null;
+        return $this->accountStatus() === AccountStatus::Usable;
     }
 
     /**

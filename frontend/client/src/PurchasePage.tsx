@@ -4,6 +4,8 @@ import Button from './components/Button'
 import Icon from './components/Icon'
 import { SkeletonProfile } from './components/Skeleton'
 import { useToast } from './components/Toast'
+import { apiFetch } from './shared/api/client'
+import { readToken } from './shared/session/session'
 
 // レガシー版（07）。購入の画面（/plans/:planId）。内容を確かめて「購入する」を押す。決済はしない（押したらすぐ有料）
 export default function PurchasePage() {
@@ -15,17 +17,16 @@ export default function PurchasePage() {
   const navigate = useNavigate()
   // M8（#198）：どの画面から来たか。買ったあと、そこに戻す（なければ、プランの一覧）
   const from = useLocation().state?.from
-  const api = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
-  const headers = { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+  const headers = { Accept: 'application/json' }
 
   useEffect(() => {
     // ログインが要るかの守りを、ここにも書く
-    if (!sessionStorage.getItem('token')) {
+    if (!readToken()) {
       navigate('/login')
       return
     }
     // 1つのプランを読む API はないので、一覧を全部読んで探す。男性でなければ 403 でホームに戻す
-    fetch(`${api}/api/plans`, { headers }).then(async (r) => {
+    apiFetch(`/api/plans`, { headers }).then(async (r) => {
       if (r.status === 403) {
         navigate('/home')
         return
@@ -33,14 +34,14 @@ export default function PurchasePage() {
       const rows = await r.json()
       setPlan(rows.find((p: any) => String(p.id) === planId))
     })
-    fetch(`${api}/api/me`, { headers })
+    apiFetch(`/api/me`, { headers })
       .then((r) => r.json())
       .then(setMe)
   }, [planId])
 
   const buy = () => {
     setSending(true)
-    fetch(`${api}/api/me/purchases`, {
+    apiFetch(`/api/me/purchases`, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ plan_id: plan.id }),

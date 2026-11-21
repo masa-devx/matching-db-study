@@ -1645,3 +1645,164 @@ flowchart LR
 
 - 付け忘れを見つける仕組みが2つ重なっていること（`loginUserId()` の 500 と、ルートを全部読むテスト）を、どの API にどちらが効くかで分けて言う
 - 401 と 500 の違いを「だれへの知らせか」で言う
+
+## PR #270（#257 の 2-1：画面の API の呼び出しを client.ts の1か所に通す）
+
+### ディレクトリの設計
+
+```text
+frontend/client/src/
+├── app/configureApi.ts          起動のときに、トークンの読み方と 401 の動きを client.ts に渡す
+├── shared/api/client.ts         API を呼ぶ3つの関数と、画像の URL。送り先とトークンを扱うのはここだけ
+└── shared/session/session.ts    トークンを読む・置く・消す。検索の条件のキー
+backend/client/app/
+├── Enums/AccountStatus.php                       会員のアカウントの状態（4つ）
+└── Exceptions/Auth/AccountSuspendedException.php アカウント停止された会員が API を呼んだ
+```
+
+- 置き場は `architecture-frontend.md` の2章（`shared/api`・`shared/session`・`app/`）のとおり
+- `client.ts` が `session.ts` を import しないのは、3章の依存の向き（`shared/session` → `shared/api`）を守るため。両方をつなぐのは `app/` の受け持ち
+- ほかに置ける場所：`client.ts` が `sessionStorage` を直に読む形もある。置かなかったのは、トークンを読む所が2か所になり、Cookie に切り替える（#259）ときに直す所が増えるため
+
+### クラスの責務
+
+#### `shared/api/client.ts`
+
+- 知っていること：送り先・トークンの付け方・401 のとき `app/` に知らせること
+- すること：API を呼ぶ。401 なら `app/` に `code` を渡して `UnauthorizedError` を投げる
+- しないこと：画面を移す・トークンを消す（`app/` と `shared/session` の受け持ち）
+
+#### `app/configureApi.ts`
+
+- 知っていること：401 のときに、何を消して、どこへ移すか
+- すること：起動のときに1回だけ、`client.ts` に設定を渡す。401 が何本届いても、移るのは1回
+- しないこと：API を呼ぶ
+
+#### `AccountStatus`（バックエンド）
+
+- 知っていること：アカウントの状態は4つ（使える・退会・アカウント停止・強制退会）
+- すること：`User::accountStatus()` が、3つの日時の列から1つに決める（強制退会 → 退会 → アカウント停止の順に見る）
+- しないこと：列を1つにまとめる（ロードマップの「会員の状態を1つにする」で決める）
+
+### メソッドの表
+
+#### `apiFetch(path, init): Promise<Response>`
+
+- 入力：`/api/` で始まるパスと、`fetch` と同じ設定
+- 戻り値：応答（401 のほかは、`res.ok` でなくてもそのまま返す）
+- 副作用：401 なら、`configureApiClient()` に渡された `onUnauthorized(code)` を呼ぶ
+- 失敗のしかた：401 なら `UnauthorizedError` を投げる
+- 呼ぶ所：ログインが要る API を呼ぶ画面の57か所
+
+```ts
+const res = await fetch(`${API_URL}${path}`, { ...init, headers })
+if (res.status === 401) {
+  settings.onUnauthorized(await codeOf(res))   // 応答の code（account_suspended など）を app/ に渡す
+  throw new UnauthorizedError()                // 呼んだ画面の続き（応答を一覧として置くなど）を止める
+}
+return res
+```
+
+#### `apiFetchWithoutLogin`・`apiFetchForLogout`
+
+- `apiFetchWithoutLogin`：トークンを付けない。401 でも移らない（ログインの失敗の 401 を、画面の誤りの文に出すため）。ログイン・登録・確認・再設定の9か所
+- `apiFetchForLogout`：トークンを付けるが、401 でも移らない（もうログインしていないのと同じなので、自分でしたログアウトとして扱う）
+- 3つに分けたのは、真偽の引数で動きを変えない決まり（`architecture-backend.md` の3章。画面も同じ考え方）のため
+
+#### `AuthenticateUser::handle()`（バックエンド。変えた所）
+
+```php
+$status = $userId === null ? null : $this->auth->userAccountStatus($userId);
+if ($status === AccountStatus::Suspended) {
+    throw new AccountSuspendedException;   // 401「このアカウントは停止されています」と code
+}
+if ($userId === null || $status !== AccountStatus::Usable) {
+    throw new AuthenticationException;     // 401「ログインしてください」
+}
+```
+
+### 呼び出しの流れ
+
+```mermaid
+sequenceDiagram
+    participant P as 画面（検索など）
+    participant C as client.ts
+    participant A as API
+    participant G as app/configureApi
+    participant S as shared/session
+    P->>C: apiFetch('/api/users?…')
+    C->>C: トークンを付ける（readToken は app/ が渡したもの）
+    C->>A: GET /api/users
+    alt アカウント停止
+        A-->>C: 401 code=account_suspended
+        C->>G: onUnauthorized('account_suspended')
+        G->>S: clearSession()
+        G->>G: /login?reason=account-suspended へ読み込み直す
+        C-->>P: UnauthorizedError（続きを止める）
+    else 使える
+        A-->>C: 200
+        C-->>P: 応答
+    end
+```
+
+### 名前
+
+- `apiFetchWithoutLogin`：ログインが要らない API だと分かる名前にした。候補の `publicFetch` は、「公開」が画面の公開と紛れるので選ばなかった
+- `apiFetchForLogout`：ログアウトのためだけの関数だと分かる名前にした。候補の `apiFetchIgnoringUnauthorized` は、否定の言い方で読みにくいので選ばなかった
+- `AccountStatus`：何の値かを名詞で書いた（決まりに足した。`Enum` は付けない）
+
+### 依存の向き
+
+```mermaid
+flowchart LR
+  main["main.tsx"] --> G["app/configureApi"]
+  G --> C["shared/api/client"]
+  G --> S["shared/session/session"]
+  P["画面（レガシー版の置き場）"] --> C
+  P --> S
+```
+
+- `shared/api` から `shared/session` への矢印はない
+
+### レガシー版との違い
+
+- レガシー版：25ファイルに64か所の `fetch`。それぞれが送り先とトークンを書き、401 を見ずに応答を置いた
+- 改善版：`client.ts` の3つの関数。401 の扱いは1か所
+
+### 直した課題と、現場での意味
+
+- 課題は `05-problems.md` の #257
+- アカウント停止された会員は、どの画面でも、ログインの画面へ移り、停止されていると分かる（前は、画面が真っ白になるか、使えてしまった）
+- 壊れたトークンでも、真っ白にならず、「ログインが切れました」と出る
+- 送り先とトークンを変えるときは、`client.ts` の1か所を直せばよい（Cookie への切り替え #259 の準備）
+
+### 次の改善の候補
+
+- 失敗の扱いを `ApiError` にする（画面を機能のフォルダに移すとき）
+- 401 のたびに、受け止めない例外がコンソールに出る（`RequireAuth` で画面の中で移すようにしたら、なくせる）
+
+### 説明の練習
+
+#### 1回目：検索の画面を開いたまま、アカウント停止された（2026-11-21）
+
+リーダーが聞いた：「search00004 が検索の画面を開いたまま、運営がアカウント停止にした。そのあと検索を押すと、画面とサーバーで、どんな順番で何が起きるか。最後に何が見えるか」
+
+##### 問い1：起きる順番と、最後に見えるもの
+
+- 人の答え：`AuthenticateUser` で停止を見て、`apiFetch` が 401、ログインの画面に移る
+- 結果：一部合っている
+  - 合っている：順番の芯（サーバーの `AuthenticateUser` が断り、画面がログインの画面に移る）
+  - ずれていた：401 を作るのはサーバー（`AccountSuspendedException` を `bootstrap/app.php` が 401 と `code` にする）。`apiFetch` は受け取る側
+  - 足りない：`configureApi` の役（トークンと検索の条件を消し、`/login?reason=account-suspended` へ読み込み直す）と、最後に見える文（「ログインはできません。このアカウントは停止されています」）
+
+##### 問い2：なぜ `client.ts` が自分で消して移る形にしなかったか
+
+- 人の答え：`shared/api` は `shared/session` を使えないから
+- 結果：合っている
+  - もう一段：`shared/session` は、これから `GET /api/me` を読むために `shared/api` を使う。逆向きにも使うと、互いを import する輪になる
+  - 画面を移すのは `app/` の受け持ち。2-2 で `RequireAuth` を作るときも、`configureApi` を変えるだけで、`client.ts` は変わらない
+
+##### 次にやること
+
+- 「どこで（ブラウザかサーバーか）」を付けて、順番を言う
+- 新しく足したもの（`configureApi`）が、流れのどこで何をするかを言う

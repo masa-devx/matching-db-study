@@ -4,6 +4,8 @@ import Button from './components/Button'
 import ConfirmDialog from './components/ConfirmDialog'
 import { useToast } from './components/Toast'
 import UpsellDialog from './components/UpsellDialog'
+import { apiFetch } from './shared/api/client'
+import { readToken, SEARCH_CONDITIONS_KEY } from './shared/session/session'
 
 // レガシー版（#147）。検索の条件の画面（/search/conditions）。
 // 検索の画面（SearchPage）の「絞り込み」から来る。条件を選ぶ欄と、保存した検索条件（04b）は、この画面にだけ出す。
@@ -216,10 +218,10 @@ export default function SearchConditionsPage() {
   const toast = useToast()
   const navigate = useNavigate()
 
-  // 04b：保存した検索条件の一覧を読む（失敗・401 は考えない）
+  // 04b：保存した検索条件の一覧を読む（失敗は考えない。401 は client.ts が移す）
   const loadSaved = () => {
-    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me/search-conditions`, {
-      headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+    apiFetch(`/api/me/search-conditions`, {
+      headers: { Accept: 'application/json' },
     })
       .then((r) => r.json())
       .then((rows) => {
@@ -230,18 +232,16 @@ export default function SearchConditionsPage() {
 
   useEffect(() => {
     // ログインが要るかの守りを、ここにも書く
-    if (!sessionStorage.getItem('token')) {
+    if (!readToken()) {
       navigate('/login')
       return
     }
     loadSaved()
     // 07：男性の無料の会員かを知るために、自分と自分のプロフィールを読む（ホームと同じ2本を、ここにも書いた）
-    const headers = { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` }
-    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me`, { headers })
+    const headers = { Accept: 'application/json' }
+    apiFetch(`/api/me`, { headers })
       .then((r) => r.json())
-      .then((u) =>
-        fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/users/${u.public_id}`, { headers }),
-      )
+      .then((u) => apiFetch(`/api/users/${u.public_id}`, { headers }))
       .then((r) => r.json())
       .then((u) => setLocked(u.profile?.gender === 'male' && !u.is_paid))
   }, [])
@@ -255,7 +255,7 @@ export default function SearchConditionsPage() {
   // 条件を URL のクエリにして、検索の画面に戻る。この画面の履歴は入れ替えるので、
   // 検索の画面でブラウザの「戻る」を押すと、前の条件の結果に戻る（FR-UI-043）
   const search = (c: any) => {
-    sessionStorage.setItem('searchConditions', JSON.stringify(c))
+    sessionStorage.setItem(SEARCH_CONDITIONS_KEY, JSON.stringify(c))
     navigate(`/search?${toQuery(c)}`, { replace: true })
   }
 
@@ -308,18 +308,14 @@ export default function SearchConditionsPage() {
   }
   const overwrite = () => {
     setSending(true)
-    fetch(
-      `${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me/search-conditions/${editingSaved.public_id}`,
-      {
-        method: 'PUT',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({ conditions: form }),
+    apiFetch(`/api/me/search-conditions/${editingSaved.public_id}`, {
+      method: 'PUT',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
       },
-    ).then((r) => {
+      body: JSON.stringify({ conditions: form }),
+    }).then((r) => {
       setSending(false)
       if (!r.ok) {
         toast('直せませんでした', 'error')
@@ -362,12 +358,11 @@ export default function SearchConditionsPage() {
     }
     // 欄の値を、そのまま送る（数も文字のまま）
     setSending(true)
-    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me/search-conditions`, {
+    apiFetch(`/api/me/search-conditions`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${sessionStorage.getItem('token')}`,
       },
       body: JSON.stringify({ name, conditions: form }),
     }).then((r) => {
@@ -396,12 +391,11 @@ export default function SearchConditionsPage() {
       return
     }
     setSending(true)
-    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me/search-conditions/${renaming.public_id}`, {
+    apiFetch(`/api/me/search-conditions/${renaming.public_id}`, {
       method: 'PUT',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${sessionStorage.getItem('token')}`,
       },
       body: JSON.stringify({ name }),
     }).then((r) => {
@@ -418,9 +412,9 @@ export default function SearchConditionsPage() {
 
   const remove = () => {
     setSending(true)
-    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me/search-conditions/${deleting.public_id}`, {
+    apiFetch(`/api/me/search-conditions/${deleting.public_id}`, {
       method: 'DELETE',
-      headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+      headers: { Accept: 'application/json' },
     }).then((r) => {
       setSending(false)
       setDeleting(null)

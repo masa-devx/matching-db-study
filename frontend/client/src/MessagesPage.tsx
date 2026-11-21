@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router'
 import Avatar from './components/Avatar'
 import EmptyState from './components/EmptyState'
 import { SkeletonRows } from './components/Skeleton'
+import { apiFetch } from './shared/api/client'
+import { readToken } from './shared/session/session'
 
 // レガシー版（05）。メッセージのタブ（/messages）＝トークの一覧。相手ごとに最新の1件と未読の数を出し、押すとトーク画面に移る。
 // M3（#187）：上に「新しいマッチ」を分けた。
@@ -16,8 +18,8 @@ export default function MessagesPage() {
 
   // 読み込み中・失敗は考えない。API が 500 を返すと、画面は空のまま（rooms が配列でないので filter で落ちる）
   const load = () => {
-    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me/talk-rooms`, {
-      headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+    apiFetch(`/api/me/talk-rooms`, {
+      headers: { Accept: 'application/json' },
     })
       .then((r) => r.json())
       .then(setRooms)
@@ -25,7 +27,7 @@ export default function MessagesPage() {
 
   useEffect(() => {
     // ログインが要るかの守りを、ここにも書く
-    if (!sessionStorage.getItem('token')) {
+    if (!readToken()) {
       navigate('/login')
       return
     }
@@ -122,9 +124,7 @@ export default function MessagesPage() {
                       <span className="chat-name">
                         {r.nickname ?? '退会した会員'} {/* 年齢の計算を、また写した（誕生日の前だと1歳多い） */}
                         {r.birthday && (
-                          <span className="row-age">
-                            {new Date().getFullYear() - Number(r.birthday.slice(0, 4))}歳
-                          </span>
+                          <span className="row-age">{new Date().getFullYear() - Number(r.birthday.slice(0, 4))}歳</span>
                         )}
                       </span>
                       <span className="chat-time">{when(r.last_message?.created_at ?? r.created_at)}</span>

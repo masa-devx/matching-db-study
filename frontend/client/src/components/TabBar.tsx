@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router'
+import { apiFetch } from '../shared/api/client'
 import Icon from './Icon'
 
 // 03c：下のタブ（SVG のアイコン・すりガラス・選んだタブの点）。メッセージのタブに未読の合計（FR-UI-032）。
@@ -23,9 +24,8 @@ export default function TabBar() {
 
   useEffect(() => {
     const count = () => {
-      const api = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
-      fetch(`${api}/api/me/talk-rooms`, {
-        headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+      apiFetch(`/api/me/talk-rooms`, {
+        headers: { Accept: 'application/json' },
       })
         .then((r) => r.json())
         .then((rooms) =>
@@ -40,8 +40,8 @@ export default function TabBar() {
           ),
         )
       // M3：届いたいいねの一覧を全部読んで、件数だけを使う（数だけを返す API はない。画面が変わるたびに読む）
-      fetch(`${api}/api/me/received-likes`, {
-        headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+      apiFetch(`/api/me/received-likes`, {
+        headers: { Accept: 'application/json' },
       })
         .then((r) => r.json())
         .then((likes) => setReceived(Array.isArray(likes) ? likes.length : 0))

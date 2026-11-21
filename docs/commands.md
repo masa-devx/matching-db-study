@@ -76,7 +76,7 @@ AI が守る決まり（推測で流さない・許可の一覧に足す基準�
 
 - 実行場所：`frontend/client/`
 - コマンド：初めてのときは `npm install` → `npm run dev` → `http://localhost:5173/`
-- API の送り先は `VITE_API_URL`（既定は `http://127.0.0.1:8000`）
+- API の送り先は `VITE_API_URL`（既定は `http://localhost:8000`。前の `127.0.0.1` は、セッションの Cookie が届かなくなるので使わない）
   - 変えるときは `.env.example` をコピーして `.env.local` を作る
 - 前提：`mise install` 済み・API が起動している
 - 使わないもの：`http://127.0.0.1:5173` で開く（`localhost` とは別のオリジンになり、改善版で Cookie が届かなくなるため）
