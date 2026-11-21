@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Models\User;
-use Firebase\JWT\JWT;
-use Firebase\JWT\Key;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -14,7 +12,7 @@ use Illuminate\Support\Facades\Hash;
 /**
  * M1 設定画面：パスワードを変える（レガシー版。docs/api/01b-auth.md の「#181」）。
  * 設計を考えずに「とりあえず使える」形で作る。
- * だれが使うかは、AuthController::me() の JWT の処理をコピーして決める（これで 21か所目）。
+ * だれが使うかは、ルートの user.authenticate（ログインを確かめる Middleware）が決め、loginUserId() で番号を読む。
  * - 新しいパスワードを確かめない（1文字でも通る。登録のときの決まり（8〜64文字）と違ってしまう）
  * - 変えても、前に配ったトークン（JWT）は止めない（30日のあいだ、前のトークンで使い続けられる）
  * - 何回でも試せる（今のパスワードを当てる試しを、止める仕組みがない）
@@ -24,14 +22,9 @@ class PasswordController extends Controller
 {
     public function update(Request $request): JsonResponse
     {
-        // AuthController::me() からコピーした（トークンがなければ 401、壊れていれば 500）
-        $token = $request->bearerToken();
-        if (! $token) {
-            return response()->json(['message' => 'ログインしてください'], 401);
-        }
-        $payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));
+        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
 
-        $user = User::find($payload->sub);
+        $user = User::find($loginUserId);
         // 退会と同じ形（UserController::destroy）で、今のパスワードを確かめる
         if (! Hash::check((string) $request->input('current_password'), $user->password)) {
             return response()->json(['message' => '今のパスワードがちがいます'], 422);

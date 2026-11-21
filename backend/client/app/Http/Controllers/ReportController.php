@@ -8,15 +8,13 @@ use App\Models\Block;
 use App\Models\Report;
 use App\Models\ReportCase;
 use App\Models\User;
-use Firebase\JWT\JWT;
-use Firebase\JWT\Key;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
  * M7 通報する（レガシー版。#202。docs/api/m7-reports.md）。
  * 設計を考えずに「とりあえず使える」形で作る。
- * - だれが使うかは、BlockController::store() の JWT の処理をコピーして決める
+ * - だれが使うかは、ルートの user.authenticate（ログインを確かめる Middleware）が決め、loginUserId() で番号を読む
  * - 相手がいるかだけを見る。自分でも通報できる
  * - 指したメッセージ（message_id）を確かめない。自分のいないルームのメッセージも、ない番号も入る
  * - 理由（reason）と自由な文（detail）を確かめない。理由がなければ NOT NULL の違反で 500
@@ -28,12 +26,7 @@ class ReportController extends Controller
 {
     public function store(Request $request): JsonResponse
     {
-        // BlockController::store() からコピーした（トークンがなければ 401、壊れていれば 500）
-        $token = $request->bearerToken();
-        if (! $token) {
-            return response()->json(['message' => 'ログインしてください'], 401);
-        }
-        $payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));
+        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
 
         // 相手は public_id（UUID）で来る。自分かどうか・退会したかは見ない
         $reportedId = User::where('public_id', $request->input('user_id'))->value('id');
@@ -50,7 +43,7 @@ class ReportController extends Controller
         // 送られた値を、そのまま入れる（message_id がだれのメッセージかを見ない。理由が6つのどれかも見ない）
         Report::create([
             'report_case_id' => $case->id,
-            'reporter_id' => $payload->sub,
+            'reporter_id' => $loginUserId,
             'reported_id' => $reportedId,
             'message_id' => $request->input('message_id'),
             'reason' => $request->input('reason'),
@@ -59,7 +52,7 @@ class ReportController extends Controller
 
         // 「ブロックもする」が付いていたら、ブロックする。もうブロックしていると UNIQUE の違反で 500（通報は入ったまま）
         if ($request->boolean('block')) {
-            Block::create(['blocker_id' => $payload->sub, 'blocked_id' => $reportedId]);
+            Block::create(['blocker_id' => $loginUserId, 'blocked_id' => $reportedId]);
         }
 
         return response()->json(['message' => '通報しました'], 201);

@@ -10,14 +10,12 @@ use App\Models\Profile;
 use App\Models\TalkRoom;
 use App\Models\TalkRoomMember;
 use App\Models\User;
-use Firebase\JWT\JWT;
-use Firebase\JWT\Key;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
  * 05 トークの一覧（レガシー版。docs/api/05-messages.md）。
- * だれが見るかは、AuthController::me() の JWT の処理を写して決める（これで6か所目）。
+ * だれが使うかは、ルートの user.authenticate（ログインを確かめる Middleware）が決め、loginUserId() で番号を読む。
  * 自分の参加者の行を全部読み、ルームごとに6本ずつ読む（1＋6N 本）。messages にインデックスがないので、
  * 最新の1件と未読の数は、ルームごとに表を全部読む。並べるのは PHP。改善する段階で、要件 ID のテストにする。
  * 06 で、ブロックした・された相手を除いた（向きごとに2本足す。退会した相手は除かない。docs/api/06-blocks-withdrawal.md）。
@@ -26,13 +24,8 @@ class TalkRoomController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        // AuthController::me() から写した（トークンがなければ 401、壊れていれば 500）
-        $token = $request->bearerToken();
-        if (! $token) {
-            return response()->json(['message' => 'ログインしてください'], 401);
-        }
-        $payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));
-        $me = $payload->sub;
+        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
+        $me = $loginUserId;
 
         // 06：ブロックした・された相手を、向きごとに PHP に持ってくる（検索から写した）
         $blocked = Block::where('blocker_id', $me)->pluck('blocked_id');     // UNIQUE の先頭なので索引が効く

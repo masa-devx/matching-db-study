@@ -9,14 +9,12 @@ use App\Models\Profile;
 use App\Models\TalkRoom;
 use App\Models\TalkRoomMember;
 use App\Models\User;
-use Firebase\JWT\JWT;
-use Firebase\JWT\Key;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
  * 05 トークの履歴・送る（レガシー版。docs/api/05-messages.md）。
- * だれが使うかは、AuthController::me() の JWT の処理を、メソッドごとに写して決める（これで7・8か所目）。
+ * だれが使うかは、ルートの user.authenticate（ログインを確かめる Middleware）が決め、loginUserId() で番号を読む。
  * ルームは public_id（UUID）だけで探し、参加者かを確かめない（UUID を知っていれば、だれでも読めて送れる）。
  * 入力も確かめず、エラーの扱いは考えない。改善する段階で、要件 ID のテストにする。
  * 07 で、送るときに男性の無料の会員を断るようにした（is_paid だけを見る。2本増える。docs/api/07-paid-members.md）。
@@ -25,12 +23,7 @@ class MessageController extends Controller
 {
     public function index(Request $request, string $publicId): JsonResponse
     {
-        // AuthController::me() から写した（トークンがなければ 401、壊れていれば 500）
-        $token = $request->bearerToken();
-        if (! $token) {
-            return response()->json(['message' => 'ログインしてください'], 401);
-        }
-        $payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));
+        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
 
         // 参加者かを確かめない。ないルームなら null で、次の行が 500
         $room = TalkRoom::where('public_id', $publicId)->first();
@@ -45,7 +38,7 @@ class MessageController extends Controller
 
         // 開いたら読んだことにする（GET の中で書き込む。画面は5秒ごとに呼ぶので、そのたびに書く）
         TalkRoomMember::where('talk_room_id', $room->id)
-            ->where('user_id', $payload->sub)
+            ->where('user_id', $loginUserId)
             ->update(['last_read_at' => now()]);
 
         // messages の行をそのまま返す（中の連番の id・sender_id が出る）
@@ -54,16 +47,11 @@ class MessageController extends Controller
 
     public function store(Request $request, string $publicId): JsonResponse
     {
-        // index() と同じ処理を、もう一度写した
-        $token = $request->bearerToken();
-        if (! $token) {
-            return response()->json(['message' => 'ログインしてください'], 401);
-        }
-        $payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));
+        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
 
         // 07：男性の無料の会員は使えない（is_paid だけを見る。paid_until は見ない。送る・いいね・検索に写した）
-        $myProfile = Profile::where('user_id', $payload->sub)->first();
-        $myUser = User::find($payload->sub);
+        $myProfile = Profile::where('user_id', $loginUserId)->first();
+        $myUser = User::find($loginUserId);
         if ($myProfile?->gender === 'male' && ! $myUser->is_paid) {
             return response()->json(['message' => '有料会員になると使えます'], 403);
         }
@@ -74,7 +62,7 @@ class MessageController extends Controller
         // 本文を確かめない。空・空白だけは Laravel が null に変えるので、NOT NULL の違反で 500。1万文字でも入る
         $message = Message::create([
             'talk_room_id' => $room->id,
-            'sender_id' => $payload->sub,
+            'sender_id' => $loginUserId,
             'body' => $request->input('body'),
         ]);
 

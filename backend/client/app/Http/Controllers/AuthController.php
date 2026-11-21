@@ -6,7 +6,6 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use Firebase\JWT\JWT;
-use Firebase\JWT\Key;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -32,12 +31,12 @@ class AuthController extends Controller
             return response()->json(['message' => 'パスワードが違います'], 401);
         }
 
-        // 12：管理画面で利用を止めた会員は、ログインさせない（ここにだけ書いた。止める前の JWT は、ほかの API でそのまま使える）
+        // 12：管理画面で利用を止めた会員は、ログインさせない（止める前の JWT は、ほかの API でも user.authenticate が断る）
         if ($user->suspended_at !== null) {
             return response()->json(['message' => '利用を停止しています'], 403);
         }
 
-        // A7（#213）：強制退会にした会員は、ログインさせない（ここにだけ書いた。前に配った JWT は、ほかの API でそのまま使える）
+        // A7（#213）：強制退会にした会員は、ログインさせない（前に配った JWT は、ほかの API でも user.authenticate が断る）
         if ($user->banned_at !== null) {
             return response()->json(['message' => '強制退会になっています'], 403);
         }
@@ -60,16 +59,10 @@ class AuthController extends Controller
 
     public function me(Request $request): JsonResponse
     {
-        $token = $request->bearerToken();
-        if (! $token) {
-            return response()->json(['message' => 'ログインしてください'], 401);
-        }
-
-        // 署名が違う・期限が切れた JWT の例外をつかまえないので、401 ではなく 500 になる
-        $payload = JWT::decode($token, new Key(config('app.key'), 'HS256'));
+        $loginUserId = $this->loginUserId($request);   // user.authenticate が載せた、ログインしている会員の番号
 
         // 呼ぶたびに DB を読む。users の行をそのまま返す（verification_token は User の #[Hidden] で隠す）
-        return response()->json(User::find($payload->sub));
+        return response()->json(User::find($loginUserId));
     }
 
     public function logout(): JsonResponse
