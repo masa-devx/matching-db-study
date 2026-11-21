@@ -1806,3 +1806,107 @@ flowchart LR
 
 - 「どこで（ブラウザかサーバーか）」を付けて、順番を言う
 - 新しく足したもの（`configureApi`）が、流れのどこで何をするかを言う
+
+## PR #271（#257 の 2-2：ログインしているかを起動のときの GET /api/me で決める）
+
+### ディレクトリの設計
+
+```text
+frontend/client/src/
+├── shared/session/SessionProvider.tsx   起動のときに GET /api/me を読み、ログインの状態を持つ（signIn・signOut・retry）
+├── app/SessionGate.tsx                  決まるまで「読み込み中…」。読み込めなかったら、もう一度
+└── app/RequireAuth.tsx                  ログインが要る15の画面の守り
+```
+
+- 状態を持つのは `shared/session`（決まりの1章・5章の「ログインした自分」）。見せ方（読み込み中・守り）は `app/`
+- 設計（`03-how.md`）は `features/auth/session` と書いていたが、決まりの1章が `/api/me` を読むのは `shared/session` と決めているので、そちらに置いた
+
+### クラスの責務
+
+- `SessionProvider`：ログインしているかを知っていて、`GET /api/me` を読む。画面を移さない（移すのは `RequireAuth` と `configureApi`）
+- `SessionGate`：決まるまでと、読み込めなかったときの見せ方を知っている。API を呼ばない（もう一度は `retry` を呼ぶ）
+- `RequireAuth`：ログインしていなければ、ログインの画面へ移す。開こうとした画面は、まだ覚えない
+
+### 状態の移り方
+
+```mermaid
+stateDiagram-v2
+    [*] --> signedOut: トークンがない
+    [*] --> loading: トークンがある
+    loading --> signedIn: GET /api/me が 200
+    loading --> error: 500・つながらない・10秒
+    loading --> [*]: 401（configureApi がトークンを消して読み込み直す）
+    error --> loading: もう一度
+    signedOut --> loading: signIn（ログインの画面）
+    signedIn --> signedOut: signOut（ログアウト・退会）
+```
+
+### メソッドの表
+
+#### `load()`（`SessionProvider` の中）
+
+- 入力：なし（トークンは `readToken()` で読む）
+- 副作用：状態を変える。読み込みに番号を付け、古い番号の結果は捨てる
+- 失敗のしかた：投げない。401 は `client.ts` に任せ、ほかの失敗は `error` にする
+
+```ts
+const id = ++latest.current
+const res = await apiFetch('/api/me', { signal: AbortSignal.timeout(LOAD_TIMEOUT_MS) })
+if (id !== latest.current) return          // 途中でログイン・ログアウトしたら、古い結果は捨てる
+if (!res.ok) { setSession({ status: 'error' }); return }   // 401 でない失敗では、トークンを消さない
+setSession({ status: 'signedIn', account: toAccount(await res.json()) })
+```
+
+#### `toAccount(res: AccountResponse): Account`
+
+- API の形（`public_id`・`email_verified_at`）を、画面の形（`userId`・`emailVerified`）に1回だけ変える（決まりの4章）
+- API を改善版の形に変えたときは、ここだけを直す
+
+### 名前
+
+- `SessionGate`：「決まるまで通さない門」の意味で `Gate` にした。候補の `SessionLoader` は、読むのは `SessionProvider` なので、紛れるため選ばなかった
+- `Account`：用語集の「アカウント」。コードでは `Me` と呼ばない
+
+### レガシー版との違い
+
+- レガシー版：トークンがあるかだけで決め、15の画面がそれぞれ守りを持っていた。期限切れのトークンでも「ログイン中」に見えた
+- 改善版：起動のときの `GET /api/me` で決め、守りは `RequireAuth` の1か所
+
+### 直した課題と、現場での意味
+
+- 期限切れのトークンで開いても、画面が出かけてから戻されることがなくなった
+- API が少し止まっても、会員はログアウトされず、もう一度で戻れる
+- 新しい画面を足すときは、ルートを `RequireAuth` の下に置くだけで守られる
+
+### 次の改善の候補
+
+- 開こうとした画面を覚えて、ログインのあとに戻す（FR-UI-011）
+- 401 で消す入口を1つにする（`05-problems.md` の #257）
+- 画面それぞれの `GET /api/me` を、`SessionProvider` の `account` にまとめる（機能のフォルダに移すとき）
+
+### 説明の練習
+
+#### 1回目：DB の再起動で、API が 500 を返した（2026-11-21）
+
+リーダーが聞いた：「DB の再起動で、API が30秒ほど 500 を返した。その間に、ログインしていた会員がホームを読み込み直した」
+
+##### 問い1：画面に何が出るか。パスワードを入れ直す必要があるか
+
+- 人の答え：ログインに失敗した系のエラー（401）が出る。セッションがなくなっているので、ログインし直す
+- 結果：ずれていた
+  - 返るのは 500 で、401 ではない（サーバーの不具合で、ログインしていないわけではない）
+  - `SessionGate` が「読み込めませんでした」と、もう一度を出す。ログインの画面には移らない
+  - トークン（今は JWT。ブラウザの `sessionStorage`）は消さないので、API が戻ったら、もう一度でホームに戻れる
+  - 2-2 の最初の形は、500 でトークンを消していた。レビューの S2 で直した所
+
+##### 問い2：「ログインが切れました」が出るのは、API が何を返したときか
+
+- 人の答え：認証しているかの API と、認証が要る API を呼んだとき
+- 結果：一部合っている
+  - 合っている：ログインが要る API を呼んだとき
+  - 足りない：返したもの（401）。例は、期限切れ・壊れたトークン・退会・強制退会。アカウント停止は 401 に印が付き、別の文になる
+
+##### 次にやること
+
+- 「401 はログインしていない、500 はサーバーの不具合。だから、ログアウトさせるのは 401 のときだけ」を、自分の言葉で言う
+- 「どの API か」と「何を返したか」を分けて答える
