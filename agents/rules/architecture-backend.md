@@ -55,7 +55,7 @@ Controller ──→ Service ──→ Model
   - 使ってはいけない：新しいクエリ（`Model::query()`・リレーションの `->count()`）。N+1 になる（8章のレビューで見る）
 - Middleware
   - 受け持ち：トークンを読む（ここだけ）
-  - 受け持ち：使えるか（退会・停止）と役割の確かめを Service に頼む
+  - 受け持ち：使えるか（退会・アカウント停止・強制退会）・メールアドレスを確認したか・役割の確かめを Service に頼む
   - 主に使うもの（目安）：JWT・Service
   - 使ってはいけない：Model・DB・`app()`
 - Service
@@ -140,7 +140,7 @@ Model・Service・Middleware・Controller など、どのクラスのメソッ�
 - 状態が3つ以上あるなら、真偽ではなく enum で持ち、真偽のメソッドはそこから作る（真偽の値は「何を調べた結果か」を持たないため）。DB の列は日時のままでもよく、Model が PHP の enum を返す形も含む（会員の状態：退会・停止・強制退会・どれでもない。列を1つにするかは、ロードマップの「会員の状態を1つにする」で決める）
 - 一度だけ起きて「いつか」に意味がある出来事は、日時の列（`〇〇_at`。null なら起きていない）で持ち、Model の真偽のメソッドで読む（Laravel の `email_verified_at` と `hasVerifiedEmail()`・`deleted_at` と `trashed()` と同じ形）
 - Model と Service で同じ事実を確かめるときは、同じ言葉を使う。番号から探して答える Service のメソッドは、主語（だれの何か）を名前に入れる（Model の `$user->accountStatus()` と、Service の `$auth->userAccountStatus($userId)`。`$auth->accountStatus($userId)` や `$auth->hasUsableAccount($userId)` は「AuthService が持つか」と読めてしまう）。引数の形（`ById`）は名前に出さない
-- Middleware の別名は「だれ.何をするか」の形にする（会員の側の `user.authenticate`・管理画面の `admin.authenticate`・`admin.can-write`）
+- Middleware の別名は「だれ.何をするか」の形にする（会員の側の `user.authenticate`・管理画面の `admin.authenticate`・`admin.can-write`）。例外：Laravel の標準の別名にそろえるもの（会員の側の `user.verified`。Laravel の `verified` と同じ意味。#263）
 ### Controller の分け方
 
 Laravel と Rails の公式の考え方に合わせる。**Controller は、URL の名詞（リソース）1つに1つ**。
@@ -373,6 +373,7 @@ $this->firestore->openRoom($room);                                     // コミ
 | 起きること | 止める場所 | 応答 |
 | --- | --- | --- |
 | トークンがない・壊れている・退会した・停止された会員 | Middleware（使えるかは Service に聞く） | 401 |
+| メールアドレスを確認していない会員（確認が要る API） | Middleware（`user.verified`。確認したかは Service に聞く） | 403（`code: email_unverified`） |
 | 入力の形が違う | Request | 422（Laravel の形のまま） |
 | 役割が足りない（管理画面） | 書き込みのルートの Middleware（役割は Service に聞く） | 403 |
 | 業務の決まりに反する | Service の業務の例外 | 403・409 |
