@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link } from 'react-router'
 import Avatar from './components/Avatar'
 import EmptyState from './components/EmptyState'
 import { SkeletonRows } from './components/Skeleton'
 import { apiFetch } from './shared/api/client'
-import { readToken } from './shared/session/session'
 
 // レガシー版（05）。メッセージのタブ（/messages）＝トークの一覧。相手ごとに最新の1件と未読の数を出し、押すとトーク画面に移る。
 // M3（#187）：上に「新しいマッチ」を分けた。
@@ -14,7 +13,6 @@ export default function MessagesPage() {
   const [rooms, setRooms] = useState<any[] | null>(null)
   const [keyword, setKeyword] = useState('')
   const [unreadOnly, setUnreadOnly] = useState(false)
-  const navigate = useNavigate()
 
   // 読み込み中・失敗は考えない。API が 500 を返すと、画面は空のまま（rooms が配列でないので filter で落ちる）
   const load = () => {
@@ -26,11 +24,6 @@ export default function MessagesPage() {
   }
 
   useEffect(() => {
-    // ログインが要るかの守りを、ここにも書く
-    if (!readToken()) {
-      navigate('/login')
-      return
-    }
     load()
     // M6：開いたままでも新しいメッセージに気づけるよう、10秒ごとに一覧を全部読み直す（一覧の API は、ルームごとに6本の SQL が流れる）
     const timer = setInterval(load, 10000)

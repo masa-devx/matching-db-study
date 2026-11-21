@@ -5,8 +5,9 @@ import { ACCOUNT_SUSPENDED_REASON, clearSession, readToken, SIGNED_OUT_REASON } 
 let leaving = false
 
 // 起動のときに1回呼ぶ。API にトークンの読み方と、401 のときの動きを渡す（architecture-frontend.md の4章）。
-// 401 なら、ログインした自分の情報を消し、理由を付けてログインの画面へ移す（画面を読み込み直すので、App が持つトークンの状態も、ポーリングも止まる）。
-// RequireAuth（#257 の 2-2）を作ったら、移すのはそちらに任せ、ここは消すだけにする
+// 401 なら、ログインした自分の情報を消し、理由を付けてログインの画面へ移す（画面を読み込み直すので、SessionProvider の状態も、ポーリングも消える）。
+// ログアウト・退会は SessionProvider の signOut() で消すので、消す入口が2つある。読み込み直しをやめるときに、
+// SessionProvider が configureApiClient() に 401 の処理を渡す形にして、1つにする（docs/cycles/01-backend-foundation/05-problems.md の #257）
 export function configureApi(): void {
   configureApiClient({
     readToken,

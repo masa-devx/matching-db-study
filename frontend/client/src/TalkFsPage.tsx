@@ -4,7 +4,6 @@ import { useNavigate, useParams } from 'react-router'
 import { countReads, db, signInFirebase } from './firebase'
 import ReadCounter from './ReadCounter'
 import { apiFetch, apiUrl } from './shared/api/client'
-import { readToken } from './shared/session/session'
 
 // レガシー版（05c）。Firestore 版のトーク画面（/messages-fs/:roomId）。05 の TalkPage を写して、取り方を Firestore に変えた。
 // limit のないリスナーで、ルームのメッセージを全部聞く（開くたびに全部読む）。時刻は画面の時計で入れる
@@ -17,11 +16,6 @@ export default function TalkFsPage() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    // ログインが要るかの守りを、ここにも書く
-    if (!readToken()) {
-      navigate('/login')
-      return
-    }
     let stop = () => {}
     signInFirebase().then(async (me) => {
       setUid(me)

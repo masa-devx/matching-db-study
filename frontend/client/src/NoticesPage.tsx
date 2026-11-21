@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router'
 import Icon from './components/Icon'
 import { SkeletonRows } from './components/Skeleton'
 import { apiFetch } from './shared/api/client'
-import { readToken } from './shared/session/session'
 
 // レガシー版（A7。#213）。運営からのお知らせ（/notices）。ホームのベルと、未読があるときの帯から来る。
 // 開いたら、まだ読んでいないお知らせを、1件ずつ「読んだ」と送る（まとめて送る API はない）
@@ -14,10 +13,6 @@ export default function NoticesPage() {
 
   useEffect(() => {
     // ログインが要るかの確かめを、ここにも書く
-    if (!readToken()) {
-      navigate('/login')
-      return
-    }
     apiFetch(`/api/me/notices`, { headers })
       .then((r) => r.json())
       .then((rows) => {

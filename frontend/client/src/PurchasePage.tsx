@@ -5,7 +5,6 @@ import Icon from './components/Icon'
 import { SkeletonProfile } from './components/Skeleton'
 import { useToast } from './components/Toast'
 import { apiFetch } from './shared/api/client'
-import { readToken } from './shared/session/session'
 
 // レガシー版（07）。購入の画面（/plans/:planId）。内容を確かめて「購入する」を押す。決済はしない（押したらすぐ有料）
 export default function PurchasePage() {
@@ -20,11 +19,6 @@ export default function PurchasePage() {
   const headers = { Accept: 'application/json' }
 
   useEffect(() => {
-    // ログインが要るかの守りを、ここにも書く
-    if (!readToken()) {
-      navigate('/login')
-      return
-    }
     // 1つのプランを読む API はないので、一覧を全部読んで探す。男性でなければ 403 でホームに戻す
     apiFetch(`/api/plans`, { headers }).then(async (r) => {
       if (r.status === 403) {

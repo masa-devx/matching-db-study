@@ -1,5 +1,5 @@
 import { Link, useParams } from 'react-router'
-import { readToken } from './shared/session/session'
+import { useSession } from './shared/session/SessionProvider'
 
 // レガシー版（M1。#181）。案内の画面（/info/<名前>）。設定から来る。
 // 文は、学習用の見本。本当のサービスでは、法務や運営が書いた文を置く。文を、この部品の中に直接書いた
@@ -116,6 +116,7 @@ const PAGES: Record<string, { title: string; sections: { heading: string; body: 
 }
 
 export default function InfoPage() {
+  const { session } = useSession()
   const { slug } = useParams()
   const page = PAGES[slug ?? '']
 
@@ -124,7 +125,11 @@ export default function InfoPage() {
       <div className="search-head">
         <h1 className="page-title">{page ? page.title : 'ページが見つかりません'}</h1>
         {/* M2（#193）：登録の画面からも開く（利用規約・プライバシーポリシー）。ログインしていなければ、登録に戻る */}
-        <Link className="button button-small button-ghost" to={readToken() ? '/settings' : '/register'} viewTransition>
+        <Link
+          className="button button-small button-ghost"
+          to={session.status === 'signedIn' ? '/settings' : '/register'}
+          viewTransition
+        >
           戻る
         </Link>
       </div>

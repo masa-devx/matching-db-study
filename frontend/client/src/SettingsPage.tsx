@@ -4,15 +4,16 @@ import ConfirmDialog from './components/ConfirmDialog'
 import Icon from './components/Icon'
 import { useToast } from './components/Toast'
 import { apiFetch, apiFetchForLogout, apiFetchWithoutLogin } from './shared/api/client'
-import { clearSession, readToken } from './shared/session/session'
+import { useSession } from './shared/session/SessionProvider'
 
 // レガシー版（M1。#181）。設定（/settings）。ホームの右上の歯車から来る。
 // アカウント（メールアドレスの確認・パスワード）・有料会員・検索・安全・案内・ログアウト・退会を、ここにまとめる。
 // ログアウトと退会の処理は、ホーム（HomePage）にあったものを、そのまま持ってきた。取る・送る・見せるを、全部この部品に書く
-export default function SettingsPage(props: any) {
+export default function SettingsPage() {
   const [me, setMe] = useState<any>(null)
   const toast = useToast()
   const navigate = useNavigate()
+  const { signOut } = useSession()
   // 確認のメールをもう一度送る
   const [resending, setResending] = useState(false)
   // パスワードを変えるモーダル
@@ -30,11 +31,6 @@ export default function SettingsPage(props: any) {
   const [withdrawBusy, setWithdrawBusy] = useState(false)
 
   useEffect(() => {
-    // ログインが要るかの守りを、ここにも書く
-    if (!readToken()) {
-      navigate('/login')
-      return
-    }
     // ホームと同じ2本（自分・自分のプロフィール）を、ここにも書いた。メールアドレス・確認済みか・性別・有料かを知るため
     const headers = { Accept: 'application/json' }
     apiFetch(`/api/me`, { headers })
@@ -96,8 +92,7 @@ export default function SettingsPage(props: any) {
       method: 'POST',
     })
     // 応答を待たずに消す。サーバーは何もしないので、消す前にコピーしたトークンは30日使える
-    clearSession()
-    props.setToken(null)
+    signOut()
     navigate('/login')
   }
 
@@ -117,8 +112,7 @@ export default function SettingsPage(props: any) {
       setWithdrawError('パスワードがちがいます')
       return
     }
-    clearSession()
-    props.setToken(null)
+    signOut()
     navigate('/login')
   }
 

@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { apiFetchWithoutLogin } from './shared/api/client'
-import { readToken } from './shared/session/session'
+import { useSession } from './shared/session/SessionProvider'
 
 // レガシー版（M2。#193）。メールアドレスの確認の画面（/verify/<確認用の文字>）。確認のメールのリンクから来る。
 // 前は、リンクが API を直接開き、JSON の文字だけが出ていた。ここで API を呼び、結果と、次にやることを出す。
 // ログインしていなくても開ける（メールを開いた端末が、登録した端末とは限らない）
 export default function VerifyPage() {
+  const { session } = useSession()
   const { token } = useParams()
   // 結果：null は確かめている途中、true は確認できた、false はリンクが正しくない
   const [ok, setOk] = useState<boolean | null>(null)
@@ -18,7 +19,7 @@ export default function VerifyPage() {
     }).then((r) => setOk(r.ok))
   }, [token])
 
-  const loggedIn = !!readToken()
+  const loggedIn = session.status === 'signedIn'
 
   return (
     <div className="auth">

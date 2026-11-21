@@ -79,7 +79,7 @@ frontend/client/src/
 ├── app/                           組み立て。ルートと、どの画面にどの Repository の実装を渡すかを決めるのはここだけ
 │   ├── App.tsx                    Provider を重ねる（ログインした自分・トースト）            ← App.tsx の上半分
 │   ├── router.tsx                 ルートの表（パス・画面の題・どのタブを選ぶか）              ← App.tsx の Routes・TITLES・TabBar の UNDER_HOME
-│   ├── RequireAuth.tsx            ログインの守り（1か所）。開こうとした画面を覚えて戻す       ← 15画面の守り
+│   ├── RequireAuth.tsx            ログインの守り（1か所。#257 で作った）。開こうとした画面は、まだ覚えない   ← 15画面の守り
 │   └── AppShell.tsx               四角の枠と下のタブ・スクロールする枠を渡す                  ← App.tsx の下半分・components/TabBar
 │
 ├── features/                      機能ごと。名前は要件（docs/requirements/）のまとまりにそろえる
@@ -99,7 +99,7 @@ frontend/client/src/
 │   ├── api/
 │   │   ├── client.ts              fetch の包み：送り先・Cookie・401・失敗の形・中止
 │   │   └── ApiError.ts            失敗の型（状態コード・code・メッセージ・入力の誤り）
-│   ├── session/                   ログインした自分（Me の型・/api/me を読む・読み直す・useSession）← App.tsx・各画面の /api/me
+│   ├── session/                   ログインした自分（Account の型・/api/me を読む・読み直す・useSession）← App.tsx・各画面の /api/me
 │   ├── firebase/app.ts            Emulator への接続（最初の1回だけ）                         ← firebase.ts の上半分
 │   ├── ui/                        見せるだけの部品                                          ← components/ の残り（Button・Avatar・Icon・EmptyState・Skeleton・ConfirmDialog・Toast）
 │   │   ├── AsyncView.tsx          読み込み中・失敗・空・中身を出し分ける（新しく作る）

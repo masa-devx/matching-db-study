@@ -5,7 +5,7 @@ import ConfirmDialog from './components/ConfirmDialog'
 import { useToast } from './components/Toast'
 import UpsellDialog from './components/UpsellDialog'
 import { apiFetch } from './shared/api/client'
-import { readToken, SEARCH_CONDITIONS_KEY } from './shared/session/session'
+import { SEARCH_CONDITIONS_KEY } from './shared/session/session'
 
 // レガシー版（#147）。検索の条件の画面（/search/conditions）。
 // 検索の画面（SearchPage）の「絞り込み」から来る。条件を選ぶ欄と、保存した検索条件（04b）は、この画面にだけ出す。
@@ -231,11 +231,6 @@ export default function SearchConditionsPage() {
   }
 
   useEffect(() => {
-    // ログインが要るかの守りを、ここにも書く
-    if (!readToken()) {
-      navigate('/login')
-      return
-    }
     loadSaved()
     // 07：男性の無料の会員かを知るために、自分と自分のプロフィールを読む（ホームと同じ2本を、ここにも書いた）
     const headers = { Accept: 'application/json' }

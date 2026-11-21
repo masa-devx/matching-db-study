@@ -3,7 +3,6 @@ import { Link, useLocation, useNavigate } from 'react-router'
 import Icon from './components/Icon'
 import { SkeletonRows } from './components/Skeleton'
 import { apiFetch } from './shared/api/client'
-import { readToken } from './shared/session/session'
 
 // レガシー版（07）。プランの一覧（/plans）。男性の会員だけ。今の状態・プラン・購入の記録を、全部この部品に書く
 export default function PlansPage() {
@@ -16,11 +15,6 @@ export default function PlansPage() {
   const headers = { Accept: 'application/json' }
 
   useEffect(() => {
-    // ログインが要るかの守りを、ここにも書く
-    if (!readToken()) {
-      navigate('/login')
-      return
-    }
     // 男性でなければ API が 403 を返すので、ホームに戻す（画面では性別を確かめない）
     apiFetch(`/api/plans`, { headers }).then(async (r) => {
       if (r.status === 403) {

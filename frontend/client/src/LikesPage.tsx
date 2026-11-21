@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link } from 'react-router'
 import Avatar from './components/Avatar'
 import Button from './components/Button'
 import EmptyState from './components/EmptyState'
@@ -8,7 +8,6 @@ import { SkeletonRows } from './components/Skeleton'
 import { useToast } from './components/Toast'
 import UpsellDialog from './components/UpsellDialog'
 import { apiFetch } from './shared/api/client'
-import { readToken } from './shared/session/session'
 
 // レガシー版（M3。#184）。いいねのタブ（/likes）＝相手から届いたいいねの一覧。
 // 1人ずつ「マッチする」（いいねを送り返す）か「スキップ」（見送る。相手には伝わらない）を選ぶ。
@@ -23,7 +22,6 @@ export default function LikesPage() {
   // マッチの演出に出す、自分と相手
   const [matched, setMatched] = useState<any>(null)
   const toast = useToast()
-  const navigate = useNavigate()
 
   const headers = {
     'Content-Type': 'application/json',
@@ -41,11 +39,6 @@ export default function LikesPage() {
   }
 
   useEffect(() => {
-    // ログインが要るかの守りを、ここにも書く
-    if (!readToken()) {
-      navigate('/login')
-      return
-    }
     load()
   }, [])
 
