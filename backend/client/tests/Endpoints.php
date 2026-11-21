@@ -34,6 +34,20 @@ final class Endpoints
         ];
     }
 
+    /**
+     * ログインは要るが、メールアドレスを確認していなくても呼べるルート（FR-AUTH-021）。形は routesWithoutLogin() と同じ。
+     * ログインが要るルートのうち、ここにないものは、どれも確認が要る（tests/Feature/Auth/LoginRequiredRoutesTest.php）。
+     *
+     * @return list<string>
+     */
+    public static function routesWithoutVerifiedEmail(): array
+    {
+        return [
+            'GET api/me',            // 自分の情報（確認を促す帯が、確認したかを読む）
+            'POST api/auth/logout',
+        ];
+    }
+
     // ---- Auth（登録・ログイン） ----
 
     /** 会員を登録する（POST /api/users） */
