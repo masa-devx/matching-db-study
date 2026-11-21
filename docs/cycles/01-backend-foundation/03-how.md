@@ -241,6 +241,7 @@ API のルートは、すべて `routes/api.php` から読み込む。`routes/we
   - 書き込みは JSON の `Content-Type` か独自のヘッダーを必須にするか、CSRF のトークン（Sanctum の SPA の方式）を使うか
   - Cookie の `SameSite`・`Secure`・`HttpOnly` の値
   - CORS で許すオリジンは画面のオリジンだけ（`http://localhost:5173`・管理画面は `http://localhost:5174`）。すべてのオリジンを許す設定と `supports_credentials` を一緒にしない
+- #259 で決まった形：会員の API は `api.php` のまま置く。`bootstrap/app.php` の `statefulApi()` で、画面のオリジンからのリクエストにだけ、Cookie の暗号化・セッション・CSRF の確かめ（Sanctum）が付く。CORS は `config/cors.php` で画面のオリジンだけを許し、`supports_credentials` を true にした
 
 ### ルートのまとめ方
 

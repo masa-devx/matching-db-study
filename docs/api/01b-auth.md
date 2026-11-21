@@ -327,7 +327,12 @@ return ['message' => 'メールアドレスを確認しました'];
 ### 送り方
 
 - レガシー版：ログインの応答の JSON（`{"token": "…"}`）。呼ぶときは `Authorization: Bearer <JWT>`
-- 改善版：`access`・`refresh` の HttpOnly の Cookie（requirements/auth.md の「トークンと Cookie」）
+- 改善版（#259・D-027）：トークンは使わない。Laravel Sanctum のセッションの HttpOnly の Cookie。取り替え用のトークン（`refresh`）は作らない
+- 改善版を curl で確かめるとき（`Origin` を付けないと、Sanctum はセッションを使わず 401 になる）
+  - `curl -c jar -b jar -H 'Origin: http://localhost:5173' http://localhost:8000/sanctum/csrf-cookie` で、CSRF の Cookie（`XSRF-TOKEN`）をもらう
+  - ログイン：`curl -c jar -b jar -H 'Origin: http://localhost:5173' -H 'Accept: application/json' -H 'Content-Type: application/json' -H 'X-XSRF-TOKEN: <jar の XSRF-TOKEN の値を URL のデコードしたもの>' -d '{"email":"…","password":"…"}' http://localhost:8000/api/auth/login`
+  - 自分の情報：`curl -b jar -H 'Origin: http://localhost:5173' -H 'Accept: application/json' http://localhost:8000/api/me`
+  - 書き込み（ログアウトなど）は、ログインと同じく `X-XSRF-TOKEN` を付ける。付けないと `419`「画面を読み込み直してください」
 
 ## `POST /api/auth/login`（ログイン）
 

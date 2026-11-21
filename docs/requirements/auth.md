@@ -350,6 +350,7 @@
   - 01 のレガシー版のプロフィールの API（`/api/users/{id}/profile`。#46 で `/api/users/{public_id}`）は、01b のレガシー版でも、だれでも使えるまま
   - 認可は改善版で足す
 - 前提：03b までは画面がないので、Cookie は curl の Cookie の保存（`-c`・`-b`）で確かめる
+- 改善版（#259）を curl で確かめるときは、`Origin: http://localhost:5173` を付ける（Sanctum は、画面からのリクエストだけでセッションを使う）。書き込みは `X-XSRF-TOKEN` に、Cookie の `XSRF-TOKEN` の値を入れる（手順は `docs/api/01b-auth.md` の「送り方」）
 - 要確認：なし
 
 ## スコープ外
