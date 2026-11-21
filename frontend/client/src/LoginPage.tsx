@@ -2,11 +2,12 @@ import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import Button from './components/Button'
 import { apiFetchWithoutLogin } from './shared/api/client'
-import { ACCOUNT_SUSPENDED_REASON, SIGNED_OUT_REASON, saveToken } from './shared/session/session'
+import { useSession } from './shared/session/SessionProvider'
+import { ACCOUNT_SUSPENDED_REASON, SIGNED_OUT_REASON } from './shared/session/session'
 
 // レガシー版（03b）。送る・トークンを置く・失敗を見せる・移るを、この部品にまとめて書く。
 // M2（#193）：パスワードを見せる切り替え・autocomplete・利用を止められたときの案内を足した
-export default function LoginPage(props: any) {
+export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -16,6 +17,7 @@ export default function LoginPage(props: any) {
   // 03c：送っている間はボタンにスピナーを出し、押せなくする（FR-UI-026）
   const [sending, setSending] = useState(false)
   const navigate = useNavigate()
+  const { signIn } = useSession()
   // #257：ログインしたあとの API が 401 を返して、ここへ移ってきたか（FR-UI-100）
   const [searchParams] = useSearchParams()
   const reason = searchParams.get('reason')
@@ -37,8 +39,7 @@ export default function LoginPage(props: any) {
     setSending(false)
     if (res.ok) {
       // XSS があると、画面で動いたスクリプトがここから持ち出せる
-      saveToken(data.token)
-      props.setToken(data.token)
+      signIn(data.token)
       navigate('/home')
     } else {
       // API の言葉をそのまま出す（「メールアドレスが違います」で、登録されているかが分かる）

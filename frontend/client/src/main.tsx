@@ -4,13 +4,16 @@ import { BrowserRouter } from 'react-router'
 import './index.css'
 import App from './App.tsx'
 import { configureApi } from './app/configureApi'
+import { SessionProvider } from './shared/session/SessionProvider'
 
 configureApi()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
-      <App />
+      <SessionProvider>
+        <App />
+      </SessionProvider>
     </BrowserRouter>
   </StrictMode>,
 )

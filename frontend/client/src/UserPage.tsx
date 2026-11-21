@@ -8,7 +8,6 @@ import { SkeletonProfile } from './components/Skeleton'
 import { useToast } from './components/Toast'
 import UpsellDialog from './components/UpsellDialog'
 import { apiFetch, apiUrl, UnauthorizedError } from './shared/api/client'
-import { readToken } from './shared/session/session'
 
 // レガシー版（03b）。相手のプロフィール。取る・持つ・見せる・決まりを、全部この部品に書く
 // 03c：モーダル・トースト・スケルトン・マッチの演出は components/ の部品を使う
@@ -39,10 +38,6 @@ export default function UserPage() {
 
   useEffect(() => {
     // ログインが要るかの守りを、ここにも書く
-    if (!readToken()) {
-      navigate('/login')
-      return
-    }
     // 読み込み中・失敗は考えない。すぐ別の人に移ると、前の人の応答があとから上書きする
     apiFetch(`/api/users/${publicId}`, { headers })
       .then((r) => {

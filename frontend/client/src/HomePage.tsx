@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link } from 'react-router'
 import Avatar from './components/Avatar'
 import Button from './components/Button'
 import Icon from './components/Icon'
 import { SkeletonProfile } from './components/Skeleton'
 import { useToast } from './components/Toast'
 import { apiFetch, apiUrl } from './shared/api/client'
-import { readToken } from './shared/session/session'
 
 // M4（#198）：プルダウンに出す都道府県と身長（検索の条件の画面にある一覧と同じものを、ここにも書いた）
 const PREFECTURES = [
@@ -70,14 +69,9 @@ export default function HomePage() {
   // 03c：保存の結果はトーストで出す（FR-UI-024）
   const toast = useToast()
   const [saving, setSaving] = useState(false)
-  const navigate = useNavigate()
 
   useEffect(() => {
     // ログインが要るかの守りを、画面ごとに書く
-    if (!readToken()) {
-      navigate('/login')
-      return
-    }
     // 読み込み中と失敗は考えない。401 は client.ts がログインの画面へ移す。StrictMode なので、開発中は2本ずつ呼ばれる
     // 自分の public_id（#46）を知るために /api/me を呼び、そのあとプロフィールを呼ぶ（2本が順に流れる）
     apiFetch(`/api/me`, {

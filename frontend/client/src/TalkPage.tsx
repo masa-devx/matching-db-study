@@ -9,7 +9,6 @@ import { SkeletonTalk } from './components/Skeleton'
 import { useToast } from './components/Toast'
 import UpsellDialog from './components/UpsellDialog'
 import { apiFetch } from './shared/api/client'
-import { readToken } from './shared/session/session'
 
 // レガシー版（05）。トーク画面（/messages/:roomId）。取る・続き・5秒ごとの読み直し・送る・見せるを、全部この部品に書く。
 // M6（#190）：作り直した。相手のプロフィールへのリンク・日付の区切り・相手の吹き出しに写真・改行できる入力欄・
@@ -60,10 +59,6 @@ export default function TalkPage() {
 
   useEffect(() => {
     // ログインが要るかの守りを、ここにも書く
-    if (!readToken()) {
-      navigate('/login')
-      return
-    }
     // 自分のメッセージかを見分けるために、自分の id を読む（ホームでも読んでいるが、もう一度読む）
     apiFetch(`/api/me`, { headers })
       .then((r) => r.json())

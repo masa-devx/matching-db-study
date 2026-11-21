@@ -7,7 +7,6 @@ import Icon from './components/Icon'
 import { SkeletonRows } from './components/Skeleton'
 import { useToast } from './components/Toast'
 import { apiFetch } from './shared/api/client'
-import { readToken } from './shared/session/session'
 
 // レガシー版（06）。ブロックした相手（/blocks）。ホームから開く。いいねの一覧の画面を写して、全部この部品に書く
 export default function BlocksPage() {
@@ -28,10 +27,6 @@ export default function BlocksPage() {
 
   useEffect(() => {
     // ログインが要るかの守りを、ここにも書く
-    if (!readToken()) {
-      navigate('/login')
-      return
-    }
     load()
   }, [])
 

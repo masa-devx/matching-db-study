@@ -5,7 +5,7 @@ import { SkeletonCards } from './components/Skeleton'
 import { useToast } from './components/Toast'
 import UpsellDialog from './components/UpsellDialog'
 import { apiFetch, apiUrl } from './shared/api/client'
-import { readToken, SEARCH_CONDITIONS_KEY } from './shared/session/session'
+import { SEARCH_CONDITIONS_KEY } from './shared/session/session'
 
 // レガシー版（04）。検索のタブ（/search）＝条件で相手を探して、2列のカードで見る。
 // 条件・取る・続き・見せるを、全部この部品に書く（03b と同じ形）。
@@ -164,10 +164,6 @@ export default function SearchPage() {
 
   useEffect(() => {
     // ログインが要るかの守りを、ここにも書く
-    if (!readToken()) {
-      navigate('/login')
-      return
-    }
     // 04b：URL にクエリがないとき（タブから /search を開いたとき）は、タブの中で覚えた最後の条件に戻す（FR-UI-016）。
     // 履歴を増やさないよう replace で入れ替える。入れ替えると、この useEffect がもう一度動く
     // #159：ブラウザの「戻る」で条件なしの /search に戻ったときは、入れ替えない（入れ替えると、条件なしの結果に戻れない。FR-UI-043）。

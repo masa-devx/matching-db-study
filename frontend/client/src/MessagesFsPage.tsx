@@ -1,23 +1,17 @@
 import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link } from 'react-router'
 import { countReads, db, signInFirebase } from './firebase'
 import ReadCounter from './ReadCounter'
 import { apiFetch, apiUrl } from './shared/api/client'
-import { readToken } from './shared/session/session'
 
 // レガシー版（05c）。Firestore 版のトークの一覧（/messages-fs）。05 の MessagesPage を写して、取り方だけを Firestore に変えた。
 // 受信箱には必要な情報（partnerUid・lastReadAt）しかないので、ルームごとに最新の1件・未読・相手の名前を読みに行く（N+1）
 export default function MessagesFsPage() {
   const [rooms, setRooms] = useState<any[] | null>(null)
-  const navigate = useNavigate()
 
   useEffect(() => {
     // ログインが要るかの守りを、ここにも書く
-    if (!readToken()) {
-      navigate('/login')
-      return
-    }
     // 読み込み中・失敗は考えない
     signInFirebase().then(async (uid) => {
       // 自分の受信箱を全部読む（limit なし。並べる時刻がないので、Firestore では並べられない）
