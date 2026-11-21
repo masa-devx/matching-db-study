@@ -38,8 +38,8 @@ export default function LoginPage() {
     const data = await res.json()
     setSending(false)
     if (res.ok) {
-      // XSS があると、画面で動いたスクリプトがここから持ち出せる
-      signIn(data.token)
+      // トークンは受け取らない。セッションの Cookie は HttpOnly なので、画面のスクリプトから読めない（D-027）
+      signIn()
       navigate('/home')
     } else {
       // API の言葉をそのまま出す（「メールアドレスが違います」で、登録されているかが分かる）

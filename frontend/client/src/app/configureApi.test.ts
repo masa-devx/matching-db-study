@@ -23,12 +23,11 @@ async function setUp() {
 
 beforeEach(() => {
   sessionStorage.clear()
-  sessionStorage.setItem('token', 'token-1')
   sessionStorage.setItem('searchConditions', '{"prefecture":"東京都"}')
 })
 
 describe('ログインしたあとの API が 401 を返す', () => {
-  it('トークンと前の検索の条件を消し、「ログインが切れました」の理由でログインの画面へ移る（FR-UI-100）', async () => {
+  it('前の検索の条件を消し、「ログインが切れました」の理由でログインの画面へ移る（FR-UI-100）', async () => {
     const { apiFetch, UnauthorizedError, moveTo } = await setUp()
     vi.stubGlobal(
       'fetch',
@@ -37,7 +36,6 @@ describe('ログインしたあとの API が 401 を返す', () => {
 
     await expect(apiFetch('/api/me')).rejects.toThrow(UnauthorizedError)
 
-    expect(sessionStorage.getItem('token')).toBeNull()
     expect(sessionStorage.getItem('searchConditions')).toBeNull()
     expect(moveTo).toHaveBeenCalledWith('/login?reason=signed-out')
   })
@@ -72,7 +70,7 @@ describe('ログインしたあとの API が 401 を返す', () => {
 })
 
 describe('ログインしたあとの API が 503（メンテナンス中）を返す', () => {
-  it('トークンを消さず、ログインの画面にも移さず、メンテナンス中にする（FR-MAINT-006）', async () => {
+  it('前の検索の条件を消さず、ログインの画面にも移さず、メンテナンス中にする（FR-MAINT-006）', async () => {
     const { apiFetch, MaintenanceError, moveTo } = await setUp()
     const maintenance = await import('./maintenance')
     vi.stubGlobal(
@@ -83,13 +81,13 @@ describe('ログインしたあとの API が 503（メンテナンス中）を�
     await expect(apiFetch('/api/me')).rejects.toThrow(MaintenanceError)
 
     expect(maintenance.isUnderMaintenance()).toBe(true)
-    expect(sessionStorage.getItem('token')).toBe('token-1')
+    expect(sessionStorage.getItem('searchConditions')).not.toBeNull()
     expect(moveTo).not.toHaveBeenCalled()
   })
 })
 
 describe('メンテナンスに入ったあとに、前に送った要求の 401 が届く', () => {
-  it('トークンを消さず、ログインの画面にも移さない（FR-MAINT-006）', async () => {
+  it('前の検索の条件を消さず、ログインの画面にも移さない（FR-MAINT-006）', async () => {
     const { apiFetch, moveTo } = await setUp()
     vi.stubGlobal(
       'fetch',
@@ -101,51 +99,23 @@ describe('メンテナンスに入ったあとに、前に送った要求の 401
 
     await Promise.allSettled([apiFetch('/api/me'), apiFetch('/api/me/talk-rooms')])
 
-    expect(sessionStorage.getItem('token')).toBe('token-1')
+    expect(sessionStorage.getItem('searchConditions')).not.toBeNull()
     expect(moveTo).not.toHaveBeenCalled()
   })
 })
 
-describe('トークンがない人が、メンテナンス中にアプリを開く', () => {
-  it('起動のときに確かめ、メンテナンス中にする（FR-MAINT-006）', async () => {
-    sessionStorage.removeItem('token')
-    await setUp()
-    const maintenance = await import('./maintenance')
-    const { checkMaintenanceWithoutLogin } = await import('./checkMaintenance')
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(jsonResponse(503, { message: 'ただいまメンテナンス中です' }))
-    vi.stubGlobal('fetch', fetchMock)
-
-    await checkMaintenanceWithoutLogin()
-
-    expect(maintenance.isUnderMaintenance()).toBe(true)
-    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).has('Authorization')).toBe(false)
-  })
-
-  it('メンテナンス中でなければ（401）、いつもの画面のまま', async () => {
-    sessionStorage.removeItem('token')
-    await setUp()
-    const maintenance = await import('./maintenance')
-    const { checkMaintenanceWithoutLogin } = await import('./checkMaintenance')
+describe('ログインしたあとの書き込みが 419（CSRF のトークンが合わない）を返す', () => {
+  it('「ログインが切れました」の理由で、ログインの画面へ移る（24時間で切れたあとの書き込みも、ここに来る）', async () => {
+    const { apiFetch, UnauthorizedError, moveTo } = await setUp()
+    // biome-ignore lint/suspicious/noDocumentCookie: テストで、API が付ける Cookie の代わりに置く（jsdom には Cookie Store API がない）
+    document.cookie = 'XSRF-TOKEN=xsrf-1; path=/'
     vi.stubGlobal(
       'fetch',
-      vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(401, { message: 'ログインしてください' })),
+      vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(419, { message: '画面を読み込み直してください' })),
     )
 
-    await checkMaintenanceWithoutLogin()
+    await expect(apiFetch('/api/me/likes', { method: 'POST', body: '{}' })).rejects.toThrow(UnauthorizedError)
 
-    expect(maintenance.isUnderMaintenance()).toBe(false)
-  })
-
-  it('トークンがあれば、ここでは呼ばない（SessionProvider の GET /api/me で分かる）', async () => {
-    await setUp()
-    const { checkMaintenanceWithoutLogin } = await import('./checkMaintenance')
-    const fetchMock = vi.fn<typeof fetch>()
-    vi.stubGlobal('fetch', fetchMock)
-
-    await checkMaintenanceWithoutLogin()
-
-    expect(fetchMock).not.toHaveBeenCalled()
+    expect(moveTo).toHaveBeenCalledWith('/login?reason=signed-out')
   })
 })

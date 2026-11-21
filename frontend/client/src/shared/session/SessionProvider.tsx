@@ -1,7 +1,6 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { UnauthorizedError } from '../api/ApiError'
-import { apiFetch } from '../api/client'
-import { clearSession, readToken, saveToken } from './session'
+import { apiFetchWithoutLogin } from '../api/client'
+import { clearSession } from './session'
 
 // GET /api/me の応答の形（レガシー版）。このファイルの外へ出さない（architecture-frontend.md の4章）
 type AccountResponse = {
@@ -22,7 +21,7 @@ function toAccount(res: AccountResponse): Account {
 }
 
 // 読み込み中・ログインしている・していない・読み込めなかった。
-// トークンがなければ API を呼ばずに「していない」。あれば、GET /api/me が通るかで決める（#257 の 2-2）
+// 起動のときに GET /api/me を読み、200 なら「している」、401 なら「していない」（セッションの Cookie で API が決める。D-027）
 export type SessionState =
   | { status: 'loading' }
   | { status: 'signedIn'; account: Account }
@@ -31,7 +30,7 @@ export type SessionState =
 
 type SessionValue = {
   session: SessionState
-  signIn: (token: string) => void
+  signIn: () => void
   signOut: () => void
   retry: () => void
 }
@@ -41,33 +40,31 @@ const LOAD_TIMEOUT_MS = 10_000
 
 const SessionContext = createContext<SessionValue | null>(null)
 
-// 起動のときに1回、GET /api/me を読む。
-// 401 なら、client.ts が app/ の処理でトークンを消してログインの画面へ読み込み直すので、ここでは何もしない。
-// 401 でない失敗（500・つながらない・時間切れ）では、トークンを消さない（API が戻れば、もう一度で戻れる）
+// 起動のときに1回、GET /api/me を読む。401（ログインしていない）でも、ログインの画面へは移さない（ログインの画面・登録の画面も、この下にあるため）。
+// 401 でない失敗（500・つながらない・時間切れ）では、「読み込めませんでした」にする（API が戻れば、もう一度で戻れる）。
+// 503（メンテナンス中）は、client.ts が見分けて、メンテナンスの画面を出す
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<SessionState>(() =>
-    readToken() ? { status: 'loading' } : { status: 'signedOut' },
-  )
+  const [session, setSession] = useState<SessionState>({ status: 'loading' })
   // 読み込みが重なったとき（起動の読み込みの途中でログインした）、古い結果で上書きしないための番号
   const latest = useRef(0)
 
   const load = useCallback(async () => {
     const id = ++latest.current
-    if (!readToken()) {
-      setSession({ status: 'signedOut' })
-      return
-    }
     setSession({ status: 'loading' })
     try {
-      const res = await apiFetch('/api/me', { signal: AbortSignal.timeout(LOAD_TIMEOUT_MS) })
+      const res = await apiFetchWithoutLogin('/api/me', { signal: AbortSignal.timeout(LOAD_TIMEOUT_MS) })
       if (id !== latest.current) return
+      if (res.status === 401) {
+        setSession({ status: 'signedOut' })
+        return
+      }
       if (!res.ok) {
         setSession({ status: 'error' })
         return
       }
       setSession({ status: 'signedIn', account: toAccount((await res.json()) as AccountResponse) })
-    } catch (e) {
-      if (id !== latest.current || e instanceof UnauthorizedError) return
+    } catch {
+      if (id !== latest.current) return
       // つながらない・時間切れ
       setSession({ status: 'error' })
     }
@@ -77,14 +74,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     load()
   }, [load])
 
-  // ログインの画面が呼ぶ。トークンを置いて、もう一度 GET /api/me を読む
-  const signIn = useCallback(
-    (token: string) => {
-      saveToken(token)
-      load()
-    },
-    [load],
-  )
+  // ログインの画面が、ログインの API が通ったあとに呼ぶ。セッションの Cookie はもう付いているので、GET /api/me を読み直す
+  const signIn = useCallback(() => {
+    load()
+  }, [load])
 
   // ログアウト・退会の画面が呼ぶ。読み込みの途中なら、その結果は捨てる
   const signOut = useCallback(() => {
