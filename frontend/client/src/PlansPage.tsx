@@ -15,7 +15,6 @@ export default function PlansPage() {
   const headers = { Accept: 'application/json' }
 
   useEffect(() => {
-    // ログインが要るかの守りを、ここにも書く
     // 男性でなければ API が 403 を返すので、ホームに戻す（画面では性別を確かめない）
     apiFetch(`/api/plans`, { headers }).then(async (r) => {
       if (r.status === 403) {

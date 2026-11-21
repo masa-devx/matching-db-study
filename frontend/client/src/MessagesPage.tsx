@@ -24,7 +24,6 @@ export default function MessagesPage() {
   }
 
   useEffect(() => {
-    // ログインが要るかの守りを、ここにも書く
     load()
     // M6：開いたままでも新しいメッセージに気づけるよう、10秒ごとに一覧を全部読み直す（一覧の API は、ルームごとに6本の SQL が流れる）
     const timer = setInterval(load, 10000)

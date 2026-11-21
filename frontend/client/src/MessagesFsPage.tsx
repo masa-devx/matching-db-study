@@ -11,7 +11,6 @@ export default function MessagesFsPage() {
   const [rooms, setRooms] = useState<any[] | null>(null)
 
   useEffect(() => {
-    // ログインが要るかの守りを、ここにも書く
     // 読み込み中・失敗は考えない
     signInFirebase().then(async (uid) => {
       // 自分の受信箱を全部読む（limit なし。並べる時刻がないので、Firestore では並べられない）

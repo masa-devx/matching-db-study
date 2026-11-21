@@ -565,7 +565,7 @@ URL は今のまま（`/api/...`）。新しい URL に移すのは、サイク�
 | 環境変数の見本 | ― |
 | `lang/ja/errors.php` | ― |
 | `frontend/client/src/shared/api/client.ts` | 新しい |
-| `frontend/client/src/app/RequireAuth.tsx`・`features/auth/session` | 新しい |
+| `frontend/client/src/app/RequireAuth.tsx`・`shared/session/SessionProvider.tsx` | 新しい |
 | メンテナンスの画面 | 新しい |
 | `tests/DummyData/DummyAuth.php` | ― |
 
@@ -668,7 +668,7 @@ URL は今のまま（`/api/...`）。新しい URL に移すのは、サイク�
   - 401・419 はログインの画面へ、503 はメンテナンスの画面へ
 - 置き場の理由：API を呼ぶ所を1か所にする（`architecture-frontend.md`）
 
-#### `frontend/client/src/app/RequireAuth.tsx`・`features/auth/session`（新しい）
+#### `frontend/client/src/app/RequireAuth.tsx`・`shared/session/SessionProvider.tsx`（新しい。#257 の 2-2 で、決まりの1章のとおり `features/auth/session` から置き場を変えた）
 
 - 責務：起動のときに `GET /api/me` を1回読み、ログインしているかを決める（`sessionStorage` を見ない）
 - 置き場の理由：ログインの守りを1か所にする（`architecture-frontend.md`）

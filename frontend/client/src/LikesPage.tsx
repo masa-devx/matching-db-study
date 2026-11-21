@@ -39,7 +39,6 @@ export default function LikesPage() {
   }
 
   useEffect(() => {
-    // ログインが要るかの守りを、ここにも書く
     load()
   }, [])
 

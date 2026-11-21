@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router'
 import './App.css'
 import RequireAuth from './app/RequireAuth'
+import SessionGate from './app/SessionGate'
 import BlocksPage from './BlocksPage'
 import NoticeBanner from './components/NoticeBanner'
 import TabBar from './components/TabBar'
@@ -122,7 +123,9 @@ export default function App() {
     return (
       <ToastProvider>
         <div className="app">
-          <main className="main">{routes}</main>
+          <main className="main">
+            <SessionGate>{routes}</SessionGate>
+          </main>
         </div>
       </ToastProvider>
     )

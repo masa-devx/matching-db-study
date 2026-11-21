@@ -231,7 +231,6 @@ export default function SearchConditionsPage() {
   }
 
   useEffect(() => {
-    // ログインが要るかの守りを、ここにも書く
     loadSaved()
     // 07：男性の無料の会員かを知るために、自分と自分のプロフィールを読む（ホームと同じ2本を、ここにも書いた）
     const headers = { Accept: 'application/json' }

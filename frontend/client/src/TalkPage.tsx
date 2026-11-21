@@ -58,7 +58,6 @@ export default function TalkPage() {
   }
 
   useEffect(() => {
-    // ログインが要るかの守りを、ここにも書く
     // 自分のメッセージかを見分けるために、自分の id を読む（ホームでも読んでいるが、もう一度読む）
     apiFetch(`/api/me`, { headers })
       .then((r) => r.json())

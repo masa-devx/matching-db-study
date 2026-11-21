@@ -37,7 +37,6 @@ export default function UserPage() {
   }
 
   useEffect(() => {
-    // ログインが要るかの守りを、ここにも書く
     // 読み込み中・失敗は考えない。すぐ別の人に移ると、前の人の応答があとから上書きする
     apiFetch(`/api/users/${publicId}`, { headers })
       .then((r) => {

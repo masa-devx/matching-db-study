@@ -19,7 +19,6 @@ export default function PurchasePage() {
   const headers = { Accept: 'application/json' }
 
   useEffect(() => {
-    // ログインが要るかの守りを、ここにも書く
     // 1つのプランを読む API はないので、一覧を全部読んで探す。男性でなければ 403 でホームに戻す
     apiFetch(`/api/plans`, { headers }).then(async (r) => {
       if (r.status === 403) {

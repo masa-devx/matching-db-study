@@ -26,7 +26,6 @@ export default function BlocksPage() {
   }
 
   useEffect(() => {
-    // ログインが要るかの守りを、ここにも書く
     load()
   }, [])
 

@@ -11,7 +11,6 @@ export default function SentLikesPage() {
   const [likes, setLikes] = useState<any[] | null>(null)
 
   useEffect(() => {
-    // ログインが要るかの守りを、ここにも書く
     // 読み込み中・失敗は考えない。API が止まると、画面は空のまま
     apiFetch(`/api/me/likes`, {
       headers: { Accept: 'application/json' },

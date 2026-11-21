@@ -71,7 +71,6 @@ export default function HomePage() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    // ログインが要るかの守りを、画面ごとに書く
     // 読み込み中と失敗は考えない。401 は client.ts がログインの画面へ移す。StrictMode なので、開発中は2本ずつ呼ばれる
     // 自分の public_id（#46）を知るために /api/me を呼び、そのあとプロフィールを呼ぶ（2本が順に流れる）
     apiFetch(`/api/me`, {

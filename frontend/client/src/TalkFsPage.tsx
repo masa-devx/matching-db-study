@@ -16,7 +16,6 @@ export default function TalkFsPage() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    // ログインが要るかの守りを、ここにも書く
     let stop = () => {}
     signInFirebase().then(async (me) => {
       setUid(me)

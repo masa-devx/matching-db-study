@@ -31,7 +31,6 @@ export default function SettingsPage() {
   const [withdrawBusy, setWithdrawBusy] = useState(false)
 
   useEffect(() => {
-    // ログインが要るかの守りを、ここにも書く
     // ホームと同じ2本（自分・自分のプロフィール）を、ここにも書いた。メールアドレス・確認済みか・性別・有料かを知るため
     const headers = { Accept: 'application/json' }
     apiFetch(`/api/me`, { headers })
