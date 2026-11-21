@@ -209,6 +209,9 @@ flowchart TB
   - 401 のとき、`client.ts` は応答の `code` を `app/` に渡して `UnauthorizedError` を投げる。`app/` は `shared/session` の `clearSession()` を呼び、理由を付けてログインの画面へ読み込み直す（FR-UI-100）
   - 401 のときは、まだ読み込み直す形（`configureApi`）。読み込み直すので、ポーリングも止まる。画面の中で移す形にしたら、ポーリングを止めることを、はっきり書く
 - ログアウトは `apiFetchForLogout` で呼ぶ（トークンを付けるが、401 でも移らない）
+- メンテナンス中の 503（FR-MAINT-006）は、`client.ts` の3つの関数が見分け、`app/configureApi.ts` から渡された `onMaintenance` を呼ぶ。`app/MaintenanceGate.tsx` が、どの画面の代わりにも「ただいまメンテナンス中です」を出す（画面ごとに 503 を見分けない）
+  - 続きを止める（`MaintenanceError` を投げる）のは `apiFetch` だけ。ログインの前の API とログアウトは、待たずに呼ぶ所があるので、投げずに応答を返す
+  - トークンは消さず、ログインの画面にも移さない。解けたかは、会員が読み込み直して確かめる
 - メールアドレスを確認していない会員の 403（`code: "email_unverified"`。FR-AUTH-021）は、`client.ts` が `EmailUnverifiedError` を投げて、呼んだ画面の続きを止める（画面は移さない）。確認を促すのは、`app/RequireAuth.tsx` が画面の代わりに出す「確認待ち」（`components/AwaitingVerification.tsx`）と、枠のいちばん上の帯（`VerifyBanner`。FR-UI-014）。画面で受け止めるときは、親の `StoppedRequestError` で見分ける
 - PR #268 から、API は、壊れた・期限の切れたトークンにも 401 を返す（前は 500）
 - 403 は、応答の `code` で見分ける（有料が要る・男性でない・確認していない・ブロック）。ステータスだけで「有料が要る」と読まない。API が `code` を返すまでは、誘導のダイアログを 403 で出さず、`plans/rules.ts` の判断で出す

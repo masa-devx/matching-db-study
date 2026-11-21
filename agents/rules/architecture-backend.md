@@ -81,6 +81,10 @@ Controller ──→ Service ──→ Model
   - 受け持ち：業務の決まりに反したことを表す
   - 主に使うもの（目安）：`BusinessException`
   - 使ってはいけない：Http・`abort()`・Symfony の HTTP の例外（状態コードは `bootstrap/app.php` で決める）
+- Listener
+  - 受け持ち：Laravel の出来事を受けて、基盤の処理をする（例：メンテナンスを入れたら、表 `sessions` の行を全部消す。`Listeners/DeleteAllSessions`）
+  - 主に使うもの（目安）：Laravel の機能（`DB::`・`Log::`・`config()`）。業務のロジックが要るときは Service を呼ぶ
+  - 使ってはいけない：Http（Request・Resource）・Model のイベントを受けること（2章の Model と同じ理由）
 - `App\Support`
   - 受け持ち：基盤
   - 主に使うもの（目安）：Laravel の機能
