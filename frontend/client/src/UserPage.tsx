@@ -7,7 +7,7 @@ import ReportDialog from './components/ReportDialog'
 import { SkeletonProfile } from './components/Skeleton'
 import { useToast } from './components/Toast'
 import UpsellDialog from './components/UpsellDialog'
-import { apiFetch, apiUrl, UnauthorizedError } from './shared/api/client'
+import { apiFetch, apiUrl, StoppedRequestError } from './shared/api/client'
 
 // レガシー版（03b）。相手のプロフィール。取る・持つ・見せる・決まりを、全部この部品に書く
 // 03c：モーダル・トースト・スケルトン・マッチの演出は components/ の部品を使う
@@ -82,8 +82,8 @@ export default function UserPage() {
           toast('いいねしました')
         }
       } catch (e) {
-        // 401 は client.ts がログインの画面へ移す。ここで受け止めないと、遷移の中の失敗として画面全体が外れる
-        if (!(e instanceof UnauthorizedError)) throw e
+        // 401 と、メールアドレスを確認していない 403 は、client.ts が続きを止める。ここで受け止めないと、遷移の中の失敗として画面全体が外れる
+        if (!(e instanceof StoppedRequestError)) throw e
       }
     })
 

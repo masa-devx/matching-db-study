@@ -22,12 +22,25 @@ export function configureApiClient(next: ApiClientSettings): void {
   settings = next
 }
 
-// ログインが切れたときに投げる。呼んだ画面の続きの処理（応答を一覧として置くなど）を止めるため。
-// 失敗の扱いを ApiError（状態コード・code・文）にするとき、この型は「status が 401 の ApiError」に置き換える
-export class UnauthorizedError extends Error {
+// 呼んだ画面の続きの処理（応答を一覧として置くなど）を止めるために投げる失敗の親。
+// 画面で受け止めるときは、この型で見分ける（いいねのように、遷移の中で待つ所）。
+// 失敗の扱いを ApiError（状態コード・code・文）にするとき、ここは「status と code を持つ ApiError」に置き換える
+export class StoppedRequestError extends Error {}
+
+// ログインが切れた（401）。app/ の処理がログインの画面へ移す
+export class UnauthorizedError extends StoppedRequestError {
   constructor() {
     super('ログインしてください')
     this.name = 'UnauthorizedError'
+  }
+}
+
+// メールアドレスを確認していない会員が、確認が要る API を呼んだ（403 の email_unverified。FR-AUTH-021）。
+// 画面は移さない。確認を促すのは、枠のいちばん上の帯（VerifyBanner。FR-UI-014）
+export class EmailUnverifiedError extends StoppedRequestError {
+  constructor() {
+    super('この機能は使えません')
+    this.name = 'EmailUnverifiedError'
   }
 }
 
@@ -57,6 +70,9 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
     settings.onUnauthorized(await codeOf(res))
     throw new UnauthorizedError()
   }
+  if (res.status === 403 && (await codeOf(res)) === 'email_unverified') {
+    throw new EmailUnverifiedError()
+  }
   return res
 }
 
@@ -70,7 +86,7 @@ export function apiFetchForLogout(path: string, init: RequestInit = {}): Promise
   return fetch(`${API_URL}${path}`, { ...init, headers })
 }
 
-// 401 の応答の code を読む。JSON でなければ null
+// 401・403 の応答の code を読む。JSON でなければ null
 async function codeOf(res: Response): Promise<string | null> {
   try {
     const body: unknown = await res.clone().json()
