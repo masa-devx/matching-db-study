@@ -5,7 +5,8 @@ import Button from './components/Button'
 import Icon from './components/Icon'
 import { SkeletonProfile } from './components/Skeleton'
 import { useToast } from './components/Toast'
-import { goToLoginAfterUnauthorized } from './shared/session/goToLoginAfterUnauthorized'
+import { apiFetch, apiUrl } from './shared/api/client'
+import { readToken } from './shared/session/session'
 
 // M4（#198）：プルダウンに出す都道府県と身長（検索の条件の画面にある一覧と同じものを、ここにも書いた）
 const PREFECTURES = [
@@ -73,27 +74,22 @@ export default function HomePage() {
 
   useEffect(() => {
     // ログインが要るかの守りを、画面ごとに書く
-    if (!sessionStorage.getItem('token')) {
+    if (!readToken()) {
       navigate('/login')
       return
     }
     // 読み込み中と失敗は考えない。401 はプロフィールの API だけで見る（/api/me の 401・500 は #257 で扱う）。StrictMode なので、開発中は2本ずつ呼ばれる
     // 自分の public_id（#46）を知るために /api/me を呼び、そのあとプロフィールを呼ぶ（2本が順に流れる）
-    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me`, {
-      headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+    apiFetch(`/api/me`, {
+      headers: { Accept: 'application/json' },
     })
       .then((r) => r.json())
       .then((u) =>
-        fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/users/${u.public_id}`, {
-          headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+        apiFetch(`/api/users/${u.public_id}`, {
+          headers: { Accept: 'application/json' },
         }),
       )
       .then((r) => {
-        // #243：ログインが切れた・止められたときは 401。ログインの画面へ移す（ほかの失敗は、まだ考えない）
-        if (r.status === 401) {
-          goToLoginAfterUnauthorized()
-          return null
-        }
         return r.json()
       })
       .then((u) => {
@@ -112,12 +108,11 @@ export default function HomePage() {
     }
     setSaving(true)
     // 入力を確かめない。API も確かめないので、何でも入る
-    const res = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/users/${me.public_id}`, {
+    const res = await apiFetch(`/api/users/${me.public_id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
-        Authorization: `Bearer ${sessionStorage.getItem('token')}`,
       },
       body: JSON.stringify({
         nickname: form.nickname,
@@ -134,11 +129,6 @@ export default function HomePage() {
         image: form.image,
       }),
     })
-    // #243：ログインが切れた・止められたときは 401。保存せず、ログインの画面へ移す
-    if (res.status === 401) {
-      goToLoginAfterUnauthorized()
-      return
-    }
     const profile = await res.json()
     setSaving(false)
     setMe({ ...me, profile })
@@ -149,7 +139,6 @@ export default function HomePage() {
 
   // 年齢の計算を、相手の画面からここにも写した（誕生日の前だと1歳多い）
   const age = me?.profile?.birthday ? new Date().getFullYear() - Number(me.profile.birthday.slice(0, 4)) : ''
-  const api = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
 
   // 03c：読み込み中は、中身と同じ形のスケルトン（FR-UI-025）
   if (!me) return <SkeletonProfile />
@@ -235,7 +224,7 @@ export default function HomePage() {
                     checked={form.image === `/images/avatars/demo-${n}.svg`}
                     onChange={(e) => setForm({ ...form, image: e.target.value })}
                   />
-                  <img src={`${api}/images/avatars/demo-${n}.svg`} />
+                  <img src={apiUrl(`/images/avatars/demo-${n}.svg`)} />
                 </label>
               ))}
             </div>

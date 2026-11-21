@@ -3,11 +3,12 @@ import { Link, useNavigate, useParams } from 'react-router'
 import ConfirmDialog from './components/ConfirmDialog'
 import Icon from './components/Icon'
 import MatchCelebration from './components/MatchCelebration'
+import ReportDialog from './components/ReportDialog'
 import { SkeletonProfile } from './components/Skeleton'
 import { useToast } from './components/Toast'
-import ReportDialog from './components/ReportDialog'
 import UpsellDialog from './components/UpsellDialog'
-import { goToLoginAfterUnauthorized } from './shared/session/goToLoginAfterUnauthorized'
+import { apiFetch, apiUrl } from './shared/api/client'
+import { readToken } from './shared/session/session'
 
 // レガシー版（03b）。相手のプロフィール。取る・持つ・見せる・決まりを、全部この部品に書く
 // 03c：モーダル・トースト・スケルトン・マッチの演出は components/ の部品を使う
@@ -31,27 +32,20 @@ export default function UserPage() {
   const [upsell, setUpsell] = useState(false)
   const toast = useToast()
   const navigate = useNavigate()
-  const api = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
   const headers = {
     'Content-Type': 'application/json',
     Accept: 'application/json',
-    Authorization: `Bearer ${sessionStorage.getItem('token')}`,
   }
 
   useEffect(() => {
     // ログインが要るかの守りを、ここにも書く
-    if (!sessionStorage.getItem('token')) {
+    if (!readToken()) {
       navigate('/login')
       return
     }
     // 読み込み中・失敗は考えない。すぐ別の人に移ると、前の人の応答があとから上書きする
-    fetch(`${api}/api/users/${publicId}`, { headers })
+    apiFetch(`/api/users/${publicId}`, { headers })
       .then((r) => {
-        // #243：ログインが切れた・止められたときは 401。ログインの画面へ移す（ほかの失敗は、まだ考えない）
-        if (r.status === 401) {
-          goToLoginAfterUnauthorized()
-          return null
-        }
         return r.json()
       })
       .then((u) => {
@@ -66,7 +60,7 @@ export default function UserPage() {
   const like = () =>
     startTransition(async () => {
       setShownLiked(true)
-      const r = await fetch(`${api}/api/me/likes`, {
+      const r = await apiFetch(`/api/me/likes`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ user_id: publicId }),
@@ -86,13 +80,8 @@ export default function UserPage() {
       if (d.matched) {
         setRoomId(d.room_id ?? null)
         // マッチの演出に出す自分の写真を、ここで読む（ホームと同じ2本を写す）
-        const me = await fetch(`${api}/api/me`, { headers }).then((x) => x.json())
-        const res = await fetch(`${api}/api/users/${me.public_id}`, { headers })
-        // #243：止められた・ログインが切れたときは 401。ログインの画面へ移す
-        if (res.status === 401) {
-          goToLoginAfterUnauthorized()
-          return
-        }
+        const me = await apiFetch(`/api/me`, { headers }).then((x) => x.json())
+        const res = await apiFetch(`/api/users/${me.public_id}`, { headers })
         const mine = await res.json()
         setMatchedWith(mine.profile ?? {})
       } else {
@@ -102,7 +91,7 @@ export default function UserPage() {
 
   // M3（#187）：スキップする。届いたいいねの画面（LikesPage）に書いた送り方を、ここにもコピーした
   const skip = () => {
-    fetch(`${api}/api/me/skips`, { method: 'POST', headers, body: JSON.stringify({ user_id: publicId }) }).then((r) => {
+    apiFetch(`/api/me/skips`, { method: 'POST', headers, body: JSON.stringify({ user_id: publicId }) }).then((r) => {
       if (!r.ok) {
         toast('スキップできませんでした', 'error')
         return
@@ -114,7 +103,7 @@ export default function UserPage() {
 
   // 06：ブロックする。ステータスを見ない（2回目は 500 でも「ブロックしました」と出る）
   const block = () => {
-    fetch(`${api}/api/me/blocks`, { method: 'POST', headers, body: JSON.stringify({ user_id: publicId }) }).then(() => {
+    apiFetch(`/api/me/blocks`, { method: 'POST', headers, body: JSON.stringify({ user_id: publicId }) }).then(() => {
       setConfirming(false)
       toast('ブロックしました')
       // 前の画面に戻る（戻った先は読み直すが、検索の一覧は条件を残したまま1ページ目から）
@@ -125,7 +114,7 @@ export default function UserPage() {
   // 年齢の計算もここに書く（年の引き算なので、誕生日の前だと1歳多い）
   const age = user?.profile?.birthday ? new Date().getFullYear() - Number(user.profile.birthday.slice(0, 4)) : ''
   // 画像のパスは API の側にあるので、送り先を前に付ける
-  const image = user?.profile?.image ? `${api}${user.profile.image}` : ''
+  const image = user?.profile?.image ? apiUrl(user.profile.image) : ''
 
   // 03c：読み込み中は、中身と同じ形のスケルトン（FR-UI-025）
   if (!user) return <SkeletonProfile />

@@ -6,6 +6,8 @@ import EmptyState from './components/EmptyState'
 import Icon from './components/Icon'
 import { SkeletonRows } from './components/Skeleton'
 import { useToast } from './components/Toast'
+import { apiFetch } from './shared/api/client'
+import { readToken } from './shared/session/session'
 
 // レガシー版（06）。ブロックした相手（/blocks）。ホームから開く。いいねの一覧の画面を写して、全部この部品に書く
 export default function BlocksPage() {
@@ -14,12 +16,11 @@ export default function BlocksPage() {
   const toast = useToast()
   const [busy, setBusy] = useState('')
   const navigate = useNavigate()
-  const api = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
 
   const load = () => {
     // 読み込み中・失敗は考えない
-    fetch(`${api}/api/me/blocks`, {
-      headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+    apiFetch(`/api/me/blocks`, {
+      headers: { Accept: 'application/json' },
     })
       .then((r) => r.json())
       .then(setBlocks)
@@ -27,7 +28,7 @@ export default function BlocksPage() {
 
   useEffect(() => {
     // ログインが要るかの守りを、ここにも書く
-    if (!sessionStorage.getItem('token')) {
+    if (!readToken()) {
       navigate('/login')
       return
     }
@@ -37,9 +38,9 @@ export default function BlocksPage() {
   const unblock = (userId: string) => {
     setBusy(userId)
     // 確かめずに、すぐ解除する。ステータスを見ない。終わったら一覧を全部読み直す
-    fetch(`${api}/api/me/blocks/${userId}`, {
+    apiFetch(`/api/me/blocks/${userId}`, {
       method: 'DELETE',
-      headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+      headers: { Accept: 'application/json' },
     }).then(() => {
       setBusy('')
       toast('解除しました')

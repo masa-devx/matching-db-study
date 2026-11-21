@@ -2,29 +2,30 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 import Icon from './components/Icon'
 import { SkeletonRows } from './components/Skeleton'
+import { apiFetch } from './shared/api/client'
+import { readToken } from './shared/session/session'
 
 // レガシー版（A7。#213）。運営からのお知らせ（/notices）。ホームのベルと、未読があるときの帯から来る。
 // 開いたら、まだ読んでいないお知らせを、1件ずつ「読んだ」と送る（まとめて送る API はない）
 export default function NoticesPage() {
   const [notices, setNotices] = useState<any[] | null>(null)
   const navigate = useNavigate()
-  const api = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
-  const headers = { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+  const headers = { Accept: 'application/json' }
 
   useEffect(() => {
     // ログインが要るかの確かめを、ここにも書く
-    if (!sessionStorage.getItem('token')) {
+    if (!readToken()) {
       navigate('/login')
       return
     }
-    fetch(`${api}/api/me/notices`, { headers })
+    apiFetch(`/api/me/notices`, { headers })
       .then((r) => r.json())
       .then((rows) => {
         const list = Array.isArray(rows) ? rows : []
         setNotices(list)
         // 画面には「未読」の印を残したまま、API には読んだと送る（次に開いたときは、印が消える）
         for (const n of list) {
-          if (!n.read_at) fetch(`${api}/api/me/notices/${n.id}/read`, { method: 'POST', headers })
+          if (!n.read_at) apiFetch(`/api/me/notices/${n.id}/read`, { method: 'POST', headers })
         }
       })
   }, [])

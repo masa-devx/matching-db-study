@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router'
+import { apiFetch } from '../shared/api/client'
 
 // A7（#213）：運営からのお知らせに、まだ読んでいないものがあるとき、どの画面にも帯を出す。
 // 画面が変わるたびに、お知らせの一覧を全部読んで、未読の数を数える（数だけを返す API はない。
@@ -10,8 +11,8 @@ export default function NoticeBanner() {
   const location = useLocation()
 
   useEffect(() => {
-    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me/notices`, {
-      headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+    apiFetch(`/api/me/notices`, {
+      headers: { Accept: 'application/json' },
     })
       .then((r) => r.json())
       .then((rows) => {

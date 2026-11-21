@@ -1,6 +1,7 @@
 import { getApp, getApps, initializeApp } from 'firebase/app'
 import { connectAuthEmulator, getAuth, signInWithCustomToken } from 'firebase/auth'
 import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore'
+import { apiFetch } from './shared/api/client'
 
 // レガシー版（05c）。手元の Firebase Emulator（Docker の firebase）につなぐ。本物の Firebase にはつながない。
 // プロジェクトは demo-matching。apiKey は Emulator が見ないので、決まった文字を入れる（秘密の値ではない）
@@ -27,10 +28,9 @@ export const countReads = (n: number) => {
 
 // Laravel にカスタムトークンをもらい、Firebase にログインする。uid は会員の public_id
 export const signInFirebase = async (): Promise<string> => {
-  const api = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
-  const res = await fetch(`${api}/api/me/firebase-token`, {
+  const res = await apiFetch(`/api/me/firebase-token`, {
     method: 'POST',
-    headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+    headers: { Accept: 'application/json' },
   }).then((r) => r.json())
   await signInWithCustomToken(auth, res.token)
   return res.uid

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { apiFetch } from '../shared/api/client'
 import ConfirmDialog from './ConfirmDialog'
 import { useToast } from './Toast'
 
@@ -55,12 +56,11 @@ export default function ReportDialog({ open, userId, nickname, message, onClose,
       return
     }
     setSending(true)
-    const r = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me/reports`, {
+    const r = await apiFetch(`/api/me/reports`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${sessionStorage.getItem('token')}`,
       },
       body: JSON.stringify({ user_id: userId, message_id: message?.id, reason, detail: detail || null, block }),
     })
@@ -107,9 +107,7 @@ export default function ReportDialog({ open, userId, nickname, message, onClose,
         <input type="checkbox" checked={block} onChange={(e) => setBlock(e.target.checked)} />
         この相手をブロックする
       </label>
-      <p className="hint">
-        通報したことは、相手には伝わりません。運営が中身を確かめます。結果はお知らせしません。
-      </p>
+      <p className="hint">通報したことは、相手には伝わりません。運営が中身を確かめます。結果はお知らせしません。</p>
       {error && (
         <p className="error" role="alert">
           {error}

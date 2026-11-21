@@ -4,6 +4,8 @@ import Button from './components/Button'
 import { SkeletonCards } from './components/Skeleton'
 import { useToast } from './components/Toast'
 import UpsellDialog from './components/UpsellDialog'
+import { apiFetch, apiUrl } from './shared/api/client'
+import { readToken } from './shared/session/session'
 
 // レガシー版（04）。検索のタブ（/search）＝条件で相手を探して、2列のカードで見る。
 // 条件・取る・続き・見せるを、全部この部品に書く（03b と同じ形）。
@@ -75,12 +77,11 @@ export default function SearchPage() {
   // M5（#198）：カードから、いいねとスキップ。相手のプロフィール（UserPage）に書いた送り方を、ここにもコピーした。
   // 送ったら、その人を一覧から外す（次に検索しても、いいねした相手・スキップした相手は出ない）
   const act = async (u: any, kind: 'likes' | 'skips') => {
-    const r = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me/${kind}`, {
+    const r = await apiFetch(`/api/me/${kind}`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${sessionStorage.getItem('token')}`,
       },
       body: JSON.stringify({ user_id: u.public_id }),
     })
@@ -139,8 +140,8 @@ export default function SearchPage() {
     if (c.sort) params.append('sort', c.sort)
     params.append('page', String(p))
     // 読み込み中・失敗・401 は考えない
-    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/users?${params}`, {
-      headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+    apiFetch(`/api/users?${params}`, {
+      headers: { Accept: 'application/json' },
     })
       .then((r) => {
         // 07・#150：有料の条件を残したまま無料になったときなど、API が 403 を返したら、モーダルを出して空にする
@@ -163,7 +164,7 @@ export default function SearchPage() {
 
   useEffect(() => {
     // ログインが要るかの守りを、ここにも書く
-    if (!sessionStorage.getItem('token')) {
+    if (!readToken()) {
       navigate('/login')
       return
     }
@@ -200,8 +201,6 @@ export default function SearchPage() {
     box.addEventListener('scroll', onScroll)
     return () => box.removeEventListener('scroll', onScroll)
   }, [page, loading, done, searchParams.toString()])
-
-  const api = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
 
   return (
     <div>
@@ -284,7 +283,7 @@ export default function SearchPage() {
             <Link to={`/users/${u.public_id}`} viewTransition className="user-card">
               <span className="user-card-photo" style={{ viewTransitionName: `photo-${u.public_id}` }}>
                 {u.profile?.image ? (
-                  <img className="photo-img" src={`${api}${u.profile.image}`} alt="" />
+                  <img className="photo-img" src={apiUrl(u.profile.image)} alt="" />
                 ) : (
                   <span className="photo-empty">{(u.profile?.nickname ?? '?').slice(0, 1)}</span>
                 )}

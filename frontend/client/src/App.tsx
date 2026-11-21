@@ -4,8 +4,8 @@ import './App.css'
 import BlocksPage from './BlocksPage'
 import NoticeBanner from './components/NoticeBanner'
 import TabBar from './components/TabBar'
-import VerifyBanner from './components/VerifyBanner'
 import { ToastProvider } from './components/Toast'
+import VerifyBanner from './components/VerifyBanner'
 import ForgotPasswordPage from './ForgotPasswordPage'
 import HomePage from './HomePage'
 import InfoPage from './InfoPage'
@@ -22,6 +22,7 @@ import SearchConditionsPage from './SearchConditionsPage'
 import SearchPage from './SearchPage'
 import SentLikesPage from './SentLikesPage'
 import SettingsPage from './SettingsPage'
+import { readToken } from './shared/session/session'
 import TalkFsPage from './TalkFsPage'
 import TalkPage from './TalkPage'
 import UserPage from './UserPage'
@@ -49,9 +50,9 @@ const TITLES: [string, string][] = [
 ]
 
 // レガシー版（03b）。画面の切り替えと、ログインしたあとの枠（四角の枠と、その下のタブ）を、ここに全部書く。
-// ログインしているかは、sessionStorage の token があるかだけで決める（期限切れでも「ログイン中」に見える）
+// ログインしているかは、トークンがあるかだけで決める（期限切れでも「ログイン中」に見える。起動のときに GET /api/me で決めるのは #257 の 2-2）
 export default function App() {
-  const [token, setToken] = useState<string | null>(sessionStorage.getItem('token'))
+  const [token, setToken] = useState<string | null>(readToken())
   const location = useLocation()
 
   // M9：画面ごとに、タブの題を変える（前は、どの画面も同じ題で、タブを並べると見分けられなかった）

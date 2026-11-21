@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { countReads, db, signInFirebase } from './firebase'
 import ReadCounter from './ReadCounter'
+import { apiFetch, apiUrl } from './shared/api/client'
+import { readToken } from './shared/session/session'
 
 // レガシー版（05c）。Firestore 版のトーク画面（/messages-fs/:roomId）。05 の TalkPage を写して、取り方を Firestore に変えた。
 // limit のないリスナーで、ルームのメッセージを全部聞く（開くたびに全部読む）。時刻は画面の時計で入れる
@@ -13,11 +15,10 @@ export default function TalkFsPage() {
   const [partner, setPartner] = useState<any>(null)
   const [body, setBody] = useState('')
   const navigate = useNavigate()
-  const api = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
 
   useEffect(() => {
     // ログインが要るかの守りを、ここにも書く
-    if (!sessionStorage.getItem('token')) {
+    if (!readToken()) {
       navigate('/login')
       return
     }
@@ -27,8 +28,8 @@ export default function TalkFsPage() {
       // 相手を知るために、自分の受信箱のこのルームを読み、名前は Laravel（PostgreSQL）から読む
       const inbox = await getDoc(doc(db, 'users', me, 'rooms', roomId!))
       countReads(1)
-      fetch(`${api}/api/users/${inbox.data()?.partnerUid}`, {
-        headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+      apiFetch(`/api/users/${inbox.data()?.partnerUid}`, {
+        headers: { Accept: 'application/json' },
       })
         .then((r) => r.json())
         .then(setPartner)
@@ -62,7 +63,7 @@ export default function TalkFsPage() {
         <button className="button button-small button-ghost" onClick={() => navigate('/messages-fs')}>
           ←
         </button>
-        {partner?.profile?.image && <img className="row-avatar" src={`${api}${partner.profile.image}`} />}
+        {partner?.profile?.image && <img className="row-avatar" src={apiUrl(partner.profile.image)} />}
         <span className="row-name">{partner?.profile?.nickname ?? ''}</span>
       </div>
       <ReadCounter />

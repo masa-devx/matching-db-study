@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router'
 import ConfirmDialog from './components/ConfirmDialog'
 import Icon from './components/Icon'
 import { useToast } from './components/Toast'
+import { apiFetch, apiFetchWithoutLogin } from './shared/api/client'
+import { clearSession, readToken } from './shared/session/session'
 
 // レガシー版（M1。#181）。設定（/settings）。ホームの右上の歯車から来る。
 // アカウント（メールアドレスの確認・パスワード）・有料会員・検索・安全・案内・ログアウト・退会を、ここにまとめる。
@@ -29,17 +31,15 @@ export default function SettingsPage(props: any) {
 
   useEffect(() => {
     // ログインが要るかの守りを、ここにも書く
-    if (!sessionStorage.getItem('token')) {
+    if (!readToken()) {
       navigate('/login')
       return
     }
     // ホームと同じ2本（自分・自分のプロフィール）を、ここにも書いた。メールアドレス・確認済みか・性別・有料かを知るため
-    const headers = { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` }
-    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me`, { headers })
+    const headers = { Accept: 'application/json' }
+    apiFetch(`/api/me`, { headers })
       .then((r) => r.json())
-      .then((u) =>
-        fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/users/${u.public_id}`, { headers }),
-      )
+      .then((u) => apiFetch(`/api/users/${u.public_id}`, { headers }))
       .then((r) => r.json())
       .then((u) => setMe(u))
   }, [])
@@ -47,7 +47,7 @@ export default function SettingsPage(props: any) {
   // 確認のメールをもう一度送る（FR-AUTH-007 の API。ログインしていなくても呼べる API に、自分のメールアドレスを送る）
   const resend = () => {
     setResending(true)
-    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/email-verifications`, {
+    apiFetchWithoutLogin(`/api/email-verifications`, {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: me.email }),
@@ -68,12 +68,11 @@ export default function SettingsPage(props: any) {
       return
     }
     setChangeBusy(true)
-    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me/password`, {
+    apiFetch(`/api/me/password`, {
       method: 'PUT',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${sessionStorage.getItem('token')}`,
       },
       body: JSON.stringify({ current_password: current, password: next }),
     }).then((r) => {
@@ -93,13 +92,11 @@ export default function SettingsPage(props: any) {
 
   const logout = () => {
     // ホームにあった処理を、そのまま持ってきた
-    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/auth/logout`, {
+    apiFetch(`/api/auth/logout`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
     })
     // 応答を待たずに消す。サーバーは何もしないので、消す前にコピーしたトークンは30日使える
-    sessionStorage.removeItem('token')
-    sessionStorage.removeItem('searchConditions')
+    clearSession()
     props.setToken(null)
     navigate('/login')
   }
@@ -107,12 +104,11 @@ export default function SettingsPage(props: any) {
   // 06：退会する。422 のときだけ、モーダルの中に出す（ほかの失敗は考えない）
   const withdraw = async () => {
     setWithdrawBusy(true)
-    const res = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me`, {
+    const res = await apiFetch(`/api/me`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
-        Authorization: `Bearer ${sessionStorage.getItem('token')}`,
       },
       body: JSON.stringify({ password }),
     })
@@ -121,8 +117,7 @@ export default function SettingsPage(props: any) {
       setWithdrawError('パスワードがちがいます')
       return
     }
-    sessionStorage.removeItem('token')
-    sessionStorage.removeItem('searchConditions')
+    clearSession()
     props.setToken(null)
     navigate('/login')
   }

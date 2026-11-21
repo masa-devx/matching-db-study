@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
+import { apiFetchWithoutLogin } from './shared/api/client'
+import { readToken } from './shared/session/session'
 
 // レガシー版（M2。#193）。メールアドレスの確認の画面（/verify/<確認用の文字>）。確認のメールのリンクから来る。
 // 前は、リンクが API を直接開き、JSON の文字だけが出ていた。ここで API を呼び、結果と、次にやることを出す。
@@ -11,12 +13,12 @@ export default function VerifyPage() {
 
   useEffect(() => {
     // 開いたら、すぐ確認の API を呼ぶ（つながらないときは、「確かめています」のまま止まる）
-    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/email-verifications/${token}`, {
+    apiFetchWithoutLogin(`/api/email-verifications/${token}`, {
       headers: { Accept: 'application/json' },
     }).then((r) => setOk(r.ok))
   }, [token])
 
-  const loggedIn = !!sessionStorage.getItem('token')
+  const loggedIn = !!readToken()
 
   return (
     <div className="auth">

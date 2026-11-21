@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router'
 import Avatar from './components/Avatar'
 import EmptyState from './components/EmptyState'
 import { SkeletonRows } from './components/Skeleton'
+import { apiFetch } from './shared/api/client'
+import { readToken } from './shared/session/session'
 
 // レガシー版（03b）。送ったいいねの一覧。取る・持つ・見せるを、全部この部品に書く。
 // M3（#184）：いいねのタブ（/likes）は、届いたいいね（LikesPage）にした。この画面は /likes/sent に移し、設定から開く
@@ -12,13 +14,13 @@ export default function SentLikesPage() {
 
   useEffect(() => {
     // ログインが要るかの守りを、ここにも書く
-    if (!sessionStorage.getItem('token')) {
+    if (!readToken()) {
       navigate('/login')
       return
     }
     // 読み込み中・失敗は考えない。API が止まると、画面は空のまま
-    fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/me/likes`, {
-      headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+    apiFetch(`/api/me/likes`, {
+      headers: { Accept: 'application/json' },
     })
       .then((r) => r.json())
       .then(setLikes)

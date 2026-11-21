@@ -3,17 +3,18 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { countReads, db, signInFirebase } from './firebase'
 import ReadCounter from './ReadCounter'
+import { apiFetch, apiUrl } from './shared/api/client'
+import { readToken } from './shared/session/session'
 
 // レガシー版（05c）。Firestore 版のトークの一覧（/messages-fs）。05 の MessagesPage を写して、取り方だけを Firestore に変えた。
 // 受信箱には必要な情報（partnerUid・lastReadAt）しかないので、ルームごとに最新の1件・未読・相手の名前を読みに行く（N+1）
 export default function MessagesFsPage() {
   const [rooms, setRooms] = useState<any[] | null>(null)
   const navigate = useNavigate()
-  const api = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
 
   useEffect(() => {
     // ログインが要るかの守りを、ここにも書く
-    if (!sessionStorage.getItem('token')) {
+    if (!readToken()) {
       navigate('/login')
       return
     }
@@ -33,8 +34,8 @@ export default function MessagesFsPage() {
           countReads(Math.max(after.size, 1))
           const unread = after.docs.filter((m) => m.data().senderId !== uid).length
           // 相手の名前と写真は、Firestore にないので、ルームごとに Laravel（PostgreSQL）から読む
-          const partner = await fetch(`${api}/api/users/${r.data().partnerUid}`, {
-            headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+          const partner = await apiFetch(`/api/users/${r.data().partnerUid}`, {
+            headers: { Accept: 'application/json' },
           }).then((x) => x.json())
           return { id: r.id, last: last.docs[0]?.data(), unread, partner }
         }),
@@ -57,7 +58,7 @@ export default function MessagesFsPage() {
           <li key={r.id}>
             <Link to={`/messages-fs/${r.id}`} className="row">
               {r.partner?.profile?.image ? (
-                <img className="row-avatar" src={`${api}${r.partner.profile.image}`} />
+                <img className="row-avatar" src={apiUrl(r.partner.profile.image)} />
               ) : (
                 <div className="row-avatar me-avatar-empty">?</div>
               )}

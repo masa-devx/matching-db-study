@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import Button from './components/Button'
+import { apiFetchWithoutLogin } from './shared/api/client'
 
 // レガシー版（M2。#196）。新しいパスワードを決める（/reset-password/<再設定用の文字>）。再設定のメールのリンクから来る。
 // 確かめるのは画面だけ（長さ・2回が同じか）。API は確かめないので、API を直接呼べば、1文字でも通る
@@ -26,7 +27,7 @@ export default function ResetPasswordPage() {
       return
     }
     setSending(true)
-    const res = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'}/api/password-resets/${token}`, {
+    const res = await apiFetchWithoutLogin(`/api/password-resets/${token}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ password }),
