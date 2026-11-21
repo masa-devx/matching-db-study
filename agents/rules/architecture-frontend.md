@@ -80,7 +80,12 @@ src/
 
 ## 3. 依存の向き
 
-下の一覧の「使ってよい」に書いたものだけを使う（一覧は、許すものを並べたものとして読む）。#114 で Biome の `noRestrictedImports` に書き、`npm run lint` で止める。Biome で書けない決まりが出たら、dependency-cruiser を足すかを決める。
+下の一覧の「使ってよい」に書いたものだけを使う（一覧は、許すものを並べたものとして読む）。#114 で Biome の `noRestrictedImports`（`biome.json` の `overrides`）に書き、`npm run lint:rules` と CI で止める。Biome で書けない決まりが出たら、dependency-cruiser を足すかを決める。
+
+- Biome は import の文字そのもので比べるので、規則はフォルダの名前で書く（`shared/api` から見た `shared/session` は `../session/session` なので `**/session/*`）。`**/shared/session/**` と書くと、同じ `shared/` の中の相対の import を止められない（#114 で確かめた）
+- `fetch` を `shared/api/client.ts` の外で使うことは、`noRestrictedGlobals` で止める（テストのファイルは外す）
+- 機能の中の `sessionStorage` も、`noRestrictedGlobals` で止める
+- Biome で止められないもの（レビューで見る）：機能どうしが互いの `index.ts` を import し合う形・`app/` から機能の `index.ts` を `features/<機能>/index` と書く形（`features/<機能>` と書く）
 
 - `app/`
   - 使ってよい：すべての機能の `index.ts`・`shared/`
