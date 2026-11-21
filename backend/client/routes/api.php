@@ -52,7 +52,7 @@ Route::post('/password-resets', [PasswordResetController::class, 'store']);
 Route::put('/password-resets/{token}', [PasswordResetController::class, 'update']);
 
 // ---- ログインが要る API ----
-// user.authenticate がトークンを読み、使える会員か（退会・停止・強制退会でないか）を確かめる。だめなら 401（FR-AUTH-024・NFR-AUTH-001）。
+// user.authenticate がセッションの会員を読み、使える会員か（退会・アカウント停止・強制退会でないか）を確かめる。だめなら 401（FR-AUTH-024・NFR-AUTH-001）。
 // 新しいルートは、ログインが要らないと決めたもののほかは、このグループに入れる（入れ忘れると LoginRequiredRoutesTest が落ちる）
 Route::middleware('user.authenticate')->group(function (): void {
     // 01b 自分の情報（docs/api/01b-auth.md）。メールアドレスを確認していなくても使える（FR-AUTH-021）
