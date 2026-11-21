@@ -51,21 +51,21 @@ flowchart TD
   A["書き方で迷った"] --> B{"Pint が直すか？"}
   B -- "直す" --> C["Pint が直した形にする（決まり 1）"]
   B -- "直さない" --> D{"PER Coding Style 3.1 に決まりがあるか？"}
-  D -- "ある" --> E["PER に合わせる（決まり 2）"]
-  D -- "ない" --> F["php-style.md に決まりを足すか、人に聞く"]
+  D -- "ある" --> E["PER に合わせてもよい（好みで選ぶもの）"]
+  D -- "ない" --> F["quality-php.md に決まりを足すか、人に聞く"]
   </pre>
   <p>Pint の <code>laravel</code> の preset は、PER と逆の形に直す所がある。手元の Pint 1.32.2 で確かめた。</p>
   <table>
     <tr><th>書くもの</th><th>PER Coding Style 3.1</th><th>Pint の laravel</th></tr>
     <tr><td>引数のない <code>new</code></td><td><code>new Box()</code></td><td><code>new Box</code></td></tr>
     <tr><td>文字をつなぐ</td><td><code>'a' . 'b'</code></td><td><code>'a'.'b'</code></td></tr>
-    <tr><td>否定</td><td>決まりなし</td><td><code>! $flag</code></td></tr>
+    <tr><td>否定</td><td><code>!$flag</code>（空白を入れない）</td><td><code>! $flag</code></td></tr>
     <tr><td>短い無名関数</td><td><code>fn($x)</code></td><td><code>fn ($x)</code></td></tr>
     <tr><td>引数の最後の <code>,</code></td><td>複数行なら必ず</td><td>配列だけ足す</td></tr>
     <tr><td>パイプ演算子の空白</td><td>前後に1つ</td><td>直さない</td></tr>
     <tr><td><code>private(set)</code> だけ</td><td>書いてよい</td><td><code>public</code> を足す</td></tr>
   </table>
-  <div class="card point"><strong>このリポジトリで選ぶもの</strong>：Pint が直す所は Pint の形。Pint が直さない所（パイプ演算子の空白・引数の最後の <code>,</code>）は PER の形。CI の <code>pint --test</code> が通る形と、文書の形をそろえるため。</div>
+  <div class="card point"><strong>このリポジトリで選ぶもの</strong>：Pint が直す所は Pint の形（<code>quality-php.md</code> の1章）。Pint が直さない所（パイプ演算子の空白・引数の最後の <code>,</code>）は、決まりにしていない（好みで選ぶもの。PER に合わせてもよい）。</div>
 
   <h2>3. Laravel 13 の公式の文書が勧めていること</h2>
 
@@ -103,11 +103,12 @@ flowchart TD
   <h3>3-6. Laravel のメソッドに、引数を名前で渡さない</h3>
   <ul>
     <li>リリースノートに「名前付き引数は、Laravel の後方互換の約束に入らない」とある。引数の名前は、小さい版の更新で変わることがある</li>
-    <li><code>architecture-backend.md</code> の 7章の <code>DB::transaction(fn () =&gt; ..., attempts: 3)</code> は、<code>DB::transaction(fn () =&gt; ..., 3)</code> と書くほうが、この勧めに合う</li>
+    <li><code>DB::transaction(fn () =&gt; ..., 3)</code> のように順番で渡す（<code>attempts: 3</code> と書かない）</li>
+    <li>例外：Laravel の文書が名前で書いている値のクラス（メールの <code>Envelope</code>・<code>Content</code>）と、Symfony・Pest・PHP の組み込みの関数は、名前で渡してよい（<code>quality-php.md</code> の2章）</li>
   </ul>
 
   <h2>4. PHP 8.4・8.5 の新しい書き方</h2>
-  <p>どれも、手元の PHP 8.5.12 で動かして確かめた。Larastan は、今は PHP 8.3 として読むので、プロパティのフックを誤りにする（6章）。</p>
+  <p>どれも、手元の PHP 8.5.12 で動かして確かめた。Larastan は、前は PHP 8.3 として読み、プロパティのフックを誤りにしていた（6章。#261 で直した）。</p>
 
   <h3>4-1. プロパティのフック（PHP 8.4）</h3>
   <pre><code class="language-php">final class Nickname
@@ -220,7 +221,7 @@ flowchart LR
   Q -- "どれもない" --> U["Usable"]
   U --> T["isAccountUsable() が true"]
   </pre>
-  <p class="meta">上から順に確かめる（戻せないものを先にする）。<code>backend/client/app/Models/User.php</code> の78〜92行目。</p>
+  <p class="meta">上から順に確かめる（戻せないものを先にする）。<code>User::accountStatus()</code>（<code>backend/client/app/Models/User.php</code>）。</p>
 
   <h3>5-4. 一度だけ起きる出来事は、日時の列で持つ</h3>
   <ul>
@@ -230,29 +231,26 @@ flowchart LR
 
   <h2>6. このリポジトリでの当てはめ</h2>
 
-  <h3>6-1. Larastan が PHP 8.3 として読む</h3>
+  <h3>6-1. Larastan が PHP 8.3 として読んでいた（#261 で直した）</h3>
   <ul>
     <li><code>composer.json</code> が <code>"php": "^8.3"</code> で、<code>phpstan.neon</code> に <code>phpVersion</code> がない。PHPStan は <code>composer.json</code> の版を読む</li>
     <li>手元で確かめると、プロパティのフックだけが <code>Property hooks are supported only on PHP 8.4 and later.</code> になった</li>
     <li><code>phpVersion: 80500</code> を書いても、<code>composer.json</code> を <code>^8.5</code> にしても、この誤りは消えた。今のコードは、どちらでも両方のアプリで <code>[OK] No errors</code></li>
-    <li>勧めるのは <code>composer.json</code> を <code>^8.5</code> にするほう。PHP の版を書く所が1か所で済む（下書きの <code>larastan-version.md</code>）</li>
+    <li><code>composer.json</code> を <code>^8.5</code> にした（人が決めた）。Larastan が読む版を書く所が1か所で済む。版を上げるときに直す所は、<code>quality-types.md</code> に並べた</li>
   </ul>
 
-  <h3>6-2. 今のコードで当たる所</h3>
+  <h3>6-2. 今のコードで、決まりから外れている所（分かっている不具合）</h3>
   <table>
     <tr><th>決まり</th><th>当たる所</th></tr>
-    <tr><td>環境変数は <code>config/</code> だけ</td><td><code>LikeController.php</code> の86行目の <code>getenv()</code></td></tr>
-    <tr><td>Laravel に名前で渡さない</td><td><code>architecture-backend.md</code> の <code>attempts: 3</code></td></tr>
-    <tr><td>Pint の形</td><td><code>architecture-backend.md</code> の見本の <code>new 〜Exception()</code></td></tr>
-    <tr><td>Model の設定は属性で</td><td><code>User.php</code> の <code>#[Hidden]</code> と <code>$guarded</code> が混ざる</td></tr>
-    <tr><td>日時は変えられない型</td><td><code>now()</code> が <code>Illuminate\Support\Carbon</code></td></tr>
+    <tr><td>環境変数は <code>config/</code> だけ</td><td><code>LikeController.php</code> の <code>getenv()</code>・<code>FirestoreMessagesSeeder.php</code> の <code>env()</code></td></tr>
   </table>
+  <p class="meta">#261 で、決まりの見本の <code>attempts: 3</code>・<code>new 〜Exception()</code>・<code>now()</code> の型の書き方は直した。Model の設定を属性で書く・日時を変えられない型にそろえるは、好みで選ぶものとして決まりにしなかった。</p>
 
   <h2>7. 気をつけること（罠）</h2>
   <div class="card warn"><ul>
     <li>Eloquent の Model に、列と同じ名前のプロパティ（フック・<code>private(set)</code> を含む）を宣言すると、Eloquent を通らなくなり、列に入らない</li>
     <li>Larastan が PHP 8.3 として読んでいても、<code>private(set)</code>・パイプ演算子・clone with は誤りにならなかった。誤りにならないからといって、PHP 8.3 で動くわけではない</li>
-    <li><code>architecture-backend.md</code> の5章は「<code>now()</code> は <code>CarbonImmutable</code>」と書いているが、手元の <code>now()</code> は変えられる型（<code>Illuminate\Support\Carbon</code>）だった。<code>$now-&gt;addDays(7)</code> は <code>$now</code> も変える</li>
+    <li>手元の <code>now()</code> は変えられる型（<code>Illuminate\Support\Carbon</code>）を返す。<code>$now-&gt;addDays(7)</code> は <code>$now</code> も変える。<code>CarbonImmutable</code> を受けるメソッドには <code>now()-&gt;toImmutable()</code> で渡す</li>
     <li>Laravel の <code>contributions.md</code> の「PSR-2」は、Laravel 本体に PR を出す人向けの古い文。アプリの書き方は Pint の preset が正</li>
   </ul></div>
 
