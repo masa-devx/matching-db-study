@@ -258,14 +258,46 @@ AI が守る決まり（推測で流さない・許可の一覧に足す基準�
 
 ## 会員の側のメンテナンス
 
+手順の正はここ。`backend/client/bootstrap/app.php` のコメントは要点だけなので、直すときはここを先に直す。
+
 - 実行場所：リポジトリのルート
-- 入れる：`docker compose exec app php artisan down --secret="<自分で決めた文字>"`
-  - 会員の API が、どれも `503`「ただいまメンテナンス中です」になる（`GET /api/health` も。FR-MAINT-004）
-  - 入れたときに、表 `sessions` の行を全部消す（全員をログアウトさせる。FR-MAINT-002）。消した数は、ログの `maintenance.deleteAllSessions` に出る
-  - 管理画面（`admin-app`）は止まらない（別のアプリなので）
-- 抜け道：ブラウザか curl で `http://localhost:8000/<自分で決めた文字>` を開くと、Cookie が付き、その Cookie を持つクライアントだけが使える（curl なら `-c` で受け取り、`-b` で送る）
-- 解く：`docker compose exec app php artisan up`
-- 使わないもの：抜け道の文字を、ログ・チケット・PR・コミットに書く（NFR-MAINT-001）。テストで `php artisan down` をファイルの置き場のまま流す（同じフォルダで動いている開発用の API まで止まるので、テストはメモリの置き場にする。`tests/Feature/Maintenance/DownTest.php`）
+- 前提：会員の認証が JWT の間は、解いたあとも、会員はログインしたまま戻る。画面で抜け道を通れないので、確かめは curl で行う（会員の認証がセッションに移ったら、ここを直す）
+
+### 1. 入れる
+
+- コマンド：`docker compose exec app php artisan down --with-secret`
+  - 抜け道の文字は Laravel に作らせる。自分で決めた文字（`--secret`）は、シェルの履歴に残るので使わない（NFR-MAINT-001）
+  - コマンドが、抜け道の URL（`http://localhost:8000/<文字>`）を出す。その出力は、どこにも貼らない
+- 起きること
+  - 会員の API が、どれも `503`「ただいまメンテナンス中です」になる（`GET /api/health` も。FR-MAINT-004）。Laravel の `GET /up` だけは止まらない（Laravel がもとから外している）
+  - 表 `sessions` の行を全部消す（全員をログアウトさせる。FR-MAINT-002）。消した数は、`backend/client/storage/logs/laravel.log` の `maintenance.deleteAllSessions` に出る
+  - 管理画面（`admin-app`）は止まらない（別のアプリなので。FR-MAINT-005）
+- 「Failed to enter maintenance mode」と出ても、メンテナンスに入っていることがある（Laravel は、メンテナンスに入れてから、セッションを消す）。DB につながらないときに起きる。DB が戻ってから、同じコマンドをもう一度流す（もう一度流すと、セッションを消し直し、抜け道の URL も出る）
+- 入れたあと、処理の途中だったリクエストが終わるまで、数秒待ってから作業を始める
+
+### 2. 確かめる
+
+- 今の状態：`backend/client/storage/framework/down` があれば、メンテナンス中（`docker compose exec app php artisan about --only=environment` の `Maintenance Mode` でも見られる）
+- 会員の API：`curl -s -H 'Accept: application/json' http://localhost:8000/api/me` が `503`
+- 管理画面：`curl -s http://127.0.0.1:8100/api/health` が `200`（FR-MAINT-005 は、この curl で確かめる。2026-11-21 に人が決めた）
+- 抜け道：`curl -c <Cookie のファイル> <コマンドが出した URL>` で Cookie を受け取り、`curl -b <Cookie のファイル> -H 'Accept: application/json' http://localhost:8000/api/health` が `200`
+  - 抜け道の URL を開いた行は、`docker compose logs app` に残る（PHP の組み込みのサーバーのアクセスのログ）。ログを貼るときは、その行を消す。解けば、その文字は使えなくなる
+- `down` を流し直すと、セッションをまた全部消し、抜け道の文字も変わる（前の Cookie では通れない）
+
+### 3. 作業する
+
+- リリース・マイグレーション・認証の切り替えなど
+
+### 4. 解く
+
+- コマンド：`docker compose exec app php artisan up`
+- 解いたことは、`laravel.log` の `maintenance.disabled` に出る（入れたときの行と合わせて、何時から何時まで止まっていたかが分かる）
+- 会員の画面を読み込み直して、いつもどおり使えるかを確かめる
+
+### 使わないもの
+
+- 抜け道の文字を、ログ・チケット・PR・コミットに書く（NFR-MAINT-001）
+- 本当のメンテナンス中に、テストの置き場をファイルにして `pest` を流す（テストは `phpunit.xml` の `APP_MAINTENANCE_DRIVER=array` でメモリに置く。ファイルにすると、同じフォルダで動いている開発用の API とテストが、互いのメンテナンスを読む）
 
 ## DB に入る
 
@@ -281,6 +313,7 @@ AI が守る決まり（推測で流さない・許可の一覧に足す基準�
 - `legacy-repo` 系と `refactored-repo` 系を行き来したときは、続けて `docker compose run --rm app composer dump-autoload`
   - 読み込みの一覧 `vendor/composer/` は git に入らず、前のブランチのまま残る
   - `refactored-repo` にだけある `tests/DummyData/` のファイルを指したまま `legacy-repo` に移ると、API が全部 500 になる
+- 会員の API がどれも 503 なら、メンテナンスを解き忘れている（`backend/client/storage/framework/down` は git に入らないので、ブランチを切り替えても、再起動しても残る）。`docker compose exec app php artisan up` で解く
 
 ## CI
 

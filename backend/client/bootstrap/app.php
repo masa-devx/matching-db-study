@@ -45,17 +45,14 @@ return Application::configure(basePath: dirname(__DIR__))
         // メンテナンス中（php artisan down）。Laravel の PreventRequestsDuringMaintenance が投げる 503 の文を日本語にする。
         // リダイレクトはしない（画面は client.ts で 503 を見分ける）。Retry-After などのヘッダーは、そのまま返す
         //
-        // 開発者がメンテナンスをするときの手順（docs/requirements/maintenance.md・docs/commands.md の「会員の側のメンテナンス」）
-        //   1. 抜け道の文字を決める。ログ・チケット・PR・コミットには書かない（NFR-MAINT-001）
-        //   2. 入れる：docker compose exec app php artisan down --secret="<抜け道の文字>"
-        //      - 会員の API は、どれも 503「ただいまメンテナンス中です」になり、画面はメンテナンスの画面を出す
-        //      - 表 sessions の行を全部消す（app/Listeners/DeleteAllSessions.php。消した数はログの maintenance.deleteAllSessions）
-        //      - 管理画面（backend/admin）は止まらない
-        //   3. 確かめる：http://localhost:8000/<抜け道の文字> を開くと、そのブラウザ（curl なら Cookie を -c で受け取り -b で送る）だけが使える
-        //   4. 作業する（リリース・マイグレーション・認証の切り替えなど）。抜け道のブラウザで、会員の側が動くかを確かめる
-        //   5. 解く：docker compose exec app php artisan up
-        //   6. 確かめる：会員の画面を読み込み直し、いつもどおり使えるか
-        // ログインが切れるのは、会員の認証がセッション（D-027）に移ってから。それまでは JWT のログインが残り、解いたあとも、ログインしたまま戻る
+        // 開発者がメンテナンスをするときの手順の要点。正は docs/commands.md の「会員の側のメンテナンス」（直すときは、そちらを先に直す）
+        //   1. 入れる：docker compose exec app php artisan down --with-secret
+        //      - 抜け道の文字は Laravel に作らせる。自分で決めた文字（--secret）は、シェルの履歴に残るので使わない（NFR-MAINT-001）
+        //      - 会員の API は、どれも 503「ただいまメンテナンス中です」。表 sessions の行を全部消す（app/Listeners/DeleteAllSessions.php）
+        //      - 「Failed to enter maintenance mode」と出ても、入っていることがある。DB が戻ってから、もう一度流す
+        //   2. 確かめる：コマンドが出した URL を、どこにも貼らずに curl で開く（画面で通れるのは、会員の認証がセッションに移ってから）
+        //   3. 作業する（リリース・マイグレーション・認証の切り替えなど）
+        //   4. 解く：docker compose exec app php artisan up。会員の画面を読み込み直して確かめる
         $exceptions->render(function (HttpException $e) {
             if ($e->getStatusCode() !== 503 || ! app()->isDownForMaintenance()) {
                 return null;

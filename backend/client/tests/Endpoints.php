@@ -56,7 +56,7 @@ final class Endpoints
         return '/api/health';
     }
 
-    /** メンテナンス中に、開発者が開く抜け道の URL（php artisan down --secret の文字。Laravel が web のルートで受ける） */
+    /** メンテナンス中に、開発者が開く抜け道の URL（php artisan down --with-secret が作った文字。Laravel が web のルートで受ける） */
     public static function maintenanceBypass(string $secret): string
     {
         return "/{$secret}";
@@ -68,6 +68,12 @@ final class Endpoints
     public static function register(): string
     {
         return '/api/users';
+    }
+
+    /** ログインする（POST /api/auth/login） */
+    public static function login(): string
+    {
+        return '/api/auth/login';
     }
 
     /** メールアドレスを確認する（GET /api/email-verifications/{token}。確認のメールのリンク） */

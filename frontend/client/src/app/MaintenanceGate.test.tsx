@@ -7,7 +7,7 @@ import { enterMaintenance } from './maintenance'
 // メンテナンス中かは、ファイルの中に1つだけ持つ（入ったら戻らない）ので、このファイルのテストは1本にする
 
 describe('会員が画面を使っている途中で、API が 503（メンテナンス中）を返す', () => {
-  it('それまでの画面の代わりに「ただいまメンテナンス中です」を出す。JSON の文字は出さない（FR-MAINT-006）', async () => {
+  it('それまでの画面の代わりに「ただいまメンテナンス中です」を出し、読み上げのために見出しにフォーカスを移す（FR-MAINT-006）', async () => {
     render(
       <MaintenanceGate>
         <p>画面の中身</p>
@@ -19,9 +19,10 @@ describe('会員が画面を使っている途中で、API が 503（メンテ�
       enterMaintenance()
     })
 
-    expect(screen.getByRole('status')).toHaveTextContent('ただいまメンテナンス中です')
+    const heading = screen.getByRole('heading', { name: 'ただいまメンテナンス中です' })
+    expect(heading).toHaveFocus()
+    expect(document.title).toBe('メンテナンス中｜matching')
     expect(screen.queryByText('画面の中身')).not.toBeInTheDocument()
-    expect(screen.queryByText(/message/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '読み込み直す' })).toBeInTheDocument()
   })
 })

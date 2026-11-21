@@ -52,7 +52,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
     headers.set('Authorization', `Bearer ${token}`)
   }
   const res = await fetch(`${API_URL}${path}`, { ...init, headers })
-  if (res.status === 503) {
+  if (isMaintenance(res)) {
     settings.onMaintenance()
     throw new MaintenanceError()
   }
@@ -77,9 +77,14 @@ export async function apiFetchForLogout(path: string, init: RequestInit = {}): P
   return noticeMaintenance(await fetch(`${API_URL}${path}`, { ...init, headers }))
 }
 
+// メンテナンス中か。見分け方を変えるときは、ここだけを直す（今は 503 を返すのがメンテナンスだけ。code では見分けない）
+function isMaintenance(res: Response): boolean {
+  return res.status === 503
+}
+
 // 503（メンテナンス中）なら、メンテナンスの処理を呼ぶ。応答はそのまま返す
 function noticeMaintenance(res: Response): Response {
-  if (res.status === 503) {
+  if (isMaintenance(res)) {
     settings.onMaintenance()
   }
   return res

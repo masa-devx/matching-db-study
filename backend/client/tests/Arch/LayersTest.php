@@ -274,9 +274,14 @@ arch('Support（基盤）は、Http・Service・Model を使わない', function
         ->not->toUse(['App\Http', 'App\Services', 'App\Models', 'App\Clients']);
 });
 
+arch('Listener（Laravel の出来事を受けて動く）は、Http を使わない', function (): void {
+    expect('App\Listeners')
+        ->not->toUse(HTTP_THINGS);
+});
+
 // Model は移さずに今の置き場に残り、管理画面ではこれから作る。Model も対象にする（#239）
 arch('新しいコードのファイルは strict_types', function (): void {
-    expect(['App\Http', 'App\Services', 'App\Clients', 'App\Exceptions', 'App\Models', 'App\Support'])
+    expect(['App\Http', 'App\Services', 'App\Clients', 'App\Exceptions', 'App\Models', 'App\Support', 'App\Listeners'])
         ->toUseStrictTypes()
         ->ignoring(LEGACY_CONTROLLERS);
 });

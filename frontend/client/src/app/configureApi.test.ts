@@ -13,7 +13,12 @@ async function setUp() {
   const client = await import('../shared/api/client')
   const moveTo = vi.fn<(url: string) => void>()
   configureApi(moveTo)
-  return { apiFetch: client.apiFetch, UnauthorizedError: client.UnauthorizedError, moveTo }
+  return {
+    apiFetch: client.apiFetch,
+    UnauthorizedError: client.UnauthorizedError,
+    MaintenanceError: client.MaintenanceError,
+    moveTo,
+  }
 }
 
 beforeEach(() => {
@@ -68,17 +73,79 @@ describe('ログインしたあとの API が 401 を返す', () => {
 
 describe('ログインしたあとの API が 503（メンテナンス中）を返す', () => {
   it('トークンを消さず、ログインの画面にも移さず、メンテナンス中にする（FR-MAINT-006）', async () => {
-    const { apiFetch, moveTo } = await setUp()
+    const { apiFetch, MaintenanceError, moveTo } = await setUp()
     const maintenance = await import('./maintenance')
     vi.stubGlobal(
       'fetch',
       vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(503, { message: 'ただいまメンテナンス中です' })),
     )
 
-    await expect(apiFetch('/api/me')).rejects.toThrow('ただいまメンテナンス中です')
+    await expect(apiFetch('/api/me')).rejects.toThrow(MaintenanceError)
 
     expect(maintenance.isUnderMaintenance()).toBe(true)
     expect(sessionStorage.getItem('token')).toBe('token-1')
     expect(moveTo).not.toHaveBeenCalled()
+  })
+})
+
+describe('メンテナンスに入ったあとに、前に送った要求の 401 が届く', () => {
+  it('トークンを消さず、ログインの画面にも移さない（FR-MAINT-006）', async () => {
+    const { apiFetch, moveTo } = await setUp()
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(jsonResponse(503, { message: 'ただいまメンテナンス中です' }))
+        .mockResolvedValueOnce(jsonResponse(401, { message: 'ログインしてください' })),
+    )
+
+    await Promise.allSettled([apiFetch('/api/me'), apiFetch('/api/me/talk-rooms')])
+
+    expect(sessionStorage.getItem('token')).toBe('token-1')
+    expect(moveTo).not.toHaveBeenCalled()
+  })
+})
+
+describe('トークンがない人が、メンテナンス中にアプリを開く', () => {
+  it('起動のときに確かめ、メンテナンス中にする（FR-MAINT-006）', async () => {
+    sessionStorage.removeItem('token')
+    await setUp()
+    const maintenance = await import('./maintenance')
+    const { checkMaintenanceWithoutLogin } = await import('./checkMaintenance')
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(503, { message: 'ただいまメンテナンス中です' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await checkMaintenanceWithoutLogin()
+
+    expect(maintenance.isUnderMaintenance()).toBe(true)
+    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).has('Authorization')).toBe(false)
+  })
+
+  it('メンテナンス中でなければ（401）、いつもの画面のまま', async () => {
+    sessionStorage.removeItem('token')
+    await setUp()
+    const maintenance = await import('./maintenance')
+    const { checkMaintenanceWithoutLogin } = await import('./checkMaintenance')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(401, { message: 'ログインしてください' })),
+    )
+
+    await checkMaintenanceWithoutLogin()
+
+    expect(maintenance.isUnderMaintenance()).toBe(false)
+  })
+
+  it('トークンがあれば、ここでは呼ばない（SessionProvider の GET /api/me で分かる）', async () => {
+    await setUp()
+    const { checkMaintenanceWithoutLogin } = await import('./checkMaintenance')
+    const fetchMock = vi.fn<typeof fetch>()
+    vi.stubGlobal('fetch', fetchMock)
+
+    await checkMaintenanceWithoutLogin()
+
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

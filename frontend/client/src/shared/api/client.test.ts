@@ -146,6 +146,7 @@ describe('ログインしたあとの API を apiFetch で呼ぶ', () => {
     expect((await apiFetch('/api/me')).status).toBe(500)
     expect((await apiFetch('/api/me/blocks/x', { method: 'DELETE' })).status).toBe(204)
     expect(onUnauthorized).not.toHaveBeenCalled()
+    expect(onMaintenance).not.toHaveBeenCalled()
   })
 })
 
@@ -158,6 +159,16 @@ describe('ログインが要らない API を apiFetchWithoutLogin で呼ぶ', (
     expect(res.status).toBe(401)
     expect(sentHeaders().has('Authorization')).toBe(false)
     expect(onUnauthorized).not.toHaveBeenCalled()
+    expect(onMaintenance).not.toHaveBeenCalled()
+  })
+
+  it('500 は、メンテナンスとは見なさず、応答をそのまま返す', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(500, { message: 'Server Error' }))
+
+    const res = await apiFetchWithoutLogin('/api/auth/login', { method: 'POST' })
+
+    expect(res.status).toBe(500)
+    expect(onMaintenance).not.toHaveBeenCalled()
   })
 
   it('503（メンテナンス中）なら、メンテナンスの処理を呼び、応答はそのまま返す（待たずに呼ぶ画面があるので投げない。FR-MAINT-006）', async () => {
@@ -179,6 +190,16 @@ describe('ログアウトの API を apiFetchForLogout で呼ぶ', () => {
     expect(res.status).toBe(401)
     expect(sentHeaders().get('Authorization')).toBe('Bearer token-1')
     expect(onUnauthorized).not.toHaveBeenCalled()
+    expect(onMaintenance).not.toHaveBeenCalled()
+  })
+
+  it('500 は、メンテナンスとは見なさず、応答をそのまま返す', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(500, { message: 'Server Error' }))
+
+    const res = await apiFetchForLogout('/api/auth/logout', { method: 'POST' })
+
+    expect(res.status).toBe(500)
+    expect(onMaintenance).not.toHaveBeenCalled()
   })
 
   it('503（メンテナンス中）なら、メンテナンスの処理を呼び、応答はそのまま返す（FR-MAINT-006）', async () => {
