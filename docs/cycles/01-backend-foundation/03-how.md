@@ -480,7 +480,13 @@ D-027。仕組みの解説は [explanations/auth-session.html](../../../explanat
 - **行の数の見積もり**：24時間のうちに使われた、ログインしている端末の数＋ログインせずに来た端末の数＋くじを待っている期限切れの行。会員の総数ではなく、1日に使う端末の数で決まる。どれも今は数がないので、切り替えの前と後に `select count(*), count(user_id) from sessions` を測る
 - **10倍になったときに見る数字**：`select n_tup_upd, n_tup_hot_upd, n_dead_tup, last_autovacuum from pg_stat_user_tables where relname = 'sessions'`。`last_activity` にインデックスがあるので、update は HOT（インデックスを書き直さない更新）にならない。書き込みが目立ってきたら、`SESSION_DRIVER` を別の置き場（Redis など）に替える。そのときは NFR-AUTH-001 の「表 `sessions`」の書き方も変える
 - **`sessions.user_id` に外部キーを付けない理由**：番号は使い回さないので、会員の行が消えてもガードが会員を見つけられず 401 になる。外部キーを付けると、Laravel は insert の失敗を受け止めて update に切り替える（`performInsert`）ので、違反が表に出ないまま保存されなくなる。今は、`users` を物理的に消すのは試しのデータ（シーダー）だけ。本番で消す処理を作るときに、その処理で `delete from sessions where user_id = ?` も流す
-- **セッションを消す処理**：パスワードの変更（FR-AUTH-033）は、Laravel の `Auth::logoutOtherDevices()` と Sanctum の `AuthenticateSession` で、変えた端末のほかを使えなくする（`delete ... where user_id = ?` を直接流すと、変えた端末もログアウトされる）。パスワードの再設定（FR-AUTH-035）・退会は、その会員の行を全部消す。メンテナンス（FR-MAINT-002）は、表の行を全部消す
+- **セッションを消す処理**（2026-11-21 に人が決め直した。`05-problems.md` の #259 の2つ目）
+  - パスワードの変更（FR-AUTH-033）：今の端末の番号を除いて、その会員の行を消す（`delete from sessions where user_id = ? and id <> ?`）
+    - 前は `Auth::logoutOtherDevices()` と Sanctum の `AuthenticateSession` にしていた。行が残らず、消えたことをテストで確かめられるので変えた
+    - 弱いところ：管理画面など、ほかの所でパスワードを変えたときは効かない
+  - パスワードの再設定（FR-AUTH-035）・退会：その会員の行を全部消す（`delete from sessions where user_id = ?`）
+  - メンテナンス（FR-MAINT-002）：表の行を全部消す
+  - 置き場：3つの API を新しい形（Controller → Service）に移してから足す。行を消すのは Service（DB の操作）。今の端末の番号は、Controller が文字として Service に渡す
 - `last_activity` は `integer`（UNIX の秒）なので、2038-01-19 にあふれる。Laravel の標準の形で、今は直さない
 - `users` を2回読むのを1回にするには、ガードの会員を Service に渡す。そうすると、Middleware が Model を、Service が Http の型を知ることになるので、層の決まり（architecture-backend.md の2章）を優先して、2回のままにした（PR #280 のレビューの M4。2026-11-21 に人が決めた）。主キーで読むので、1本は 1ms に満たない（10倍のときに見る数字は下のとおり）
 - テストは `SESSION_DRIVER=array`（`phpunit.xml:45`）なので、`sessions` の SQL は流れない。Cookie で続くか・切れるかを見るテストは、`DummyAuth::loginFromScreen()` が置き場を DB にする。セッションを消すテスト（FR-AUTH-033・035・退会・FR-MAINT-002）だけ、そのテストの中でセッションの置き場を DB にし、行が消えた・残ったを `assertDatabaseHas`・`assertDatabaseMissing` で確かめる。SQL の本数を確かめるテストは、本番と本数が違うことをコメントに書く
