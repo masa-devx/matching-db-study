@@ -21,26 +21,26 @@ paths:
 | 番号 | 決まり | 機械で止めるか |
 | --- | --- | --- |
 | R1 | 描く間に外を変えず、props と state を書き換えない | 止めない（レビュー） |
-| R2 | hook は一番上で呼び、`use` の名前は hook だけ | `lint:rules` |
+| R2 | hook は一番上で呼び、`use` の名前は hook だけ | `lint:rules`（app・shared） |
 | R3 | Effect は、React の外に合わせるときだけ | 止めない（レビュー） |
 | R4 | データを取る Effect は、片付けで古い応答を捨てる | 止めない（レビュー） |
-| R5 | 依存の配列はコードから決める。lint を止めない | `lint:rules` |
-| R6 | 一覧の `key` はデータの id | `lint:rules` |
+| R5 | 依存の配列はコードから決める。lint を止めない | `lint:rules`（app・shared） |
+| R6 | 一覧の `key` はデータの id | `lint:rules`（app・shared） |
 | R7 | 計算できる値・食い違う組み合わせを state に持たない | 止めない（レビュー） |
 | R8 | `&&` の左には真偽の値 | 止めない（レビュー） |
 | R9 | Context は `<Ctx value>`、ref は props で受ける | 止めない（レビュー） |
-| T1 | `any` を書かない | `lint:rules` |
+| T1 | `any` を書かない | `lint:rules`（app・shared） |
 | T2 | 外から来る値は `unknown` で受けて絞り込む | 止めない（レビュー） |
-| T3 | `as`・`!` は人が確かめられる所だけ | `!` は `lint:rules` |
+| T3 | `as`・`!` は人が確かめられる所だけ | `!` は `lint:rules`（app・shared） |
 | T4 | `XxxResponse` は API の JSON のまま書く | 止めない（レビュー） |
 | T7 | `noUncheckedIndexedAccess` を入れる | `npm run build` |
 | B1 | 整形と import の並びは Biome の形を正とする | 止めない（`biome check`） |
-| B2 | 改訂版の置き場では `any`・`!` を error にする | `lint:rules` |
-| B3 | lint を止めるときは規則と理由を書く | 止めない（レビュー） |
-| B4 | a11y の規則をそのまま使う | `lint:rules` |
+| B2 | 改訂版の置き場では `any`・`!` を error にする | `lint:rules`（app・shared） |
+| B3 | lint を止めるときは規則と理由を書く | 理由が空なら Biome が誤りにする |
+| B4 | a11y の規則をそのまま使う | `lint:rules`（app・shared） |
 
-- `lint:rules`：会員の画面の `npm run lint:rules`。改訂版の置き場（`src/app`・`src/shared`）では、Biome の全部の規則を、警告も誤りとして見る。CI でも流れる
-- `src/features` は、まだないので `lint:rules` に入っていない。ディレクトリのチケットで作るときに足す
+- `lint:rules`：会員の画面の `npm run lint:rules`。改訂版の置き場（`src/app`・`src/shared`）では、Biome の `recommended` の規則と、`biome.json` の `overrides` で足した規則を、警告も誤りとして見る（`recommended` に入っていない規則は流れない）。CI でも流れる
+- `src/features` は、まだないので `lint:rules` の2つ目のコマンドに入っていない。`biome.json` の `overrides`（B2）には書いてあるが、CI では効かない。ディレクトリのチケットで作るときに、`lint:rules` に `src/features` を足す
 - 管理画面は、改訂版の置き場ができる #123 で、同じ形（`overrides`・`lint:rules`）を足す
 
 ## 言葉
@@ -66,6 +66,7 @@ paths:
 
 - hook は、コンポーネントか自分で作った hook の一番上で呼ぶ。`if`・ループ・`return` のあと・イベントの処理・`try` の中で呼ばない
 - `use` で始まる名前は、中で hook を呼ぶ関数だけに付ける
+- 例外：React 19 の `use`（Promise・Context を読む）は、`if` やループの中で呼んでよい
 - なぜ：React は、hook を呼んだ順番で、どの state がどれかを見分ける。`use` の名前は、lint と読む人が hook として扱う
 - 根拠：https://react.dev/reference/rules/rules-of-hooks
 - 機械：Biome の `useHookAtTopLevel`・`noComponentHookFactories`
@@ -85,8 +86,9 @@ paths:
 ### R4. データを取る Effect は、片付けで古い応答を捨てる
 
 - API や Firestore を読む Effect には、必ず片付けを書く
-- 片付けでは、`AbortController` で止めるか、`ignore` の印を立てて結果を捨てる。`fetch` のあとに `await` が続くとき（`res.json()`・2本目の API）は、`ignore` の印で捨てる
-- なぜ：依存（会員の id・検索の条件）が変わると、前の応答があとから届き、新しい表示を上書きする。`AbortController` だけでは、`fetch` のあとに続く処理を止められないことがある
+- 片付けでは、`AbortController` で止めるか、`ignore` の印を立てて結果を捨てる
+- `AbortController` で止められないものは、`ignore` の印で捨てる：`res.json()` が返ったあと `setXxx` までの間・`signal` を渡していない2本目の API
+- なぜ：依存（会員の id・検索の条件）が変わると、前の応答があとから届き、新しい表示を上書きする
 - 根拠：https://react.dev/learn/synchronizing-with-effects（「Fetching data」）
 - `architecture-frontend.md` の4章の「検索の連打は `AbortController` で古い方を止める」を、データを取るすべての Effect に広げたもの
 - 見本：`shared/session/SessionProvider.tsx`（読み込みに番号を付け、古い番号の結果を捨てる）
@@ -131,7 +133,7 @@ paths:
 
 - Context は `<SessionContext value={...}>` と書く。`<SessionContext.Provider>` と書かない
 - 部品が `ref` を受けるときは、ふつうの props（`function Input({ ref })`）で受ける。`forwardRef` を使わない
-- なぜ：React 19 から、どちらも短く書ける。React は、`<Context.Provider>` と `forwardRef` を先の版で使えなくすると書いている
+- なぜ：React 19 から、どちらも短く書ける。React は、`<Context.Provider>` を使わないように勧め、`forwardRef` は先の版でなくすと書いている
 - 根拠：https://react.dev/blog/2024/12/05/react-19（「`<Context>` as a provider」・「`ref` as a prop」）
 
 ## 2. TypeScript と型の書き方
@@ -213,7 +215,7 @@ paths:
 
 ### B3. lint を止めるときは、規則の名前と理由を書く
 
-- `biome-ignore` には、規則の名前と、`:` のあとに理由を書く（`// biome-ignore lint/suspicious/noArrayIndexKey: 数が決まったスケルトン`）
+- `biome-ignore` には、規則の名前と、`:` のあとに理由を書く（`// biome-ignore lint/suspicious/noArrayIndexKey: 数が決まったスケルトン`）。理由が空だと、Biome が誤り（`suppressions/parse`）にする（#114 で確かめた）
 - `biome-ignore-all`（ファイル全体）を使わない
 - `useExhaustiveDependencies` は止めない（R5）
 - 効いていない `biome-ignore` は消す

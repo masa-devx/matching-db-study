@@ -17,7 +17,7 @@
     <ul>
       <li>決まりの案は24（React 11・TypeScript 8・Biome 5）。人が「強く勧める」18個を選び、<a href="../agents/rules/quality-frontend.md">agents/rules/quality-frontend.md</a> に書き足した（2026-11-21）</li>
       <li>採らなかった6個（R10・R11・T5・T6・T8・B5。「好みで選ぶ」のもの）は、このページに考え方だけを残す</li>
-      <li>#114 で入れたもの：<code>noUncheckedIndexedAccess</code>（T7）・改訂版の置き場で <code>any</code> と <code>!</code> を error（B2）・<code>&lt;SessionContext value&gt;</code>（R9）。会員の画面の <code>npm run lint:rules</code> は、改訂版の置き場（<code>src/app</code>・<code>src/shared</code>）で Biome の全部の規則を、警告も誤りとして見る</li>
+      <li>#114 で入れたもの：<code>noUncheckedIndexedAccess</code>（T7）・改訂版の置き場で <code>any</code> と <code>!</code> を error（B2）・<code>&lt;SessionContext value&gt;</code>（R9）。会員の画面の <code>npm run lint:rules</code> は、改訂版の置き場（<code>src/app</code>・<code>src/shared</code>）で、Biome の <code>recommended</code> の規則と <code>overrides</code> で足した規則を、警告も誤りとして見る</li>
       <li>数は、コミット <code>4534057</code>（#114 の前）のもの</li>
     </ul>
   </div>
@@ -127,7 +127,7 @@ const onLoaded = (me: AccountResponse) =&gt; {
   <p class="meta">R10（好みで選ぶ）。決まりには入れていない。R9 の <code>&lt;Ctx value&gt;</code> と <code>ref</code> の props だけは、決まりに入れた</p>
   <table>
     <tr><th>書き方</th><th>使う場面</th><th>使わない場面</th></tr>
-    <tr><td><code>&lt;Ctx value&gt;</code></td><td>Context を渡すとき全部</td><td>―（<code>.Provider</code> は先の版でなくなる）</td></tr>
+    <tr><td><code>&lt;Ctx value&gt;</code></td><td>Context を渡すとき全部</td><td>―（React は <code>.Provider</code> を使わないように勧めている）</td></tr>
     <tr><td><code>ref</code> の props</td><td><code>ref</code> を受ける部品</td><td>―（<code>forwardRef</code> は先の版でなくなる）</td></tr>
     <tr><td><code>use(Context)</code></td><td><code>if</code> の中で読みたいとき</td><td>―</td></tr>
     <tr><td><code>use(promise)</code></td><td>キャッシュした Promise</td><td>部品の中で作った Promise</td></tr>
