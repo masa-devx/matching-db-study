@@ -305,7 +305,7 @@ flowchart TB
 - その機能の hook に置く（05b からは小さな store）
 - 読み直す関数を `index.ts` から出す
 - 数を読む部品は `TabBar`（管理画面はサイドバー）の中だけにし、描き直しをその部品にとどめる
-- 数だけを返す API ができるまでは、今の読み方のまま、その機能の `api.ts` に移す
+- 数だけを返す API ができるまでは、今の読み方のまま、その機能の `api.ts` に移す。下のタブの未読・新しいマッチ・届いたいいねは、数だけを返す API（`GET /api/me/badge-counts`）を `features/messages` の `useBadgeCounts` が読む（#247）
 
 ### 入力中の値
 

@@ -98,6 +98,9 @@ API ごとに、下の表から当てはまる観点を選ぶ。「API テスト
 | --- | --- | --- |
 | `DummyUser::create()` | 会員とプロフィール（既定と引数は下） | 購入の行（`purchases`）・管理画面の監査ログ |
 | `DummyMatching::match()` | お互いのいいね・マッチ・トークルームと参加者2人。トークルームの番号を返す | Firestore のルーム |
+| `DummyMatching::like()`・`skip()`・`block()` | いいね・スキップ・ブロックの1行だけ（向きは引数の順） | マッチ・トークルーム |
+| `DummyMessage::send()` | そのルームのメッセージ1通（ルームは `DummyMatching::match()` の番号で指す） | Firestore のメッセージ |
+| `DummyMessage::read()` | その会員が今の時刻にルームを開いた状態（`last_read_at` を今にする） | ― |
 | `DummyAuth::actingAs()` | その会員でログインした状態（Laravel の `actingAs`。ガードに会員を直に置き、Cookie を通らない）にし、画面のオリジンを付ける。続けて `->getJson(...)` と書く | ― |
 | `DummyAuth::loginFromScreen()` | 画面のオリジンからログインの API を呼び（200 を確かめる）、セッションの Cookie の値を返す。置き場は DB にする。Cookie で続くか・切れるかを見るテストで使う | ― |
 | `DummyAuth::withSessionCookie()` | 画面のオリジンを付け、渡したセッションの Cookie を送る。続けて `->getJson(...)` と書く | ― |

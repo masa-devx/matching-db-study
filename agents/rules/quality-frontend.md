@@ -39,8 +39,8 @@ paths:
 | B3 | lint を止めるときは規則と理由を書く | 理由が空なら Biome が誤りにする |
 | B4 | a11y の規則をそのまま使う | `lint:rules`（app・shared） |
 
-- `lint:rules`：会員の画面の `npm run lint:rules`。改訂版の置き場（`src/app`・`src/shared`）では、Biome の `recommended` の規則と、`biome.json` の `overrides` で足した規則を、警告も誤りとして見る（`recommended` に入っていない規則は流れない）。CI でも流れる
-- `src/features` は、まだないので `lint:rules` の2つ目のコマンドに入っていない。`biome.json` の `overrides`（B2）には書いてあるが、CI では効かない。ディレクトリのチケットで作るときに、`lint:rules` に `src/features` を足す
+- `lint:rules`：会員の画面の `npm run lint:rules`。改訂版の置き場（`src/app`・`src/shared`・`src/features`）では、Biome の `recommended` の規則と、`biome.json` の `overrides` で足した規則を、警告も誤りとして見る（`recommended` に入っていない規則は流れない）。CI でも流れる
+- `src/features` は、最初の機能（`features/messages` の下のタブの数。#247）を作ったときに、`lint:rules` の2つ目のコマンドに足した
 - 管理画面は、改訂版の置き場ができる #123 で、同じ形（`overrides`・`lint:rules`）を足す
 
 ## 言葉
