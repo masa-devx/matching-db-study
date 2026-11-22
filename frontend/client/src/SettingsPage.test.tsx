@@ -72,11 +72,23 @@ describe('ログインした会員が、設定でパスワードを変える', (
     expect(await screen.findByText('新しいパスワードは8文字以上にしてください')).toBeInTheDocument()
   })
 
-  it('今のパスワードが違い 422 なら、「今のパスワードがちがいます」を出す', async () => {
-    passwordResponse = () => json({ message: '今のパスワードがちがいます' }, 422)
+  it('今のパスワードが違い 422 なら、API が返した文を出す', async () => {
+    passwordResponse = () =>
+      json({ message: '今のパスワードがちがいます', errors: { current_password: ['今のパスワードがちがいます'] } }, 422)
 
     await changePassword()
 
     expect(await screen.findByText('今のパスワードがちがいます')).toBeInTheDocument()
+  })
+
+  it('つながらないときは、通信を確かめる文を出し、ボタンをまた押せるようにする', async () => {
+    passwordResponse = () => {
+      throw new TypeError('Failed to fetch')
+    }
+
+    await changePassword()
+
+    expect(await screen.findByText('変えられませんでした。通信を確かめて、もう一度お試しください')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '変える' })).toBeEnabled()
   })
 })

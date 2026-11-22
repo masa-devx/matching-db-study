@@ -3,17 +3,24 @@ import { Link, useNavigate } from 'react-router'
 import ConfirmDialog from './components/ConfirmDialog'
 import Icon from './components/Icon'
 import { useToast } from './components/Toast'
+import { StoppedRequestError } from './shared/api/ApiError'
 import { apiFetch, apiFetchWithoutLogin } from './shared/api/client'
 import { useSession } from './shared/session/SessionProvider'
 import { useLogout } from './shared/session/useLogout'
 
-// 422 の応答の errors.password の最初の文。なければ null（応答は外から来る値なので、unknown で受けて調べる。quality-frontend.md の T2）
-function passwordErrorOf(body: unknown): string | null {
+// 422 の応答の errors.<項目> の最初の文。なければ null（応答は外から来る値なので、unknown で受けて調べる。quality-frontend.md の T2）
+function fieldErrorOf(body: unknown, field: string): string | null {
   if (typeof body !== 'object' || body === null || !('errors' in body)) return null
   const errors: unknown = body.errors
-  if (typeof errors !== 'object' || errors === null || !('password' in errors)) return null
-  const messages: unknown = errors.password
+  if (typeof errors !== 'object' || errors === null || !(field in errors)) return null
+  const messages: unknown = Object.entries(errors).find(([key]) => key === field)?.[1]
   return Array.isArray(messages) && typeof messages[0] === 'string' ? messages[0] : null
+}
+
+// 応答の message（文は API の lang/ja/errors.php にだけ書く）。読めないときは null
+function messageOf(body: unknown): string | null {
+  if (typeof body !== 'object' || body === null || !('message' in body)) return null
+  return typeof body.message === 'string' ? body.message : null
 }
 
 // レガシー版（M1。#181）。設定（/settings）。ホームの右上の歯車から来る。
@@ -65,7 +72,7 @@ export default function SettingsPage() {
   }
 
   // パスワードを変える。画面で確かめるのは、空でないことと、2回が同じことだけ。長さ（8〜64文字・72バイトまで）は API が見る（FR-AUTH-033・FR-AUTH-004）
-  const changePassword = () => {
+  const changePassword = async () => {
     if (!current || !next) {
       setChangeError('今のパスワードと、新しいパスワードを入れてください')
       return
@@ -75,19 +82,25 @@ export default function SettingsPage() {
       return
     }
     setChangeBusy(true)
-    apiFetch(`/api/me/password`, {
-      method: 'PUT',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ current_password: current, password: next }),
-    }).then(async (r) => {
-      setChangeBusy(false)
+    try {
+      const r = await apiFetch(`/api/me/password`, {
+        method: 'PUT',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ current_password: current, password: next }),
+      })
       if (r.status === 422) {
-        // 新しいパスワードが決まりに合わないときは errors.password に文が入る。今のパスワードが違うときは message だけ
-        const body: unknown = await r.json()
-        setChangeError(passwordErrorOf(body) ?? '今のパスワードがちがいます')
+        // 新しいパスワードが決まりに合わないときは errors.password に、今のパスワードが違うときは errors.current_password に文が入る。
+        // 画面の文は、応答が読めないときのためだけに置く
+        const body: unknown = await r.json().catch(() => null)
+        setChangeError(
+          fieldErrorOf(body, 'password') ??
+            fieldErrorOf(body, 'current_password') ??
+            messageOf(body) ??
+            '変えられませんでした',
+        )
         return
       }
       if (!r.ok) {
@@ -96,7 +109,14 @@ export default function SettingsPage() {
       }
       setChanging(false)
       toast('パスワードを変えました')
-    })
+    } catch (e) {
+      // 401・メンテナンスは、app/ の処理が画面を移す。ほかは、つながらない・時間切れ
+      if (!(e instanceof StoppedRequestError)) {
+        setChangeError('変えられませんでした。通信を確かめて、もう一度お試しください')
+      }
+    } finally {
+      setChangeBusy(false)
+    }
   }
 
   // 手順は shared/session/useLogout（ホーム・確認待ちの画面と同じ）
