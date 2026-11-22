@@ -20,12 +20,13 @@ final class ProfileService
 {
     /**
      * 会員1人とプロフィールを読む。見ている人（$viewerId）がいれば、2人のトークルームの番号も探す。
+     * 退会・アカウント停止・強制退会の会員は、いない会員と同じに扱う（FR-WD-005・013）
      *
      * @return array{target: User, roomId: string|null}
      */
     public function showProfile(string $targetPublicId, ?int $viewerId): array
     {
-        $target = User::query()->where('public_id', $targetPublicId)->first()
+        $target = User::query()->accountUsable()->where('public_id', $targetPublicId)->first()
             ?? throw new UserNotFoundException;
         $target->load('profile');
 

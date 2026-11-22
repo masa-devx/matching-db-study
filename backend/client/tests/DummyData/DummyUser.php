@@ -76,6 +76,12 @@ final class DummyUser
         ]);
     }
 
+    /** アカウント停止を解く。管理画面の停止を解く API（DELETE /members/{publicId}/suspension）と同じく、停止の日時と理由を空にする。 */
+    public static function liftSuspension(TestUser $user): void
+    {
+        User::query()->whereKey($user->id)->update(['suspended_at' => null, 'suspended_reason' => null]);
+    }
+
     /** 退会の API（DELETE /api/me）と同じ形にする：deleted_at を入れ、メールアドレスを書き換える。 */
     private static function withdraw(User $user): void
     {

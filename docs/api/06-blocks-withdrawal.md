@@ -4,7 +4,7 @@
 
 決まり（パス・ステータス・エラーの形）と一覧は [README.md](README.md)。
 
-要件：[requirements/blocks.md](../requirements/blocks.md)（FR-BLOCK-001〜015・NFR-BLOCK-001〜002）・[requirements/withdrawal.md](../requirements/withdrawal.md)（FR-WD-001〜011・NFR-WD-001〜002）。表は `blocks`・`users.deleted_at`（[data-model.md](../data-model.md)）。解説：`explanations/06-blocks-withdrawal.html`（`legacy-repo`）。
+要件：[requirements/blocks.md](../requirements/blocks.md)（FR-BLOCK-001〜015・NFR-BLOCK-001〜002）・[requirements/withdrawal.md](../requirements/withdrawal.md)（FR-WD-001〜014・NFR-WD-001〜002）。表は `blocks`・`users.deleted_at`（[data-model.md](../data-model.md)）。解説：`explanations/06-blocks-withdrawal.html`（`legacy-repo`）。
 
 ブロックは「ログインした本人がしたもの」なので `/api/me/blocks` の下に置き、相手は会員の `public_id`（UUID）で指す。退会は「本人を消す」ので `DELETE /api/me`。
 
@@ -15,6 +15,7 @@
 | `DELETE /api/me/blocks/{public_id}` | 解除する | 作る（`BlockController::destroy`） | 作る |
 | `DELETE /api/me` | 退会する | 作る（`UserController::destroy`） | 作る |
 | 検索・いいね・マッチ・トークの一覧（04・02・03・05） | ブロックした・された相手を除く | 一覧ごとにコピーする（下の「今ある API に足すこと」） | スコープ1か所 |
+| 検索・プロフィール・いいね・マッチ・トークの一覧（01・04・02・03・05） | 退会・アカウント停止・強制退会の相手を除く | 検索だけが退会した会員を除く | `User::accountUsable()` の1か所（下の「#269 で変えたこと」） |
 
 レガシー版は、これまでと同じく、だれが使うかをコントローラの中で JWT を読んで決める（`AuthController::me()` の処理をコピーする。4つ足して 10〜13か所目）。JWT を読むだけで、会員がいるか・退会したかは見ない。入力も確かめず、エラーの扱いは考えない。
 
@@ -268,3 +269,50 @@ $blockIds = $blocked->merge($blockedMe);
 - `blocks where blocker_id = ?`（私がブロックした人）
   - レガシー版：`Index Only Scan`（UNIQUE の索引）・shared hit 9・0.05ms
   - 要件：NFR-BLOCK-002
+
+## #269 で変えたこと（退会・アカウント停止・強制退会の相手を除く。refactored-repo）
+
+状態：**実装済み（refactored-repo）**。要件は FR-WD-005・006・013・014・NFR-WD-002。
+
+- 除く条件は、`User` の Model のスコープ `accountUsable()` の1か所に置いた
+  - 条件：`deleted_at`・`suspended_at`・`banned_at` がどれも `null`
+  - `User::accountStatus()` が「使える（`Usable`）」になる行と同じ条件を、SQL で書いたもの
+- 古い Controller は、Controller → Service → Model に移していない。スコープを呼ぶ行だけを足した
+- 行（いいね・マッチ・トークルーム・メッセージ）は消さない。アカウント停止が解かれたら、また出る
+
+### API ごとの今の動き
+
+- `GET /api/users`（検索。`UserController::index`）
+  - 会員の一覧の SQL に `accountUsable()` を足した（前は `whereNull('deleted_at')` だけ）
+  - SQL の本数は増えない。実行計画も、前と同じ（下の「測ったこと」）
+- `GET /api/users/{public_id}`（プロフィール。`ProfileService::showProfile`）
+  - 会員を探す SQL に `accountUsable()` を足した。除く会員は `404`「会員が見つかりません」（いない会員と同じ）
+  - 前は、退会・アカウント停止・強制退会の会員も `200` で見られた（FR-WD-005 の分かっている不具合も、一緒に直った）
+- `GET /api/me/likes`（送ったいいね。`LikeController::index`）・`GET /api/me/received-likes`（届いたいいね。`ReceivedLikeController::index`）
+  - いいねの一覧の SQL に、相手の会員が `accountUsable()` であること（`exists` の相関サブクエリ）を足した
+  - 送ったいいねは `whereHas('toUser', …)`、届いたいいねは `whereHas('fromUser', …)`
+  - SQL の本数は増えない。除いた相手の分だけ、1件ごとの SQL が減る
+- `GET /api/me/matches`（マッチ。`UserMatchController::index`）・`GET /api/me/talk-rooms`（トーク。`TalkRoomController::index`）
+  - 相手は PHP のループの中で決まるので、相手の `public_id` を読む1件ごとの SQL に `accountUsable()` を足した。読めなければ、その相手を飛ばす
+  - その SQL を、プロフィールを読む前に動かした。SQL の本数は増えず、除いた相手の分だけ減る
+  - 分かっている不具合：1件ごとに SQL を流す形（1＋N）は、そのまま
+
+### 除いていない所（このチケットの範囲の外）
+
+コードを読んで確かめた（API テストでは確かめていない）。
+
+- `GET`・`POST /api/me/talk-rooms/{public_id}/messages`（ルームの履歴と送る）：ルームの番号を知っていれば、相手がアカウント停止でも読み書きできる（FR-WD-006 の後半。要確認）
+- `POST /api/me/likes`（いいねを送る）・`POST /api/me/blocks`（ブロックする）：相手がアカウント停止でも送れる（FR-WD-007 と同じ決まりを当てはめるかは、まだ決めていない）
+- `GET /api/me/blocks`・`GET /api/me/skips`（ブロック・スキップの一覧）：相手がアカウント停止でも出る
+- Firestore の受信箱とメッセージ（05c）：Laravel の外なので、出たまま
+
+### 測ったこと（2026-11-22）
+
+- SQL の本数（`tests/Feature/Members/SearchTest.php`）
+  - 前：使える会員1人・退会・アカウント停止・強制退会の会員を1人ずつ置いて、絞らずに検索すると 11本（アカウント停止と強制退会の2人が結果に出て、プロフィールを1人ずつ読む）
+  - 後：9本（Middleware の2本・自分のプロフィール・いいね・ブロックの2向き・スキップ・会員の一覧・1人のプロフィール）
+- 実行計画（開発用の DB。会員 20,030人・退会 1,025人・アカウント停止と強制退会は 0人。`search00001` で、女性を絞らずに 20人）
+  - 前と後で同じ形：`users` を全部読む（Seq Scan）・`profiles` を Hash Semi Join・shared hit 2,467・8〜9ms
+  - 後は、Seq Scan の Filter に `suspended_at IS NULL`・`banned_at IS NULL` が足されただけ。読むページの数は変わらない
+  - 索引は、前も後も使っていない。除く会員はふつう少なく、条件で絞れる行が少ないので、今は索引を足していない（会員が増えたときの検索の速さは、検索を移すチケットで測る）
+
