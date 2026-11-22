@@ -14,6 +14,9 @@ use function Pest\Laravel\putJson;
 // PUT /api/users/{user_id}：プロフィールを書き換える。今の動きを確かめるテスト。
 // 要件と違う所は「分かっている不具合」。DB は表の名前で確かめ、ほかの会員の行が変わらないことも見る
 
+/**
+ * 正常系：要件が通す操作
+ */
 describe('ログインしている人が、自分のプロフィールを書き換える', function (): void {
     it('ニックネームを変えると、自分の行だけが変わる（FR-005）', function (): void {
         $loginUser = DummyUser::create(nickname: 'まえ');
@@ -58,6 +61,9 @@ describe('ログインしている人が、自分のプロフィールを書き�
     });
 });
 
+/**
+ * 異常系：要件が断る操作
+ */
 describe('ログインしていない人や使えなくなった会員が、プロフィールを書き換えようとする', function (): void {
     it('ログインしていなければ、書き換えられない（401「ログインしてください」。FR-AUTH-020）', function (): void {
         $target = DummyUser::create(nickname: 'まえ');
@@ -138,5 +144,19 @@ describe('ログインしている人が、いない会員やプロフィール�
         DummyAuth::actingAs($loginUser)->putJson(Endpoints::profile($target->publicId), ['nickname' => 'あと'])->assertInternalServerError();
 
         Exceptions::assertReported(RuntimeException::class);
+    });
+});
+
+describe('ログインしている人が、退会・アカウント停止・強制退会の会員のプロフィールを書き換える', function (): void {
+    it('アカウント停止された会員は、いない会員と同じく見つからず、書き換わらない（404「会員が見つかりません」。FR-WD-013）', function (): void {
+        $loginUser = DummyUser::create(nickname: 'じぶん');
+        $suspended = DummyUser::create(suspended: true, nickname: 'まえ');
+
+        DummyAuth::actingAs($loginUser)->putJson(Endpoints::profile($suspended->publicId), ['nickname' => 'かきかえ'])
+            ->assertNotFound()
+            ->assertExactJson(['message' => '会員が見つかりません']);
+
+        assertDatabaseHas('profiles', ['user_id' => $suspended->id, 'nickname' => 'まえ']);
+        assertDatabaseHas('profiles', ['user_id' => $loginUser->id, 'nickname' => 'じぶん']);
     });
 });

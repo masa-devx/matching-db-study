@@ -39,6 +39,7 @@
   - プロフィールがない相手は `nickname` などが `null`
 - 改善版：`200`。マッチした新しい順の配列
   - 1件は `{"user_id": 5, "nickname": "香織", "age": 28, "avatar_url": "/images/avatars/demo-3.svg", "matched_at": "2026-11-12T15:00:00+09:00"}`（FR-MATCH-005）
+  - 退会・アカウント停止・強制退会の相手は出さない（FR-WD-006・014）。refactored-repo では #269 で、今の URL のまま除いた（[06-blocks-withdrawal.md](06-blocks-withdrawal.md) の「#269 で変えたこと」）
   - 年齢は日本の時間帯の今日で出す
 
 ### 応答（失敗）

@@ -38,6 +38,7 @@
 | D-025 | バックエンドは Controller → Service → Model | 有効 | サイクル 01 |
 | D-026 | 改訂版の画面の形（`features/`） | 有効 | #112 |
 | D-027 | 会員の認証をセッションに移す | 有効 | #246 |
+| D-028 | 古い Controller に、Model のスコープを呼ぶ1行だけを足す（移さない） | 有効 | #269 |
 
 ## 準備で決めたこと
 
@@ -532,3 +533,22 @@
   - 学び方は、Sanctum の中を読み、テストで壊して確かめる（人が決めた。2026-11-20）
 - 数字・リンク：[認証の仕組み](../explanations/auth-session.html)・[認証の実装の計画](../explanations/auth-session-plan.html)
 - 置き換えたもの：D-014
+
+### D-028 古い Controller に、Model のスコープを呼ぶ1行だけを足す（移さない）
+
+- 状態：有効
+- 一歩：#269
+- 決めたこと：
+  - 退会・アカウント停止・強制退会の会員を除くために、古い Controller（`app/Http/Controllers/` の直下）の5つに、`User::accountUsable()` を呼ぶ行だけを足した
+  - 足した所：`UserController@index`・`LikeController@index`・`ReceivedLikeController@index`・`UserMatchController@index`・`TalkRoomController@index`
+  - Controller → Service → Model には移さない。移すチケットで、スコープを呼ぶ所も Service に移す（`docs/backend.md` の3章の表の補足）
+  - 決まり（`architecture-backend.md` の10章「古いコントローラーに機能を足さない」）の例外は、この1回だけ。足したのは条件の1行で、判断と SQL の組み立ては Model のスコープにある
+- ほかの案：
+  - 5つの API を、先に Controller → Service → Model に移してから除く（チケットが大きくなり、人は「サクッと実装して」と言った）
+  - 一覧ごとに `whereNull` を3つ書く（条件が5か所に散る）
+- 理由：
+  - 返事の来ない相手に送り続ける困りごとを、先に止める
+  - 条件はスコープの1か所にあるので、移すときは呼ぶ1行を動かすだけで済む
+  - リーダーの案を人が採った（2026-11-22）
+- 数字・リンク：[06-blocks-withdrawal.md の「#269 で変えたこと」](api/06-blocks-withdrawal.md)・[05-problems.md の #269](cycles/01-backend-foundation/05-problems.md)
+

@@ -96,6 +96,7 @@ return response()->json($like, 201);
 - 改善版：`200`。新しい順の配列
   - 1件は `{"user_id": 5, "nickname": "ゆう", "age": 28, "avatar_url": "/images/avatars/demo-3.svg", "liked_at": "2026-11-12T13:00:00+09:00"}`
   - FR-LIKE-005。年齢は日本の時間帯の今日で出す
+  - 退会・アカウント停止・強制退会の相手は出さない（FR-WD-006・014）。refactored-repo では #269 で、今の URL のまま除いた（[06-blocks-withdrawal.md](06-blocks-withdrawal.md) の「#269 で変えたこと」）
 
 ### 応答（失敗）
 
@@ -385,8 +386,9 @@ M3（いいねとマッチに気づく）。要件は FR-LIKE-010〜013・FR-SEA
 
 - レガシー版：もう送り返した相手・ブロックした／された相手・スキップした相手
   - それぞれの ID を PHP に持ってきて `whereNotIn` に並べる（4本）
-- 改善版：同じ相手に加えて、退会した・止められた相手
+- 改善版：同じ相手に加えて、退会・アカウント停止・強制退会の相手（FR-WD-006・014）
   - `not exists` で1本の中に書く
+  - refactored-repo では #269 で、今の URL のまま、退会・アカウント停止・強制退会の相手を除いた（`whereHas('fromUser', …)` と `User::accountUsable()`。ほかの相手は、今のまま PHP に ID を持ってくる）
 
 #### 応答（失敗）
 

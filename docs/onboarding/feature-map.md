@@ -26,7 +26,7 @@
 
 | 機能 | API（メソッドとパス） |
 | --- | --- |
-| 動作の確かめ | `GET /api/health` |
+| 動作の確かめ | `GET /up`（Laravel にもとからある） |
 | 登録 | `POST /api/users` |
 | メールアドレスの確認 | `GET /api/email-verifications/{token}` |
 | 確認のメールの再送 | `POST /api/email-verifications` |
@@ -68,11 +68,12 @@
 ### 動作の確かめ
 
 - 画面：―
-- API：`GET /api/health`
-- メソッド：`routes/api.php` のクロージャ
-- 読む表：`migrations`
+- API：`GET /up`
+- メソッド：Laravel の `HealthCheck`（`bootstrap/app.php` の `health: '/up'`。`routes/api.php` にはない）
+- 読む表：―
 - 書く表：―
-- 主な処理：DB の名前とマイグレーションの数を返す
+- 主な処理：動いていれば `200` を返す。DB につながるかは見ない（`docs/api/00-health.md` の「弱いところ」）
+- 前は `routes/api.php` のクロージャの `GET /api/health` が、DB の名前とマイグレーションの数を返していた。消した
 
 ### 登録
 

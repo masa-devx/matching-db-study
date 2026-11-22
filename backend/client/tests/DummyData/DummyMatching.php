@@ -35,7 +35,7 @@ final class DummyMatching
         return $room->refresh()->public_id;   // public_id は DB が入れるので、読み直す
     }
 
-    /** いいねを1つ送った状態（likes の1行だけ）。送り返していなければ、相手の届いたいいねに出る */
+    /** 片方だけのいいね（$from から $to へ）を作る。マッチはしない。送り返していなければ、相手の届いたいいねに出る */
     public static function like(TestUser $from, TestUser $to): void
     {
         Like::create(['from_user_id' => $from->id, 'to_user_id' => $to->id]);

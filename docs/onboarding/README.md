@@ -6,7 +6,7 @@
 
 | 順 | 領域 | 画面で触る | API を叩く | 読むコード | DB を見る |
 | --- | --- | --- | --- | --- | --- |
-| 1 | 全体像 | ― | `GET /api/health`（:8000・:8100） | `compose.yaml`・`backend/*/routes/api.php` | `\dt` |
+| 1 | 全体像 | ― | `GET /up`（:8000）・`GET /api/health`（:8100） | `compose.yaml`・`backend/*/routes/api.php` | `\dt` |
 | 2 | 認証 | 登録・ログイン | `POST /api/users`・`POST /api/auth/login` | `AuthController`・`EmailVerificationController` | `users` |
 | 3 | 会員と検索 | 一覧・詳細・プロフィール | `GET /api/users`・`GET /api/me` | `UserController`・`ProfileController` | `users`・`profiles` |
 | 4 | いいねとマッチ | いいね・マッチの一覧 | `POST /api/me/likes`・`GET /api/me/matches` | `LikeController`・`UserMatchController` | `likes`・`user_matches` |
