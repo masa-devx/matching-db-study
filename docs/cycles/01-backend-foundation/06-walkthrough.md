@@ -2434,3 +2434,178 @@ flowchart LR
 - 「なぜ残るのか」を、どの処理が失敗したかで答える練習
 - ログアウトの成功・失敗は Laravel のログに出ない。問い合わせが増えるなら、1行残すかを決める（次の改善の候補）
 
+
+## PR #283（#259 の2つ目の1つ目：パスワードを変えたら、ほかの端末のセッションを消す）
+
+### ディレクトリの設計
+
+```text
+backend/client/
+├── app/Http/Controllers/Auth/PasswordController.php   受け取る → PasswordService → LoginSession::renew() → 200
+├── app/Http/Requests/Auth/ChangePasswordRequest.php   入力の形（今のパスワードは文字か・新しいパスワードは 8〜64文字・72バイト・NUL なし）
+├── app/Http/Session/LoginSession.php                  セッションを作る・作り直す・今の番号・消す（ここにだけ書く）
+├── app/Services/Auth/PasswordService.php              ロックして確かめる → 保存 → ほかの端末の行・再設定用の文字を消す
+├── app/Models/Session.php                             表 sessions の Model。スコープ ofUser・exceptId
+├── app/Support/Logging/StructuredLog.php              業務の出来事のログ。秘密の値のキーを伏せる
+├── app/Exceptions/Auth/WrongCurrentPasswordException.php  今のパスワードが違う（422）
+├── bootstrap/app.php                                  422 の形（errors.current_password）と auth.rejected のログ
+├── lang/ja/validation.php                             入力の確かめの文（使う決まりだけ）
+└── tests/Feature/Auth/ChangePasswordTest.php・tests/Feature/StructuredLogTest.php
+frontend/client/src/SettingsPage.tsx                   422 の文の出し分け・通信の失敗
+```
+
+- セッションの番号を作り直すのは `LoginSession`（Http）。ほかの端末の行を消すのは `PasswordService`（DB の操作）。`architecture-backend.md` の2章
+  - ほかの置き場：Service が `regenerate()` も呼ぶ → Service が HTTP の道具（セッション）を知り、コマンドやキューから呼べなくなるので、選ばなかった
+  - ほかの置き場：Controller に `$request->session()->regenerate(true)` を書く → ログイン・ログアウト・変更でセッションを触る所が散るので、`LoginSession` の1か所にした（D-027・人が決めた）
+- 入力の形は `ChangePasswordRequest`（このリポジトリで最初の FormRequest）。今のパスワードが合うかは業務の確かめなので Service
+- ログの共通の関数は `app/Support/Logging/`（どの業務のまとまりにも属さない基盤。`architecture-backend.md` の1章の5）
+
+### クラスの責務
+
+- `PasswordController`：リクエストの形を知っていて、Service と `LoginSession` を順に呼ぶ。パスワードの照合も、表 `sessions` の削除もしない
+- `ChangePasswordRequest`：入力の形だけを知っていて、合わなければ 422 を返す。DB を読まない
+- `PasswordService`：会員の行・パスワードのハッシュ・表 `sessions`・`password_reset_tokens` を知っていて、1つのトランザクションで変える。セッションの番号は作り直さない
+- `LoginSession`：Laravel のガードとセッションを知っていて、作る・作り直す・消す。DB の行は消さない
+- `Session`（Model）：表 `sessions` の行の絞り込みを知っている。行を作る・書き換えるのは Laravel
+- `StructuredLog`：ログの名前と要約を受け、秘密の値のキーを伏せて `Log::info` に渡す。何を出すかは決めない
+
+### メソッドの表
+
+| メソッド | 入力 | 戻り値 | 副作用 | 失敗 | 呼ぶ所 |
+| --- | --- | --- | --- | --- | --- |
+| `PasswordController::update()` | `ChangePasswordRequest` | 200 の JSON | 番号を作り直す | 422（形・違う） | `PUT /api/me/password` |
+| `PasswordService::changePassword()` | 会員の番号・今と新しいパスワード・今の番号 | なし | 書き換え・2つの表の削除・ログ | `WrongCurrentPasswordException`・`UserNotFoundException` | `PasswordController` |
+| `LoginSession::start()` | 会員 | なし | ログインの状態を作り、番号を作り直す | なし | `AuthController::login` |
+| `LoginSession::renew()` | Request | なし | 番号と CSRF のトークンを作り直し、前の行を消す | なし | `PasswordController` |
+| `LoginSession::currentId()` | Request | 今の番号 | なし | なし | `PasswordController` |
+| `LoginSession::end()` | Request | なし | 行を消し、Cookie と CSRF を替える | なし | `AuthController::logout` |
+| `Session::scopeOfUser()`・`scopeExceptId()` | 会員の番号・番号 | なし（クエリに条件を足す） | なし | なし | `PasswordService` |
+| `StructuredLog::info()` | 名前・要約 | なし | info のログを1行 | なし | `PasswordService` |
+
+```php
+// PasswordService::changePassword()：ロックして読み、ロックしたまま確かめる。違えば例外で全部戻る
+$deletedSessions = DB::transaction(function () use (...): int {
+    $user = User::query()->lockForUpdate()->find($userId) ?? throw new UserNotFoundException;
+    if (! Hash::check($currentPassword, $user->password)) {
+        throw new WrongCurrentPasswordException;   // bootstrap/app.php が 422 と errors.current_password にする
+    }
+    $user->update(['password' => $newPassword]);   // 'hashed' のキャストが bcrypt にする
+    $deleted = Session::query()->ofUser($user->id)->exceptId($currentSessionId)->delete();
+    DB::table('password_reset_tokens')->where('email', $user->email)->delete();
+    return $deleted;
+});
+StructuredLog::info('auth.passwordChanged', ['userId' => $userId, 'deletedSessions' => $deletedSessions]);   // コミットのあと
+```
+
+```php
+// PasswordController::update()：番号の作り直しは、Service が通ったあと（違うときは作り直さない）
+$this->passwordService->changePassword($this->loginUserId($request), $current, $new, $this->loginSession->currentId($request));
+$this->loginSession->renew($request);
+```
+
+```php
+// ChangePasswordRequest：空の文字は ConvertEmptyStringsToNull で null になるので nullable。違うときと同じ 422 にするため
+'current_password' => ['nullable', 'string'],
+```
+
+### 呼び出しの流れ
+
+```mermaid
+sequenceDiagram
+    participant UI as 設定の画面（端末 A）
+    participant MW as Middleware
+    participant C as PasswordController
+    participant S as PasswordService
+    participant L as LoginSession
+    participant DB as PostgreSQL
+    UI->>MW: PUT /api/me/password（Cookie・X-XSRF-TOKEN）
+    MW->>DB: 会員の状態・メールアドレスの確認（2本）
+    MW->>C: ChangePasswordRequest で形を確かめる（違えば 422）
+    C->>S: changePassword(会員の番号, 今, 新しい, 今の番号)
+    S->>DB: begin
+    S->>DB: select * from users where id = ? for update
+    S->>DB: update users set password = ?
+    S->>DB: delete from sessions where user_id = ? and id <> ?
+    S->>DB: delete from password_reset_tokens where email = ?
+    S->>DB: commit
+    S-->>C: 戻る（auth.passwordChanged のログ）
+    C->>L: renew()
+    L->>DB: 前の番号の行を消し、新しい番号の行を書く（リクエストの終わり）
+    C-->>UI: 200・新しい番号の Cookie
+```
+
+- 今のパスワードが違うときは、`Hash::check` のあとで例外になり、`rollback`。`renew()` は呼ばれず、Cookie は変わらない。`bootstrap/app.php` が `auth.rejected` を1行残す
+
+### 名前
+
+- `LoginSession`：何のセッションかを名詞で書いた（`architecture-backend.md` の3章）。`SessionService` は、Service（HTTP を知らない層）の名前なのに HTTP のセッションを触ることになるので選ばなかった
+- `renew()`：ログインしたまま番号だけを新しくする。`regenerate()` は Laravel のメソッドと同じ名前で、前の行を消すか（`true`）が名前から読めないので選ばなかった
+- `changePassword()`：Service の public のメソッドは操作の名前（`update` は Controller の名前とぶつかる）
+- `StructuredLog`：`logging.md` の見出し「構造化」にそろえた。`AppLog` は何をするかが分からないので選ばなかった
+- `deletedSessions`：消した行の数。`session` だけで伏せると、この数まで伏せるので、伏せる言葉は `sessionid` にした
+
+### 依存の向き
+
+```mermaid
+flowchart LR
+  route["routes/api.php"] --> ctrl["Auth/PasswordController"]
+  ctrl --> req["ChangePasswordRequest"]
+  ctrl --> svc["PasswordService"]
+  ctrl --> ls["Http/Session/LoginSession"]
+  auth["Auth/AuthController"] --> ls
+  svc --> user["User（Model）"]
+  svc --> sess["Session（Model）"]
+  svc --> log["Support/Logging/StructuredLog"]
+  svc --> exc["WrongCurrentPasswordException"]
+  boot["bootstrap/app.php"] --> exc
+  page["SettingsPage.tsx"] --> apierr["shared/api/ApiError"]
+```
+
+- 逆向きはない。`LoginSession` は Model を使わない。`StructuredLog` は Model から呼ばない（`architecture-backend.md` の6章）
+- 層のテストが、Controller・Request・Resource・Middleware から `Illuminate\Session` を使わないこと、`auth()->logout()`・`getSession()` などを `app/Http/Session` の外で書かないことを確かめる
+
+### レガシー版との違い
+
+- 前：古い `PasswordController`（39行）の1つのメソッドに、会員を読む・照合・保存が並んでいた。新しいパスワードは確かめず、1文字でも通り、送らなければ 500。ほかの端末も、前に届いた再設定のリンクも使えたまま
+- 後：Controller は受け取って2つを呼ぶだけ。形は Request、照合と削除は Service、番号は `LoginSession` に分かれた。ログイン・ログアウトも `LoginSession` を呼ぶ形にそろえた
+
+### 直した課題と、現場での意味
+
+- `05-problems.md` の #259
+- パスワードを盗まれたと気づいた会員が変えると、ほかの端末（盗んだ人の端末）は次のリクエストで 401 になる。前に届いた再設定のリンクも使えなくなる
+- 「急に全部の端末でログアウトされた」という問い合わせは、`auth.passwordChanged`（`userId`・`deletedSessions`）で、本人が変えたかを追える
+- 前と後：端末 B は 200 → 401。新しいパスワード1文字は 200 → 422。送らないときは 500 → 422。SQL はテストで6本＋begin・commit
+
+### 次の改善の候補
+
+- 72バイトの決まりが `ChangePasswordRequest` にだけある。再設定の PR で1か所に出す
+- 続けて間違えても止めない（P5）。`auth.rejected` に `userId` がないので、1人の会員への連続を数えられない。運用の土台のエピックで足す
+- ロックを持ったまま bcrypt を2回流す（回数 12 で 0.4 秒ほど）。同じ会員の書き込みが増えたら、`Hash::make()` をトランザクションの前に出すかを考える
+
+### 説明の練習
+
+#### 1回目：間違えたのにスマホがログアウトされた、という問い合わせ（2026-11-22）
+
+リーダーが聞いた：「パスワードを変えようとしたら『今のパスワードがちがいます』と出た。変わっていないはずなのに、スマホはログアウトされていた、と問い合わせが来た。`PasswordService::changePassword()` は何をどの順でしているか。この API で起きうるか」
+
+##### 問い：何をどの順でしているか・起きうるか
+
+- 人の答え：セッションを消してから、新しいパスワードの保存とセッションの削除をする。スマホは、セッションがないのでエラーになったのでは
+- 返し：保存と削除が入っているのは合っている。順番がずれている。最初に消すと、盗んだ Cookie だけで、違うパスワードを送ってほかの端末をログアウトさせられる（1回目のレビューの S2）。`Hash::check`・`DB::transaction`・`lockForUpdate()` が出てこなかった
+- 結果：一部
+
+##### 突っ込み1：`Hash::check` は削除の前か後か・例外のあとの行は動くか
+
+- 人の答え：後にある・動かない（例外が先に効く）
+- 返し：`Hash::check` は削除より前（`lockForUpdate()->find()` のすぐ下）。例外のあとの行が動かないのは合っている
+
+##### 突っ込み2：最後の削除で DB が失敗したら・この API でないなら何を見るか
+
+- 人の答え：トランザクションのおかげ・`StructuredLog` で分かる
+- 返し：合っている。トランザクションが全部戻すので、スマホの行も前のパスワードも残り、500 になる（`ChangePasswordTest` の DB の失敗のテスト）。ログは `auth.passwordChanged` をその会員の `userId` で探す。あれば、だれかが正しく変えた（覚えがなければ乗っ取りを疑う）。なければ、24時間で切れた・スマホでログアウトした・メンテナンス（`maintenance.deleteAllSessions`）を見る
+- 結果：一部（ヒント1）
+
+##### 次にやること
+
+- 処理の順番を、コードの行で確かめてから答える
+- 「トランザクション」は、何が戻るか（どの行・どの値）まで言う
