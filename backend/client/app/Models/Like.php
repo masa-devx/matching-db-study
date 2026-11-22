@@ -42,15 +42,18 @@ class Like extends Model
 
     /**
      * 会員の届いたいいね（まだ返事をしていないもの。docs/glossary.md）。届いたいいねの一覧（GET /api/me/received-likes）に出るもの。
-     * 下のタブの数も、これで数える。今の一覧と同じく、送り返した相手（マッチした相手）・ブロックした／された相手・スキップした相手を除く
-     * （FR-LIKE-010・FR-BLOCK-007・FR-LIKE-012）。
-     * 分かっている不具合：退会した相手のいいねは除かない（要件は FR-WD-006。今の一覧と同じ）。除くときは、ここと一覧の両方を直す
+     * 下のタブの数も、これで数える。今の一覧と同じく、送った人が使える会員（User の accountUsable()）のものだけにし、
+     * 送り返した相手（マッチした相手）・ブロックした／された相手・スキップした相手を除く
+     * （FR-LIKE-010・FR-WD-006・FR-WD-014・FR-BLOCK-007・FR-LIKE-012）
      *
      * @param  Builder<self>  $query
      */
     public function scopeReceivedBy(Builder $query, int $userId): void
     {
         $query->where('likes.to_user_id', $userId)
+            ->whereHas('fromUser', function (Builder $sender): void {
+                $sender->accountUsable();
+            })
             ->whereNotExists(function (QueryBuilder $likedBack) use ($userId): void {
                 $likedBack->selectRaw('1')
                     ->from('likes as liked_back')

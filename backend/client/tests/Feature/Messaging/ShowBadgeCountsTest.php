@@ -182,19 +182,38 @@ describe('ログインした会員に、ブロックした相手とブロック�
     });
 });
 
-describe('ログインした会員に、退会した相手がいるときに、タブの数を読む', function (): void {
-    // 分かっている不具合：要件は、退会した相手を一覧に出さない（FR-WD-006）。今の2つの一覧が除かないので、数も同じに数える
-    it('退会した相手のメッセージ・マッチ・いいねも、今の一覧と同じく数える', function (): void {
+describe('ログインした会員に、退会・アカウント停止・強制退会した相手がいるときに、タブの数を読む', function () use ($noCounts): void {
+    it('その相手のメッセージ・マッチ・いいねは、どの数にも入れず、今の一覧で数えたものと同じ（FR-WD-006・FR-WD-014）', function (array $status) use ($noCounts): void {
         $loginUser = DummyUser::create(gender: 'male');
-        $talked = DummyUser::create(withdrawn: true);
-        $matched = DummyUser::create(withdrawn: true);
-        $liker = DummyUser::create(withdrawn: true);
+        $talked = DummyUser::create(...$status);
+        $matched = DummyUser::create(...$status);
+        $liker = DummyUser::create(...$status);
         $room = DummyMatching::match($loginUser, $talked);
         DummyMessage::send($room, $talked);
         DummyMatching::match($matched, $loginUser);
         DummyMatching::like($liker, $loginUser);
 
-        $expected = ['unread_messages' => 1, 'new_matches' => 1, 'received_likes' => 1];
+        DummyAuth::actingAs($loginUser)->getJson(Endpoints::badgeCounts())
+            ->assertOk()
+            ->assertExactJson($noCounts);
+        expect(badgeCountsFromLists($loginUser))->toBe($noCounts);
+    })->with([
+        '退会した相手' => [['withdrawn' => true]],
+        'アカウント停止された相手' => [['suspended' => true]],
+        '強制退会になった相手' => [['banned' => true]],
+    ]);
+
+    it('アカウント停止が解けた相手は、また数え、今の一覧で数えたものと同じ（FR-WD-014）', function (): void {
+        $loginUser = DummyUser::create(gender: 'male');
+        $partner = DummyUser::create(suspended: true);
+        $liker = DummyUser::create(suspended: true);
+        $room = DummyMatching::match($loginUser, $partner);
+        DummyMessage::send($room, $partner);
+        DummyMatching::like($liker, $loginUser);
+        DummyUser::liftSuspension($partner);
+        DummyUser::liftSuspension($liker);
+
+        $expected = ['unread_messages' => 1, 'new_matches' => 0, 'received_likes' => 1];
         DummyAuth::actingAs($loginUser)->getJson(Endpoints::badgeCounts())
             ->assertOk()
             ->assertExactJson($expected);

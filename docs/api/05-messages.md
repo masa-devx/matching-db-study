@@ -408,12 +408,13 @@ return response()->json($result);
 
 - 数は、今の2つの一覧（`GET /api/me/talk-rooms`・`GET /api/me/received-likes`）で数えたものと同じにする。`tests/Feature/Messaging/ShowBadgeCountsTest.php` が、一覧から数えたものと比べる
 - トークルームの条件は `TalkRoomMember::scopeListedFor()` の1か所（未読と新しいマッチの2つが使う）
+  - 相手が、使える会員（`User::scopeAccountUsable()`。退会・アカウント停止・強制退会でない）のルームだけ（FR-WD-006・FR-WD-014）
   - ブロックした・された相手のルームは除く（FR-BLOCK-009）
 - 届いたいいねの条件は `Like::scopeReceivedBy()` の1か所
+  - 送った人が、使える会員（`User::scopeAccountUsable()`）のいいねだけ（FR-WD-006・FR-WD-014）
   - 送り返した相手・ブロックした／された相手・スキップした相手は除く（FR-LIKE-010・FR-BLOCK-007・FR-LIKE-012）
-- ブロックの向きを問わない条件は `Block::scopeBetween()`（上の2つが使う）
-- 分かっている不具合：退会した相手は、どちらの数にも入る（要件は FR-WD-006 で、一覧に出さない）。今の2つの一覧が除かないので、同じにした。除くときは、上の2つのスコープと、2つの一覧の両方を直す
-- 一覧の API はまだ古いコントローラー（`TalkRoomController`・`ReceivedLikeController`）のままで、同じ条件をコントローラーの中にも書いている。一覧を移すときに、上のスコープを使う形にする
+- 使える会員の条件は `User::scopeAccountUsable()`、ブロックの向きを問わない条件は `Block::scopeBetween()`。上の2つのスコープは、条件を書き写さずに、これを呼ぶ
+- 一覧の API はまだ古いコントローラー（`TalkRoomController`・`ReceivedLikeController`）のままで、ブロック・送り返し・スキップの条件をコントローラーの中にも書いている（使える会員の条件は、どちらも `accountUsable()` を呼ぶ）。一覧を移すときに、上のスコープを使う形にする
 
 #### 応答（失敗）
 

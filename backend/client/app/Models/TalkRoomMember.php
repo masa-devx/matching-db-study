@@ -48,20 +48,21 @@ class TalkRoomMember extends Model
 
     /**
      * 会員の参加者の行のうち、トークの一覧（GET /api/me/talk-rooms）に出るルームのもの。下のタブの数も、これで数える。
-     * 今の一覧と同じく、ブロックした・された相手のルームを除く（FR-BLOCK-009）。
-     * 分かっている不具合：退会した相手のルームは除かない（要件は FR-WD-006。今の一覧と同じ）。除くときは、ここと一覧の両方を直す
+     * 今の一覧と同じく、相手が使える会員（User の accountUsable()。退会・アカウント停止・強制退会でない）で、
+     * ブロックした・された相手でないルームだけ（FR-WD-006・FR-WD-014・FR-BLOCK-009）
      *
      * @param  Builder<self>  $query
      */
     public function scopeListedFor(Builder $query, int $userId): void
     {
         $query->where('talk_room_members.user_id', $userId)
-            ->whereNotExists(function (QueryBuilder $partner) use ($userId): void {
+            ->whereExists(function (QueryBuilder $partner) use ($userId): void {
                 $partner->selectRaw('1')
                     ->from('talk_room_members as partner')
                     ->whereColumn('partner.talk_room_id', 'talk_room_members.talk_room_id')
                     ->where('partner.user_id', '<>', $userId)
-                    ->whereExists(Block::query()->between($userId, 'partner.user_id'));
+                    ->whereExists(User::query()->accountUsable()->whereColumn('users.id', 'partner.user_id'))
+                    ->whereNotExists(Block::query()->between($userId, 'partner.user_id'));
             });
     }
 
