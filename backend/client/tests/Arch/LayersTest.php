@@ -80,6 +80,18 @@ arch('Request・Middleware・セッションの操作（Http\Session）は、Mod
     }
 });
 
+// セッションの物（Illuminate\Session\Store など）を引数で受け取って触る形は、下のファイルの文字を探すテストでは見つけられない。
+// セッションの物を使ってよいのは app/Http/Session だけ（architecture-backend.md の2章）
+arch('Controller・Request・Resource・Middleware は、セッションの物（Illuminate\Session）を使わない', function (): void {
+    foreach (['App\Http\Controllers', 'App\Http\Requests', 'App\Http\Resources', 'App\Http\Middleware'] as $layer) {
+        foreach (['Illuminate\Session', 'Illuminate\Contracts\Session'] as $session) {
+            expect($layer)
+                ->not->toUse($session)
+                ->ignoring(LEGACY_CONTROLLERS);
+        }
+    }
+});
+
 // Resource は、Service が返した Model から、返してよい項目を選ぶ（Model の型は使ってよい）。新しくクエリを書かない。
 // Model の型を使ってよいので、User::query() やリレーションの ->count() は、このテストでは見られない（レビューで見る。architecture-backend.md の8章）
 arch('Resource は、DB を使わない', function (): void {
@@ -150,10 +162,11 @@ test('新しい Http の層は、DB のファサードの別名（\DB::・use DB
 // セッションを作る・作り直す・消すのは app/Http/Session（LoginSession）だけ（architecture-backend.md の2章）。
 // ほかの所に増えると、「どこでセッションが変わるか」を1か所で追えなくなる。ログインしている会員を読む（Auth::guard()->id()）のは、Middleware でよい。
 // arch() はメソッドの呼び出しを見られないので、ファイルの文字を読んで探す。Session のファサードは、読み込み（Facades\Session）と \Session:: の形で探す
-// （Session:: だけで探すと、表 sessions の Model（App\Models\Session）の Session::query() にも当たる）
+// （Session:: だけで探すと、表 sessions の Model（App\Models\Session）の Session::query() にも当たる）。
+// 1行ずつ比べるので、2行に分けた呼び出し（auth()\n->logout()）は見つけられない（レビューで見る）
 test('セッションを作る・作り直す・消す処理は、app/Http/Session の中にだけある', function (): void {
     $app = dirname(__DIR__, 2).'/app';
-    $pattern = '/->session\(\)|(?<![\w>$])session\(|Facades\\\\Session\b|(?<![\w\\\\])\\\\Session::|guard\([^)]*\)->(login|loginUsingId|logout|logoutOtherDevices|attempt)\(|Auth::(login|loginUsingId|logout|logoutOtherDevices|attempt)\(/';
+    $pattern = '/->session\(\)|(?<![\w>$])session\(|Facades\\\\Session\b|(?<![\w\\\\])\\\\Session::|(?:guard|\bauth)\([^)]*\)->(login|loginUsingId|logout|logoutOtherDevices|attempt)\(|->getSession\(\)|Auth::(login|loginUsingId|logout|logoutOtherDevices|attempt)\(/';
     $found = [];
     foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($app, FilesystemIterator::SKIP_DOTS)) as $file) {
         if (! $file instanceof SplFileInfo || $file->getExtension() !== 'php' || str_starts_with($file->getPathname(), $app.'/Http/Session/')) {
