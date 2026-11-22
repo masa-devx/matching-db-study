@@ -18,6 +18,7 @@ use Illuminate\Http\Request;
  * 同じ組が2行あれば、同じ相手が2回出る。改善する段階で、要件 ID のテストにする。
  * #46 で、相手を public_id（UUID）で返すようにした（1件ごとに1本増え、1＋2N 本）。
  * 06 で、ブロックした・された相手を除いた（向きごとに2本足す。退会した相手は除かない。docs/api/06-blocks-withdrawal.md）。
+ * #269 で、退会・アカウント停止・強制退会の相手も除いた（User の accountUsable()。Controller → Service には、まだ移していない）。
  */
 class UserMatchController extends Controller
 {
@@ -40,14 +41,18 @@ class UserMatchController extends Controller
         foreach ($matches as $match) {
             // 組のどちら側に自分がいるかで、相手を選ぶ（自分とのマッチなら、相手も自分になる）
             $partnerId = $match->user1_id == $loginUserId ? $match->user2_id : $match->user1_id;
-            // 06：ブロックした・された相手は飛ばす（退会した相手は飛ばさない）
+            // 06：ブロックした・された相手は飛ばす
             if ($blockIds->contains($partnerId)) {
                 continue;
             }
-            // マッチ1件ごとに1本（N+1）。相手が消えても、マッチの行は残る
+            // #46：画面がユーザー詳細へのリンクに使うので、相手の public_id を返す。1件ごとに1本。
+            // 退会・アカウント停止・強制退会の相手は読めないので飛ばす。条件は User の accountUsable() の1か所（FR-WD-006・014）
+            $publicId = User::query()->accountUsable()->where('id', $partnerId)->value('public_id');
+            if ($publicId === null) {
+                continue;
+            }
+            // マッチ1件ごとにもう1本（N+1）。相手が消えても、マッチの行は残る
             $profile = Profile::where('user_id', $partnerId)->first();
-            // #46：画面がユーザー詳細へのリンクに使うので、相手の public_id を返す。1件ごとにもう1本
-            $publicId = User::where('id', $partnerId)->value('public_id');
             $result[] = [
                 'user_id' => $publicId,
                 'nickname' => $profile?->nickname,

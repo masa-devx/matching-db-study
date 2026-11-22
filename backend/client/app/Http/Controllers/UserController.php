@@ -23,6 +23,7 @@ use Illuminate\Support\Str;
  * 入力を確かめない・トランザクションがない。応答に確認用の文字が出ていた（今は User の #[Hidden] で隠す）。改善する段階で、要件 ID のテストにする。
  * 04 で、相手を探す index() を足した（docs/api/04-search.md）。OFFSET で20人ずつ・1＋N 本・条件は文字で比べる。
  * 06 で、退会の destroy() を足し（docs/api/06-blocks-withdrawal.md）、検索からブロックした・された相手と退会した会員を除いた。
+ * #269 で、アカウント停止・強制退会の会員も除いた（User の accountUsable()。Controller → Service には、まだ移していない）。
  * 07 で、身長の条件を男性の無料の会員には使わせないようにした（送ったときだけ2本増える。docs/api/07-paid-members.md）。
  */
 class UserController extends Controller
@@ -79,8 +80,8 @@ class UserController extends Controller
             ->whereNotIn('id', $likedIds)
             ->whereNotIn('id', $blockIds)
             ->whereNotIn('id', $skipIds)
-            // 06：退会した会員を除くのは、ここ（検索）だけ
-            ->whereNull('deleted_at')
+            // 退会・アカウント停止・強制退会の会員を除く。条件は User の accountUsable() の1か所（FR-WD-005・013）
+            ->accountUsable()
             // 条件は profiles にあるので exists（相関サブクエリ）で絞る。送られた条件だけを足し、値は確かめない
             ->whereHas('profile', function (Builder $q) use ($request, $gender) {
                 $q->where('gender', $gender);

@@ -623,7 +623,7 @@ URL は今のまま（`/api/...`）。新しい URL に移すのは、サイク�
 #### `User` の Model
 
 - 責務
-  - 会員が使えるか（退会・停止・強制退会）を、行の値だけで答える（`isAccountUsable()`。今ある `scopeActive` と同じ条件）
+  - 会員が使えるか（退会・停止・強制退会）を、行の値だけで答える（`isAccountUsable()`。SQL で絞るときのスコープ `accountUsable()` と同じ条件。#269）
   - ログインと `AuthenticateUser` の両方から使う
 - 置き場の理由
   - 行の値だけで決まる事実は、Model に1つだけ置く

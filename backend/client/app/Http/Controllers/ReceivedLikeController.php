@@ -9,6 +9,7 @@ use App\Models\Like;
 use App\Models\Profile;
 use App\Models\Skip;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -20,7 +21,8 @@ use Illuminate\Http\Request;
  * - もう送り返した相手（マッチした相手）・ブロックした／された相手・スキップした相手を、PHP に ID を持ってきて除く
  * - 1件ごとに、プロフィールと public_id を読む（1＋2N 本）
  * - likes.to_user_id にインデックスがないので、表を全部読む
- * - ページ送りがない（届いた分を全部返す）。退会した相手・止められた相手も、そのまま出る
+ * - ページ送りがない（届いた分を全部返す）
+ * #269 で、退会・アカウント停止・強制退会の相手を除いた（User の accountUsable()。Controller → Service には、まだ移していない）。
  */
 class ReceivedLikeController extends Controller
 {
@@ -43,6 +45,8 @@ class ReceivedLikeController extends Controller
             ->whereNotIn('from_user_id', $likedIds)
             ->whereNotIn('from_user_id', $blockIds)
             ->whereNotIn('from_user_id', $skipIds)
+            // 退会・アカウント停止・強制退会の相手を除く。条件は User の accountUsable() の1か所（FR-WD-006・014）
+            ->whereHas('fromUser', fn (Builder $user) => $user->accountUsable())
             ->orderBy('created_at', 'desc')
             ->get();
 

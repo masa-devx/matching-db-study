@@ -88,6 +88,7 @@
 表の補足：
 
 - `Members/MemberService` の `search` のクエリは、`User` の `scopeSearch` に置く
+- 移すとき一緒に動かすもの：`UserController@index`・`LikeController@index`・`ReceivedLikeController@index`・`UserMatchController@index`・`TalkRoomController@index` は、`User::accountUsable()`（退会・アカウント停止・強制退会の会員を除く）を呼んでいる（#269・D-028）。移すときは、この呼ぶ所も Service に移す
 - 自分のプロフィールを直す新しい URL は `PATCH /me`（`03-how.md` の281行目）
 - `Matching/LikeService` と `Messaging/MessageService` は、Firestore へは `Clients/Firestore/FirestoreClient`（`FirestoreClient`）を通す
 

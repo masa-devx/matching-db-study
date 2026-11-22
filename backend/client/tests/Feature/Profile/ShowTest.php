@@ -14,65 +14,9 @@ use function Pest\Laravel\getJson;
 // GET /api/users/{user_id}：相手のプロフィールを見る。今の動きを確かめるテスト。
 // 要件と違う所は「分かっている不具合」。手で試すシナリオは bruno/client/profile/
 
-describe('ログインしていない人が、相手のプロフィールを見る', function (): void {
-    it('見られない（401「ログインしてください」。FR-AUTH-020）', function (): void {
-        $target = DummyUser::create();
-
-        getJson(Endpoints::profile($target->publicId))
-            ->assertUnauthorized()
-            ->assertExactJson(['message' => 'ログインしてください']);
-    });
-
-    it('ログインしていなければ、会員の情報にもプロフィールにもアクセスできない（DB を読まない）', function (): void {
-        $target = DummyUser::create();
-        DB::enableQueryLog();
-
-        getJson(Endpoints::profile($target->publicId))->assertUnauthorized();
-
-        expect(DB::getQueryLog())->toHaveCount(0);
-    });
-});
-
-describe('使えなくなった会員が、ログインしたまま、相手のプロフィールを見る', function (): void {
-    it('アカウント停止された会員は、見られず、停止されていると知らされる（401「このアカウントは停止されています」。NFR-AUTH-001）', function (): void {
-        $loginUser = DummyUser::create(suspended: true);
-        $target = DummyUser::create();
-
-        DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile($target->publicId))
-            ->assertUnauthorized()
-            ->assertExactJson(['message' => 'このアカウントは停止されています', 'code' => 'account_suspended']);
-    });
-
-    it('退会した会員は、見られない（401「ログインしてください」。NFR-AUTH-001）', function (): void {
-        $loginUser = DummyUser::create(withdrawn: true);
-        $target = DummyUser::create();
-
-        DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile($target->publicId))
-            ->assertUnauthorized()
-            ->assertExactJson(['message' => 'ログインしてください']);
-    });
-
-    it('強制退会になった会員は、見られない（401「ログインしてください」。NFR-AUTH-001）', function (): void {
-        $loginUser = DummyUser::create(banned: true);
-        $target = DummyUser::create();
-
-        DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile($target->publicId))
-            ->assertUnauthorized()
-            ->assertExactJson(['message' => 'ログインしてください']);
-    });
-
-    it('ログインしたあとに会員の行がなくなったセッションでは、見られない（401。NFR-AUTH-001）', function (): void {
-        $gone = DummyUser::create();
-        $target = DummyUser::create();
-        $cookie = DummyAuth::loginFromScreen($gone);
-        DB::table('profiles')->where('user_id', $gone->id)->delete();
-        DB::table('users')->where('id', $gone->id)->delete();
-
-        DummyAuth::withSessionCookie($cookie)->getJson(Endpoints::profile($target->publicId))
-            ->assertUnauthorized();
-    });
-});
-
+/**
+ * 正常系：要件が通す操作
+ */
 describe('ログインしている人が、相手のプロフィールを見る', function (): void {
     // 分かっている不具合：要件（FR-002）は、メールアドレス・生年月日を返さない。表の列を全部返している
     it('ニックネームと一緒に、メールアドレスと生年月日も返る', function (): void {
@@ -161,6 +105,78 @@ describe('ログインしている人が、相手のプロフィールを見る'
 
         expect($response->json('room_id'))->toBeIn($roomIds);
     });
+
+    it('アカウント停止が解かれた会員のプロフィールは、また見られる（FR-WD-013）', function (): void {
+        $loginUser = DummyUser::create();
+        $lifted = DummyUser::create(suspended: true);
+        DummyUser::liftSuspension($lifted);
+
+        DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile($lifted->publicId))
+            ->assertOk()
+            ->assertJsonPath('public_id', $lifted->publicId);
+    });
+});
+
+/**
+ * 異常系：要件が断る操作
+ */
+describe('ログインしていない人が、相手のプロフィールを見る', function (): void {
+    it('見られない（401「ログインしてください」。FR-AUTH-020）', function (): void {
+        $target = DummyUser::create();
+
+        getJson(Endpoints::profile($target->publicId))
+            ->assertUnauthorized()
+            ->assertExactJson(['message' => 'ログインしてください']);
+    });
+
+    it('ログインしていなければ、会員の情報にもプロフィールにもアクセスできない（DB を読まない）', function (): void {
+        $target = DummyUser::create();
+        DB::enableQueryLog();
+
+        getJson(Endpoints::profile($target->publicId))->assertUnauthorized();
+
+        expect(DB::getQueryLog())->toHaveCount(0);
+    });
+});
+
+describe('使えなくなった会員が、ログインしたまま、相手のプロフィールを見る', function (): void {
+    it('アカウント停止された会員は、見られず、停止されていると知らされる（401「このアカウントは停止されています」。NFR-AUTH-001）', function (): void {
+        $loginUser = DummyUser::create(suspended: true);
+        $target = DummyUser::create();
+
+        DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile($target->publicId))
+            ->assertUnauthorized()
+            ->assertExactJson(['message' => 'このアカウントは停止されています', 'code' => 'account_suspended']);
+    });
+
+    it('退会した会員は、見られない（401「ログインしてください」。NFR-AUTH-001）', function (): void {
+        $loginUser = DummyUser::create(withdrawn: true);
+        $target = DummyUser::create();
+
+        DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile($target->publicId))
+            ->assertUnauthorized()
+            ->assertExactJson(['message' => 'ログインしてください']);
+    });
+
+    it('強制退会になった会員は、見られない（401「ログインしてください」。NFR-AUTH-001）', function (): void {
+        $loginUser = DummyUser::create(banned: true);
+        $target = DummyUser::create();
+
+        DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile($target->publicId))
+            ->assertUnauthorized()
+            ->assertExactJson(['message' => 'ログインしてください']);
+    });
+
+    it('ログインしたあとに会員の行がなくなったセッションでは、見られない（401。NFR-AUTH-001）', function (): void {
+        $gone = DummyUser::create();
+        $target = DummyUser::create();
+        $cookie = DummyAuth::loginFromScreen($gone);
+        DB::table('profiles')->where('user_id', $gone->id)->delete();
+        DB::table('users')->where('id', $gone->id)->delete();
+
+        DummyAuth::withSessionCookie($cookie)->getJson(Endpoints::profile($target->publicId))
+            ->assertUnauthorized();
+    });
 });
 
 describe('でたらめなセッションの Cookie を送る人が、相手のプロフィールを見る', function (): void {
@@ -209,5 +225,34 @@ describe('ログインしている人が、いない会員や形の違う番号�
         $loginUser = DummyUser::create();
 
         DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile('abc'))->assertInternalServerError();
+    });
+});
+
+describe('ログインしている人が、退会・アカウント停止・強制退会の会員のプロフィールを見る', function (): void {
+    it('退会した会員は、いない会員と同じく見つからない（404「会員が見つかりません」。FR-WD-005）', function (): void {
+        $loginUser = DummyUser::create();
+        $withdrawn = DummyUser::create(withdrawn: true);
+
+        DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile($withdrawn->publicId))
+            ->assertNotFound()
+            ->assertExactJson(['message' => '会員が見つかりません']);
+    });
+
+    it('アカウント停止された会員は、いない会員と同じく見つからない（404「会員が見つかりません」。FR-WD-013）', function (): void {
+        $loginUser = DummyUser::create();
+        $suspended = DummyUser::create(suspended: true);
+
+        DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile($suspended->publicId))
+            ->assertNotFound()
+            ->assertExactJson(['message' => '会員が見つかりません']);
+    });
+
+    it('強制退会になった会員は、いない会員と同じく見つからない（404「会員が見つかりません」。FR-WD-013）', function (): void {
+        $loginUser = DummyUser::create();
+        $banned = DummyUser::create(banned: true);
+
+        DummyAuth::actingAs($loginUser)->getJson(Endpoints::profile($banned->publicId))
+            ->assertNotFound()
+            ->assertExactJson(['message' => '会員が見つかりません']);
     });
 });

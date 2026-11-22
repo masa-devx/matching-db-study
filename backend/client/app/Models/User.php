@@ -8,6 +8,7 @@ use App\Enums\AccountStatus;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -89,6 +90,20 @@ class User extends Authenticatable
     public function isAccountUsable(): bool
     {
         return $this->accountStatus() === AccountStatus::Usable;
+    }
+
+    /**
+     * アカウントが使える状態の会員だけに絞る（退会・アカウント停止・強制退会のどれでもない）。
+     * ほかの会員に見せてよいのは、この会員だけ（FR-WD-005・006・013・014）。検索・プロフィール・いいね・マッチ・トークの一覧が呼ぶ。
+     * accountStatus() が Usable になる行を、SQL の条件で書いたもの。状態や列を足すときは、2つを一緒に直す
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeAccountUsable(Builder $query): void
+    {
+        $query->whereNull($query->qualifyColumn('deleted_at'))
+            ->whereNull($query->qualifyColumn('suspended_at'))
+            ->whereNull($query->qualifyColumn('banned_at'));
     }
 
     /**

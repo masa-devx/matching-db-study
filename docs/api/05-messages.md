@@ -50,6 +50,7 @@
   - **生年月日をそのまま返す**
   - やり取りがなければ `last_message` は `null`
 - 改善版：`200` `{"data": [{"room_id": "019a…", "user_id": "019a…", "nickname": "香織", "age": 28, "avatar_url": "/images/avatars/demo-3.svg", "last_message": {"body": "こんにちは", "sent_at": "2026-11-13T10:00:00+09:00"}, "unread_count": 3}]}`
+  - 退会・アカウント停止・強制退会の相手のルームは出さない（FR-WD-006・014）。refactored-repo では #269 で、今の URL のまま除いた（[06-blocks-withdrawal.md](06-blocks-withdrawal.md) の「#269 で変えたこと」）
 
 ### 未読の数
 

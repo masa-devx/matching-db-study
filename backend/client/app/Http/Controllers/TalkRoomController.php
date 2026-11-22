@@ -19,6 +19,7 @@ use Illuminate\Http\Request;
  * 自分の参加者の行を全部読み、ルームごとに6本ずつ読む（1＋6N 本）。messages にインデックスがないので、
  * 最新の1件と未読の数は、ルームごとに表を全部読む。並べるのは PHP。改善する段階で、要件 ID のテストにする。
  * 06 で、ブロックした・された相手を除いた（向きごとに2本足す。退会した相手は除かない。docs/api/06-blocks-withdrawal.md）。
+ * #269 で、退会・アカウント停止・強制退会の相手も除いた（User の accountUsable()。Controller → Service には、まだ移していない）。
  */
 class TalkRoomController extends Controller
 {
@@ -40,12 +41,16 @@ class TalkRoomController extends Controller
             $room = TalkRoom::where('id', $member->talk_room_id)->first();
             // 相手（同じルームの、自分でない参加者）。いなければ null で、次の行が 500
             $partner = TalkRoomMember::where('talk_room_id', $room->id)->where('user_id', '!=', $loginUserId)->first();
-            // 06：ブロックした・された相手のルームは飛ばす（退会した相手は飛ばさない）
+            // 06：ブロックした・された相手のルームは飛ばす
             if ($blockIds->contains($partner->user_id)) {
                 continue;
             }
+            // 退会・アカウント停止・強制退会の相手のルームは飛ばす。条件は User の accountUsable() の1か所（FR-WD-006・014）
+            $publicId = User::query()->accountUsable()->where('id', $partner->user_id)->value('public_id');
+            if ($publicId === null) {
+                continue;
+            }
             $profile = Profile::where('user_id', $partner->user_id)->first();
-            $publicId = User::where('id', $partner->user_id)->value('public_id');
             // 最新の1件と未読の数：talk_room_id にインデックスがないので、どちらも表を全部読む
             $last = Message::where('talk_room_id', $room->id)->orderBy('created_at', 'desc')->first();
             // 未読の数は、最後に読んだ時刻より新しい相手のもの（時刻で比べるので、同じ秒に届いたものの境目がずれる）

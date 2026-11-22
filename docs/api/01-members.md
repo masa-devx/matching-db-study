@@ -36,6 +36,7 @@
   - `404`：その会員がいない（`{"message": "No query results for model [App\\Models\\User] 999"}`）
   - プロフィールがない会員は、`"profile": null` で `200`
 - 改善版：`404`：その会員がいない（`{"message": "会員が見つかりません"}`）
+  - 退会・アカウント停止・強制退会の会員も、いない会員と同じ `404`（FR-WD-005・013）。refactored-repo では #269 で、この形にした
 
 ### 流れる SQL の目安
 

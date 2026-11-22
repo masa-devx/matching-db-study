@@ -11,6 +11,7 @@ use App\Models\TalkRoom;
 use App\Models\TalkRoomMember;
 use App\Models\User;
 use App\Models\UserMatch;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -24,6 +25,7 @@ use Illuminate\Support\Facades\Http;
  * 05 で、マッチしたときにトークルームと参加者2人を作るようにした（送ってマッチしたときに3本増える）。
  * 05c で、マッチしたときに Firestore（手元の Emulator）にもルームと2人の受信箱を作るようにした（SQL 2本・HTTP 3本が増える）。
  * 06 で、ブロックした・された相手を除いた（向きごとに2本足す。退会した相手は除かない。docs/api/06-blocks-withdrawal.md）。
+ * #269 で、退会・アカウント停止・強制退会の相手も除いた（User の accountUsable()。Controller → Service には、まだ移していない）。
  * 07 で、男性の無料の会員のいいねを1日10回までにした（UTC の日付で数えてから入れる。3本増える。docs/api/07-paid-members.md）。
  */
 class LikeController extends Controller
@@ -112,8 +114,12 @@ class LikeController extends Controller
         $blockedMe = Block::where('blocked_id', $loginUserId)->pluck('blocker_id');   // 索引がなく、表を全部読む
         $blockIds = $blocked->merge($blockedMe);
 
-        // 退会した相手は除かない
-        $likes = Like::where('from_user_id', $loginUserId)->whereNotIn('to_user_id', $blockIds)->orderBy('created_at', 'desc')->get();
+        // 退会・アカウント停止・強制退会の相手を除く。条件は User の accountUsable() の1か所（FR-WD-006・014）
+        $likes = Like::where('from_user_id', $loginUserId)
+            ->whereNotIn('to_user_id', $blockIds)
+            ->whereHas('toUser', fn (Builder $user) => $user->accountUsable())
+            ->orderBy('created_at', 'desc')
+            ->get();
 
         $result = [];
         foreach ($likes as $like) {
