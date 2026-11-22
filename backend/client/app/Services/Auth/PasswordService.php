@@ -18,10 +18,10 @@ use Illuminate\Support\Facades\Hash;
 final class PasswordService
 {
     /**
-     * 今のパスワードを確かめてから、新しいパスワードにし、ほかの端末のセッションの行を消す（FR-AUTH-033）。
+     * 今のパスワードを確かめてから、新しいパスワードにし、ほかの端末のセッションの行と、再設定用の文字を消す（FR-AUTH-033）。
      * 保存するときに、Model の 'hashed' のキャストが bcrypt にする。変えた端末（$currentSessionId）の行は残す。
-     * 分かっている不具合：新しいパスワードを確かめない（1文字でも通り、null なら NOT NULL の違反で 500。FR-AUTH-033・FR-AUTH-004）。
-     * 再設定用の文字も消さない（FR-AUTH-033）
+     * 再設定用の文字を消すのは、前に届いた再設定のリンクから、パスワードを変え直されないようにするため。
+     * 分かっている不具合：新しいパスワードを確かめない（1文字でも通り、null なら NOT NULL の違反で 500。FR-AUTH-033・FR-AUTH-004）
      *
      * @throws WrongCurrentPasswordException 今のパスワードが違う（422）
      */
@@ -40,6 +40,8 @@ final class PasswordService
         DB::transaction(function () use ($user, $newPassword, $currentSessionId): void {
             $user->update(['password' => $newPassword]);
             Session::query()->ofUser($user->id)->exceptId($currentSessionId)->delete();
+            // 表 password_reset_tokens は、メールアドレスが主キー（1人に1行）。条件が1つなので、Model を作らずにここで消す
+            DB::table('password_reset_tokens')->where('email', $user->email)->delete();
         });
     }
 }

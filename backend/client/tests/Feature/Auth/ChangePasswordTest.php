@@ -80,14 +80,18 @@ describe('同じ会員が端末 A と B でログインしていて、A でパ�
 });
 
 describe('再設定のメールを頼んだ会員が、そのあとで設定の画面からパスワードを変える（P7）', function () use ($validInput): void {
-    // 分かっている不具合：要件（FR-AUTH-033）は、その会員の再設定用の文字を消す。表 password_reset_tokens を触っていない
-    it('前に届いた再設定のリンクの文字は、残ったまま', function () use ($validInput): void {
+    it('前に届いた再設定のリンクの文字が消え、ほかの会員の文字は残る（FR-AUTH-033）', function () use ($validInput): void {
         $user = DummyUser::create();
-        DB::table('password_reset_tokens')->insert(['email' => $user->email, 'token' => 'reset-token-1', 'created_at' => now()]);
+        $someone = DummyUser::create();
+        DB::table('password_reset_tokens')->insert([
+            ['email' => $user->email, 'token' => 'reset-token-1', 'created_at' => now()],
+            ['email' => $someone->email, 'token' => 'reset-token-2', 'created_at' => now()],
+        ]);
 
         DummyAuth::actingAs($user)->putJson(Endpoints::password(), $validInput)->assertOk();
 
-        assertDatabaseHas('password_reset_tokens', ['email' => $user->email, 'token' => 'reset-token-1']);
+        assertDatabaseMissing('password_reset_tokens', ['email' => $user->email]);
+        assertDatabaseHas('password_reset_tokens', ['email' => $someone->email, 'token' => 'reset-token-2']);
     });
 });
 
