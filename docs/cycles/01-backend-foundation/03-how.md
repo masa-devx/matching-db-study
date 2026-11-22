@@ -378,7 +378,7 @@ API のルートは、すべて `routes/api.php` から読み込む。`routes/we
 
 | 今の URL | 新しい URL | `/me` | 理由 |
 | --- | --- | --- | --- |
-| `GET /api/health` | `GET /health` | ― | |
+| `GET /api/health` | ―（消した。Laravel の `GET /up` に寄せた） | ― | 口が2つあり、返す中身は外から見えなくてよい情報だった |
 | `POST /api/users` | `POST /users`（名前は仮） | 付けない | 登録の前で、まだ「自分」がいない |
 | `GET /api/email-verifications/{token}` | `GET /users/{user_id}/email-verification/{hash}` | 付けない | メールのリンクで開くので、ログインしていない（下の注） |
 | `POST /api/email-verifications` | `POST /me/email-verification` | 付ける | 迷う（自分のメールアドレス） |

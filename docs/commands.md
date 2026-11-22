@@ -64,7 +64,7 @@ AI が守る決まり（推測で流さない・許可の一覧に足す基準�
 
 - 実行場所：リポジトリのルート
 - コマンド：`docker compose up -d --wait`
-  - API は `http://127.0.0.1:8000/api/health`
+  - API は `http://127.0.0.1:8000/up`（`200` なら動いている。Laravel にもとからある口で、DB につながるかは見ない）
   - メールの受信箱は `http://127.0.0.1:58025`
   - 止めるのは `docker compose stop`
 - 前提：Docker
@@ -269,7 +269,7 @@ AI が守る決まり（推測で流さない・許可の一覧に足す基準�
   - 抜け道の文字は Laravel に作らせる。自分で決めた文字（`--secret`）は、シェルの履歴に残るので使わない（NFR-MAINT-001）
   - コマンドが、抜け道の URL（`http://localhost:8000/<文字>`）を出す。その出力は、どこにも貼らない
 - 起きること
-  - 会員の API が、どれも `503`「ただいまメンテナンス中です」になる（`GET /api/health` も。FR-MAINT-004）。Laravel の `GET /up` だけは止まらない（Laravel がもとから外している）
+  - 会員の API が、どれも `503`「ただいまメンテナンス中です」になる（FR-MAINT-001）。Laravel の `GET /up` だけは止まらない（Laravel がもとから外している。FR-MAINT-004）
   - 表 `sessions` の行を全部消す（全員をログアウトさせる。FR-MAINT-002）。消した数は、`backend/client/storage/logs/laravel.log` の `maintenance.deleteAllSessions` に出る
   - 管理画面（`admin-app`）は止まらない（別のアプリなので。FR-MAINT-005）
 - 「Failed to enter maintenance mode」と出ても、メンテナンスに入っていることがある（Laravel は、メンテナンスに入れてから、セッションを消す）。DB につながらないときに起きる。DB が戻ってから、同じコマンドをもう一度流す（もう一度流すと、セッションを消し直し、抜け道の URL も出る）
@@ -280,7 +280,7 @@ AI が守る決まり（推測で流さない・許可の一覧に足す基準�
 - 今の状態：`backend/client/storage/framework/down` があれば、メンテナンス中（`docker compose exec app php artisan about --only=environment` の `Maintenance Mode` でも見られる）
 - 会員の API：`curl -s -H 'Accept: application/json' http://localhost:8000/api/me` が `503`
 - 管理画面：`curl -s http://127.0.0.1:8100/api/health` が `200`（FR-MAINT-005 は、この curl で確かめる。2026-11-21 に人が決めた）
-- 抜け道：`curl -c <Cookie のファイル> <コマンドが出した URL>` で Cookie を受け取り、`curl -b <Cookie のファイル> -H 'Accept: application/json' http://localhost:8000/api/health` が `200`
+- 抜け道：`curl -c <Cookie のファイル> <コマンドが出した URL>` で Cookie を受け取り、`curl -b <Cookie のファイル> -H 'Accept: application/json' http://localhost:8000/api/me` が `503` でなく `401`「ログインしてください」（メンテナンスを通り抜け、ログインの確かめまで届く）
 - 抜け道（画面）：コマンドが出した URL を、作業する人のブラウザで開く（Cookie `laravel_maintenance` が付く）。そのあと `http://localhost:5173` を開くと、そのブラウザだけ、ログインの画面と会員の画面が使える
   - 抜け道の URL を開いた行は、`docker compose logs app` に残る（PHP の組み込みのサーバーのアクセスのログ）。ログを貼るときは、その行を消す。解けば、その文字は使えなくなる
 - `down` を流し直すと、セッションをまた全部消し、抜け道の文字も変わる（前の Cookie では通れない）

@@ -22,19 +22,9 @@ use App\Http\Controllers\SkipController;
 use App\Http\Controllers\TalkRoomController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserMatchController;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
 // ---- ログインが要らない API（tests/Endpoints.php の routesWithoutLogin() と同じ一覧） ----
-
-// 動いているかと、DB につながるかを確かめる（00）。流した SQL が sql のログに出る
-Route::get('/health', function () {
-    return response()->json([
-        'status' => 'ok',
-        'database' => DB::connection()->getDatabaseName(),
-        'migrations' => DB::table('migrations')->count(),
-    ]);
-});
 
 // 01b 登録とメールアドレスの確認（docs/api/01b-auth.md）
 Route::post('/users', [UserController::class, 'store']);
