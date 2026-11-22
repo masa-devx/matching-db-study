@@ -128,6 +128,7 @@ frontend/client/src/
 | Firebase へのログイン（`signInFirebase`） | Firestore 版のトーク | Firestore の Repository の実装が、最初に使うときに1回だけ。`client.ts` を通す |
 
 - 退会は `settings/` に置く。`blocks/` は退会を受け持たない（#121 の範囲から外す）
+- 下のタブの数は、下のタブの数だけの機能（`features/tab-counts`）にする案・API を2本に分けてそれぞれの機能に持たせる案と比べ、1本の API と `features/messages` の hook にした（ポーリングを1本にするため。#247）。いいねの画面を移すときに見直す
 
 ### 1つの機能の中（例：`features/search/`）
 
@@ -148,7 +149,7 @@ features/search/
 └── *.test.ts(x)                   テストは隣に置く
 ```
 
-ファイルが少ない機能（`blocks/` など）も、`pages/` と `components/` は作る。`hooks/`・`api.ts`・`types.ts`・`rules.ts` は、要るときだけ作る。
+ファイルが少ない機能（`blocks/` など）も、`pages/` と `components/` は作る。画面をまだ移していない機能（今は下のタブの数だけの `messages/`）は、画面を移すチケットで作る（`architecture-frontend.md` の2章）。`hooks/`・`api.ts`・`types.ts`・`rules.ts` は、要るときだけ作る。
 
 ### データの出どころが2つある機能（`features/messages/`）
 
