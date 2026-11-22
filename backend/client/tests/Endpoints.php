@@ -127,4 +127,26 @@ final class Endpoints
     {
         return "/api/users/{$targetPublicId}";
     }
+
+    // ---- Matching（いいね） ----
+
+    /** 届いたいいねの一覧（GET /api/me/received-likes） */
+    public static function receivedLikes(): string
+    {
+        return '/api/me/received-likes';
+    }
+
+    // ---- Messaging（トークルーム・下のタブの数） ----
+
+    /** トークの一覧（GET /api/me/talk-rooms） */
+    public static function talkRooms(): string
+    {
+        return '/api/me/talk-rooms';
+    }
+
+    /** 下のタブのバッジの数（GET /api/me/badge-counts。未読・新しいマッチ・届いたいいね） */
+    public static function badgeCounts(): string
+    {
+        return '/api/me/badge-counts';
+    }
 }
