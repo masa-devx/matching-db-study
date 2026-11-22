@@ -90,6 +90,7 @@
 - `Members/MemberService` の `search` のクエリは、`User` の `scopeSearch` に置く
 - 自分のプロフィールを直す新しい URL は `PATCH /me`（`03-how.md` の281行目）
 - `Matching/LikeService` と `Messaging/MessageService` は、Firestore へは `Clients/Firestore/FirestoreClient`（`FirestoreClient`）を通す
+- 下のタブのバッジの数（`GET /api/me/badge-counts`。#247）は、新しく足した `Messaging/BadgeCountController@show`。`Messaging/MessageService`（`countUnreadMessages`・`countNewMatches`）と `Matching/LikeService`（`countReceived`）を呼ぶ。数える条件は Model のスコープ（`TalkRoomMember::scopeListedFor`・`Like::scopeReceivedBy`）で、一覧を移すときも、このスコープを使う
 
 ### 管理画面
 
