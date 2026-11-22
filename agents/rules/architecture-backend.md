@@ -35,6 +35,7 @@ Controller ──→ Service ──→ Model
    │              ├──→ Client（外のサービス）
    │              └──→ 業務の例外
    ├──→ Request（入力の形）
+   ├──→ LoginSession（セッションを作る・作り直す・消す。会員の側）
    └──→ Resource（出力の形。Service が返した Model から、返してよい項目を選ぶ）
 ```
 
@@ -44,7 +45,13 @@ Controller ──→ Service ──→ Model
   - 受け持ち：受け取る → Service を呼ぶ → 返す
   - 主に使うもの（目安）：Request・Resource・Service
   - 使ってはいけない：Model・DB（`DB::`・`Schema::`・`Illuminate\Database`）・JWT・`app()`・`resolve()`・`App::`・コンテナ
-  - セッションを作る・消すのは、ログイン・ログアウトの `Auth/AuthController` だけ（`Auth::guard('web')->login()`・`logout()`・`$request->session()->invalidate()`。D-027）。ほかの Controller はセッションを触らない
+  - セッションを作る・作り直す・消すときは、`LoginSession` を呼ぶ。Controller に `Auth::guard('web')->login()`・`logout()`・`$request->session()` を書かない（D-027）
+- LoginSession（`app/Http/Session/LoginSession.php`。会員の側だけ）
+  - 受け持ち：会員のログインのセッションを、作る（ログイン）・作り直す（番号を新しくする）・消す（ログアウト）。セッションを触る処理は、ここにだけ書く
+  - 主に使うもの（目安）：Laravel のガード（`Auth::guard('web')`）・`$request->session()`
+  - 使ってはいけない：Model・DB・`app()`。表 `sessions` の、ほかの端末の行を消すのは Service（DB の操作）。Controller が、今の端末の番号を Service に渡す
+  - ログインしている会員を読む（`Auth::guard('web')->id()`）のは、今のまま Middleware
+  - なぜ：セッションの操作が Controller ごとに散ると、「どこでセッションが変わるか」を追えなくなるため（2026-11-22 に人が決めた。#259）
 - Request
   - 受け持ち：入力の形だけを確かめる
   - 主に使うもの（目安）：Laravel の検証
@@ -105,7 +112,8 @@ app/
 │   ├── Controllers/<まとまり>/〜Controller.php   古いコントローラーは直下（10章）
 │   ├── Requests/<まとまり>/〜Request.php
 │   ├── Resources/<まとまり>/〜Resource.php
-│   └── Middleware/
+│   ├── Middleware/
+│   └── Session/LoginSession.php                 会員のセッションの操作（会員の側だけ）
 ├── Services/<まとまり>/〜Service.php             Service のクラスだけを置く
 ├── Clients/<相手>/〜Client.php                   外のサービスの呼び出し（Firestore/FirestoreClient.php など）
 ├── Exceptions/BusinessException.php              業務の例外の親（7章）
@@ -128,6 +136,7 @@ Laravel の公式の名前の付け方（`php artisan make:〇〇` の例）に�
 | Mail | `Mail/` | `Mail` で終える（今あるものに合わせる） | `VerifyMail`・`ResetPasswordMail` |
 | Model | `Models/` | 表の名前の単数 | `User`・`UserMatch` |
 | Enum（決まった値のどれか） | `Enums/` | 何の値かを名詞で書く。`Enum` は付けない | `AccountStatus` |
+| セッションの操作 | `Http/Session/` | 何のセッションかを名詞で書く | `LoginSession` |
 
 - 種類の名前で終えるのは、`〜Controller`・`〜Request`・`〜Resource`・`〜Service`・`〜Client`・`〜Exception`
 
