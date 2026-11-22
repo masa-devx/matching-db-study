@@ -1,11 +1,10 @@
-import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router'
-import { apiFetch } from '../shared/api/client'
-import { useSession } from '../shared/session/SessionProvider'
+import { messagesTabCount, useBadgeCounts } from '../features/messages'
 import Icon from './Icon'
 
 // 03c：下のタブ（SVG のアイコン・すりガラス・選んだタブの点）。メッセージのタブに未読の合計（FR-UI-032）。
-// 未読は、画面が変わるたびにトークの一覧を全部読んで足す（05 のレガシー版の一覧は 1＋6N 本の SQL なので重い）
+// #247：数は、数だけを返す API（GET /api/me/badge-counts）を1本だけ読む（前は、トークの一覧と届いたいいねの一覧を全部読んで数えていた）。
+// 読み方（画面を移ったとき・30秒ごと・ウィンドウに戻ったとき）は features/messages の useBadgeCounts
 const TABS = [
   { to: '/search', label: '検索', icon: 'search' },
   { to: '/likes', label: 'いいね', icon: 'heart' },
@@ -18,49 +17,12 @@ const TABS = [
 const UNDER_HOME = ['/settings', '/info', '/blocks', '/plans', '/likes/sent', '/notices']
 
 export default function TabBar() {
-  const [unread, setUnread] = useState(0)
-  // M3（#184）：届いたいいねのうち、まだ返事をしていない人数（いいねのタブのバッジ）
-  const [received, setReceived] = useState(0)
   const location = useLocation()
-  const { session } = useSession()
-  // #263：確認していない会員は、どちらの API も 403 で断られるので、数を聞かない（確認したら、確認の帯が Session を読み直す）
-  const canCount = session.status === 'signedIn' && session.account.emailVerified
-
-  useEffect(() => {
-    if (!canCount) return
-    const count = () => {
-      apiFetch(`/api/me/talk-rooms`, {
-        headers: { Accept: 'application/json' },
-      })
-        .then((r) => r.json())
-        .then((rooms) =>
-          // M3（#187）：新しいマッチ（まだ開いていなくて、まだ1通もないルーム）も、1件ずつ数える
-          setUnread(
-            Array.isArray(rooms)
-              ? rooms.reduce(
-                  (n: number, r: any) => n + (r.unread_count ?? 0) + (!r.last_message && !r.last_read_at ? 1 : 0),
-                  0,
-                )
-              : 0,
-          ),
-        )
-      // M3：届いたいいねの一覧を全部読んで、件数だけを使う（数だけを返す API はない。画面が変わるたびに読む）
-      apiFetch(`/api/me/received-likes`, {
-        headers: { Accept: 'application/json' },
-      })
-        .then((r) => r.json())
-        .then((likes) => setReceived(Array.isArray(likes) ? likes.length : 0))
-    }
-    count()
-    // M9（#198）：同じ画面にいても、30秒ごとと、ウィンドウに戻ったときに数え直す（前は、画面を移るまで数が変わらなかった）。
-    // 数だけを返す API はないので、30秒ごとに、トークの一覧（1＋6N 本の SQL）と届いたいいねを全部読む
-    const timer = setInterval(count, 30000)
-    window.addEventListener('focus', count)
-    return () => {
-      clearInterval(timer)
-      window.removeEventListener('focus', count)
-    }
-  }, [location.pathname, canCount])
+  const counts = useBadgeCounts(location.pathname)
+  // メッセージのタブ：未読の合計と、新しいマッチ（M3。#187）
+  const unread = messagesTabCount(counts)
+  // いいねのタブ：届いたいいねのうち、まだ返事をしていない人数（M3。#184）
+  const received = counts.receivedLikes
 
   return (
     <nav className="tabs">

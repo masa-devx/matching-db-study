@@ -11,7 +11,7 @@
     "format": "biome format --write",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint:rules": "biome lint --only=style/noRestrictedImports --only=style/noRestrictedGlobals src && biome lint --error-on-warnings src/app src/shared"
+    "lint:rules": "biome lint --only=style/noRestrictedImports --only=style/noRestrictedGlobals src && biome lint --error-on-warnings src/app src/shared src/features"
   },
   "dependencies": {
     "firebase": "13.1.0",
