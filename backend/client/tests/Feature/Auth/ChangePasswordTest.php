@@ -32,6 +32,18 @@ describe('ログインした会員が、正しい今のパスワードと新し�
         DummyAuth::forgetLoginBetweenRequests();
         DummyAuth::fromScreen()->postJson(Endpoints::login(), ['email' => $user->email, 'password' => 'password'])->assertUnauthorized();
     });
+
+    // 内訳：会員の状態と、メールアドレスを確認したか（Middleware が2本）・会員を読む・パスワードの書き換え・ほかの端末の行の削除・再設定用の文字の削除。
+    // 本番は、ほかにセッションの select と、番号を作り直した分（前の行の delete・新しい行の insert）が流れる（テストのセッションの置き場は array なので流れない）
+    it('パスワードを変えるときの SQL は、決まった本数で済む（6本）', function () use ($validInput): void {
+        $user = DummyUser::create();
+        $request = DummyAuth::actingAs($user);   // ダミーが会員の Model を読むので、数え始める前に作る
+        DB::enableQueryLog();
+
+        $request->putJson(Endpoints::password(), $validInput)->assertOk();
+
+        expect(DB::getQueryLog())->toHaveCount(6);
+    });
 });
 
 describe('ログインした会員が、登録の決まりの境目の新しいパスワードを送る（P6）', function (): void {
