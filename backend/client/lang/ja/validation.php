@@ -13,6 +13,7 @@ return [
     'max' => [
         'string' => ':attributeは:max文字以内にしてください',
     ],
-    // Laravel にない決まり。パスワードの72バイト（FR-AUTH-004。ChangePasswordRequest）
-    'max_bytes' => ':attributeは:maxバイト以内にしてください',
+    // Laravel にない決まり（ChangePasswordRequest）。パスワードの72バイト（FR-AUTH-004）は、会員に「バイト」と言わずに伝える
+    'max_bytes' => ':attributeが長すぎます。全角の文字は1文字を3文字分、絵文字は4文字分に数えて、:max文字分までにしてください',
+    'no_null_character' => ':attributeに使えない文字が入っています',
 ];

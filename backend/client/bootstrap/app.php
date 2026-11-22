@@ -37,7 +37,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        // ログインの確かめで断ったこと（401・419）を、info で1行残す。理由・状態コード・ルートの形だけを書く。
+        // ログインの確かめと、今のパスワードの確かめで断ったこと（401・419・422）を、info で1行残す。理由・状態コード・ルートの形だけを書く。
         // 実際の URL・Cookie の値・セッションの番号は書かない（再設定の文字などが入るため。logging.md・FR-AUTH-032）
         $logRejected = function (Request $request, string $reason, int $status): void {
             Log::info('auth.rejected', ['reason' => $reason, 'status' => $status, 'path' => $request->route()?->uri() ?? 'unknown']);
@@ -71,8 +71,14 @@ return Application::configure(basePath: dirname(__DIR__))
             default => ['message' => __('errors.login_suspended'), 'code' => 'account_suspended'],
         }, 403));
 
-        // パスワードを変えるときに、今のパスワードが違う（PasswordService が投げる）
-        $exceptions->render(fn (WrongCurrentPasswordException $e) => response()->json(['message' => __('errors.wrong_current_password')], 422));
+        // パスワードを変えるときに、今のパスワードが違う（PasswordService が投げる）。続けて試す人に気づけるよう、断ったことを残す。
+        // 形は、同じ API の入力の誤り（ChangePasswordRequest の 422）とそろえ、errors に項目の名前を付ける。画面は errors で見分ける
+        $exceptions->render(function (WrongCurrentPasswordException $e, Request $request) use ($logRejected) {
+            $logRejected($request, 'wrong_current_password', 422);
+            $message = __('errors.wrong_current_password');
+
+            return response()->json(['message' => $message, 'errors' => ['current_password' => [$message]]], 422);
+        });
 
         // メンテナンス中（php artisan down）。Laravel の PreventRequestsDuringMaintenance が投げる 503 の文を日本語にする。
         // リダイレクトはしない（画面は client.ts で 503 を見分ける）。Retry-After などのヘッダーは、そのまま返す

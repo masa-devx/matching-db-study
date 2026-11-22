@@ -25,8 +25,9 @@ final class PasswordController extends Controller
     {
         $this->passwordService->changePassword(
             $this->loginUserId($request),
-            $request->string('current_password')->toString(),
-            $request->string('password')->toString(),   // ChangePasswordRequest で、8〜64文字・72バイトまでの文字だと確かめてある
+            // 読むのは、ChangePasswordRequest で確かめた値だけ。今のパスワードを送らないときは空の文字になり、違うときと同じ 422 になる
+            $request->safe()->string('current_password')->toString(),
+            $request->safe()->string('password')->toString(),
             $this->loginSession->currentId($request),
         );
         // 番号の作り直しは、パスワードを変えて、ほかの端末の行を消したあと（今のパスワードが違うときは、作り直さない）
