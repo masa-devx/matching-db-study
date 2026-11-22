@@ -311,10 +311,10 @@ class User extends Model
         return $this->paid_until !== null && $this->paid_until->greaterThan($now);
     }
 
-    // よく使う絞り込み（ローカルスコープ）
-    public function scopeActive(Builder $query): void
+    // よく使う絞り込み（ローカルスコープ）。アカウントが使える会員（退会・アカウント停止・強制退会のどれでもない）
+    public function scopeAccountUsable(Builder $query): void
     {
-        $query->whereNull('deleted_at')->whereNull('suspended_at');
+        $query->whereNull('deleted_at')->whereNull('suspended_at')->whereNull('banned_at');
     }
 
     /**
@@ -324,7 +324,7 @@ class User extends Model
      */
     public function scopeSearch(Builder $query, array $conditions, CarbonImmutable $today): void
     {
-        $query->active();
+        $query->accountUsable();
         if (isset($conditions['prefecture'])) {
             $query->whereRelation('profile', 'prefecture', $conditions['prefecture']);
         }
@@ -340,7 +340,9 @@ class User extends Model
 | 検索・一覧・集計のクエリの組み立て（スコープ） | トランザクション・ログ |
 | | ログインしている人を見る（`auth()`）・Request を読む |
 
-**クエリの置き場の線**：1つの条件で1件を読む・保存するだけなら、Service に書いてよい（`Profile::query()->where('user_id', $id)->first()`）。条件が2つ以上のもの・一覧・集計・同じ条件を2か所以上で使うものは、Model のスコープにする（`User::query()->active()`）。
+**クエリの置き場の線**：1つの条件で1件を読む・保存するだけなら、Service に書いてよい（`Profile::query()->where('user_id', $id)->first()`）。条件が2つ以上のもの・一覧・集計・同じ条件を2か所以上で使うものは、Model のスコープにする（`User::query()->accountUsable()`）。
+
+**会員の状態で絞るとき**：SQL で、使える会員（退会・アカウント停止・強制退会のどれでもない）に絞るときは `User::query()->accountUsable()` を呼ぶ。1人の会員を判定するときは `isAccountUsable()`。2つは同じ事実なので、状態や列を足すときは一緒に直す（`tests/Feature/AccountUsableTest.php` が、2つがそろうかを確かめる。#269）。
 
 ## 5. トランザクション・日時・外への書き込み
 
