@@ -61,7 +61,10 @@ final class DummyUser
         return new TestUser($user->id, $user->public_id, $user->email, $profile->nickname, $gender);   // 性別は、渡した値をそのまま入れている
     }
 
-    /** 有料なら期限を今から30日にする。停止・強制退会なら、その日時と理由を入れる。確認していないなら、確認の日時を空にし、確認用の文字を入れる。 */
+    /**
+     * 有料なら期限を今から30日にする。停止・強制退会なら、その日時と理由を入れる。確認していないなら、確認の日時を空にし、確認用の文字を入れる。
+     * 強制退会は、管理画面の強制退会の API（backend/admin の NoticeController）と同じく、退会した日時（deleted_at）も入れる
+     */
     private static function createUser(bool $paid, bool $suspended, bool $banned, bool $unverified): User
     {
         return User::factory()->create([
@@ -73,6 +76,7 @@ final class DummyUser
             'suspended_reason' => $suspended ? 'テストで止めた' : null,
             'banned_at' => $banned ? now() : null,
             'banned_reason' => $banned ? 'テストで強制退会にした' : null,
+            'deleted_at' => $banned ? now() : null,
         ]);
     }
 

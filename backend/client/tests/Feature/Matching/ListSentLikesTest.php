@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\DB;
 use Tests\DummyData\DummyAuth;
 use Tests\DummyData\DummyMatching;
 use Tests\DummyData\DummyUser;
@@ -10,7 +11,7 @@ use Tests\Endpoints;
 use function Pest\Laravel\assertDatabaseHas;
 use function Pest\Laravel\getJson;
 
-// GET /api/me/likes：送ったいいねの一覧を見る。ほかの会員に見せない相手（退会・アカウント停止・強制退会）を除くかのテスト。
+// GET /api/me/likes：送ったいいねの一覧を見る。退会・アカウント停止・強制退会の相手を除くかのテスト。
 // ほかの動き（並び・マッチ済みの印・応答の項目）は、いいねの API を移すチケットで足す
 
 /**
@@ -63,6 +64,24 @@ describe('ログインしている人が、送ったいいねの一覧を見る'
         $response = DummyAuth::actingAs($loginUser)->getJson(Endpoints::sentLikes())->assertOk();
 
         expect($response->json('*.user_id'))->toBe([$lifted->publicId]);
+    });
+
+    // 内訳：Middleware の2本・ブロックの2向き・いいねの一覧（相手が使えるかは exists の中）・使える相手1人のプロフィールとマッチ済みかと public_id
+    it('退会・アカウント停止・強制退会の相手がいても、その相手の分の SQL は流れない（8本。NFR-WD-002）', function (): void {
+        $loginUser = DummyUser::create(gender: 'male');
+        $usable = DummyUser::create();
+        $withdrawn = DummyUser::create(withdrawn: true);
+        $suspended = DummyUser::create(suspended: true);
+        $banned = DummyUser::create(banned: true);
+        foreach ([$usable, $withdrawn, $suspended, $banned] as $partner) {
+            DummyMatching::like($loginUser, $partner);
+        }
+        $request = DummyAuth::actingAs($loginUser);   // ダミーが会員の Model を読むので、数え始める前に作る
+        DB::enableQueryLog();
+
+        $request->getJson(Endpoints::sentLikes())->assertOk();
+
+        expect(DB::getQueryLog())->toHaveCount(8);
     });
 });
 

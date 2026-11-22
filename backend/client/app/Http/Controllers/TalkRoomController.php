@@ -45,7 +45,7 @@ class TalkRoomController extends Controller
             if ($blockIds->contains($partner->user_id)) {
                 continue;
             }
-            // ほかの会員に見せない相手（退会・アカウント停止・強制退会）のルームは飛ばす。条件は User の accountUsable() の1か所（FR-WD-006・014）
+            // 退会・アカウント停止・強制退会の相手のルームは飛ばす。条件は User の accountUsable() の1か所（FR-WD-006・014）
             $publicId = User::query()->accountUsable()->where('id', $partner->user_id)->value('public_id');
             if ($publicId === null) {
                 continue;

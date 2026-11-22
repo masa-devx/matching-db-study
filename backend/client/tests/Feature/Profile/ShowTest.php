@@ -228,7 +228,7 @@ describe('ログインしている人が、いない会員や形の違う番号�
     });
 });
 
-describe('ログインしている人が、ほかの会員に見せない会員のプロフィールを見る', function (): void {
+describe('ログインしている人が、退会・アカウント停止・強制退会の会員のプロフィールを見る', function (): void {
     it('退会した会員は、いない会員と同じく見つからない（404「会員が見つかりません」。FR-WD-005）', function (): void {
         $loginUser = DummyUser::create();
         $withdrawn = DummyUser::create(withdrawn: true);

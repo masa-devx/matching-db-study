@@ -80,7 +80,7 @@ class UserController extends Controller
             ->whereNotIn('id', $likedIds)
             ->whereNotIn('id', $blockIds)
             ->whereNotIn('id', $skipIds)
-            // ほかの会員に見せない会員（退会・アカウント停止・強制退会）を除く。条件は User の accountUsable() の1か所（FR-WD-005・013）
+            // 退会・アカウント停止・強制退会の会員を除く。条件は User の accountUsable() の1か所（FR-WD-005・013）
             ->accountUsable()
             // 条件は profiles にあるので exists（相関サブクエリ）で絞る。送られた条件だけを足し、値は確かめない
             ->whereHas('profile', function (Builder $q) use ($request, $gender) {

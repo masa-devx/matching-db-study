@@ -114,7 +114,7 @@ class LikeController extends Controller
         $blockedMe = Block::where('blocked_id', $loginUserId)->pluck('blocker_id');   // 索引がなく、表を全部読む
         $blockIds = $blocked->merge($blockedMe);
 
-        // ほかの会員に見せない相手（退会・アカウント停止・強制退会）を除く。条件は User の accountUsable() の1か所（FR-WD-006・014）
+        // 退会・アカウント停止・強制退会の相手を除く。条件は User の accountUsable() の1か所（FR-WD-006・014）
         $likes = Like::where('from_user_id', $loginUserId)
             ->whereNotIn('to_user_id', $blockIds)
             ->whereHas('toUser', fn (Builder $user) => $user->accountUsable())

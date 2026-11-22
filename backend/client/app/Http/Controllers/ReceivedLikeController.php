@@ -45,7 +45,7 @@ class ReceivedLikeController extends Controller
             ->whereNotIn('from_user_id', $likedIds)
             ->whereNotIn('from_user_id', $blockIds)
             ->whereNotIn('from_user_id', $skipIds)
-            // ほかの会員に見せない相手（退会・アカウント停止・強制退会）を除く。条件は User の accountUsable() の1か所（FR-WD-006・014）
+            // 退会・アカウント停止・強制退会の相手を除く。条件は User の accountUsable() の1か所（FR-WD-006・014）
             ->whereHas('fromUser', fn (Builder $user) => $user->accountUsable())
             ->orderBy('created_at', 'desc')
             ->get();

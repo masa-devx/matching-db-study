@@ -46,7 +46,7 @@ class UserMatchController extends Controller
                 continue;
             }
             // #46：画面がユーザー詳細へのリンクに使うので、相手の public_id を返す。1件ごとに1本。
-            // ほかの会員に見せない相手（退会・アカウント停止・強制退会）は読めないので飛ばす。条件は User の accountUsable() の1か所（FR-WD-006・014）
+            // 退会・アカウント停止・強制退会の相手は読めないので飛ばす。条件は User の accountUsable() の1か所（FR-WD-006・014）
             $publicId = User::query()->accountUsable()->where('id', $partnerId)->value('public_id');
             if ($publicId === null) {
                 continue;

@@ -37,14 +37,14 @@ final class ProfileService
     }
 
     /**
-     * プロフィールを書き換える。
+     * プロフィールを書き換える。退会・アカウント停止・強制退会の会員は、showProfile() と同じく、いない会員と同じに扱う。
      * 分かっている不具合：だれが送ったかを確かめず、送られた項目（$input）を全部入れる（FR-AUTH-022・FR-010）
      *
      * @param  array<string, mixed>  $input
      */
     public function updateProfile(string $targetPublicId, array $input): Profile
     {
-        $targetId = User::query()->where('public_id', $targetPublicId)->value('id')
+        $targetId = User::query()->accountUsable()->where('public_id', $targetPublicId)->value('id')
             ?? throw new UserNotFoundException;
         // 分かっている不具合：会員はいるがプロフィールがないときは、404 が望ましい。今の動き（500）のままにしている
         $profile = Profile::query()->where('user_id', $targetId)->first()

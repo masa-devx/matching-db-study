@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\DB;
 use Tests\DummyData\DummyAuth;
 use Tests\DummyData\DummyMatching;
 use Tests\DummyData\DummyUser;
@@ -10,7 +11,7 @@ use Tests\Endpoints;
 use function Pest\Laravel\assertDatabaseHas;
 use function Pest\Laravel\getJson;
 
-// GET /api/me/matches：マッチした相手の一覧を見る。ほかの会員に見せない相手（退会・アカウント停止・強制退会）を除くかのテスト。
+// GET /api/me/matches：マッチした相手の一覧を見る。退会・アカウント停止・強制退会の相手を除くかのテスト。
 // ほかの動き（並び・応答の項目）は、マッチの API を移すチケットで足す
 
 /**
@@ -63,6 +64,24 @@ describe('ログインしている人が、マッチした相手の一覧を見�
         $response = DummyAuth::actingAs($loginUser)->getJson(Endpoints::matches())->assertOk();
 
         expect($response->json('*.user_id'))->toBe([$lifted->publicId]);
+    });
+
+    // 内訳：Middleware の2本・ブロックの2向き・マッチの一覧・4人の相手を確かめる4本・使える相手1人のプロフィール
+    it('退会・アカウント停止・強制退会の相手は、相手を確かめる1本だけで飛ばし、プロフィールを読まない（10本。NFR-WD-002）', function (): void {
+        $loginUser = DummyUser::create(gender: 'male');
+        $usable = DummyUser::create();
+        $withdrawn = DummyUser::create(withdrawn: true);
+        $suspended = DummyUser::create(suspended: true);
+        $banned = DummyUser::create(banned: true);
+        foreach ([$usable, $withdrawn, $suspended, $banned] as $partner) {
+            DummyMatching::match($loginUser, $partner);
+        }
+        $request = DummyAuth::actingAs($loginUser);   // ダミーが会員の Model を読むので、数え始める前に作る
+        DB::enableQueryLog();
+
+        $request->getJson(Endpoints::matches())->assertOk();
+
+        expect(DB::getQueryLog())->toHaveCount(10);
     });
 });
 
