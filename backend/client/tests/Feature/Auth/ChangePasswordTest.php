@@ -2,9 +2,7 @@
 
 declare(strict_types=1);
 
-use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Exceptions;
 use Tests\DummyData\DummyAuth;
 use Tests\DummyData\DummyUser;
 use Tests\Endpoints;
@@ -34,6 +32,22 @@ describe('ログインした会員が、正しい今のパスワードと新し�
         DummyAuth::forgetLoginBetweenRequests();
         DummyAuth::fromScreen()->postJson(Endpoints::login(), ['email' => $user->email, 'password' => 'password'])->assertUnauthorized();
     });
+});
+
+describe('ログインした会員が、登録の決まりの境目の新しいパスワードを送る（P6）', function (): void {
+    it('そのパスワードに変わる（200。FR-AUTH-033・FR-AUTH-004）', function (string $newPassword): void {
+        $user = DummyUser::create();
+
+        DummyAuth::actingAs($user)->putJson(Endpoints::password(), ['current_password' => 'password', 'password' => $newPassword])
+            ->assertOk();
+
+        DummyAuth::forgetLoginBetweenRequests();
+        DummyAuth::fromScreen()->postJson(Endpoints::login(), ['email' => $user->email, 'password' => $newPassword])->assertOk();
+    })->with([
+        '8文字' => [str_repeat('a', 8)],
+        '64文字' => [str_repeat('a', 64)],
+        '「あ」を24文字（72バイト）' => [str_repeat('あ', 24)],
+    ]);
 });
 
 describe('同じ会員が端末 A と B でログインしていて、A でパスワードを変える（P1・P2）', function () use ($validInput): void {
@@ -112,37 +126,19 @@ describe('ログインした会員が、違う今のパスワードを送る', f
 });
 
 describe('ログインした会員が、登録の決まりに合わない新しいパスワードを送る（P6）', function (): void {
-    // 分かっている不具合：要件（FR-AUTH-033・FR-AUTH-004）は 422 で、変わらない。新しいパスワードを確かめていない
-    it('1文字でも、そのパスワードに変わる（200）', function (): void {
+    it('変わらず、どこが違うかを返す（422。FR-AUTH-033・FR-AUTH-004）', function (?string $newPassword, string $error): void {
         $user = DummyUser::create();
 
-        DummyAuth::actingAs($user)->putJson(Endpoints::password(), ['current_password' => 'password', 'password' => 'a'])
-            ->assertOk();
+        DummyAuth::actingAs($user)->putJson(Endpoints::password(), ['current_password' => 'password', 'password' => $newPassword])
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.password', [$error]);
 
         DummyAuth::forgetLoginBetweenRequests();
-        DummyAuth::fromScreen()->postJson(Endpoints::login(), ['email' => $user->email, 'password' => 'a'])->assertOk();
-    });
-
-    // 分かっている不具合：要件（FR-AUTH-033・FR-AUTH-004）は 422 で、変わらない。bcrypt は 72バイトより後ろを読まない
-    it('73バイトでも変わり、前の72バイトだけでログインできてしまう（200）', function (): void {
-        $user = DummyUser::create();
-
-        DummyAuth::actingAs($user)->putJson(Endpoints::password(), ['current_password' => 'password', 'password' => str_repeat('a', 73)])
-            ->assertOk();
-
-        DummyAuth::forgetLoginBetweenRequests();
-        DummyAuth::fromScreen()->postJson(Endpoints::login(), ['email' => $user->email, 'password' => str_repeat('a', 72)])->assertOk();
-    });
-
-    // 分かっている不具合：要件（FR-AUTH-033）は 422 で、変わらない。null をそのまま保存しようとして、NOT NULL の違反になる
-    it('送らなければ、変わらずにサーバーのエラーになる（500）', function (): void {
-        $user = DummyUser::create();
-        Exceptions::fake();
-
-        DummyAuth::actingAs($user)->putJson(Endpoints::password(), ['current_password' => 'password'])
-            ->assertInternalServerError();
-
-        // 前のパスワードのままかは確かめない。テストは1つのトランザクションの中なので、SQL の失敗のあとは、PostgreSQL がどの SQL も断る
-        Exceptions::assertReported(QueryException::class);
-    });
+        DummyAuth::fromScreen()->postJson(Endpoints::login(), ['email' => $user->email, 'password' => 'password'])->assertOk();
+    })->with([
+        '7文字' => [str_repeat('a', 7), '新しいパスワードは8文字以上にしてください'],
+        '65文字' => [str_repeat('a', 65), '新しいパスワードは64文字以内にしてください'],
+        '「あ」を25文字（75バイト）' => [str_repeat('あ', 25), '新しいパスワードは72バイト以内にしてください'],
+        '送らない' => [null, '新しいパスワードを入れてください'],
+    ]);
 });

@@ -21,14 +21,14 @@ final class PasswordService
      * 今のパスワードを確かめてから、新しいパスワードにし、ほかの端末のセッションの行と、再設定用の文字を消す（FR-AUTH-033）。
      * 保存するときに、Model の 'hashed' のキャストが bcrypt にする。変えた端末（$currentSessionId）の行は残す。
      * 再設定用の文字を消すのは、前に届いた再設定のリンクから、パスワードを変え直されないようにするため。
-     * 分かっている不具合：新しいパスワードを確かめない（1文字でも通り、null なら NOT NULL の違反で 500。FR-AUTH-033・FR-AUTH-004）
+     * 新しいパスワードの形（8〜64文字・72バイトまで）は、Http の層（ChangePasswordRequest）で確かめてある
      *
      * @throws WrongCurrentPasswordException 今のパスワードが違う（422）
      */
     public function changePassword(
         int $userId,
         #[\SensitiveParameter] string $currentPassword,
-        #[\SensitiveParameter] ?string $newPassword,
+        #[\SensitiveParameter] string $newPassword,
         string $currentSessionId,
     ): void {
         $user = User::query()->find($userId) ?? throw new UserNotFoundException;
