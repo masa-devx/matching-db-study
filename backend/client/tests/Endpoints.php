@@ -24,7 +24,6 @@ final class Endpoints
     public static function routesWithoutLogin(): array
     {
         return [
-            'GET api/health',
             'POST api/users',                          // 登録
             'GET api/email-verifications/{token}',     // メールアドレスの確認
             'POST api/email-verifications',            // 確認のメールを送り直す。分かっている不具合：FR-AUTH-007 はログインが要る。登録の画面がログインの前に呼ぶので、改善版の URL に移すまで、このまま
@@ -50,10 +49,10 @@ final class Endpoints
 
     // ---- 動いているかの確かめ・メンテナンス ----
 
-    /** 動いているかと、DB につながるかを見る（GET /api/health） */
+    /** 動いているかを見る（GET /up。Laravel にもとからある。bootstrap/app.php の health。routes/api.php にはない） */
     public static function health(): string
     {
-        return '/api/health';
+        return '/up';
     }
 
     /** メンテナンス中に、開発者が開く抜け道の URL（php artisan down --with-secret が作った文字。Laravel が web のルートで受ける） */
