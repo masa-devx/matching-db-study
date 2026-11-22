@@ -7,6 +7,7 @@ namespace Tests\DummyData;
 use App\Models\User;
 use Firebase\JWT\JWT;
 use Illuminate\Foundation\Testing\TestCase;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\Endpoints;
@@ -39,7 +40,11 @@ final class DummyAuth
      */
     public static function forgetLoginBetweenRequests(): void
     {
-        auth()->forgetGuards();
+        // auth() の型（Contracts の Factory）には forgetGuards() がなく、エディタが「ないメソッド」と出すので、ファサードから呼ぶ
+        Auth::forgetGuards();
+        // コンテナが覚えたガード（auth.driver）も忘れさせる。表 sessions の user_id は、これから読む（DatabaseSessionHandler::userId()）。
+        // 残すと、1つのテストの中で2人目がログインしたときに、行の user_id が1人目の番号になる
+        app()->forgetInstance('auth.driver');
         // セッションも、Cookie の番号から読み直させる（前のリクエストで読んだ中身を使い続けないように）
         app('session')->forgetDrivers();
         app()->forgetInstance('session.store');

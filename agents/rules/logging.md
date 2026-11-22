@@ -11,7 +11,9 @@ paths:
 1. 業務コードで標準出力のログ（PHP の `echo`・`var_dump`・`error_log`・`dd`、画面の `console.log`）を直接使わない。
    ログは共通関数を経由する（`backend/client/app/Support/Logging/`。SQL のログ（`DB::listen`）もここに置く）。
    直書きすると requestId の付与とマスク処理を迂回してしまうため
-   - 例外：Listener（`app/Listeners/`）は、Laravel の `Log::info` を直に使ってよい。業務のログの共通の関数がまだないため（2026-11-21 に人が決めた。共通の関数ができたら、それに寄せる）
+   - 業務の出来事のログは `StructuredLog::info('auth.passwordChanged', ['userId' => …])` と、`Log::info` と同じ形で1行で呼ぶ。パスワード・トークン・秘密の値・`email` のキーの値は伏せて書く（2026-11-22 に人が決めた。PR #283）
+   - requestId は、まだ付けていない（今は SQL のログだけが、手元で付けている）
+   - 例外：Listener（`app/Listeners/`）は、Laravel の `Log::info` を直に使っている（2026-11-21 に人が決めた）。`StructuredLog` ができたので、Listener を触るチケットで寄せる
 2. ラップするのは外部IO・副作用・失敗しうる処理だけ（DB・外部API・
    通知送信）。純粋関数はラップしない（ノイズになるだけ）
 3. エラーは記録したあと必ず再スローする。握りつぶして正常系を返さない

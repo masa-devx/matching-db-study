@@ -34,7 +34,7 @@ return [
     |
     */
 
-    // 操作がないまま24時間で切れ、リクエストのたびに延びる（FR-AUTH-013・D-027）
+    // API を呼ばないまま24時間で切れ、リクエストのたびに延びる（FR-AUTH-013・D-027）。画面を開いているあいだは、画面が30秒ごとに呼ぶので延び続ける
     'lifetime' => (int) env('SESSION_LIFETIME', 1440),
 
     'expire_on_close' => env('SESSION_EXPIRE_ON_CLOSE', false),
