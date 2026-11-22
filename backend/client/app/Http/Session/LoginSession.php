@@ -22,6 +22,21 @@ final class LoginSession
     }
 
     /**
+     * ログインしたまま、セッションの番号だけを作り直す。前の番号の行は消す（regenerate(true)）。CSRF のトークンも作り直す。
+     * 本人だと確かめ直したとき（パスワードの変更）に呼ぶ。前の番号を盗まれていても、使えなくするため（FR-AUTH-033）
+     */
+    public function renew(Request $request): void
+    {
+        $request->session()->regenerate(true);
+    }
+
+    /** 今の端末のセッションの番号。ほかの端末の行を消すときに、この番号を除くために Service に渡す */
+    public function currentId(Request $request): string
+    {
+        return $request->session()->getId();
+    }
+
+    /**
      * ログアウトする。セッションの行を消し、新しい番号の Cookie に替え、CSRF のトークンも作り直す（同じ Cookie では、もう使えない。FR-AUTH-016）。
      * 画面のオリジンから来ていない（セッションのない）リクエストには、消すものがない
      */

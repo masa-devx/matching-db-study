@@ -10,6 +10,7 @@ use Tests\DummyData\DummyUser;
 use Tests\Endpoints;
 
 use function Pest\Laravel\assertDatabaseHas;
+use function Pest\Laravel\assertDatabaseMissing;
 
 // PUT /api/me/password：ログインした会員が、パスワードを変える（docs/api/01b-auth.md・FR-AUTH-033）。今の動きを確かめるテスト。
 // 要件と違う所は「分かっている不具合」。場面の名前（P1 など）は explanations/auth-edge-cases.html の3章
@@ -36,21 +37,22 @@ describe('ログインした会員が、正しい今のパスワードと新し�
 });
 
 describe('同じ会員が端末 A と B でログインしていて、A でパスワードを変える（P1・P2）', function () use ($validInput): void {
-    // 分かっている不具合：要件（FR-AUTH-033）は、B のセッションの行を消し、B は 401。表 sessions を触っていない
-    it('B は、そのあともログインしたまま使える（200）', function () use ($validInput): void {
+    it('B は、次のリクエストで見られなくなる。B のセッションの行も消える（401「ログインしてください」。FR-AUTH-033）', function () use ($validInput): void {
         $user = DummyUser::create();
         $cookieA = DummyAuth::loginFromScreen($user);
         $cookieB = DummyAuth::loginFromScreen($user);
 
         DummyAuth::withSessionCookie($cookieA)->putJson(Endpoints::password(), $validInput)->assertOk();
 
-        assertDatabaseHas('sessions', ['id' => $cookieB, 'user_id' => $user->id]);
+        // 次のリクエストで同じ番号を送ると、Laravel は中身のない行を作り直すので、ここで確かめる
+        assertDatabaseMissing('sessions', ['id' => $cookieB]);
         DummyAuth::forgetLoginBetweenRequests();
-        DummyAuth::withSessionCookie($cookieB)->getJson(Endpoints::account())->assertOk();
+        DummyAuth::withSessionCookie($cookieB)->getJson(Endpoints::account())
+            ->assertUnauthorized()
+            ->assertExactJson(['message' => 'ログインしてください']);
     });
 
-    // 分かっている不具合：要件（FR-AUTH-033）は、A のセッションの番号を新しくする。番号を作り直していない
-    it('A は、ログインしたまま、セッションの番号も前と同じ（200）', function () use ($validInput): void {
+    it('A は、ログインしたまま、セッションの番号が新しくなる。前の番号の行は消える（200。FR-AUTH-033）', function () use ($validInput): void {
         $user = DummyUser::create();
         $cookieA = DummyAuth::loginFromScreen($user);
 
@@ -58,10 +60,22 @@ describe('同じ会員が端末 A と B でログインしていて、A でパ�
             ->assertOk()
             ->getCookie(config()->string('session.cookie'))?->getValue();
 
-        expect($cookieAfter)->toBe($cookieA);
-        assertDatabaseHas('sessions', ['id' => $cookieA, 'user_id' => $user->id]);
+        expect($cookieAfter)->not->toBe($cookieA);
+        assertDatabaseMissing('sessions', ['id' => $cookieA]);
+        assertDatabaseHas('sessions', ['id' => $cookieAfter, 'user_id' => $user->id]);
         DummyAuth::forgetLoginBetweenRequests();
-        DummyAuth::withSessionCookie($cookieA)->getJson(Endpoints::account())->assertOk();
+        DummyAuth::withSessionCookie($cookieAfter)->getJson(Endpoints::account())->assertOk();
+    });
+
+    it('ほかの会員のセッションの行は、消えない（FR-AUTH-033）', function () use ($validInput): void {
+        $user = DummyUser::create();
+        $someone = DummyUser::create();
+        $cookieA = DummyAuth::loginFromScreen($user);
+        $cookieSomeone = DummyAuth::loginFromScreen($someone);
+
+        DummyAuth::withSessionCookie($cookieA)->putJson(Endpoints::password(), $validInput)->assertOk();
+
+        assertDatabaseHas('sessions', ['id' => $cookieSomeone, 'user_id' => $someone->id]);
     });
 });
 

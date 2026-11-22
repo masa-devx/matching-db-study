@@ -149,10 +149,11 @@ test('新しい Http の層は、DB のファサードの別名（\DB::・use DB
 
 // セッションを作る・作り直す・消すのは app/Http/Session（LoginSession）だけ（architecture-backend.md の2章）。
 // ほかの所に増えると、「どこでセッションが変わるか」を1か所で追えなくなる。ログインしている会員を読む（Auth::guard()->id()）のは、Middleware でよい。
-// arch() はメソッドの呼び出しを見られないので、ファイルの文字を読んで探す
+// arch() はメソッドの呼び出しを見られないので、ファイルの文字を読んで探す。Session のファサードは、読み込み（Facades\Session）と \Session:: の形で探す
+// （Session:: だけで探すと、表 sessions の Model（App\Models\Session）の Session::query() にも当たる）
 test('セッションを作る・作り直す・消す処理は、app/Http/Session の中にだけある', function (): void {
     $app = dirname(__DIR__, 2).'/app';
-    $pattern = '/->session\(\)|(?<![\w>$])session\(|Session::|guard\([^)]*\)->(login|loginUsingId|logout|logoutOtherDevices|attempt)\(|Auth::(login|loginUsingId|logout|logoutOtherDevices|attempt)\(/';
+    $pattern = '/->session\(\)|(?<![\w>$])session\(|Facades\\\\Session\b|(?<![\w\\\\])\\\\Session::|guard\([^)]*\)->(login|loginUsingId|logout|logoutOtherDevices|attempt)\(|Auth::(login|loginUsingId|logout|logoutOtherDevices|attempt)\(/';
     $found = [];
     foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($app, FilesystemIterator::SKIP_DOTS)) as $file) {
         if (! $file instanceof SplFileInfo || $file->getExtension() !== 'php' || str_starts_with($file->getPathname(), $app.'/Http/Session/')) {
