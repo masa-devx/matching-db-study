@@ -9,7 +9,8 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * 表 sessions の1行（会員の側のログインのセッション。1つの端末に1行）。行を作る・書き換えるのは Laravel（DatabaseSessionHandler）。
- * ここから行うのは、会員の行を消すことだけ（パスワードの変更・再設定・退会。docs/cycles/01-backend-foundation/03-how.md の「セッションを消す処理」）
+ * ここから行うのは、会員の行を消すことだけ（パスワードの変更・再設定・退会。docs/cycles/01-backend-foundation/03-how.md の「セッションを消す処理」）。
+ * セッションの置き場が DB（SESSION_DRIVER=database）のときだけ意味がある。置き場を替えると、消しても0行でエラーも出ない（03-how.md の DB の節）
  */
 class Session extends Model
 {

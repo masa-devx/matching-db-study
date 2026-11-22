@@ -569,8 +569,9 @@ D-022。上は 01b で作った形のまま残し、ここに差分だけを書�
 
 - レガシー版：`{"current_password": "…", "password": "…"}`
   - **新しいパスワードを確かめない**（1文字でも通る）
-- 改善版：`current_password`・`password`（必須・8〜64文字・72バイトまで。`Auth/ChangePasswordRequest`）
-  - `current_password` を送らないときは、違うときと同じ `422`「今のパスワードがちがいます」
+- 改善版：`current_password`（文字）・`password`（必須・8〜64文字・72バイトまで・NUL の文字を入れない。`Auth/ChangePasswordRequest`）
+  - `current_password` を送らないときは、違うときと同じ `422`「今のパスワードがちがいます」。配列など、文字でないときは `422`（`errors.current_password`）
+  - NUL の文字は bcrypt にできず `500` になり、そのときのエラーのログにパスワードが出るおそれがあるので断る（FR-AUTH-032）
   - 72バイトまでの決まりは、今は `ChangePasswordRequest` にだけある。登録・再設定を移すときに、1か所に出す（FR-AUTH-004）
 
 #### 何をするか
@@ -578,12 +579,17 @@ D-022。上は 01b で作った形のまま残し、ここに差分だけを書�
 - レガシー版：今のパスワードを照らし合わせ、合えば新しいパスワードを bcrypt にして保存する
   - **前に配った JWT は止めない**（30日のあいだ、前のトークンで使い続けられる）
   - 試す回数の上限もない
-- 改善版：今のパスワードを照らし合わせ、合えば、次の3つを1つのトランザクションで行う（`Auth/PasswordService`）
-  - 新しいパスワードを保存する
-  - その会員の、今の端末を除くセッションの行を消す（`delete from sessions where user_id = ? and id <> ?`）。ほかの端末は、次のリクエストで `401`
-  - その会員の再設定用の文字を消す（`delete from password_reset_tokens where email = ?`）。前に届いた再設定のリンクは使えなくなる
-  - そのあと、今の端末のセッションの番号を作り直す（`LoginSession::renew()`）。ログインしたままで、Cookie の番号が変わる
+- 改善版：1つのトランザクションで、次のことを行う（`Auth/PasswordService`）
+  - 会員の行をロックして読み（`select … for update`）、今のパスワードを照らし合わせる。2つの端末から同時に変えても、あとの方は前の方のコミットを待ち、新しいパスワードで照らし合わせる
+  - 合えば、次の3つを行う
+    - 新しいパスワードを保存する
+    - その会員の、今の端末を除くセッションの行を消す（`delete from sessions where user_id = ? and id <> ?`）。ほかの端末は、次のリクエストで `401`
+    - その会員の再設定用の文字を消す（`delete from password_reset_tokens where email = ?`）。前に届いた再設定のリンクは使えなくなる
+  - コミットのあと、今の端末のセッションの番号を作り直す（`LoginSession::renew()`）。ログインしたままで、Cookie の番号が変わる
   - 分かっている不具合：続けて間違えても止めない（#281 と同じ形で考える）
+  - 今のパスワードが違うときは、`auth.rejected` のログを1行残す（`reason=wrong_current_password`・`status=422`・`path`）。パスワードは書かない
+  - 変えたら、`auth.passwordChanged` のログを1行残す（`userId`・消したほかの端末の数の `deletedSessions`。`App\Support\Logging\StructuredLog`）
+  - 分かっている不具合：番号を作り直すちょうどそのときに、ほかのタブのポーリングが古い番号で送ると、その応答が古い番号の Cookie を返し、変えた端末も `401` になることがある（コードを読んだ。確かめていない。PR #283 のレビューの S5 で、人が受け入れた）
 
 #### 応答（成功）
 
@@ -599,14 +605,16 @@ D-022。上は 01b で作った形のまま残し、ここに差分だけを書�
 - 改善版
   - `401`：ログインしていない
   - `419`：CSRF のトークンがない・違う
-  - `422`：今のパスワードが違う `{"message": "今のパスワードがちがいます"}`
+  - `422`：今のパスワードが違う・送らない `{"message": "今のパスワードがちがいます", "errors": {"current_password": ["今のパスワードがちがいます"]}}`（入力の誤りと同じ形。PR #283 のレビューの A3 で、人が決めた）
   - `422`：新しいパスワードの決まりに合わない `{"message": "…", "errors": {"password": ["新しいパスワードは8文字以上にしてください"]}}`
+    - 72バイトを超えると「新しいパスワードが長すぎます。全角の文字は1文字を3文字分、絵文字は4文字分に数えて、72文字分までにしてください」（会員に「バイト」と言わない）
+  - `422`：今のパスワードが文字でない `{"message": "…", "errors": {"current_password": ["今のパスワードは文字で入れてください"]}}`
   - `429`（続けて間違えた）は、まだない（分かっている不具合）
 
 #### 流れる SQL の目安
 
 - レガシー版：2本（会員を読む・update）
-- 改善版：6本＋begin・commit（Middleware の2本・会員を読む・update・`sessions` の delete・`password_reset_tokens` の delete。`ChangePasswordTest` で数えている）
+- 改善版：6本＋begin・commit（Middleware の2本・会員をロックして読む・update・`sessions` の delete・`password_reset_tokens` の delete。`ChangePasswordTest` で数えている）
   - 本番は、ほかにセッションの select と、番号を作り直した分（前の行の delete・新しい行の insert）が流れる
 
 #### curl の例
