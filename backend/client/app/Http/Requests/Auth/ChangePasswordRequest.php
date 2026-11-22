@@ -17,8 +17,9 @@ final class ChangePasswordRequest extends FormRequest
     public function rules(): array
     {
         return [
-            // 今のパスワードは、形だけを見る。送らないときは required にせず、違うときと同じ 422 にする（docs/api/01b-auth.md）
-            'current_password' => ['string'],
+            // 今のパスワードは、形だけを見る。送らない・空の文字・null のときは、違うときと同じ 422 にする（docs/api/01b-auth.md）。
+            // 空の文字は、Laravel の ConvertEmptyStringsToNull で null になるので、nullable がないと「文字で入れてください」になる
+            'current_password' => ['nullable', 'string'],
             // 文字の数（min・max）は mb_strlen で数える。72バイトは bcrypt が読む長さで、それより後ろは照合に使われない。
             // NUL の文字は bcrypt にできず 500 になり、そのときのエラーのログにパスワードが出るおそれがあるので断る（FR-AUTH-032）
             'password' => ['required', 'string', 'min:8', 'max:64', static function (string $attribute, mixed $value, Closure $fail): void {

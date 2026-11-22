@@ -25,7 +25,7 @@ final class PasswordController extends Controller
     {
         $this->passwordService->changePassword(
             $this->loginUserId($request),
-            // 読むのは、ChangePasswordRequest で確かめた値だけ。今のパスワードを送らないときは空の文字になり、違うときと同じ 422 になる
+            // 読むのは、ChangePasswordRequest で確かめた値だけ。今のパスワードを送らない・null のときは空の文字になり、違うときと同じ 422 になる
             $request->safe()->string('current_password')->toString(),
             $request->safe()->string('password')->toString(),
             $this->loginSession->currentId($request),

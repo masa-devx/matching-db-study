@@ -269,7 +269,7 @@ sequenceDiagram
       <p class="compare-title">後<span class="count">重なると残る</span></p>
       <ul>
         <li>照合のあと、行を書くまでのあいだに消すと、X の行が残る（コードから考えた。確かめていない）</li>
-        <li>間は短い（照合の bcrypt が数十ミリ秒）。ただ、狙ってくり返されると起きうる</li>
+        <li>間は短い（照合の bcrypt が、既定の回数 12 で、手元で1回およそ 220ms）。ただ、狙ってくり返されると起きうる</li>
         <li>設計の前の案（ア：セッションにパスワードのハッシュを持たせる <code>AuthenticateSession</code>）なら、X の次のリクエストで切れる。イを選んだときに、手放したもの</li>
       </ul>
     </section>

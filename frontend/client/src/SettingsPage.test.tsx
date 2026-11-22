@@ -72,13 +72,21 @@ describe('ログインした会員が、設定でパスワードを変える', (
     expect(await screen.findByText('新しいパスワードは8文字以上にしてください')).toBeInTheDocument()
   })
 
-  it('今のパスワードが違い 422 なら、API が返した文を出す', async () => {
+  // 文は、画面が持たない文にする（画面に文を書き戻したときや、message だけを読むようになったときに落ちるように）
+  it('今のパスワードが違い 422 なら、API が返した errors.current_password の文を出す', async () => {
     passwordResponse = () =>
-      json({ message: '今のパスワードがちがいます', errors: { current_password: ['今のパスワードがちがいます'] } }, 422)
+      json(
+        {
+          message: 'テスト用の文：入力に誤りがあります',
+          errors: { current_password: ['テスト用の文：今のパスワードが違う'] },
+        },
+        422,
+      )
 
     await changePassword()
 
-    expect(await screen.findByText('今のパスワードがちがいます')).toBeInTheDocument()
+    expect(await screen.findByText('テスト用の文：今のパスワードが違う')).toBeInTheDocument()
+    expect(screen.queryByText('テスト用の文：入力に誤りがあります')).not.toBeInTheDocument()
   })
 
   it('つながらないときは、通信を確かめる文を出し、ボタンをまた押せるようにする', async () => {

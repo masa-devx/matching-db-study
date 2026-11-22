@@ -23,7 +23,8 @@ final class PasswordService
      * 保存するときに、Model の 'hashed' のキャストが bcrypt にする。変えた端末（$currentSessionId）の行は残す。
      * 再設定用の文字を消すのは、前に届いた再設定のリンクから、パスワードを変え直されないようにするため。
      * 新しいパスワードの形（8〜64文字・72バイトまで）は、Http の層（ChangePasswordRequest）で確かめてある。
-     * 弱いところ：bcrypt の照合と保存（それぞれ数十ミリ秒）のあいだ、会員の行をロックしたまま。同じ会員の行を書くほかの処理（ログインの日時など）は待つ
+     * 弱いところ：bcrypt の照合と保存の2回のあいだ、会員の行をロックしたまま。同じ会員の行を書くほかの処理（ログインの日時など）は待つ。
+     * 1回の時間は bcrypt の回数（BCRYPT_ROUNDS。Laravel の既定は 12）に比例する。手元では 12 で1回およそ 220ms だった（テストは 4 なので見えない）
      *
      * @throws WrongCurrentPasswordException 今のパスワードが違う（422）
      */

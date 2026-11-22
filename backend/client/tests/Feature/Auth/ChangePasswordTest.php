@@ -44,7 +44,17 @@ describe('ログインした会員が、正しい今のパスワードと新し�
         $request->putJson(Endpoints::password(), $validInput)->assertOk();
 
         expect(DB::getQueryLog())->toHaveCount(6);
-        // 2つの端末から同時に変えても、あとの方が前のパスワードで確かめを通らないように、会員の行をロックして読む
+    });
+
+    // 2つの接続から本当に同時に流すテストは書けない（RefreshDatabase の外側のトランザクションの中で作った会員の行が、別の接続からは見えない）。
+    // そのため、会員の行をロックして読む SQL が流れることで確かめる
+    it('2つの端末から同時に変えても、あとの方は前のパスワードで確かめを通らない（会員の行をロックして読む。FR-AUTH-033）', function () use ($validInput): void {
+        $user = DummyUser::create();
+        $request = DummyAuth::actingAs($user);
+        DB::enableQueryLog();
+
+        $request->putJson(Endpoints::password(), $validInput)->assertOk();
+
         expect(array_column(DB::getQueryLog(), 'query'))->toContain('select * from "users" where "users"."id" = ? limit 1 for update');
     });
 });
@@ -97,7 +107,7 @@ describe('同じ会員が端末 A と B でログインしていて、A でパ�
     });
 
     // 「急に全部の端末でログアウトされた」と問い合わせが来たときに、本人が変えたかを追えるようにする。パスワード・番号は書かない（FR-AUTH-032）
-    it('変えたことと、消したほかの端末の数を、ログに残す', function () use ($validInput): void {
+    it('変えたことと、消したほかの端末の数を、ログに残す（FR-AUTH-032）', function () use ($validInput): void {
         $user = DummyUser::create();
         $cookieA = DummyAuth::loginFromScreen($user);
         DummyAuth::loginFromScreen($user);
@@ -122,7 +132,7 @@ describe('同じ会員が端末 A と B でログインしていて、A でパ�
 
 // 正常系とした：操作は要件が通す。途中で DB の書き込みが失敗したときに、前の書き込みも戻ることを確かめる
 describe('同じ会員が端末 A と B でログインしていて、A でパスワードを変える途中で、DB の書き込みが失敗する', function () use ($validInput): void {
-    it('パスワードも、B のセッションの行も、変わらない（500）', function () use ($validInput): void {
+    it('パスワードも、B のセッションの行も、変わらない（500。FR-AUTH-033）', function () use ($validInput): void {
         $user = DummyUser::create();
         $cookieA = DummyAuth::loginFromScreen($user);
         $cookieB = DummyAuth::loginFromScreen($user);
@@ -174,7 +184,7 @@ describe('ログインした会員が、違う今のパスワードを送る', f
     });
 
     // 削除を確かめの前に動かすと、盗んだ Cookie だけを持つ人が、違うパスワードを送るだけで、ほかの端末をログアウトさせられる
-    it('ほかの端末の行・再設定用の文字・この端末の番号は、どれも変わらない（P5）', function (): void {
+    it('ほかの端末の行・再設定用の文字・この端末の番号は、どれも変わらない（P5。FR-AUTH-033）', function (): void {
         $user = DummyUser::create();
         $cookieA = DummyAuth::loginFromScreen($user);
         $cookieB = DummyAuth::loginFromScreen($user);
@@ -191,7 +201,7 @@ describe('ログインした会員が、違う今のパスワードを送る', f
     });
 
     // 続けて間違える人（ログインしたままの端末を拾った人など）に、ログで気づけるようにする。パスワードは書かない（FR-AUTH-032）
-    it('断ったことを、理由とルートの形だけでログに残す', function (): void {
+    it('断ったことを、理由とルートの形だけでログに残す（FR-AUTH-032）', function (): void {
         $user = DummyUser::create();
         $log = Log::spy();
 
@@ -202,7 +212,7 @@ describe('ログインした会員が、違う今のパスワードを送る', f
     });
 
     // 分かっている不具合：要件は、何回も続けて間違えたら、しばらく止める（FR-AUTH-033）。間違えた回数を数えていない
-    it('続けて6回送っても、毎回 422 で、止めない（P5）', function (): void {
+    it('続けて6回送っても、毎回 422 で、止めない（P5。FR-AUTH-033）', function (): void {
         $user = DummyUser::create();
         $request = DummyAuth::actingAs($user);
 
@@ -214,8 +224,8 @@ describe('ログインした会員が、違う今のパスワードを送る', f
     });
 });
 
-describe('ログインした会員が、今のパスワードを送らない・文字でない形で送る', function (): void {
-    it('送らないときは、違うときと同じ文を返し、変わらない（422「今のパスワードがちがいます」。docs/api/01b-auth.md）', function (): void {
+describe('ログインした会員が、今のパスワードを送らない・空で送る・文字でない形で送る', function (): void {
+    it('送らないときは、違うときと同じ文を返し、変わらない（422「今のパスワードがちがいます」。FR-AUTH-033・docs/api/01b-auth.md）', function (): void {
         $user = DummyUser::create();
 
         DummyAuth::actingAs($user)->putJson(Endpoints::password(), ['password' => 'new-password-1'])
@@ -226,7 +236,22 @@ describe('ログインした会員が、今のパスワードを送らない・�
         DummyAuth::fromScreen()->postJson(Endpoints::login(), ['email' => $user->email, 'password' => 'password'])->assertOk();
     });
 
-    it('配列で送ると、どこが違うかを返し、変わらない（422）', function (): void {
+    // 空の文字は、Laravel の前処理（ConvertEmptyStringsToNull）で null になる
+    it('空の文字・null で送っても、送らないときと同じ文を返し、変わらない（422「今のパスワードがちがいます」。FR-AUTH-033・docs/api/01b-auth.md）', function (?string $currentPassword): void {
+        $user = DummyUser::create();
+
+        DummyAuth::actingAs($user)->putJson(Endpoints::password(), ['current_password' => $currentPassword, 'password' => 'new-password-1'])
+            ->assertUnprocessable()
+            ->assertExactJson(['message' => '今のパスワードがちがいます', 'errors' => ['current_password' => ['今のパスワードがちがいます']]]);
+
+        DummyAuth::forgetLoginBetweenRequests();
+        DummyAuth::fromScreen()->postJson(Endpoints::login(), ['email' => $user->email, 'password' => 'password'])->assertOk();
+    })->with([
+        '空の文字' => [''],
+        'null' => [null],
+    ]);
+
+    it('配列で送ると、どこが違うかを返し、変わらない（422。FR-AUTH-033）', function (): void {
         $user = DummyUser::create();
 
         DummyAuth::actingAs($user)->putJson(Endpoints::password(), ['current_password' => ['password'], 'password' => 'new-password-1'])
