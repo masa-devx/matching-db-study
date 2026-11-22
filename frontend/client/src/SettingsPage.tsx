@@ -7,6 +7,15 @@ import { apiFetch, apiFetchWithoutLogin } from './shared/api/client'
 import { useSession } from './shared/session/SessionProvider'
 import { useLogout } from './shared/session/useLogout'
 
+// 422 の応答の errors.password の最初の文。なければ null（応答は外から来る値なので、unknown で受けて調べる。quality-frontend.md の T2）
+function passwordErrorOf(body: unknown): string | null {
+  if (typeof body !== 'object' || body === null || !('errors' in body)) return null
+  const errors: unknown = body.errors
+  if (typeof errors !== 'object' || errors === null || !('password' in errors)) return null
+  const messages: unknown = errors.password
+  return Array.isArray(messages) && typeof messages[0] === 'string' ? messages[0] : null
+}
+
 // レガシー版（M1。#181）。設定（/settings）。ホームの右上の歯車から来る。
 // アカウント（メールアドレスの確認・パスワード）・有料会員・検索・安全・案内・ログアウト・退会を、ここにまとめる。
 // ログアウトと退会の処理は、ホーム（HomePage）にあったものを、そのまま持ってきた。取る・送る・見せるを、全部この部品に書く
@@ -55,7 +64,7 @@ export default function SettingsPage() {
     })
   }
 
-  // パスワードを変える。画面で確かめるのは、空でないことと、2回が同じことだけ（長さは見ない。API も見ない）
+  // パスワードを変える。画面で確かめるのは、空でないことと、2回が同じことだけ。長さ（8〜64文字・72バイトまで）は API が見る（FR-AUTH-033・FR-AUTH-004）
   const changePassword = () => {
     if (!current || !next) {
       setChangeError('今のパスワードと、新しいパスワードを入れてください')
@@ -73,10 +82,12 @@ export default function SettingsPage() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ current_password: current, password: next }),
-    }).then((r) => {
+    }).then(async (r) => {
       setChangeBusy(false)
       if (r.status === 422) {
-        setChangeError('今のパスワードがちがいます')
+        // 新しいパスワードが決まりに合わないときは errors.password に文が入る。今のパスワードが違うときは message だけ
+        const body: unknown = await r.json()
+        setChangeError(passwordErrorOf(body) ?? '今のパスワードがちがいます')
         return
       }
       if (!r.ok) {
