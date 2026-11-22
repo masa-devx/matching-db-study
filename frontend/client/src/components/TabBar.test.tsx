@@ -76,6 +76,15 @@ describe('ログインした会員が、検索の画面（/search）を開く', 
     expect(within(tab('いいね')).getByText('99+')).toBeInTheDocument()
   })
 
+  it('99 までは、そのままの数が出る（「99+」の境目の下側。FR-UI-032）', async () => {
+    respond({ unread_messages: 98, new_matches: 1, received_likes: 99 })
+
+    renderAt('/search')
+
+    expect(await within(tab('メッセージ')).findByText('99')).toBeInTheDocument()
+    expect(within(tab('いいね')).getByText('99')).toBeInTheDocument()
+  })
+
   it('0 なら、バッジは出ない（FR-UI-032）', async () => {
     respond({ unread_messages: 0, new_matches: 0, received_likes: 0 })
 

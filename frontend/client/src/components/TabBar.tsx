@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router'
-import { messagesTabCount, useBadgeCounts } from '../features/messages'
+import { useBadgeCounts } from '../features/messages'
 import Icon from './Icon'
 
 // 03c：下のタブ（SVG のアイコン・すりガラス・選んだタブの点）。メッセージのタブに未読の合計（FR-UI-032）。
@@ -18,11 +18,8 @@ const UNDER_HOME = ['/settings', '/info', '/blocks', '/plans', '/likes/sent', '/
 
 export default function TabBar() {
   const location = useLocation()
-  const counts = useBadgeCounts(location.pathname)
-  // メッセージのタブ：未読の合計と、新しいマッチ（M3。#187）
-  const unread = messagesTabCount(counts)
-  // いいねのタブ：届いたいいねのうち、まだ返事をしていない人数（M3。#184）
-  const received = counts.receivedLikes
+  // メッセージのタブ：未読の合計と、新しいマッチ（M3。#187）。いいねのタブ：届いたいいねのうち、まだ返事をしていない人数（M3。#184）
+  const { messagesTab, likesTab } = useBadgeCounts(location.pathname)
 
   return (
     <nav className="tabs">
@@ -40,14 +37,14 @@ export default function TabBar() {
         >
           <span className="tab-icon">
             <Icon name={t.icon} />
-            {t.to === '/likes' && received > 0 && (
-              <span key={received} className="tab-badge">
-                {received > 99 ? '99+' : received}
+            {t.to === '/likes' && likesTab > 0 && (
+              <span key={likesTab} className="tab-badge">
+                {likesTab > 99 ? '99+' : likesTab}
               </span>
             )}
-            {t.to === '/messages' && unread > 0 && (
-              <span key={unread} className="tab-badge">
-                {unread > 99 ? '99+' : unread}
+            {t.to === '/messages' && messagesTab > 0 && (
+              <span key={messagesTab} className="tab-badge">
+                {messagesTab > 99 ? '99+' : messagesTab}
               </span>
             )}
           </span>

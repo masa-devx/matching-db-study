@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Messaging;
 
+use App\Models\Message;
 use App\Models\TalkRoomMember;
 
 /**
@@ -12,10 +13,10 @@ use App\Models\TalkRoomMember;
  */
 final class MessageService
 {
-    /** 相手から届いて、まだ読んでいないメッセージの合計（FR-UI-032）。数える条件は TalkRoomMember のスコープ */
+    /** 相手から届いて、まだ読んでいないメッセージの合計（FR-UI-032）。数える条件は Message の unreadBy() */
     public function countUnreadMessages(int $userId): int
     {
-        return TalkRoomMember::query()->unreadMessagesFor($userId)->count();
+        return Message::query()->unreadBy($userId)->count();
     }
 
     /** 新しいマッチ（まだ一度も開いていなくて、まだ1通もないルーム）の数（FR-UI-073） */

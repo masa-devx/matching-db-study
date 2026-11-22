@@ -44,7 +44,8 @@ class Like extends Model
      * 会員の届いたいいね（まだ返事をしていないもの。docs/glossary.md）。届いたいいねの一覧（GET /api/me/received-likes）に出るもの。
      * 下のタブの数も、これで数える。今の一覧と同じく、送った人が使える会員（User の accountUsable()）のものだけにし、
      * 送り返した相手（マッチした相手）・ブロックした／された相手・スキップした相手を除く
-     * （FR-LIKE-010・FR-WD-006・FR-WD-014・FR-BLOCK-007・FR-LIKE-012）
+     * （FR-LIKE-010・FR-WD-006・FR-WD-014・FR-BLOCK-007・FR-LIKE-012）。
+     * 一覧の古い ReceivedLikeController にも同じ条件を書いている。変えるときは、両方を直す
      *
      * @param  Builder<self>  $query
      */

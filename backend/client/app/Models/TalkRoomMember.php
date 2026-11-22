@@ -47,9 +47,11 @@ class TalkRoomMember extends Model
     }
 
     /**
-     * 会員の参加者の行のうち、トークの一覧（GET /api/me/talk-rooms）に出るルームのもの。下のタブの数も、これで数える。
-     * 今の一覧と同じく、相手が使える会員（User の accountUsable()。退会・アカウント停止・強制退会でない）で、
-     * ブロックした・された相手でないルームだけ（FR-WD-006・FR-WD-014・FR-BLOCK-009）
+     * トークの一覧（GET /api/me/talk-rooms）と、下のタブの数（GET /api/me/badge-counts）の両方が使う、一覧に出るルームの条件。
+     * 会員の参加者の行のうち、相手が使える会員（User の accountUsable()。退会・アカウント停止・強制退会でない）で、
+     * ブロックした・された相手でないルームのもの（FR-WD-006・FR-WD-014・FR-BLOCK-009）。
+     * 相手の参加者の行がないルームは、入れない（一覧の API は、そのルームで 500 になる。前からある不具合）。
+     * 一覧の古い TalkRoomController にも同じ条件を書いている。変えるときは、両方を直す
      *
      * @param  Builder<self>  $query
      */
@@ -63,23 +65,6 @@ class TalkRoomMember extends Model
                     ->where('partner.user_id', '<>', $userId)
                     ->whereExists(User::query()->accountUsable()->whereColumn('users.id', 'partner.user_id'))
                     ->whereNotExists(Block::query()->between($userId, 'partner.user_id'));
-            });
-    }
-
-    /**
-     * 一覧に出るルームの、まだ読んでいない相手のメッセージ（1通で1行）。count() で、未読の合計になる（FR-MSG-009・FR-UI-032）。
-     * 未読は、今の一覧の unread_count と同じく、最後に開いた時刻より新しいもの。まだ開いていなければ、相手のものを全部数える
-     *
-     * @param  Builder<self>  $query
-     */
-    public function scopeUnreadMessagesFor(Builder $query, int $userId): void
-    {
-        $query->listedFor($userId)
-            ->join('messages', 'messages.talk_room_id', '=', 'talk_room_members.talk_room_id')
-            ->where('messages.sender_id', '<>', $userId)
-            ->where(function (Builder $unread): void {
-                $unread->whereNull('talk_room_members.last_read_at')
-                    ->orWhereColumn('messages.created_at', '>', 'talk_room_members.last_read_at');
             });
     }
 

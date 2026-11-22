@@ -24,6 +24,16 @@ describe('ログインした会員の、下のタブの数を読む', () => {
     expect(new URL(String(url)).pathname).toBe('/api/me/badge-counts')
   })
 
+  it('渡した止める合図（AbortSignal）が、fetch まで届く（画面を移ったときに、古い読み込みを止めるため）', async () => {
+    fetchMock.mockResolvedValue(json({ unread_messages: 0, new_matches: 0, received_likes: 0 }))
+    const controller = new AbortController()
+
+    await fetchBadgeCounts(controller.signal)
+
+    const [, init] = fetchMock.mock.calls[0] ?? []
+    expect(init?.signal).toBe(controller.signal)
+  })
+
   it('200 でなければ、数として置かずに投げる', async () => {
     fetchMock.mockResolvedValue(json({ message: 'サーバーのエラー' }, 500))
 

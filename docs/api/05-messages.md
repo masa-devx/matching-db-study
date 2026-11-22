@@ -410,6 +410,10 @@ return response()->json($result);
 - トークルームの条件は `TalkRoomMember::scopeListedFor()` の1か所（未読と新しいマッチの2つが使う）
   - 相手が、使える会員（`User::scopeAccountUsable()`。退会・アカウント停止・強制退会でない）のルームだけ（FR-WD-006・FR-WD-014）
   - ブロックした・された相手のルームは除く（FR-BLOCK-009）
+  - 相手の参加者の行がないルームは数えない（一覧の API は、そのルームで 500 になる。前からある不具合）。ここだけは、一覧の数と同じにならない
+- 未読は `Message::scopeUnreadBy()`（上の `scopeListedFor()` を呼ぶ）。新しいマッチは `TalkRoomMember::scopeNewMatchesFor()`
+  - 未読は、会員が最後に開いた時刻（`last_read_at`）より新しい、相手のメッセージ。まだ開いていなければ、相手のものを全部数える
+  - 分かっている不具合：時刻は秒までなので、開いたのと同じ秒に届いたものは、読んだことになる（一覧も同じ。`ShowBadgeCountsTest.php` で今の動きを確かめている）
 - 届いたいいねの条件は `Like::scopeReceivedBy()` の1か所
   - 送った人が、使える会員（`User::scopeAccountUsable()`）のいいねだけ（FR-WD-006・FR-WD-014）
   - 送り返した相手・ブロックした／された相手・スキップした相手は除く（FR-LIKE-010・FR-BLOCK-007・FR-LIKE-012）
@@ -430,7 +434,12 @@ return response()->json($result);
 - テストで数えた本数（セッションの置き場は array なので、`sessions` の分は出ない）
   - 前：トークの一覧 5＋6×ルームの数、届いたいいねの一覧 7＋2×いいねの数。ルームといいねが5つずつで 35＋17＝52本
   - 後：5本（ルームといいねが2・3・5・10のどれでも同じ）
-- インデックスは足していない。`messages.talk_room_id`・`likes.to_user_id` にはインデックスがなく、どちらの数も表を全部読む（一覧と同じ。インデックスは、一覧を直すチケットで足す）
+- インデックスは足していない。次の表に索引がなく、3本の数は表を全部読む（一覧と同じ）。足すのは #289
+  - `messages.talk_room_id`（未読・新しいマッチ）
+  - `likes.to_user_id`（届いたいいね）
+  - `blocks` の逆向き（`blocked_id` から引く）
+  - `skips`（`skipper_id`・`skipped_id`）
+  - `talk_room_members.user_id`（自分の参加者の行）
 
 #### curl の例
 

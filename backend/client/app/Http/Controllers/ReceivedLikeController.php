@@ -30,6 +30,7 @@ class ReceivedLikeController extends Controller
     {
         $loginUserId = $this->loginUserId($request);
 
+        // 下のタブの数（GET /api/me/badge-counts）も、同じ条件で数える。ここの条件を変えるときは、Like::scopeReceivedBy も直す
         // もう自分からもいいねした相手（＝マッチした相手）は、返事が済んでいるので出さない
         $likedIds = Like::where('from_user_id', $loginUserId)->pluck('to_user_id');
 

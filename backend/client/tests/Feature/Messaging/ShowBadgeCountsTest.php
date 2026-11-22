@@ -94,6 +94,22 @@ describe('ログインした会員に、相手からメッセージが届いて�
         expect(badgeCountsFromLists($loginUser))->toBe($noCounts);
     });
 
+    // 分かっている不具合：同じ秒に届いたものは既読になる。時刻は秒までで、開いた時刻より新しいもの（>）だけを数えるため（一覧も同じ）
+    it('開いたのと同じ秒に届いた1通は、未読に数えず、今の一覧で数えたものと同じ（FR-MSG-009）', function () use ($noCounts): void {
+        $loginUser = DummyUser::create(gender: 'male');
+        $partner = DummyUser::create();
+        travelTo(Carbon::parse('2026-11-22 10:00:00'));
+        $room = DummyMatching::match($loginUser, $partner);
+        travelTo(Carbon::parse('2026-11-22 10:05:00'));
+        DummyMessage::read($room, $loginUser);
+        DummyMessage::send($room, $partner);   // 時刻を動かさずに送る
+
+        DummyAuth::actingAs($loginUser)->getJson(Endpoints::badgeCounts())
+            ->assertOk()
+            ->assertExactJson($noCounts);
+        expect(badgeCountsFromLists($loginUser))->toBe($noCounts);
+    });
+
     it('ほかの会員どうしのメッセージは、数えない（FR-MSG-009）', function () use ($noCounts): void {
         $loginUser = DummyUser::create(gender: 'male');
         $other = DummyUser::create(gender: 'male');
@@ -218,6 +234,20 @@ describe('ログインした会員に、退会・アカウント停止・強制�
             ->assertOk()
             ->assertExactJson($expected);
         expect(badgeCountsFromLists($loginUser))->toBe($expected);
+    });
+});
+
+describe('ログインした会員に、相手の参加者の行がないルームがあるときに、タブの数を読む', function () use ($noCounts): void {
+    // 一覧（GET /api/me/talk-rooms）は、このルームで 500 になる（前からある不具合）ので、一覧の数とは比べない
+    it('そのルームは、新しいマッチにも未読にも数えない（docs/api/05-messages.md の「数える条件」）', function () use ($noCounts): void {
+        $loginUser = DummyUser::create(gender: 'male');
+        $partner = DummyUser::create();
+        DummyMatching::match($partner, $loginUser);
+        DB::table('talk_room_members')->where('user_id', $partner->id)->delete();
+
+        DummyAuth::actingAs($loginUser)->getJson(Endpoints::badgeCounts())
+            ->assertOk()
+            ->assertExactJson($noCounts);
     });
 });
 
