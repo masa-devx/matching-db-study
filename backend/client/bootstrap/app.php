@@ -7,6 +7,7 @@ use App\Exceptions\Auth\AccountSuspendedException;
 use App\Exceptions\Auth\EmailUnverifiedException;
 use App\Exceptions\Auth\LoginFailedException;
 use App\Exceptions\Auth\LoginRefusedException;
+use App\Exceptions\Auth\WrongCurrentPasswordException;
 use App\Exceptions\BusinessException;
 use App\Exceptions\UserNotFoundException;
 use App\Http\Middleware\AuthenticateUser;
@@ -69,6 +70,9 @@ return Application::configure(basePath: dirname(__DIR__))
             AccountStatus::Banned => ['message' => __('errors.login_banned'), 'code' => 'account_banned'],
             default => ['message' => __('errors.login_suspended'), 'code' => 'account_suspended'],
         }, 403));
+
+        // パスワードを変えるときに、今のパスワードが違う（PasswordService が投げる）
+        $exceptions->render(fn (WrongCurrentPasswordException $e) => response()->json(['message' => __('errors.wrong_current_password')], 422));
 
         // メンテナンス中（php artisan down）。Laravel の PreventRequestsDuringMaintenance が投げる 503 の文を日本語にする。
         // リダイレクトはしない（画面は client.ts で 503 を見分ける）。Retry-After などのヘッダーは、そのまま返す

@@ -17,7 +17,6 @@ const LEGACY_CONTROLLERS = [
     'App\Http\Controllers\LikeController',
     'App\Http\Controllers\MessageController',
     'App\Http\Controllers\NoticeController',
-    'App\Http\Controllers\PasswordController',
     'App\Http\Controllers\PasswordResetController',
     'App\Http\Controllers\PlanController',
     'App\Http\Controllers\PurchaseController',

@@ -16,4 +16,5 @@ return [
     'login_wrong_password' => 'パスワードが違います',
     'login_suspended' => '利用を停止しています',
     'login_banned' => '強制退会になっています',
+    'wrong_current_password' => '今のパスワードがちがいます',
 ];
