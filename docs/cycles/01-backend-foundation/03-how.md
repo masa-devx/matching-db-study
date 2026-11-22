@@ -569,7 +569,7 @@ URL は今のまま（`/api/...`）。新しい URL に移すのは、サイク�
 #### メンテナンス中の会員の API
 
 - `503`「ただいまメンテナンス中です」。リダイレクトはしない（画面は `client.ts` で 503 を見分け、`app/` が1か所でメンテナンスの画面を出す）
-- 抜け道は通す。`GET /api/health` も、ほかの API と同じに止める（FR-MAINT-004。2026-11-21 に変えた）
+- 抜け道は通す。`GET /up` は Laravel がもとから止めない（FR-MAINT-004。#279 で変えた）
 
 #### `POST /auth/refresh`
 
@@ -653,7 +653,7 @@ URL は今のまま（`/api/...`）。新しい URL に移すのは、サイク�
   - `statefulApi()`・Middleware の別名
   - `AuthenticationException` を 401、CSRF の失敗を 419、メンテナンスを 503 にし、どれも日本語の文にする `render`
   - 401・419 のときに、`auth.rejected` のログを1行出す
-  - メンテナンスで health を通す（`preventRequestsDuringMaintenance(except: ...)`）
+  - メンテナンス中も通すルートは書かない（`except` はない）。`GET /up` は、Laravel が `health: '/up'` から自分で外す（FR-MAINT-004。#279 で変えた）
 - 置き場の理由：例外を応答に変えるのは1か所（7章）
 
 #### `app/Listeners/`（新しい。メンテナンスに入れたとき）
@@ -756,7 +756,7 @@ URL は今のまま（`/api/...`）。新しい URL に移すのは、サイク�
 
 #### 3：会員の側のメンテナンス（新）
 
-- バックエンド：503 と日本語の文・health を通す・出来事で `sessions` を全部消す
+- バックエンド：503 と日本語の文・出来事で `sessions` を全部消す（`GET /up` は Laravel がもとから止めない。#279 で変えた）
 - 画面：503 を受けたら、メンテナンスの画面を出す
 - 直す文書：`docs/commands.md` にメンテナンスを足す
 

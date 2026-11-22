@@ -65,6 +65,7 @@ AI が守る決まり（推測で流さない・許可の一覧に足す基準�
 - 実行場所：リポジトリのルート
 - コマンド：`docker compose up -d --wait`
   - API は `http://127.0.0.1:8000/up`（`200` なら動いている。Laravel にもとからある口で、DB につながるかは見ない）
+  - DB につながるかは `docker compose run --rm app php artisan migrate:status`（マイグレーションの一覧が `Ran` で出れば、つながっていて、流してある。接続の設定は出ない。2026-11-22 に確かめた）
   - メールの受信箱は `http://127.0.0.1:58025`
   - 止めるのは `docker compose stop`
 - 前提：Docker

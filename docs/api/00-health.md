@@ -25,5 +25,5 @@ Laravel にもとからある口（`backend/client/bootstrap/app.php` の `healt
 - 弱いところ：DB につながるかは確かめない
   - Laravel の `HealthCheck` は、出来事 `DiagnosingHealth` を出すだけ。会員の側には、それを受ける Listener がない
   - そのため、DB が落ちても `GET /up` は `200` を返す
-  - DB の確かめを足すかは、監視を入れるチケットで決め直す
+  - DB の確かめを足すかは、監視を入れるチケット（#287）で決め直す
 - 管理画面（`backend/admin`）の `GET /api/health` は、このファイルの外。今は変えていない（`docs/commands.md` の「管理画面」）
