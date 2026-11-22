@@ -63,7 +63,7 @@ arch('新しい Controller は、Model・DB・トークンを直接使わない'
 // 使うものは、引数（コンストラクタやメソッドの型）で受け取る。Controller だけでなく、Request・Resource・Middleware も同じ
 // （Resource に app('db') を置くと、Controller だけを見る決まりでは通った。#239 で確かめた）。response() などは止めない
 arch('新しい Http の層は、app()・resolve()・コンテナで中身を取り出さない', function (): void {
-    foreach (['App\Http\Controllers', 'App\Http\Requests', 'App\Http\Resources', 'App\Http\Middleware'] as $layer) {
+    foreach (['App\Http\Controllers', 'App\Http\Requests', 'App\Http\Resources', 'App\Http\Middleware', 'App\Http\Session'] as $layer) {
         expect($layer)
             ->not->toUse(CONTAINER_THINGS)
             ->ignoring(LEGACY_CONTROLLERS);
@@ -71,8 +71,8 @@ arch('新しい Http の層は、app()・resolve()・コンテナで中身を取
 });
 
 // 対象を Controller だけにすると、DB の処理を Request に移すだけで避けられる（#234 のレビューで確かめた）
-arch('Request と Middleware は、Model・DB を使わない', function (): void {
-    foreach (['App\Http\Requests', 'App\Http\Middleware'] as $layer) {
+arch('Request・Middleware・セッションの操作（Http\Session）は、Model・DB を使わない', function (): void {
+    foreach (['App\Http\Requests', 'App\Http\Middleware', 'App\Http\Session'] as $layer) {
         expect($layer)
             ->not->toUse(['App\Models', ...DB_THINGS]);
     }
@@ -143,6 +143,27 @@ test('新しい Http の層は、DB のファサードの別名（\DB::・use DB
     // app/Http/Controllers の直下は古いコントローラー（上の LEGACY_CONTROLLERS）なので見ない。新しい Controller は、業務のまとまりのフォルダに置く
     $http = dirname(__DIR__, 2).'/app/Http';
     expect(archFindFacadeAliases($http, ['DB', 'Schema', 'App'], skipFilesIn: $http.'/Controllers'))->toBe([]);
+});
+
+// セッションを作る・作り直す・消すのは app/Http/Session（LoginSession）だけ（architecture-backend.md の2章）。
+// ほかの所に増えると、「どこでセッションが変わるか」を1か所で追えなくなる。ログインしている会員を読む（Auth::guard()->id()）のは、Middleware でよい。
+// arch() はメソッドの呼び出しを見られないので、ファイルの文字を読んで探す
+test('セッションを作る・作り直す・消す処理は、app/Http/Session の中にだけある', function (): void {
+    $app = dirname(__DIR__, 2).'/app';
+    $pattern = '/->session\(\)|(?<![\w>$])session\(|Session::|guard\([^)]*\)->(login|loginUsingId|logout|logoutOtherDevices|attempt)\(|Auth::(login|loginUsingId|logout|logoutOtherDevices|attempt)\(/';
+    $found = [];
+    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($app, FilesystemIterator::SKIP_DOTS)) as $file) {
+        if (! $file instanceof SplFileInfo || $file->getExtension() !== 'php' || str_starts_with($file->getPathname(), $app.'/Http/Session/')) {
+            continue;
+        }
+        foreach (file($file->getPathname()) ?: [] as $number => $line) {
+            if (preg_match($pattern, $line) === 1 && ! str_starts_with(ltrim($line), '//') && ! str_starts_with(ltrim($line), '*')) {
+                $found[] = 'app'.substr($file->getPathname(), strlen($app)).':'.($number + 1);
+            }
+        }
+    }
+
+    expect($found)->toBe([]);
 });
 
 // 標準の5つ以外のメソッドが欲しくなったら、隠れている名詞を探して Controller を分ける（architecture-backend.md の3章）。
