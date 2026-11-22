@@ -9,6 +9,7 @@ use App\Http\Controllers\EmailVerificationController;
 use App\Http\Controllers\FirebaseTokenController;
 use App\Http\Controllers\LikeController;
 use App\Http\Controllers\MessageController;
+use App\Http\Controllers\Messaging\BadgeCountController;
 use App\Http\Controllers\NoticeController;
 use App\Http\Controllers\PasswordResetController;
 use App\Http\Controllers\PlanController;
@@ -68,6 +69,8 @@ Route::middleware('user.authenticate')->group(function (): void {
         // 05 メッセージ（docs/api/05-messages.md）。ルームはマッチしたときに LikeController::store が作る。
         // レガシー版は、ルームの参加者かを確かめない
         Route::get('/me/talk-rooms', [TalkRoomController::class, 'index']);
+        // 下のタブのバッジの数（未読・新しいマッチ・届いたいいね。docs/api/05-messages.md の「#247」）。一覧を全部読まずに、数だけを返す
+        Route::get('/me/badge-counts', [BadgeCountController::class, 'show']);
         Route::get('/me/talk-rooms/{publicId}/messages', [MessageController::class, 'index']);
         Route::post('/me/talk-rooms/{publicId}/messages', [MessageController::class, 'store']);
 

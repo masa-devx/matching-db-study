@@ -147,11 +147,17 @@ final class Endpoints
         return '/api/me/matches';
     }
 
-    // ---- Messaging（トークルーム） ----
+    // ---- Messaging（トークルーム・下のタブの数） ----
 
     /** トークの一覧を見る（GET /api/me/talk-rooms） */
     public static function talkRooms(): string
     {
         return '/api/me/talk-rooms';
+    }
+
+    /** 下のタブのバッジの数（GET /api/me/badge-counts。未読・新しいマッチ・届いたいいね） */
+    public static function badgeCounts(): string
+    {
+        return '/api/me/badge-counts';
     }
 }

@@ -27,6 +27,8 @@ class TalkRoomController extends Controller
     {
         $loginUserId = $this->loginUserId($request);
 
+        // 下のタブの数（GET /api/me/badge-counts）も、同じ条件で数える。ここの条件（ブロック・相手が使える会員か・未読）を変えるときは、
+        // TalkRoomMember::scopeListedFor（未読は Message::scopeUnreadBy）も直す
         // 06：ブロックした・された相手を、向きごとに PHP に持ってくる（検索から写した）
         $blocked = Block::where('blocker_id', $loginUserId)->pluck('blocked_id');     // UNIQUE の先頭なので索引が効く
         $blockedMe = Block::where('blocked_id', $loginUserId)->pluck('blocker_id');   // 索引がなく、表を全部読む

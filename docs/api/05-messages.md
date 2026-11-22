@@ -4,7 +4,7 @@
 
 決まり（パス・ステータス・エラーの形）と一覧は [README.md](README.md)。
 
-要件：[requirements/messages.md](../requirements/messages.md)（FR-MSG-001〜014・NFR-MSG-001〜003）。表は `talk_rooms`・`talk_room_members`・`messages`（[data-model.md](../data-model.md)・D-023）。解説：`explanations/05-messages.html`（`legacy-repo`）。
+要件：[requirements/messages.md](../requirements/messages.md)（FR-MSG-001〜014・NFR-MSG-001〜004）。表は `talk_rooms`・`talk_room_members`・`messages`（[data-model.md](../data-model.md)・D-023）。解説：`explanations/05-messages.html`（`legacy-repo`）。
 
 トークルームは「ログインした本人が参加しているもの」なので、`/api/me/talk-rooms` の下に置く。1つのルームは `public_id`（UUID）で指し、メッセージはその下に入れ子にする（決まり「持ち主の下にあるものは入れ子にする」）。
 
@@ -14,6 +14,7 @@
 | `GET /api/me/talk-rooms/{public_id}/messages` | トークの履歴（新しい50件・古い続き・新しいものだけ） | 作る（読んだことにするのも、この中） | 作る（書き込まない） |
 | `POST /api/me/talk-rooms/{public_id}/messages` | 送る | 作る | 作る |
 | `PUT /api/me/talk-rooms/{public_id}/read` | 読んだことにする | 作らない | 作る |
+| `GET /api/me/badge-counts` | 下のタブのバッジの数（未読・新しいマッチ・届いたいいね。#247） | ― | 作った（下の「#247 で足すこと」） |
 
 レガシー版の作り：
 
@@ -376,3 +377,71 @@ return response()->json($result);
 - 「新しいマッチ」と同じく、既読の決まりも画面にある
 - メッセージの一覧は、開いているあいだ10秒ごとに一覧の API を呼ぶ
   - ルームが100ある会員は、10秒ごとに 600本を超える SQL が流れる
+
+## #247 で足すこと（下のタブの数。状態：**実装済み（改善版）**）
+
+下のタブ（`TabBar`）は、メッセージのタブに「未読の合計＋新しいマッチ」、いいねのタブに「届いたいいねの人数」のバッジを出す（FR-UI-032・FR-UI-064・FR-UI-073）。前は、その数のために、画面が変わるたび・30秒ごとに、トークの一覧と届いたいいねの一覧を全部読んでいた（#112 の P14）。数だけを返す API を足し、タブはそれだけを読む。
+
+- 1本で3つの数を返す。タブは1回の呼び出しで済み、ポーリングも1本になるため
+- 置き場は改訂版の形（`Messaging/BadgeCountController@show` → `Messaging/MessageService`・`Matching/LikeService` → Model のスコープ）
+- 名前：URL の名詞は「バッジの数」（`badge-counts`）。ログインした本人あての数なので `/me` の下に置く（`docs/cycles/01-backend-foundation/03-how.md` の「`/me` を付けるか」の「迷うもの」）
+
+### `GET /api/me/badge-counts`
+
+#### だれが使えるか
+
+- ログインしていて、メールアドレスを確認した会員（ルートの `user.authenticate` と `user.verified`。FR-MSG-012・FR-MSG-013）
+
+#### 入力
+
+- なし
+
+#### 応答（成功）
+
+- `200` `{"unread_messages": 3, "new_matches": 1, "received_likes": 2}`
+- `unread_messages`：相手から届いて、まだ読んでいないメッセージの合計。トークの一覧の `unread_count` の合計と同じ（自分が送ったものと、最後に開いた時刻より前のものは数えない。FR-MSG-009）
+- `new_matches`：新しいマッチ（まだ一度も開いていなくて、まだ1通もないルーム）の数。トークの一覧で `last_message` と `last_read_at` がどちらも `null` のルームの数と同じ（FR-UI-073）
+- `received_likes`：届いたいいね（まだ返事をしていないもの）の数。届いたいいねの一覧の件数と同じ（FR-UI-064）
+- メッセージのタブのバッジは `unread_messages + new_matches`（前の画面の数え方と同じ）。足すのは画面
+
+#### 数える条件
+
+- 数は、今の2つの一覧（`GET /api/me/talk-rooms`・`GET /api/me/received-likes`）で数えたものと同じにする。`tests/Feature/Messaging/ShowBadgeCountsTest.php` が、一覧から数えたものと比べる
+- トークルームの条件は `TalkRoomMember::scopeListedFor()` の1か所（未読と新しいマッチの2つが使う）
+  - 相手が、使える会員（`User::scopeAccountUsable()`。退会・アカウント停止・強制退会でない）のルームだけ（FR-WD-006・FR-WD-014）
+  - ブロックした・された相手のルームは除く（FR-BLOCK-009）
+  - 相手の参加者の行がないルームは数えない（一覧の API は、そのルームで 500 になる。前からある不具合）。ここだけは、一覧の数と同じにならない
+- 未読は `Message::scopeUnreadBy()`（上の `scopeListedFor()` を呼ぶ）。新しいマッチは `TalkRoomMember::scopeNewMatchesFor()`
+  - 未読は、会員が最後に開いた時刻（`last_read_at`）より新しい、相手のメッセージ。まだ開いていなければ、相手のものを全部数える
+  - 分かっている不具合：時刻は秒までなので、開いたのと同じ秒に届いたものは、読んだことになる（一覧も同じ。`ShowBadgeCountsTest.php` で今の動きを確かめている）
+- 届いたいいねの条件は `Like::scopeReceivedBy()` の1か所
+  - 送った人が、使える会員（`User::scopeAccountUsable()`）のいいねだけ（FR-WD-006・FR-WD-014）
+  - 送り返した相手・ブロックした／された相手・スキップした相手は除く（FR-LIKE-010・FR-BLOCK-007・FR-LIKE-012）
+- 使える会員の条件は `User::scopeAccountUsable()`、ブロックの向きを問わない条件は `Block::scopeBetween()`。上の2つのスコープは、条件を書き写さずに、これを呼ぶ
+- 一覧の API はまだ古いコントローラー（`TalkRoomController`・`ReceivedLikeController`）のままで、ブロック・送り返し・スキップの条件をコントローラーの中にも書いている（使える会員の条件は、どちらも `accountUsable()` を呼ぶ）。一覧を移すときに、上のスコープを使う形にする
+
+#### 応答（失敗）
+
+- `401` `{"message": "ログインしてください"}`：ログインしていない・退会・強制退会
+- `401` `{"message": "このアカウントは停止されています", "code": "account_suspended"}`：アカウント停止された会員
+- `403` `{"message": "この機能は使えません", "code": "email_unverified"}`：メールアドレスを確認していない
+- `503`：メンテナンス中（README の決まり）
+
+#### 流れる SQL の目安
+
+- 3本（未読の合計・新しいマッチ・届いたいいね。どれも `count(*)` の1本）。相手の数が増えても変わらない（NFR-MSG-004）
+- ほかに、ログインの確かめの分（`users` の select 2本と、`sessions` の select と update。README の「ログインが要るか」）
+- テストで数えた本数（セッションの置き場は array なので、`sessions` の分は出ない）
+  - 前：トークの一覧 5＋6×ルームの数、届いたいいねの一覧 7＋2×いいねの数。ルームといいねが5つずつで 35＋17＝52本
+  - 後：5本（ルームといいねが2・3・5・10のどれでも同じ）
+- インデックスは足していない。次の表に索引がなく、3本の数は表を全部読む（一覧と同じ）。足すのは #289
+  - `messages.talk_room_id`（未読・新しいマッチ）
+  - `likes.to_user_id`（届いたいいね）
+  - `blocks` の逆向き（`blocked_id` から引く）
+  - `skips`（`skipper_id`・`skipped_id`）
+  - `talk_room_members.user_id`（自分の参加者の行）
+
+#### curl の例
+
+- `curl http://localhost:8000/api/me/badge-counts -b cookies.txt -H 'Accept: application/json' -H 'Origin: http://localhost:5173'`
+

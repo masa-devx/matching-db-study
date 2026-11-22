@@ -54,6 +54,7 @@ src/
 
 - 機能の名前は、要件（`docs/requirements/`）のまとまりにそろえる。会員の画面の一覧は `docs/frontend.md` の「改善版の置き場」
 - `pages/` と `components/` は、小さな機能でもいつも作る。import の決まりをフォルダの単位で書くため（平たく置くと、container と presenter を機械で見分けられない）
+- 例外：画面をまだ移していない機能（今は下のタブの数だけの `messages`）は、`pages/`・`components/` を、画面を移すチケットで作る（container も presenter もまだないため。#247）
 - ファイルの名前：container は `XxxPage.tsx`、presenter は `XxxView.tsx`（画面全体）か部品の名前、hook は `useXxx.ts`、API の形の型は `XxxResponse`、形を変える関数は `toXxx`
 - 画面の題と、どのタブを選ぶかは、`app/router.tsx` のルートの表に1行で持たせる（画面を足すときに直すのは1か所。管理画面の `domains.tsx` と同じ形）
 - `index.ts` が出してよいのは、次のものだけ
@@ -303,9 +304,9 @@ flowchart TB
 未読の数・届いたいいねの数・管理画面のまだ対応していない通報の数。
 
 - その機能の hook に置く（05b からは小さな store）
-- 読み直す関数を `index.ts` から出す
+- 読み直す関数を `index.ts` から出す。#247（下のタブの数）では出していない。使う画面（トーク・いいね）を移すときに足す
 - 数を読む部品は `TabBar`（管理画面はサイドバー）の中だけにし、描き直しをその部品にとどめる
-- 数だけを返す API ができるまでは、今の読み方のまま、その機能の `api.ts` に移す
+- 数だけを返す API ができるまでは、今の読み方のまま、その機能の `api.ts` に移す。下のタブの未読・新しいマッチ・届いたいいねは、数だけを返す API（`GET /api/me/badge-counts`）を `features/messages` の `useBadgeCounts` が読む（#247）
 
 ### 入力中の値
 
