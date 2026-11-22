@@ -22,7 +22,7 @@ description: 改訂版のサイクルの終わりに、手元で「本番に出�
 1. バックアップ：`docker compose exec db pg_dump -U postgres -Fc -f /tmp/matching_dev-<タグ>.dump matching_dev`
 2. `refactored-repo` に切り替え、`docker compose restart app admin-app`
 3. マイグレーション：`docker compose run --rm app php artisan migrate`。かかった時間を測る。大きな表を変えるときは、流している間に別の端末から読み書きできるかも見る
-4. 出したあとの確かめ：2つの health・受け入れの条件の主な操作（curl か画面）・わざと 500 を起こして、エラーの通知が Mailpit（`http://127.0.0.1:58025`）に届くか（通知の仕組みがあるとき）
+4. 出したあとの確かめ：会員の側の `GET /up`（動いているかだけ）・管理画面の `GET /api/health`（DB の名前とマイグレーションの数）・会員の側が DB につながるか（`docker compose run --rm app php artisan migrate:status`）・受け入れの条件の主な操作（curl か画面）・わざと 500 を起こして、エラーの通知が Mailpit（`http://127.0.0.1:58025`）に届くか（通知の仕組みがあるとき）
 5. 戻し方を1回試す：`php artisan migrate:rollback --step=<本数>`、だめならバックアップから `pg_restore` で戻す → 確かめ → もう一度出す
 6. 結果を `09-release.md` のチェックに付ける
 
