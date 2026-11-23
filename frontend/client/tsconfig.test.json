@@ -23,6 +23,5 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true
   },
-  "include": ["tests"],
-  "exclude": ["tests/e2e"]
+  "include": ["tests"]
 }

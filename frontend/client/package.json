@@ -11,7 +11,6 @@
     "format": "biome format --write",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test",
     "lint:rules": "biome lint --only=style/noRestrictedImports --only=style/noRestrictedGlobals src tests && biome lint --error-on-warnings src/app src/shared src/features src/api tests"
   },
   "dependencies": {
@@ -23,7 +22,6 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.7",
-    "@playwright/test": "^1.65.1",
     "@testing-library/jest-dom": "^8.0.0",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.13",
