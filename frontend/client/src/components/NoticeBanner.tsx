@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router'
-import { apiFetch } from '../shared/api/client'
+import { ApiError } from '../api/ApiError'
+import { membersApi } from '../api/membersApi'
 import { useSession } from '../shared/session/SessionProvider'
 
 // A7（#213）：運営からのお知らせに、まだ読んでいないものがあるとき、どの画面にも帯を出す。
@@ -16,15 +17,19 @@ export default function NoticeBanner() {
 
   useEffect(() => {
     if (!canRead) return
-    apiFetch(`/api/me/notices`, {
-      headers: { Accept: 'application/json' },
-    })
-      .then((r) => r.json())
-      .then((rows) => {
+    membersApi.notices().then(
+      (rows) => {
         const list = Array.isArray(rows) ? rows.filter((n: any) => !n.read_at) : []
         setUnread(list.length)
         setWarning(list.some((n: any) => n.kind === 'warning'))
-      })
+      },
+      (e) => {
+        // 失敗の応答（500 など）は、一覧でないので数えない（0件のときと同じ）
+        if (!(e instanceof ApiError)) throw e
+        setUnread(0)
+        setWarning(false)
+      },
+    )
   }, [location.pathname, canRead])
 
   // お知らせの画面にいるあいだは、出さない

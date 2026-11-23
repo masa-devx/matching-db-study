@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
+import { ApiError } from './api/ApiError'
+import { membersApi } from './api/membersApi'
+import { profileApi } from './api/profileApi'
 import Button from './components/Button'
 import ConfirmDialog from './components/ConfirmDialog'
 import { useToast } from './components/Toast'
 import UpsellDialog from './components/UpsellDialog'
-import { apiFetch } from './shared/api/client'
 import { SEARCH_CONDITIONS_KEY } from './shared/session/session'
 
 // レガシー版（#147）。検索の条件の画面（/search/conditions）。
@@ -220,24 +222,18 @@ export default function SearchConditionsPage() {
 
   // 04b：保存した検索条件の一覧を読む（失敗は考えない。401 は client.ts が移す）
   const loadSaved = () => {
-    apiFetch(`/api/me/search-conditions`, {
-      headers: { Accept: 'application/json' },
+    membersApi.searchConditions().then((rows) => {
+      setSaved(rows)
+      setSavedLoaded(true)
     })
-      .then((r) => r.json())
-      .then((rows) => {
-        setSaved(rows)
-        setSavedLoaded(true)
-      })
   }
 
   useEffect(() => {
     loadSaved()
     // 07：男性の無料の会員かを知るために、自分と自分のプロフィールを読む（ホームと同じ2本を、ここにも書いた）
-    const headers = { Accept: 'application/json' }
-    apiFetch(`/api/me`, { headers })
-      .then((r) => r.json())
-      .then((u) => apiFetch(`/api/users/${u.public_id}`, { headers }))
-      .then((r) => r.json())
+    profileApi
+      .accountRecord()
+      .then((u) => profileApi.member(u.public_id))
       .then((u) => setLocked(u.profile?.gender === 'male' && !u.is_paid))
   }, [])
 
@@ -303,23 +299,19 @@ export default function SearchConditionsPage() {
   }
   const overwrite = () => {
     setSending(true)
-    apiFetch(`/api/me/search-conditions/${editingSaved.public_id}`, {
-      method: 'PUT',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
+    membersApi.updateSearchCondition(editingSaved.public_id, { conditions: form }).then(
+      () => {
+        setSending(false)
+        toast(`「${editingSaved.name}」の条件を直しました`)
+        setEditingSaved(null)
+        loadSaved()
       },
-      body: JSON.stringify({ conditions: form }),
-    }).then((r) => {
-      setSending(false)
-      if (!r.ok) {
+      (e) => {
+        if (!(e instanceof ApiError)) throw e
+        setSending(false)
         toast('直せませんでした', 'error')
-        return
-      }
-      toast(`「${editingSaved.name}」の条件を直しました`)
-      setEditingSaved(null)
-      loadSaved()
-    })
+      },
+    )
   }
 
   // 04b：保存した検索条件を押したら、その条件で探す（FR-UI-044）。使えない条件はモーダルを出す（FR-UI-048）
@@ -353,31 +345,28 @@ export default function SearchConditionsPage() {
     }
     // 欄の値を、そのまま送る（数も文字のまま）
     setSending(true)
-    apiFetch(`/api/me/search-conditions`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
+    membersApi.createSearchCondition(name, form).then(
+      () => {
+        setSending(false)
+        setNaming(false)
+        toast('保存しました')
+        loadSaved()
       },
-      body: JSON.stringify({ name, conditions: form }),
-    }).then((r) => {
-      setSending(false)
-      setNaming(false)
-      if (r.status === 403) {
-        setUpsell(true)
-        return
-      }
-      if (r.status === 422) {
-        toast('保存できるのは5件までです。どれかを消してください', 'error')
-        return
-      }
-      if (!r.ok) {
+      (e) => {
+        if (!(e instanceof ApiError)) throw e
+        setSending(false)
+        setNaming(false)
+        if (e.status === 403) {
+          setUpsell(true)
+          return
+        }
+        if (e.status === 422) {
+          toast('保存できるのは5件までです。どれかを消してください', 'error')
+          return
+        }
         toast('保存できませんでした', 'error')
-        return
-      }
-      toast('保存しました')
-      loadSaved()
-    })
+      },
+    )
   }
 
   const rename = () => {
@@ -386,40 +375,38 @@ export default function SearchConditionsPage() {
       return
     }
     setSending(true)
-    apiFetch(`/api/me/search-conditions/${renaming.public_id}`, {
-      method: 'PUT',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
+    membersApi.updateSearchCondition(renaming.public_id, { name }).then(
+      () => {
+        setSending(false)
+        setRenaming(null)
+        toast('名前を直しました')
+        loadSaved()
       },
-      body: JSON.stringify({ name }),
-    }).then((r) => {
-      setSending(false)
-      setRenaming(null)
-      if (!r.ok) {
+      (e) => {
+        if (!(e instanceof ApiError)) throw e
+        setSending(false)
+        setRenaming(null)
         toast('直せませんでした', 'error')
-        return
-      }
-      toast('名前を直しました')
-      loadSaved()
-    })
+      },
+    )
   }
 
   const remove = () => {
     setSending(true)
-    apiFetch(`/api/me/search-conditions/${deleting.public_id}`, {
-      method: 'DELETE',
-      headers: { Accept: 'application/json' },
-    }).then((r) => {
-      setSending(false)
-      setDeleting(null)
-      if (!r.ok) {
+    membersApi.deleteSearchCondition(deleting.public_id).then(
+      () => {
+        setSending(false)
+        setDeleting(null)
+        toast('消しました')
+        loadSaved()
+      },
+      (e) => {
+        if (!(e instanceof ApiError)) throw e
+        setSending(false)
+        setDeleting(null)
         toast('消せませんでした', 'error')
-        return
-      }
-      toast('消しました')
-      loadSaved()
-    })
+      },
+    )
   }
 
   return (
