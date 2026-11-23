@@ -1,7 +1,7 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
-import { StoppedRequestError } from '../../../shared/api/ApiError'
+import { StoppedRequestError } from '../../../api/ApiError'
+import { messagingApi } from '../../../api/messagingApi'
 import { useSession } from '../../../shared/session/SessionProvider'
-import { fetchBadgeCounts } from '../api'
 import { messagesTabCount } from '../rules'
 import type { BadgeCounts, TabCounts } from '../types'
 
@@ -13,7 +13,7 @@ const NO_COUNTS: BadgeCounts = { unreadMessages: 0, newMatches: 0, receivedLikes
 // 下のタブに出す数（メッセージのタブ・いいねのタブ）。数だけを返す API を1本だけ読む。
 // 読むのは、画面を移ったとき・30秒ごと・ウィンドウに戻ったとき（前の TabBar と同じ）。
 // メールアドレスを確認していない会員は、API が 403 で断るので読まない（確認したら、Session が読み直され、読み始める）
-export function useBadgeCounts(pathname: string): TabCounts {
+export const useBadgeCounts = (pathname: string): TabCounts => {
   const { session } = useSession()
   const canCount = session.status === 'signedIn' && session.account.emailVerified
   const [counts, setCounts] = useState<BadgeCounts>(NO_COUNTS)
@@ -24,9 +24,10 @@ export function useBadgeCounts(pathname: string): TabCounts {
     running.current?.abort()
     const controller = new AbortController()
     running.current = controller
-    fetchBadgeCounts(controller.signal)
+    messagingApi
+      .badgeCounts(controller.signal)
       .then((next) => {
-        // 止めたあとに届いた応答（res.json() のあと）は捨てる。止めても、fetch が返ったあとは止まらないため
+        // 止めたあとに届いた応答は捨てる。止めても、応答が返ったあとは止まらないため
         if (!controller.signal.aborted) setCounts(next)
       })
       .catch((error: unknown) => {
@@ -34,7 +35,7 @@ export function useBadgeCounts(pathname: string): TabCounts {
         if (error instanceof DOMException && error.name === 'AbortError') return
         // 401・419・503・確認していない 403 は、client.ts が画面を移す・帯を出すので、記録しない（ログインが切れるたびに記録が増えるだけ）
         if (error instanceof StoppedRequestError) return
-        // それ以外（500・形が違う・つながらない）は記録し、前の数のまま出す（logging.md の4：空の catch で捨てない）
+        // それ以外（500 などの ApiError・つながらない）は記録し、前の数のまま出す（logging.md の4：空の catch で捨てない）
         reportError(error)
       })
   })
