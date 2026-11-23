@@ -1,8 +1,8 @@
 # 画面の作り方（レガシー版と改善版）
 
-状態：確定（改善版の形は #112・#113 で決めた。API を呼ぶ所を `src/api/` にまとめること・テストの道具は #275 で決め、#292 で `src/api/` に移した）
-決まり：改善版の画面の受け持ち・import の決まり・書き方・状態の置き場・テストは [architecture-frontend.md](../agents/rules/architecture-frontend.md) を正とする。この文書は、形を選んだ理由と、今のファイルをどこへ移すかの地図
-決定：[decisions.md](decisions.md) の D-004（React＋TypeScript＋Vite）・D-006（OpenAPI は使わない）・D-014（認証）・D-018（画面も分ける）・D-026（改善版の置き場）・D-029（axios・`src/api/`・MSW と Playwright）
+状態：確定（改善版の形は #112・#113 で決めた。API を呼ぶ所を `src/api/` にまとめること・テストの道具は #275 で決め、#292 で `src/api/` に移した。21画面の行き先と移し方は #293 で書いた）
+決まり：改善版の画面の受け持ち・import の決まり・書き方・状態の置き場・テスト・画面の移し方の手順は [architecture-frontend.md](../agents/rules/architecture-frontend.md) を正とする。この文書は、形を選んだ理由と、今のファイルをどこへ移すかの地図
+決定：[decisions.md](decisions.md) の D-004（React＋TypeScript＋Vite）・D-006（OpenAPI は使わない）・D-018（画面も分ける）・D-026（改善版の置き場）・D-027（会員の認証はセッション）・D-029（axios・`src/api/`・MSW と Playwright）
 
 画面も、DB と同じく「レガシー版で作る → 測る → 直す → もう一度測る」で進める。03b から、画面の子 Issue も `legacy-repo` と `refactored-repo` に分ける。05b（Context から Zustand）は、それ自体が前と後の比べなので分けない。
 
@@ -27,23 +27,64 @@ export default function SearchPage() {
 }
 ```
 
-## 6つの項目
+## 6つの領域
 
-| 項目 | レガシー版（legacy-repo） | 改善版（refactored-repo） | 測る・確かめること |
-| --- | --- | --- | --- |
-| コンポーネント設計 | 1画面に1つの大きな部品 | container（hook とつなぎ、presenter に渡す）・hook（取る・持つ）・presenter（props で見せるだけ）に分ける | 1つの部品の行の数。presenter を、API なしでテストできるか |
-| API との通信 | 部品の中の `useEffect` で、そのつど `fetch`。URL とトークンの読み出しを、あちこちに書く | axios で、API を呼ぶところを `src/api/` にまとめる（送り先・`401`・失敗）。検索の連打は `AbortController` で止める | 連打したとき、古い結果があとから上書きするか |
-| 状態管理 | なんでも `useState` と Context に置く | どの状態をどこに置くかを分ける。05b で Zustand に移す | 描き直しの回数（React Profiler） |
-| 画面の表示速度 | 考えない | 04 の検索の一覧で直す（長い一覧・画像・バンドルの大きさ） | Lighthouse の LCP・INP・CLS。`vite build` の大きさ |
-| テスト | なし | 結合テスト（Vitest・Testing Library・MSW）と E2E（Playwright）を中心にする。直す前に、今の動きを確かめるテストを足す | テストが、要件 ID の受け入れ条件に対応しているか |
-| 開発効率 | ひな形のまま。型は `any` でよい | Biome（lint と整形）・型の検査・テストを CI に入れる。API がまだないときの仮の応答 | CI で止まるか |
+画面を直すときに見る6つの領域。1つの画面を移すときに、6つを、その画面の中で全部通る（下の「画面の移し方」）。
 
-## 認証（D-014）
+### コンポーネント設計
 
-| | レガシー版 | 改善版 |
+- レガシー版（legacy-repo）：1画面に1つの大きな部品
+- 改善版（refactored-repo）：次の3つに分ける
+  - container：hook とつなぎ、presenter に渡す
+  - hook：取る・持つ
+  - presenter：props で見せるだけ
+- 測る・確かめること：1つの部品の行の数。presenter を、API なしでテストできるか
+
+### API との通信
+
+- レガシー版：部品の中の `useEffect` で、そのつど `fetch`。URL とトークンの読み出しを、あちこちに書く
+- 改善版：axios で、API を呼ぶところを `src/api/` にまとめる（送り先・`401`・失敗）。検索の連打は `AbortController` で止める
+- 測る・確かめること：連打したとき、古い結果があとから上書きするか。画面を開いたときの API の本数
+
+### 状態管理
+
+- レガシー版：なんでも `useState` と Context に置く
+- 改善版：どの状態をどこに置くかを分ける。05b で Zustand に移す
+- 測る・確かめること：`useState` の数と置き場。描き直しの回数（React Profiler）
+
+### 画面の表示速度
+
+- レガシー版：考えない
+- 改善版：長い一覧・画像・バンドルの大きさを直す
+- 測る・確かめること：Lighthouse の LCP・INP・CLS。`vite build` の大きさ
+- 画面をまたいで測る仕組みは、#295 で決める。画面を移すときは、その画面の API の本数と描き直しの回数を比べる
+
+### テスト
+
+- レガシー版：なし
+- 改善版：結合テスト（Vitest・Testing Library・MSW）と E2E（Playwright）を中心にする。直す前に、今の動きを確かめるテストを足す
+- 測る・確かめること：テストが、要件 ID の受け入れ条件に対応しているか
+- 道具（MSW・Playwright）は、画面をまたぐので #290 で入れる
+
+### 開発効率
+
+- レガシー版：ひな形のまま。型は `any` でよい
+- 改善版：Biome（lint と整形）・型の検査・テストを CI に入れる。API がまだないときの仮の応答
+- 測る・確かめること：CI で止まるか。移すときに困ったこと（決まりの足りない所）を、決まりの直しの案にしたか
+
+## 認証（D-027）
+
+会員の認証はセッション（D-027。#259 で移した）。ブラウザには、HttpOnly の Cookie で、セッションの番号だけを渡す。書き込みには、CSRF のトークン（`X-XSRF-TOKEN`）を付ける。
+
+| | レガシー版（legacy-repo） | 改善版（refactored-repo） |
 | --- | --- | --- |
-| トークンの置き場所 | ログインの応答の JWT を sessionStorage に置き、`Authorization: Bearer` で送る | HttpOnly の Cookie（画面からは読めない）。Cookie を送る設定（axios の `withCredentials`）は `src/api/client.ts` だけ |
-| 確かめること | XSS があると、トークンを持ち出せる | 同じ XSS でも、トークンを持ち出せない |
+| ログインの状態の置き場 | JWT を sessionStorage に置く | セッションの番号を HttpOnly の Cookie に置く |
+| 送り方 | 各画面で `Authorization: Bearer` | `src/api/client.ts` だけ（`withCredentials`） |
+| ログインしているか | トークンがあるか | 起動のときの `GET /api/me`（`shared/session`） |
+| 確かめること | XSS があると、トークンを持ち出せる | 同じ XSS でも、セッションの番号を持ち出せない |
+
+- 401・419・503 の扱いは、[architecture-frontend.md](../agents/rules/architecture-frontend.md) の4章の「401 と 403」
+- 前は、改善版を D-014 の形（JWT と取り替え用のトークンを、HttpOnly の Cookie に置く）にする予定だった。#246 で D-027 に置き換えたので、取り替え用のトークンと `POST /api/auth/refresh` は作らない
 
 ## 改善版の考え方
 
@@ -84,11 +125,12 @@ frontend/client/src/
 │   ├── App.tsx                    Provider を重ねる（ログインした自分・トースト）            ← App.tsx の上半分
 │   ├── router.tsx                 ルートの表（パス・画面の題・どのタブを選ぶか）              ← App.tsx の Routes・TITLES・TabBar の UNDER_HOME
 │   ├── RequireAuth.tsx            ログインの守り（1か所。#257 で作った）。開こうとした画面は、まだ覚えない   ← 15画面の守り
+│   ├── SessionGate.tsx・MaintenanceGate.tsx・configureApi.ts・maintenance.ts   起動のときの確かめとメンテナンス（作った）
 │   └── AppShell.tsx               四角の枠と下のタブ・スクロールする枠を渡す                  ← App.tsx の下半分・components/TabBar
 │
 ├── features/                      機能ごと。名前は要件（docs/requirements/）のまとまりにそろえる
 │   ├── auth/                      ログイン・登録・メールの確認・パスワードの再設定・パスワードの変更・ログアウト
-│   │                              ← LoginPage・RegisterPage・VerifyPage・ForgotPasswordPage・ResetPasswordPage・components/VerifyBanner・SettingsPage の一部
+│   │                              ← LoginPage・RegisterPage・VerifyPage・ForgotPasswordPage・ResetPasswordPage・components/VerifyBanner・components/AwaitingVerification・SettingsPage の一部
 │   ├── profile/                   自分のプロフィール（ホーム）・相手のプロフィール           ← HomePage・UserPage
 │   ├── search/                    検索と一覧・検索の条件・保存した検索条件                    ← SearchPage・SearchConditionsPage
 │   ├── likes/                     届いたいいね・送ったいいね・いいねとスキップ・マッチの演出  ← LikesPage・SentLikesPage・components/MatchCelebration
@@ -131,6 +173,64 @@ frontend/client/src/
 - 退会は `settings/` に置く。`blocks/` は退会を受け持たない（#121 の範囲から外す）
 - 下のタブの数は、下のタブの数だけの機能（`features/tab-counts`）にする案・API を2本に分けてそれぞれの機能に持たせる案と比べ、1本の API と `features/messages` の hook にした（ポーリングを1本にするため。#247）。いいねの画面を移すときに見直す
 
+### 会員の画面の行き先（21画面）
+
+`frontend/client/src/App.tsx` のルートの21画面が、どの機能に入るか。今のファイルは、どれも `src` の直下にある。「使う API」は、今のファイルが import している `src/api/〇〇Api.ts`。
+
+| パス | 今のファイル | 移す先 | 使う API | 移したか |
+| --- | --- | --- | --- | --- |
+| `/login` | `LoginPage.tsx` | `auth` | `authApi` | まだ |
+| `/register` | `RegisterPage.tsx` | `auth` | `authApi` | まだ |
+| `/verify/:token` | `VerifyPage.tsx` | `auth` | `authApi` | まだ |
+| `/forgot-password` | `ForgotPasswordPage.tsx` | `auth` | `authApi` | まだ |
+| `/reset-password/:token` | `ResetPasswordPage.tsx` | `auth` | `authApi` | まだ |
+| `/home` | `HomePage.tsx` | `profile` | `profileApi` | まだ |
+| `/users/:publicId` | `UserPage.tsx` | `profile` | `profileApi`・`matchingApi` | まだ |
+| `/likes` | `LikesPage.tsx` | `likes` | `matchingApi`・`profileApi` | まだ（#294） |
+| `/likes/sent` | `SentLikesPage.tsx` | `likes` | `matchingApi` | まだ |
+| `/messages` | `MessagesPage.tsx` | `messages` | `messagingApi` | まだ |
+| `/messages/:roomId` | `TalkPage.tsx` | `messages` | `messagingApi`・`matchingApi`・`profileApi` | まだ |
+| `/messages-fs` | `MessagesFsPage.tsx` | `messages` | `profileApi`・Firestore | まだ |
+| `/messages-fs/:roomId` | `TalkFsPage.tsx` | `messages` | `profileApi`・Firestore | まだ |
+| `/search` | `SearchPage.tsx` | `search` | `membersApi`・`matchingApi` | まだ |
+| `/search/conditions` | `SearchConditionsPage.tsx` | `search` | `membersApi`・`profileApi` | まだ |
+| `/settings` | `SettingsPage.tsx` | `settings` | `authApi`・`profileApi` | まだ |
+| `/notices` | `NoticesPage.tsx` | `notices` | `membersApi` | まだ |
+| `/blocks` | `BlocksPage.tsx` | `blocks` | `matchingApi` | まだ |
+| `/plans` | `PlansPage.tsx` | `plans` | `billingApi`・`profileApi` | まだ |
+| `/plans/:planId` | `PurchasePage.tsx` | `plans` | `billingApi`・`profileApi` | まだ |
+| `/info/:slug` | `InfoPage.tsx` | `settings` | なし | まだ |
+
+- 「移す先」は `features/<機能>`。機能の名前は、上の図にそろえた
+- `/`（ログインしているかで移す）と `*`（ない URL）は、画面でなくルートの表の行なので、`app/router.tsx` に入れる
+- 設定の画面のうち、パスワードの変更は `auth` に入れる（上の図）。設定の画面を移すチケットで、`auth` の `index.ts` から受け取る
+- `features/messages` は、下のタブの数（`useBadgeCounts`）だけを移した。トークの4画面は、まだ移していない
+- 画面でない部品（`components/` の `VerifyBanner`・`NoticeBanner`・`ReportDialog`・`UpsellDialog`・`MatchCelebration`）の行き先は、上の図。使う画面を移すときに一緒に移す
+- 画面ごとの細かな棚卸し（状態・API・ロジックと、その置き場）は、ここに書かない。その画面を移すチケットの最初に書く（`.github/ISSUE_TEMPLATE/r-improvement.md` の「画面を移すときだけ」）
+- 移したら、その行の「移したか」を、移したチケットの番号に直す
+
+#### 機能の名前と、要件・バックエンドの名前
+
+機能の名前は、要件（`docs/requirements/`）とバックエンドの業務のまとまり（`docs/backend.md` の2章）にそろえる。画面の機能は、業務のまとまりより細かく分ける。
+
+| 画面の機能 | 要件 | バックエンドの業務のまとまり |
+| --- | --- | --- |
+| `auth` | `auth.md` | `Auth` |
+| `profile` | `members.md` | `Profile` |
+| `search` | `search.md`・`saved-searches.md` | `Members` |
+| `likes` | `likes.md`・`matches.md` | `Matching` |
+| `messages` | `messages.md` | `Messaging` |
+| `blocks` | `blocks.md` | `Matching` |
+| `reports` | `reports.md` | `Members` |
+| `plans` | `paid-members.md` | `Billing` |
+| `settings` | `withdrawal.md` | `Profile`（退会） |
+| `notices` | `screens.md` の FR-UI-098 | `Members` |
+
+- 名前がそろっていないもの
+  - `plans`：要件は `paid-members`、バックエンドは `Billing`
+  - `settings`・`notices`：要件のファイルがない
+- どちらも、図の名前のままにする。`plans` は D-026 の⑧（`plans/rules.ts`）で使っている名前で、変えると決まりと決定も直すことになるため
+
 ### 1つの機能の中（例：`features/search/`）
 
 ```text
@@ -171,6 +271,33 @@ features/messages/
 
 - どちらの実装を渡すかは `app/router.tsx` が決める。Firestore の画面は `lazy()` で分けて読む
 - 約束の形と、2つの版の違いの変え方は、[architecture-frontend.md](../agents/rules/architecture-frontend.md) の6章
+
+## 画面の移し方
+
+手順（単位・きっかけ・順番・PR の大きさ・レビューで見る所）の正は、[architecture-frontend.md](../agents/rules/architecture-frontend.md) の9章。ここには、そう決めた理由を書く。
+
+- 決めたこと：1画面ずつ縦に移す。1つの画面を移すときに、6つの領域を、その画面の中で全部通る（2026-11-23 に人が決めた）
+- 移すきっかけ：その画面に機能を足すとき・不具合を直すとき
+- 移している間は、レガシー版の画面（`src` の直下）と改訂版の画面（`features/`）が並んでよい
+- 全部の画面を先に棚卸ししない。画面ごとの細かな棚卸しは、その画面を移すチケットの最初にする
+
+### 理由
+
+- 6つの領域を、全部の画面で領域ごとに横に進めると、PR が大きくなり、何が良くなったかが数字で見えない
+- 1つの画面で6つを通すと、同じ画面の前と後の数字で比べられる
+- 機能を足す・不具合を直すときに移すと、移す手間を、その画面を触る仕事と一緒にできる。触らない画面は、移さずに残してよい
+- 先に全部を棚卸しすると、移すまでの間にコードが変わり、書いたものが古くなる
+
+### ほかの案
+
+- 領域ごとに、全部の画面を横に進める（例：先に全部の画面の API の呼び出しを hook に移す）
+- 全部の画面を先に棚卸しし、移す順番を決めてから進める（#275・#276 の初めの形）
+
+### 画面をまたぐもの
+
+- テストの道具（MSW・Playwright）：#290
+- 表示速度を測る仕組み（ビルドの大きさ・LCP・Firestore の画面の `lazy()`）：#295
+- 順番：#293（この地図）→ #290 → #294（試しの1画面：届いたいいね）→ #295
 
 ## 管理画面（`frontend/admin`）への当てはめ
 

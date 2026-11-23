@@ -62,6 +62,8 @@
 | 障害 | `[障害]` | 今まさに使えない・データが壊れている。サイクルに割り込む | 時間 | `r-incident.md` |
 | 提案 | `[提案]` | 人が出す「こうしたい」。相談して採るかを決める | 相談のあと | `r-proposal.md` |
 
+- 画面を移すチケットも改善。`r-improvement.md` の「画面を移すときだけ」を埋める（`agents/rules/architecture-frontend.md` の9章）
+
 ### 3-2. ボード（GitHub Projects「matching-db-study 改訂版」）
 
 | 項目 | 値 | 決める役 |

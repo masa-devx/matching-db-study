@@ -13,18 +13,12 @@ AI が守る決まり（推測で流さない・許可の一覧に足す基準�
 
 ## 解説を見る
 
-- 実行場所：claude.ai
-- 見方：AI が Artifact に載せたリンク（一覧は `agents/notes.local.md`）
-- 手元で見るなら、リポジトリのルートで `python3 -m http.server 8765 -d explanations` → `http://localhost:8765/`
-- 前提：claude.ai のアカウント
-- 使わないもの：`file://` で直接開く（ブラウザによって Mermaid の読み込みが止まるため）
-
-## 解説を Artifact に載せる形に変える
-
 - 実行場所：リポジトリのルート
-- コマンド：`python3 -I explanations/tools/to-artifact.py <元の HTML> <会話の作業用フォルダ>/artifacts/<ファイル名>`
-- 前提：python3
-- 使わないもの：元の HTML をそのまま載せる（骨組みのタグと Mermaid の script が二重になるため）
+- コマンド：`python3 -m http.server 8765 -d explanations` → `http://localhost:8765/`
+- 前提：python3。Mermaid を CDN から読むので、インターネットにつながっていること
+- 使わないもの：
+  - `file://` で直接開く（ブラウザによって Mermaid の読み込みが止まるため）
+  - claude.ai の Artifact に載せる（2026-11-15 から、解説はリポジトリの HTML で管理する。#111。前に載せる形に変えていた `explanations/tools/to-artifact.py` は使わない）
 
 ## Eloquent が発行する SQL を集める
 
