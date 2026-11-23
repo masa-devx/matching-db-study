@@ -3,20 +3,20 @@
 let underMaintenance = false
 const listeners = new Set<() => void>()
 
-export function enterMaintenance(): void {
+export const enterMaintenance = (): void => {
   if (underMaintenance) return
   underMaintenance = true
   for (const listener of listeners) listener()
 }
 
 // React の useSyncExternalStore に渡す2つ（app/MaintenanceGate.tsx）
-export function subscribeMaintenance(listener: () => void): () => void {
+export const subscribeMaintenance = (listener: () => void): (() => void) => {
   listeners.add(listener)
   return () => {
     listeners.delete(listener)
   }
 }
 
-export function isUnderMaintenance(): boolean {
+export const isUnderMaintenance = (): boolean => {
   return underMaintenance
 }

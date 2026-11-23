@@ -1,6 +1,6 @@
 import { act, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import MaintenanceGate from './MaintenanceGate'
+import { MaintenanceGate } from './MaintenanceGate'
 import { enterMaintenance } from './maintenance'
 
 // app/MaintenanceGate.tsx：メンテナンス中なら、どの画面の代わりにもメンテナンスの画面を出す（FR-MAINT-006）。
