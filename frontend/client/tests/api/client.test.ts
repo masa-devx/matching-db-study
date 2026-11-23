@@ -9,7 +9,7 @@ import {
 } from '../../src/api/ApiError'
 import { apiUrl, client, configureApiClient } from '../../src/api/client'
 import { removeXsrfCookie, setXsrfCookie } from '../support/cookies'
-import { CSRF_TOKEN_FROM_API } from '../support/handlers/authApi'
+import { CSRF_TOKEN_FROM_API, STALE_TOKEN_BODY, staleTokenTwiceThen } from '../support/handlers/authApi'
 import { sentRequests, server } from '../support/server'
 
 // src/api/client.ts：送り先・Cookie・CSRF のトークンと、401・419・503・確認していない 403・止めたとき・JSON でない応答の扱い（D-027・D-029）。
@@ -18,7 +18,6 @@ import { sentRequests, server } from '../support/server'
 // テストで使う値
 // 前にもらってある CSRF のトークン（Cookie の XSRF-TOKEN。API がもらい直させると CSRF_TOKEN_FROM_API になる）
 const SAVED_TOKEN = 'xsrf-1'
-const STALE_TOKEN_BODY = { message: '画面を読み込み直してください' }
 const MAINTENANCE_BODY = { message: 'ただいまメンテナンス中です' }
 const SERVER_ERROR_BODY = { message: 'Server Error' }
 
@@ -63,7 +62,7 @@ describe('ログインした会員の画面が、ログインしたあとの API
     await client.get('/api/me/likes')
 
     const [sent] = sentRequests('GET', '/api/me/likes')
-    expect(sent?.url).toBe(apiUrl('/api/me/likes'))
+    expect(sent?.url).toBe('http://localhost:8000/api/me/likes')
     expect(sent?.credentials).toBe('include')
     expect(sent?.headers.get('Accept')).toBe('application/json')
     expect(sent?.headers.has('Authorization')).toBe(false)
@@ -328,7 +327,12 @@ describe('送り先の設定違いで、画面が API を読むと 2xx の JSON 
 describe('24時間でログインが切れた会員の画面が、書き込む（送り直しても 419）', () => {
   it('それ以上は送らず、csrf の印で 401 の処理を1回だけ呼び、続きを止める（UnauthorizedError）', async () => {
     setXsrfCookie(SAVED_TOKEN)
-    server.use(http.post(apiUrl('/api/me/likes'), () => HttpResponse.json(STALE_TOKEN_BODY, { status: 419 })))
+    server.use(
+      http.post(
+        apiUrl('/api/me/likes'),
+        staleTokenTwiceThen(() => HttpResponse.json({}, { status: 201 })),
+      ),
+    )
 
     const error = await failureOf(client.post('/api/me/likes', {}))
 
@@ -406,7 +410,12 @@ describe('ログインの画面が、違うパスワードでログインの API
 describe('登録の画面が、ログインが要らない書き込み（access: withoutLogin）を古いトークンで送る（送り直しても 419）', () => {
   it('もらい直して1回だけ送り直し、それでも 419 なら、ログインの画面へは移さず ApiError にする', async () => {
     setXsrfCookie(SAVED_TOKEN)
-    server.use(http.post(apiUrl('/api/users'), () => HttpResponse.json(STALE_TOKEN_BODY, { status: 419 })))
+    server.use(
+      http.post(
+        apiUrl('/api/users'),
+        staleTokenTwiceThen(() => HttpResponse.json({}, { status: 201 })),
+      ),
+    )
 
     const error = await failureOf(client.post('/api/users', {}, { access: 'withoutLogin' }))
 

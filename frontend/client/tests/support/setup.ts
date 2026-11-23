@@ -2,7 +2,7 @@
 // jest-dom の確かめ方（toBeInTheDocument など）を足し、テストごとに描いた画面を片付ける。
 // API の偽物（MSW。tests/support/server.ts）を、テストの間だけ動かす。偽の応答を置いていない API を呼んだら、そのテストを誤りにする
 import '@testing-library/jest-dom/vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, configure } from '@testing-library/react'
 import { afterAll, afterEach, beforeAll } from 'vitest'
 import { removeXsrfCookie } from './cookies'
 import { server, takeUnhandled } from './server'
@@ -23,6 +23,10 @@ if (abortReason instanceof Error && !(abortReason instanceof DOMException)) {
     writable: true,
   })
 }
+
+// findBy・waitFor が待つ上限（既定は1秒）。流し始めの1本目は、画面と MSW の準備で1秒を超えることがあるため、3秒にする。
+// 条件がそろえばすぐ進むので、通るテストは遅くならない
+configure({ asyncUtilTimeout: 3000 })
 
 beforeAll(() => {
   // 'error'：偽の応答を置いていない要求は、つながらない失敗にする（本物の API へは送らない）

@@ -3,6 +3,7 @@ import { HttpResponse, http } from 'msw'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiUrl } from '../../../src/api/client'
 import { useLogout } from '../../../src/shared/session/useLogout'
+import { staleTokenTwiceThen } from '../../support/handlers/authApi'
 import { sentRequests, server } from '../../support/server'
 
 // shared/session/useLogout.ts：ログアウトの手順（FR-AUTH-016）。サーバーのセッションが消えたときだけ、画面の自分の情報を消す。
@@ -15,8 +16,11 @@ vi.mock('../../../src/shared/session/SessionProvider', () => ({
   useSession: () => ({ signOut }),
 }))
 
+// 419 は、送り直しても 419 の形にする（3回目まで送ると 500 になり、テストが落ちる）
 const respondToLogout = (status: number): void => {
-  server.use(http.post(apiUrl('/api/auth/logout'), () => new HttpResponse(null, { status })))
+  const answer = () => new HttpResponse(null, { status })
+  const resolver = status === 419 ? staleTokenTwiceThen(() => new HttpResponse(null, { status: 500 })) : answer
+  server.use(http.post(apiUrl('/api/auth/logout'), resolver))
 }
 
 const logout = async (): Promise<boolean> => {

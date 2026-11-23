@@ -2,24 +2,21 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { MemoryRouter } from 'react-router'
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { apiUrl } from '../../../src/api/client'
 import { ToastProvider } from '../../../src/components/Toast'
 import SettingsPage from '../../../src/SettingsPage'
+import { SessionProvider } from '../../../src/shared/session/SessionProvider'
 import { stubDialog } from '../../support/dialog'
 import { sentRequests, server } from '../../support/server'
 
 // SettingsPage.tsx のパスワードの変更（FR-AUTH-033）。設定のほかの動きは、画面を移すときに確かめる。
-// API は MSW で偽物にする（自分・プロフィールが既定）。パスワードの変更の応答は、テストごとに上書きする
+// 本物の SessionProvider で包み、API は MSW で偽物にする（自分・プロフィールが既定）。パスワードの変更の応答は、テストごとに上書きする
 
 // テストで使う値
 const CURRENT_PASSWORD = 'password'
 // 決まり（8〜64文字）に合わない新しいパスワード
 const SHORT_PASSWORD = 'short'
-
-vi.mock('../../../src/shared/session/SessionProvider', () => ({
-  useSession: () => ({ signOut: vi.fn() }),
-}))
 
 // PUT /api/me/password の 422 の形（docs/api/01b-auth.md）
 type PasswordErrorBody = {
@@ -34,11 +31,13 @@ const respondToPasswordChange = (body: PasswordErrorBody, status: number): void 
 // 設定の画面を開き、パスワードを変えるダイアログに入れる（押すのはテストの中）
 const fillPasswordForm = async (): Promise<void> => {
   render(
-    <ToastProvider>
-      <MemoryRouter>
-        <SettingsPage />
-      </MemoryRouter>
-    </ToastProvider>,
+    <SessionProvider>
+      <ToastProvider>
+        <MemoryRouter>
+          <SettingsPage />
+        </MemoryRouter>
+      </ToastProvider>
+    </SessionProvider>,
   )
   await userEvent.click(await screen.findByRole('button', { name: 'パスワードを変える' }))
   await userEvent.type(screen.getByLabelText('今のパスワード'), CURRENT_PASSWORD)

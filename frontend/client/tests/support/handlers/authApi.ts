@@ -8,6 +8,19 @@ import { setXsrfCookie } from '../cookies'
 // GET /sanctum/csrf-cookie で付ける CSRF のトークン（本物は毎回ちがう文字）
 export const CSRF_TOKEN_FROM_API = 'xsrf-from-api'
 
+// 419（CSRF のトークンが合わない）の本文
+export const STALE_TOKEN_BODY = { message: '画面を読み込み直してください' }
+
+// 2回目までは 419 を返し、3回目からは after の応答を返す偽物の中身。
+// 送り直しを1回で止める印（src/api/client.ts）が抜けたときに、送り続けずに、3回目の応答ですぐテストが落ちるようにする
+export const staleTokenTwiceThen = (after: () => Response): (() => Response) => {
+  let answered = 0
+  return () => {
+    answered += 1
+    return answered <= 2 ? HttpResponse.json(STALE_TOKEN_BODY, { status: 419 }) : after()
+  }
+}
+
 export const authHandlers = [
   // CSRF のトークンの Cookie をもらう（204。JavaScript から読める Cookie XSRF-TOKEN を付ける）
   http.get(apiUrl('/sanctum/csrf-cookie'), () => {

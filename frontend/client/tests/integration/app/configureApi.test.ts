@@ -1,6 +1,7 @@
 import { HttpResponse, http } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 import { setXsrfCookie } from '../../support/cookies'
+import { staleTokenTwiceThen } from '../../support/handlers/authApi'
 import { server } from '../../support/server'
 
 // app/configureApi.ts：ログインしたあとの API の 401・419 で、ログインした自分の情報を消し、理由を付けてログインの画面へ移す（FR-UI-100）。
@@ -124,8 +125,9 @@ describe('24時間でログインが切れた会員の画面が、書き込む�
     const { client, UnauthorizedError, moveTo } = await setUp()
     setXsrfCookie('xsrf-1')
     server.use(
-      http.post(`${API}/api/me/likes`, () =>
-        HttpResponse.json({ message: '画面を読み込み直してください' }, { status: 419 }),
+      http.post(
+        `${API}/api/me/likes`,
+        staleTokenTwiceThen(() => HttpResponse.json({}, { status: 201 })),
       ),
     )
 

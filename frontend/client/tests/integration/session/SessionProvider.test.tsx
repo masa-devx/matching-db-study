@@ -164,16 +164,24 @@ describe('ログインした会員が、ほかのタブから戻ってくる', (
     await vi.waitFor(() => expect(onAccountChanged).toHaveBeenCalledTimes(1))
   })
 
-  it('同じ会員のままなら、何もしない', async () => {
+  it('同じ会員のままなら、画面を読み込み直さず、ログインしたまま', async () => {
+    // 1回目（起動）と2回目（戻ってきた）は同じ会員。3回目は、2回目の結果を受け取り終えたかを見るための 401
+    server.use(
+      http.get(ME_URL, () => me(true, 'user-a'), { once: true }),
+      http.get(ME_URL, () => me(true, 'user-a'), { once: true }),
+      http.get(ME_URL, () => unauthorized(SIGNED_OUT_BODY)),
+    )
     renderSession()
     await screen.findByText('signedIn:user-a:true')
 
     await showTabAgain()
 
     await vi.waitFor(() => expect(sentRequests('GET', '/api/me')).toHaveLength(2))
-    await act(async () => {}) // 読み直しの結果を受け取るところまで進める
-    expect(onAccountChanged).not.toHaveBeenCalled()
     expect(screen.getByText('signedIn:user-a:true')).toBeInTheDocument()
+    // もう一度戻ってきて 401 を受け、ログインしていない状態になったら、その前に送った2回目の結果も受け取り終えている
+    await showTabAgain()
+    expect(await screen.findByText('signedOut')).toBeInTheDocument()
+    expect(onAccountChanged).not.toHaveBeenCalled()
   })
 })
 

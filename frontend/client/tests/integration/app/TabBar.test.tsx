@@ -1,30 +1,29 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import { HttpResponse, http } from 'msw'
 import { MemoryRouter } from 'react-router'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { apiUrl } from '../../../src/api/client'
 import TabBar from '../../../src/components/TabBar'
+import { SessionProvider } from '../../../src/shared/session/SessionProvider'
 import { sentPaths, server } from '../../support/server'
 
 // components/TabBar.tsx：下のタブのバッジ（FR-UI-032・FR-UI-064・FR-UI-073）。
-// 数は、数だけを返す API（GET /api/me/badge-counts。docs/api/05-messages.md）を1本だけ読む。API は MSW で偽物にする
+// 数は、数だけを返す API（GET /api/me/badge-counts。docs/api/05-messages.md）を1本だけ読む。本物の SessionProvider で包み、API は MSW で偽物にする
 
 // テストで使う値
-vi.mock('../../../src/shared/session/SessionProvider', () => ({
-  useSession: () => ({
-    session: { status: 'signedIn', account: { userId: 'u1', email: 'a@example.test', emailVerified: true } },
-  }),
-}))
 
 const respond = (counts: { unread_messages: number; new_matches: number; received_likes: number }): void => {
   server.use(http.get(apiUrl('/api/me/badge-counts'), () => HttpResponse.json(counts)))
 }
 
+// ログインした自分は、本物の SessionProvider が GET /api/me（既定は、メールアドレスを確認した会員）から読む
 const renderAt = (path: string): void => {
   render(
-    <MemoryRouter initialEntries={[path]}>
-      <TabBar />
-    </MemoryRouter>,
+    <SessionProvider>
+      <MemoryRouter initialEntries={[path]}>
+        <TabBar />
+      </MemoryRouter>
+    </SessionProvider>,
   )
 }
 
@@ -42,7 +41,8 @@ describe('ログインした会員が、検索の画面（/search）を開く', 
     renderAt('/search')
 
     expect(await within(tab('いいね')).findByText('2')).toBeInTheDocument()
-    expect(sentPaths()).toEqual(['GET /api/me/badge-counts'])
+    // GET /api/me は、ログインした自分を読む SessionProvider の1本
+    expect(sentPaths()).toEqual(['GET /api/me', 'GET /api/me/badge-counts'])
   })
 
   it('メッセージのタブに、未読の合計と新しいマッチを足した数が出る（FR-UI-032・FR-UI-073）', async () => {
@@ -79,19 +79,19 @@ describe('ログインした会員が、検索の画面（/search）を開く', 
     expect(within(tab('いいね')).getByText('99')).toBeInTheDocument()
   })
 
-  it('0 なら、バッジは出ない（FR-UI-032）', async () => {
-    let answered = false
-    server.use(
-      http.get(apiUrl('/api/me/badge-counts'), () => {
-        answered = true
-        return HttpResponse.json({ unread_messages: 0, new_matches: 0, received_likes: 0 })
-      }),
-    )
-
+  it('数が 0 になったら、バッジは消え、「0」とも出ない（FR-UI-032）', async () => {
+    // 読み込む前と見分けるため、先に1以上の数を出してから 0 にする
+    respond({ unread_messages: 3, new_matches: 1, received_likes: 2 })
     renderAt('/search')
+    expect(await within(tab('いいね')).findByText('2')).toBeInTheDocument()
+    respond({ unread_messages: 0, new_matches: 0, received_likes: 0 })
 
-    await vi.waitFor(() => expect(answered).toBe(true))
-    await act(async () => {}) // 応答を数として置くところまで進める
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'))
+    })
+
+    await waitFor(() => expect(within(tab('いいね')).queryByText('2')).not.toBeInTheDocument())
+    expect(within(tab('メッセージ')).queryByText('4')).not.toBeInTheDocument()
     expect(within(tab('メッセージ')).queryByText('0')).not.toBeInTheDocument()
     expect(within(tab('いいね')).queryByText('0')).not.toBeInTheDocument()
   })

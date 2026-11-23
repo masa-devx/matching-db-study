@@ -2,33 +2,36 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { apiUrl } from '../../../src/api/client'
+import { RequireAuth } from '../../../src/app/RequireAuth'
+import { SessionGate } from '../../../src/app/SessionGate'
 import { ToastProvider } from '../../../src/components/Toast'
 import HomePage from '../../../src/HomePage'
+import { SessionProvider } from '../../../src/shared/session/SessionProvider'
 import { stubDialog } from '../../support/dialog'
 import { sentRequests, server } from '../../support/server'
 
 // HomePage.tsx のログアウトのボタン（FR-UI-023・FR-AUTH-016）。ホームのほかの動きは、画面を移すときに確かめる。
-// API は MSW で偽物にする（自分・プロフィール・ログアウトの 204 が既定）
+// App.tsx と同じく、本物の SessionProvider・SessionGate・RequireAuth の下に描き、API は MSW で偽物にする（自分・プロフィール・ログアウトの 204 が既定）
 
 // テストで使う値
-const signOut = vi.fn()
-
-vi.mock('../../../src/shared/session/SessionProvider', () => ({
-  useSession: () => ({ signOut }),
-}))
-
 const renderHome = () => {
   return render(
-    <ToastProvider>
-      <MemoryRouter initialEntries={['/home']}>
-        <Routes>
-          <Route path="/home" element={<HomePage />} />
-          <Route path="/login" element={<p>ログインの画面</p>} />
-        </Routes>
-      </MemoryRouter>
-    </ToastProvider>,
+    <SessionProvider>
+      <ToastProvider>
+        <MemoryRouter initialEntries={['/home']}>
+          <SessionGate>
+            <Routes>
+              <Route element={<RequireAuth />}>
+                <Route path="/home" element={<HomePage />} />
+              </Route>
+              <Route path="/login" element={<p>ログインの画面</p>} />
+            </Routes>
+          </SessionGate>
+        </MemoryRouter>
+      </ToastProvider>
+    </SessionProvider>,
   )
 }
 
@@ -41,10 +44,6 @@ beforeAll(() => {
   stubDialog()
 })
 
-beforeEach(() => {
-  signOut.mockReset()
-})
-
 /**
  * 正常系：要件が通す操作
  */
@@ -55,20 +54,20 @@ describe('ログインした会員が、ホームで「ログアウト」を押�
     await pressLogout()
 
     expect(await screen.findByText('ログインの画面')).toBeInTheDocument()
-    expect(signOut).toHaveBeenCalledTimes(1)
     expect(sentRequests('POST', '/api/auth/logout')).toHaveLength(1)
   })
 })
 
 describe('ログインした会員が、ホームで「ログアウト」を押し、確かめで「キャンセル」を選ぶ', () => {
-  it('ログアウトの API を呼ばず、ログアウトしない', async () => {
+  it('ログアウトの API を呼ばず、ホームのまま', async () => {
     renderHome()
 
     await userEvent.click(await screen.findByRole('button', { name: 'ログアウト' }))
     await userEvent.click(screen.getByRole('button', { name: 'キャンセル' }))
 
     expect(sentRequests('POST', '/api/auth/logout')).toHaveLength(0)
-    expect(signOut).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'ログアウト' })).toBeInTheDocument()
+    expect(screen.queryByText('ログインの画面')).not.toBeInTheDocument()
   })
 })
 
@@ -83,7 +82,7 @@ describe('ログインした会員がホームでログアウトし、ログア�
     await pressLogout()
 
     expect(await screen.findByText('ログアウトできませんでした。もう一度お試しください')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'ログアウト' })).toBeInTheDocument()
     expect(screen.queryByText('ログインの画面')).not.toBeInTheDocument()
-    expect(signOut).not.toHaveBeenCalled()
   })
 })
