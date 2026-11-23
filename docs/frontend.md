@@ -69,7 +69,7 @@ export default function SearchPage() {
 - 改善版：結合テスト（Vitest・Testing Library・MSW）と E2E（Playwright）を中心にする。直す前に、今の動きを確かめるテストを足す
 - 測る数字：テストの本数
 - 確かめること：テストが、要件 ID の受け入れ条件に対応しているか
-- 道具（MSW・Playwright）は、画面をまたぐので #290 で入れる
+- 道具（MSW・Playwright）は、画面をまたぐので #290 で入れた（版は AGENTS.md の技術スタック）
 
 ### 開発効率
 
@@ -163,6 +163,19 @@ frontend/client/src/
     └── index.css                  全体の土台                                                 ← index.css・App.css を分ける
 ```
 
+テストは `src` の外に集める（2026-11-23 に人が決めた。決まりは architecture-frontend.md の7章）。
+
+```text
+frontend/client/tests/
+├── integration/<機能>/            結合テスト（画面を描き、API は MSW）。機能の名前は下の「会員の画面の行き先」と同じ
+│   ├── app/                       RequireAuth・SessionGate・MaintenanceGate・configureApi・下のタブ
+│   └── session/                   shared/session（ログインした自分・ログアウト）
+├── api/client.test.ts             src/api/client.ts（CSRF・401／419・503・止めたとき・JSON でない応答）
+├── unit/                          単体（rules.ts・形の変換）。src と同じフォルダの形
+├── e2e/                           Playwright（本物の API と DB）。support.ts に会員を用意する手順
+└── support/                       MSW の server・偽の応答（handlers/〇〇Api.ts）・Cookie・ダイアログの道具・Vitest の準備（setup.ts）
+```
+
 ### いくつもの画面で使うものの持ち主
 
 | もの | 今使っている画面 | 持ち主と、出すもの |
@@ -252,9 +265,10 @@ features/search/
 │   ├── useSearchConditions.ts     条件を URL に読み書きする（クエリがないときだけ、最後の条件に戻す）
 │   └── useSearchMembers.ts        取る・足す・重なりを除く・古い応答を捨てる・状態を持つ
 ├── types.ts                       画面の型（SearchConditions・MemberCard）
-├── rules.ts                       画面の決まり（年齢の下 ≤ 上など）。純粋な関数
-└── *.test.ts(x)                   テストは隣に置く
+└── rules.ts                       画面の決まり（年齢の下 ≤ 上など）。純粋な関数
 ```
+
+- テストは `tests/integration/search/`・`tests/unit/features/search/` に置く（隣には置かない）
 
 - API を呼び、API の形（`MemberCardResponse`）を画面の形（`MemberCard`）に変えるのは、`src/api/membersApi.ts`。`useSearchMembers` が呼ぶ
 
@@ -272,8 +286,7 @@ features/messages/
 ├── repositories/
 │   ├── restMessageRepository.ts                 Laravel：ポーリング。messagingApi を呼ぶ
 │   └── firestoreMessageRepository.ts            Firestore：onSnapshot。読んだ数もここで数える。Firebase へのログインもここ
-├── types.ts・rules.ts                           Message・Room・送れる文字数
-└── *.test.ts(x)
+└── types.ts・rules.ts                           Message・Room・送れる文字数
 ```
 
 - どちらの実装を渡すかは `app/router.tsx`（まだ作っていない。今は `App.tsx`）が決める。Firestore の画面は `lazy()` で分けて読む
@@ -302,7 +315,7 @@ features/messages/
 
 ### 画面をまたぐもの
 
-- テストの道具（MSW・Playwright）：#290
+- テストの道具（MSW・Playwright）：#290 で入れた
 - 表示速度を測る仕組み（ビルドの大きさ・LCP・Firestore の画面の `lazy()`）：#295
 - ルートの表：移した画面も、今の `App.tsx` のルートの表（画面の題は `TITLES`、タブは `components/TabBar.tsx` の `UNDER_HOME`）に1行足す。`app/router.tsx` に移すのは、画面が増えて困ったときに別のチケットで
 - 順番：#293（この地図）→ #290 → #294（試しの1画面：届いたいいね）→ #295

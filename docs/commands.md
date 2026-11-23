@@ -81,10 +81,29 @@ AI が守る決まり（推測で流さない・許可の一覧に足す基準�
 - 実行場所：`frontend/client/`（管理画面は `frontend/admin/`）
 - コマンド
   - テスト：`npm test`（Vitest。1回流して終わる）。直しながら流し続けるなら `npm run test:watch`
-  - 置き場の決まり：`npm run lint:rules`（会員の画面だけ。`architecture-frontend.md` の3章を書いた Biome の規則を全体に流し、改訂版の置き場（`src/app`・`src/shared`・`src/features`・`src/api`）では `recommended` の規則と `overrides` で足した規則を、警告も誤りとして見る。`quality-frontend.md`）
+  - 置き場の決まり：`npm run lint:rules`（会員の画面だけ。`architecture-frontend.md` の3章を書いた Biome の規則を全体に流し、改訂版の置き場（`src/app`・`src/shared`・`src/features`・`src/api`）とテストの置き場（`tests`）では `recommended` の規則と `overrides` で足した規則を、警告も誤りとして見る。`quality-frontend.md`）
 - 前提：`npm install` 済み
-- テストは、確かめるファイルの隣に `*.test.ts(x)` で置く。画面は jsdom の上で描く（`vite.config.ts` の `test`）
+- テストは `tests/` に置く（`integration/<機能>/`・`api/`・`unit/`。`architecture-frontend.md` の7章）。対象は `tests/**/*.test.ts(x)`。画面は jsdom の上で描く（`vite.config.ts` の `test`）
+  - 1つのファイルだけ：`npx vitest run tests/api/client.test.ts`
+- API は MSW で偽物にする（`tests/support/server.ts`・`tests/support/handlers/`）。本物の API には送らないので、API が止まっていても流せる
+- テストの型は `npm run build`（`tsc -b`。`tsconfig.test.json`）で一緒に確かめる
 - 使わないもの：全体の lint（`npm run lint`）で置き場の決まりを確かめる（レガシー版の前からの指摘が混ざり、見分けにくいため）
+
+## 画面の E2E
+
+- 実行場所：`frontend/client/`
+- コマンド：`npm run test:e2e`（Playwright。`tests/e2e/` の主な流れを、chromium で流す）
+  - 1つの流れだけ：`npx playwright test tests/e2e/login.spec.ts`
+  - 落ちたときの記録（`test-results/`）を見る：`npx playwright show-trace <test-results の中の trace.zip>`
+- 前提
+  - 初めてのときは `npm install` → `npx playwright install chromium`
+  - リポジトリのルートで `docker compose up -d --wait`（API `http://localhost:8000`・メールの受信箱 `http://127.0.0.1:58025`）
+  - 開発用の DB に、検索の試しの会員のシード（`docker compose exec app php artisan db:seed --class=SearchMembersSeeder`）を入れてある
+  - 画面（`npm run dev`）は、動いていなければ Playwright が起こす（動いていれば、それを使う）
+- 書き込むもの：開発用の DB（`matching_dev`）に、流すたびに新しい会員（`e2e-…@example.test`）と、その会員のいいね・マッチ・メッセージ・購入が残る。メールの受信箱にも、確認のメールが残る
+- 使わないもの
+  - メンテナンス（`php artisan down`）を流すこと（ほかの流れが全部 503 になる）
+  - テスト用の DB（`matching_test`）。API は開発用の DB につながっているため
 
 ## 管理画面を起動
 
