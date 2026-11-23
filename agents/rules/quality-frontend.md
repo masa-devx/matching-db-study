@@ -50,7 +50,7 @@ paths:
 
 - `lint:rules`：会員の画面の `npm run lint:rules`。改訂版の置き場（`src/app`・`src/shared`・`src/features`・`src/api`）では、Biome の `recommended` の規則と、`biome.json` の `overrides` で足した規則を、警告も誤りとして見る（`recommended` に入っていない規則は流れない）。CI でも流れる
 - `src/features` は、最初の機能（`features/messages` の下のタブの数。#247）を作ったときに、`lint:rules` の2つ目のコマンドに足した
-- `src/api` は、#275 で `lint:rules` の2つ目のコマンドに足した（まだないフォルダを渡すと、Biome が `fs/cantRead` の誤りにするため、作ったときに足した）
+- `src/api` は、#292 で `lint:rules` の2つ目のコマンドに足した（まだないフォルダを渡すと、Biome が `fs/cantRead` の誤りにするため、作ったときに足した）
 - プラグイン：Biome の規則にない決まりを、GritQL（コードの形で探す言葉）で書いたもの。`frontend/client/biome-plugins/` に置き、`biome.json` の `overrides` の `plugins` に書く。`overrides` に書くと、その置き場だけに効く
 - `--only` を付けた1つ目のコマンドでは、プラグインは流れない（2つ目のコマンドで流れる）
 - 管理画面は、改訂版の置き場ができる #123 で、同じ形（`overrides`・`lint:rules`・プラグイン）を足す
@@ -162,20 +162,21 @@ paths:
 - 根拠：https://www.typescriptlang.org/docs/handbook/declaration-files/do-s-and-don-ts.html
 - 機械：Biome の `noExplicitAny`（改訂版の置き場は error。B2）
 
-### T2. API の応答は、`〇〇Api` の関数の中で axios の型の引数で受ける。`unknown` は3か所だけ
+### T2. API の応答は、`〇〇Api` の関数の中で axios の型の引数で受ける。`unknown` は4か所だけ
 
 - API の応答は、`src/api/〇〇Api.ts` の関数の中で、axios の型の引数で受ける（`client.get<XxxResponse>('/api/...')`）
   - 形は確かめない（型ガードを書かない）
   - 受けた `XxxResponse` は、同じ関数の中で画面の形に変えて返す（T4）
-- `unknown` で受けるのは、次の3か所だけ。`typeof`・`in`・`Array.isArray`・`instanceof` で調べてから使う
+- `unknown` で受けるのは、次の4か所だけ。`typeof`・`in`・`Array.isArray`・`instanceof` で調べてから使う
   - `catch (e)` の `e`：`instanceof`（`ApiError`・`DOMException` など）で見分ける
   - `JSON.parse` の結果
   - `sessionStorage`・`localStorage` から読んだ文字
+  - `client.ts` が 2xx でない応答の本文を読む所（HTML や空の応答もある。`code`・`message`・`errors` を調べて取り出す）
 - 同じ調べ方を2か所で使うときは、型ガード（`const isXxx = (v: unknown): v is Xxx => …`）にする
 - なぜ：応答の型を書く所を `〇〇Api` の関数の1か所にまとめる。形のずれはテストで見つける（D-006）。`JSON.parse` は `any` を返し、`noExplicitAny` では見つからない。ストレージには、古い版の画面が書いた値や、人が書き換えた値が入る
 - 弱いところ：API の形がずれても型の誤りにならず、違う値が画面に黙って出る。E2E（本物の API）で見つける（`architecture-frontend.md` の7章）
 - 根拠：https://www.typescriptlang.org/docs/handbook/2/narrowing.html・https://axios-http.com/docs/typescript
-- #275 で、形を確かめる型ガード（`isBadgeCountsResponse`）と `as AccountResponse` をやめ、この形にした
+- #292 で、形を確かめる型ガード（`isBadgeCountsResponse`）と `as AccountResponse` をやめ、この形にした
 - まだ移していないレガシー版の画面は、`〇〇Api` が返す API の形（`XxxResponse`）のまま使う（`profileApi.accountRecord()`・`profileApi.member()` など）。画面を移すときに、画面の形に変える関数にする
 
 ### T3. `as` は DOM と `as const` だけに書く。`!` は人が確かめられる所だけ
@@ -203,7 +204,7 @@ paths:
 - 画面の形への変換は、`src/api/〇〇Api.ts` の、その API を呼ぶ関数の中に書く。`toXxx` という名前の関数は作らない
 - なぜ：API の形が変わったときに、直す所を `src/api/〇〇Api.ts` の中にとどめるため
 - 根拠：`architecture-frontend.md` の4章と D-006（画面の型は手で書く）から決めた（TypeScript の公式の文書の決まりではない）
-- 見本：`src/api/profileApi.ts` の `account()`（`AccountResponse` を受け、`shared/session` の `Account` に変えて返す）
+- 見本：`src/api/profileApi.ts` の `account()`（`AccountResponse` を受け、`shared/session/types.ts` の `Account` に変えて返す）
 
 ### T7. `tsconfig` に `noUncheckedIndexedAccess` を入れる
 
