@@ -570,9 +570,10 @@
   - `src/api/` を読めるのは hook（`features/*/hooks/`・`shared/session/`）だけ。例外は architecture-frontend.md の3章（`app/configureApi.ts`・REST の Repository の実装・まだ移していないレガシー版の画面）。2xx でない応答は `client.ts` が `ApiError` を投げ、hook が状態に変える
   - 応答は axios の型の引数（`get<XxxResponse>`）で受け、形は確かめない
   - ブラウザの `fetch` を偽物にしていたテストは届かなくなったので、`describe.skip` で止めた（人が決めた。2026-11-23）。#290 で MSW に書き直し、止めたものはなくなった
-  - #290 で MSW 3.0.7・Playwright 1.65.1 を入れた。偽の応答は `tests/support/handlers/〇〇Api.ts`、E2E は `tests/e2e/`（手元の API と開発用の DB で流す。CI には入れない）
+  - #290 で MSW 3.0.7 を入れた。偽の応答は `tests/support/handlers/〇〇Api.ts`
+  - 会員の画面の E2E（Playwright）は、まだ入れない（人が決めた。2026-11-23）。入れるのは #299。#290 で書いた E2E は、コミット `27fd9b2` に残る
   - 画面のテストは、確かめるファイルの隣でなく `frontend/client/tests/` に集め、書き方はバックエンドと同じ形（`testing-style.md`）にする（人が決めた。2026-11-23）
-  - テストは、会員から見える動きを確かめる結合テスト（Vitest・Testing Library・MSW）と E2E（Playwright）を中心にする。単体は `rules.ts` と形の変換だけ
+  - テストは、会員から見える動きを確かめる結合テスト（Vitest・Testing Library・MSW）を中心にする。E2E（Playwright）は #299 で足す。単体は `rules.ts` と形の変換だけ
 - ほかの案：
   - `fetch` のまま（前の `shared/api/client.ts`）：道具は増えない。JSON を読む・型を付ける・送る前と受けたあとの処理を、自分で書き続ける
   - 機能ごとの `api.ts`（D-026 の③）：機能の中で閉じる。いくつもの機能が使う API（いいね・ブロック）を、どの機能に置くかを毎回決める
@@ -583,9 +584,8 @@
   - 動きを見るテストは、AI がコードを書き換えても、そのまま残る。AI の誤りにも気づきやすい
   - 人が決めた（2026-11-22〜23）
 - 弱いところ：
-  - 応答の形を確かめないので、API の形がずれても型の誤りにならず、画面に黙って出る。E2E で見つける
-  - E2E は遅く、待ち方で落ちることがある
-  - MSW の偽の応答が、本物の API とずれることがある
+  - 応答の形を確かめないので、API の形がずれても型の誤りにならず、画面に黙って出る。#299 で E2E を入れるまでは、見つける手段がない
+  - MSW の偽の応答が、本物の API とずれることがある。#299 で E2E を入れるまでは、ずれを見つける手段がない
 - 数字・リンク：[architecture-frontend.md](../agents/rules/architecture-frontend.md) の2〜4章・7章・[quality-frontend.md](../agents/rules/quality-frontend.md) の T2・T3・[testing.md](../agents/rules/testing.md) の「画面のテスト」
 
 ### D-030 画面は1画面ずつ移す（機能を足す・不具合を直すときに一緒に）
