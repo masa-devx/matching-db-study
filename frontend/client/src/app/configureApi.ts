@@ -1,4 +1,4 @@
-import { configureApiClient } from '../shared/api/client'
+import { configureApiClient } from '../api/client'
 import { ACCOUNT_SUSPENDED_REASON, clearSession, SIGNED_OUT_REASON } from '../shared/session/session'
 import { enterMaintenance, isUnderMaintenance } from './maintenance'
 
@@ -10,7 +10,7 @@ let leaving = false
 // ログアウト・退会は SessionProvider の signOut() で消すので、消す入口が2つある。読み込み直しをやめるときに、
 // SessionProvider が configureApiClient() に 401 の処理を渡す形にして、1つにする（docs/cycles/01-backend-foundation/05-problems.md の #257）
 // moveTo はテストのために受け取る（jsdom は読み込み直しを動かせないため）。ふだんは渡さない
-export function configureApi(moveTo: (url: string) => void = (url) => window.location.assign(url)): void {
+export const configureApi = (moveTo: (url: string) => void = (url) => window.location.assign(url)): void => {
   configureApiClient({
     onUnauthorized: (code) => {
       // メンテナンスに入ったあとに、前に送った要求の 401 が届いても、ログインの画面へは移さない（FR-MAINT-006）

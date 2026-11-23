@@ -1,0 +1,11 @@
+// useState には型の引数を書く（quality-frontend.md の S5）。
+// 型の引数のない useState(…)・React.useState(…) だけを拾い、useState<T>(…) は拾わない
+language js
+
+or { `useState($args)`, `React.useState($args)` } as $call where {
+  register_diagnostic(
+    span = $call,
+    message = "useState に型の引数を書く（useState<string>('')・useState<Account | null>(null)。quality-frontend.md の S5）",
+    severity = "error"
+  )
+}

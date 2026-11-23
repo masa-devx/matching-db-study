@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
+import { messagingApi } from './api/messagingApi'
 import Avatar from './components/Avatar'
 import EmptyState from './components/EmptyState'
 import { SkeletonRows } from './components/Skeleton'
-import { apiFetch } from './shared/api/client'
 
 // レガシー版（05）。メッセージのタブ（/messages）＝トークの一覧。相手ごとに最新の1件と未読の数を出し、押すとトーク画面に移る。
 // M3（#187）：上に「新しいマッチ」を分けた。
@@ -16,11 +16,7 @@ export default function MessagesPage() {
 
   // 読み込み中・失敗は考えない。API が 500 を返すと、画面は空のまま（rooms が配列でないので filter で落ちる）
   const load = () => {
-    apiFetch(`/api/me/talk-rooms`, {
-      headers: { Accept: 'application/json' },
-    })
-      .then((r) => r.json())
-      .then(setRooms)
+    messagingApi.talkRooms().then(setRooms)
   }
 
   useEffect(() => {

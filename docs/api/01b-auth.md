@@ -465,7 +465,7 @@ return ['token' => $token];
 ## `GET /sanctum/csrf-cookie`（CSRF のトークン。改善版だけ）
 
 - Sanctum が足す API。`204`。JavaScript から読める Cookie `XSRF-TOKEN` を付ける
-- 画面の `shared/api/client.ts` は、書き込みの前に Cookie がなければ1回呼び、`X-XSRF-TOKEN` で送る
+- 画面の `src/api/client.ts` は、書き込みの前に Cookie がなければ1回呼び、`X-XSRF-TOKEN` で送る
 - 書き込みが `419` なら、1回だけもらい直して送り直す（メンテナンスでセッションが消えたあとなど）
 - 分かっている不具合：回数の上限がない（呼ぶたびに `sessions` に行ができる）。ログインの回数の上限と一緒に直す（#281）
 

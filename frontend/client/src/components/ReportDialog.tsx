@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { apiFetch } from '../shared/api/client'
+import { ApiError } from '../api/ApiError'
+import { membersApi } from '../api/membersApi'
 import ConfirmDialog from './ConfirmDialog'
 import { useToast } from './Toast'
 
@@ -56,20 +57,16 @@ export default function ReportDialog({ open, userId, nickname, message, onClose,
       return
     }
     setSending(true)
-    const r = await apiFetch(`/api/me/reports`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ user_id: userId, message_id: message?.id, reason, detail: detail || null, block }),
-    })
-    setSending(false)
-    if (!r.ok) {
+    try {
+      await membersApi.report({ user_id: userId, message_id: message?.id, reason, detail: detail || null, block })
+    } catch (e) {
+      if (!(e instanceof ApiError)) throw e
+      setSending(false)
       // もうブロックしている相手を「ブロックもする」で通報すると、ここに来る（通報は入っている）
       setError('通報できませんでした')
       return
     }
+    setSending(false)
     toast(block ? '通報して、ブロックしました' : '通報しました')
     const blocked = block
     close()

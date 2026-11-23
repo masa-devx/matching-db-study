@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
+import { ApiError } from './api/ApiError'
+import { authApi } from './api/authApi'
 import Button from './components/Button'
-import { apiFetchWithoutLogin } from './shared/api/client'
 
 // レガシー版（M2。#196）。パスワードを忘れたとき（/forgot-password）。ログインの画面から来る。
 // メールアドレスを入れると、再設定のメールを送る。送る・結果を見せるを、この部品にまとめて書く
@@ -19,20 +20,21 @@ export default function ForgotPasswordPage() {
       return
     }
     setSending(true)
-    const res = await apiFetchWithoutLogin(`/api/password-resets`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ email }),
-    })
-    setSending(false)
-    if (res.ok) {
-      setDone(true)
-    } else if (res.status === 404) {
-      // API の答えを、そのまま伝える（このメールアドレスが登録されているかどうかが、だれにでも分かる）
-      setError('このメールアドレスは、登録されていません')
-    } else {
-      setError('送れませんでした')
+    try {
+      await authApi.requestPasswordReset(email)
+    } catch (e) {
+      if (!(e instanceof ApiError)) throw e
+      setSending(false)
+      if (e.status === 404) {
+        // API の答えを、そのまま伝える（このメールアドレスが登録されているかどうかが、だれにでも分かる）
+        setError('このメールアドレスは、登録されていません')
+      } else {
+        setError('送れませんでした')
+      }
+      return
     }
+    setSending(false)
+    setDone(true)
   }
 
   return (

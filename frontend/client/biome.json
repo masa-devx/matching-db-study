@@ -36,7 +36,7 @@
   },
   "overrides": [
     {
-      "includes": ["src/shared/api/**", "src/shared/firebase/**"],
+      "includes": ["src/**", "!src/api/client.ts"],
       "linter": {
         "rules": {
           "style": {
@@ -45,12 +45,13 @@
               "options": {
                 "patterns": [
                   {
-                    "group": ["**/app/*", "**/features/**", "**/session/*", "**/ui/*"],
-                    "message": "shared/api・shared/firebase は、app・features・shared/session・shared/ui を使わない（architecture-frontend.md の3章）"
+                    "group": ["axios", "axios/*"],
+                    "message": "axios を読めるのは src/api/client.ts だけ。API は src/api/〇〇Api.ts の関数を呼ぶ（architecture-frontend.md の3章）"
                   },
                   {
-                    "group": ["react", "react-dom", "react-dom/*", "react-router"],
-                    "message": "shared/api・shared/firebase は、React を使わない（architecture-frontend.md の3章）"
+                    "group": ["**/api/client"],
+                    "importNamePattern": "(client|configureApiClient)",
+                    "message": "レガシー版の画面は、axios のインスタンス（client）と configureApiClient を直に使わない。src/api/〇〇Api.ts の関数を呼ぶ（architecture-frontend.md の3章）"
                   }
                 ]
               }
@@ -60,7 +61,7 @@
       }
     },
     {
-      "includes": ["src/shared/session/**"],
+      "includes": ["src/**/*.test.ts", "src/**/*.test.tsx"],
       "linter": {
         "rules": {
           "style": {
@@ -69,8 +70,129 @@
               "options": {
                 "patterns": [
                   {
-                    "group": ["**/app/*", "**/features/**", "**/ui/*"],
-                    "message": "shared/session は、app・features・shared/ui を使わない（architecture-frontend.md の3章）"
+                    "group": ["axios", "axios/*"],
+                    "message": "axios を読めるのは src/api/client.ts だけ。API は src/api/〇〇Api.ts の関数を呼ぶ（architecture-frontend.md の3章）"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/api/**", "!src/api/client.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["axios", "axios/*"],
+                    "message": "axios を読めるのは src/api/client.ts だけ。API は src/api/〇〇Api.ts の関数を呼ぶ（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": [
+                      "**/app/*",
+                      "**/hooks/*",
+                      "**/components/*",
+                      "**/pages/*",
+                      "**/repositories/*",
+                      "**/ui/*",
+                      "**/firebase/*"
+                    ],
+                    "message": "src/api は、app・hooks・components・pages・repositories・shared/ui・shared/firebase を使わない。機能の types.ts と shared/session は型だけ読む（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["react", "react-dom", "react-dom/*", "react-router"],
+                    "message": "src/api は、React を使わない（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["**/features/**", "!**/features/*/types", "**/session/*", "!**/session/types"],
+                    "message": "src/api が読んでよいのは、機能の types.ts と shared/session/types.ts の型だけ（architecture-frontend.md の3章）"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/api/client.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/app/*", "**/features/**", "**/shared/**"],
+                    "message": "src/api/client.ts は、app・features・shared を使わない。401・503 のときの動きは app/configureApi.ts から受け取る（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["react", "react-dom", "react-dom/*", "react-router"],
+                    "message": "src/api/client.ts は、React を使わない（architecture-frontend.md の3章）"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/shared/firebase/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["axios", "axios/*"],
+                    "message": "axios を読めるのは src/api/client.ts だけ。API は src/api/〇〇Api.ts の関数を呼ぶ（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["**/app/*", "**/features/**", "**/session/*", "**/ui/*", "**/api/*"],
+                    "message": "shared/firebase は、app・features・shared/session・shared/ui・src/api を使わない（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["react", "react-dom", "react-dom/*", "react-router"],
+                    "message": "shared/firebase は、React を使わない（architecture-frontend.md の3章）"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/shared/session/**", "!src/shared/session/**/*.test.tsx"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["axios", "axios/*"],
+                    "message": "axios を読めるのは src/api/client.ts だけ。API は src/api/〇〇Api.ts の関数を呼ぶ（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["**/app/*", "**/features/**", "**/ui/*", "**/api/client"],
+                    "message": "shared/session は、app・features・shared/ui・src/api/client.ts を使わない。API は src/api/〇〇Api.ts の関数を呼ぶ（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["**/api/ApiError"],
+                    "importNamePattern": "ignoreApiError",
+                    "message": "ignoreApiError は、まだ移していないレガシー版の画面だけが使う。改訂版では、ApiError を受けて状態に変える（architecture-frontend.md の2章）"
                   }
                 ]
               }
@@ -89,8 +211,12 @@
               "options": {
                 "patterns": [
                   {
+                    "group": ["axios", "axios/*"],
+                    "message": "axios を読めるのは src/api/client.ts だけ。API は src/api/〇〇Api.ts の関数を呼ぶ（architecture-frontend.md の3章）"
+                  },
+                  {
                     "group": ["**/features/**", "**/api/*", "**/firebase/*", "**/session/*"],
-                    "message": "shared/ui は、features・shared/api・shared/firebase・shared/session を使わない（architecture-frontend.md の3章）"
+                    "message": "shared/ui は、features・src/api・shared/firebase・shared/session を使わない（architecture-frontend.md の3章）"
                   }
                 ]
               }
@@ -108,6 +234,10 @@
               "level": "error",
               "options": {
                 "patterns": [
+                  {
+                    "group": ["axios", "axios/*"],
+                    "message": "axios を読めるのは src/api/client.ts だけ。API は src/api/〇〇Api.ts の関数を呼ぶ（architecture-frontend.md の3章）"
+                  },
                   {
                     "group": ["**/features/**", "**/app/*", "**/api/*", "**/firebase/*", "**/session/*", "**/ui/*"],
                     "message": "shared/lib・shared/constants は、ほかのフォルダを使わない（architecture-frontend.md の3章）"
@@ -133,8 +263,12 @@
               "options": {
                 "patterns": [
                   {
-                    "group": ["**/api", "**/api/*", "!**/api/ApiError", "**/firebase/*", "**/repositories/*"],
-                    "message": "container（pages）は、api.ts・shared/api・shared/firebase・repositories を直に使わない。hook を通す（失敗のクラスは shared/api/ApiError から読んでよい）（architecture-frontend.md の3章）"
+                    "group": ["axios", "axios/*"],
+                    "message": "axios を読めるのは src/api/client.ts だけ。API は src/api/〇〇Api.ts の関数を呼ぶ（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["**/api/*", "**/firebase/*", "**/repositories/*"],
+                    "message": "container（pages）は、src/api（ApiError も）・shared/firebase・repositories を直に使わない。hook を通す（architecture-frontend.md の3章）"
                   }
                 ]
               }
@@ -153,8 +287,12 @@
               "options": {
                 "patterns": [
                   {
-                    "group": ["**/hooks/*", "**/api", "**/api/*", "**/firebase/*", "**/session/*", "**/repositories/*"],
-                    "message": "presenter（components）は、hooks・api.ts・shared/api・shared/firebase・shared/session・repositories を使わない（architecture-frontend.md の3章）"
+                    "group": ["axios", "axios/*"],
+                    "message": "axios を読めるのは src/api/client.ts だけ。API は src/api/〇〇Api.ts の関数を呼ぶ（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["**/hooks/*", "**/api/*", "**/firebase/*", "**/session/*", "**/repositories/*"],
+                    "message": "presenter（components）は、hooks・src/api・shared/firebase・shared/session・repositories を使わない（architecture-frontend.md の3章）"
                   },
                   {
                     "group": ["react-router"],
@@ -183,47 +321,24 @@
               "options": {
                 "patterns": [
                   {
+                    "group": ["axios", "axios/*"],
+                    "message": "axios を読めるのは src/api/client.ts だけ。API は src/api/〇〇Api.ts の関数を呼ぶ（architecture-frontend.md の3章）"
+                  },
+                  {
                     "group": [
-                      "**/shared/api/*",
-                      "!**/api/ApiError",
+                      "**/api/client",
                       "**/firebase/*",
                       "**/ui/*",
                       "**/components/*",
                       "**/pages/*",
                       "**/repositories/*"
                     ],
-                    "message": "hook は、shared/api・shared/firebase・shared/ui・components・pages・repositories を直に使わない。自分の機能の api.ts か repository.ts を通す（失敗のクラスは shared/api/ApiError から読んでよい）（architecture-frontend.md の3章）"
-                  }
-                ]
-              }
-            }
-          }
-        }
-      }
-    },
-    {
-      "includes": ["src/features/*/api.ts"],
-      "linter": {
-        "rules": {
-          "style": {
-            "noRestrictedImports": {
-              "level": "error",
-              "options": {
-                "patterns": [
-                  {
-                    "group": [
-                      "**/hooks/*",
-                      "**/components/*",
-                      "**/pages/*",
-                      "**/session/*",
-                      "**/firebase/*",
-                      "**/ui/*"
-                    ],
-                    "message": "api.ts は、hooks・components・pages・shared/session・shared/firebase・shared/ui を使わない（architecture-frontend.md の3章）"
+                    "message": "hook は、src/api/client.ts・shared/firebase・shared/ui・components・pages・repositories を直に使わない。src/api/〇〇Api.ts の関数か repository.ts を通す（architecture-frontend.md の3章）"
                   },
                   {
-                    "group": ["react", "react-dom", "react-dom/*", "react-router"],
-                    "message": "api.ts は、React を使わない（architecture-frontend.md の3章）"
+                    "group": ["**/api/ApiError"],
+                    "importNamePattern": "ignoreApiError",
+                    "message": "ignoreApiError は、まだ移していないレガシー版の画面だけが使う。改訂版では、ApiError を受けて状態に変える（architecture-frontend.md の2章）"
                   }
                 ]
               }
@@ -242,12 +357,28 @@
               "options": {
                 "patterns": [
                   {
-                    "group": ["**/hooks/*", "**/components/*", "**/pages/*", "**/session/*", "**/ui/*"],
-                    "message": "repositories は、hooks・components・pages・shared/session・shared/ui を使わない（architecture-frontend.md の3章）"
+                    "group": ["axios", "axios/*"],
+                    "message": "axios を読めるのは src/api/client.ts だけ。API は src/api/〇〇Api.ts の関数を呼ぶ（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": [
+                      "**/hooks/*",
+                      "**/components/*",
+                      "**/pages/*",
+                      "**/session/*",
+                      "**/ui/*",
+                      "**/api/client"
+                    ],
+                    "message": "repositories は、hooks・components・pages・shared/session・shared/ui・src/api/client.ts を使わない（architecture-frontend.md の3章）"
                   },
                   {
                     "group": ["react", "react-dom", "react-dom/*", "react-router"],
                     "message": "repositories は、React を使わない（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["**/api/ApiError"],
+                    "importNamePattern": "ignoreApiError",
+                    "message": "ignoreApiError は、まだ移していないレガシー版の画面だけが使う。改訂版では、ApiError を受けて状態に変える（architecture-frontend.md の2章）"
                   }
                 ]
               }
@@ -266,8 +397,11 @@
               "options": {
                 "patterns": [
                   {
+                    "group": ["axios", "axios/*"],
+                    "message": "axios を読めるのは src/api/client.ts だけ。API は src/api/〇〇Api.ts の関数を呼ぶ（architecture-frontend.md の3章）"
+                  },
+                  {
                     "group": [
-                      "**/api",
                       "**/api/*",
                       "**/firebase/*",
                       "**/hooks/*",
@@ -276,7 +410,7 @@
                       "**/repositories/*",
                       "**/ui/*"
                     ],
-                    "message": "rules・types・repository は、API・hooks・components・pages・repositories・shared/ui を使わない（shared/session は型だけ）（architecture-frontend.md の3章）"
+                    "message": "rules・types・repository は、src/api・hooks・components・pages・repositories・shared/ui を使わない（shared/session は型だけ）（architecture-frontend.md の3章）"
                   },
                   {
                     "group": ["react", "react-dom", "react-dom/*", "react-router"],
@@ -290,7 +424,7 @@
       }
     },
     {
-      "includes": ["src/app/**"],
+      "includes": ["src/app/**", "!src/app/**/*.test.ts", "!src/app/**/*.test.tsx"],
       "linter": {
         "rules": {
           "style": {
@@ -299,8 +433,21 @@
               "options": {
                 "patterns": [
                   {
+                    "group": ["axios", "axios/*"],
+                    "message": "axios を読めるのは src/api/client.ts だけ。API は src/api/〇〇Api.ts の関数を呼ぶ（architecture-frontend.md の3章）"
+                  },
+                  {
                     "group": ["**/features/*/**"],
                     "message": "app は、機能の中のファイルを直に使わない。機能の index.ts を通す（features/<機能> と書く。features/<機能>/index と書いても止まる）（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["**/api/*"],
+                    "message": "app は、src/api を使わない。401・503 のときの動きを渡す app/configureApi.ts だけが src/api/client.ts を読む（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["**/api/ApiError"],
+                    "importNamePattern": "ignoreApiError",
+                    "message": "ignoreApiError は、まだ移していないレガシー版の画面だけが使う。改訂版では、ApiError を受けて状態に変える（architecture-frontend.md の2章）"
                   }
                 ]
               }
@@ -310,7 +457,40 @@
       }
     },
     {
-      "includes": ["src/**", "!src/shared/api/client.ts", "!src/**/*.test.ts", "!src/**/*.test.tsx"],
+      "includes": ["src/app/configureApi.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["axios", "axios/*"],
+                    "message": "axios を読めるのは src/api/client.ts だけ。API は src/api/〇〇Api.ts の関数を呼ぶ（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["**/features/*/**"],
+                    "message": "app は、機能の中のファイルを直に使わない。機能の index.ts を通す（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["**/api/*", "!**/api/client"],
+                    "message": "app/configureApi.ts が読んでよいのは、src/api/client.ts の設定の関数だけ（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["**/api/ApiError"],
+                    "importNamePattern": "ignoreApiError",
+                    "message": "ignoreApiError は、まだ移していないレガシー版の画面だけが使う。改訂版では、ApiError を受けて状態に変える（architecture-frontend.md の2章）"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/**", "!src/**/*.test.ts", "!src/**/*.test.tsx"],
       "linter": {
         "rules": {
           "style": {
@@ -318,7 +498,7 @@
               "level": "error",
               "options": {
                 "deniedGlobals": {
-                  "fetch": "fetch は shared/api/client.ts の関数（apiFetch など）を通す（architecture-frontend.md の4章）"
+                  "fetch": "fetch は使わない。API は src/api/〇〇Api.ts の関数を呼ぶ（architecture-frontend.md の3章）"
                 }
               }
             }
@@ -340,7 +520,7 @@
               "level": "error",
               "options": {
                 "deniedGlobals": {
-                  "fetch": "fetch は shared/api/client.ts の関数（apiFetch など）を通す（architecture-frontend.md の4章）",
+                  "fetch": "fetch は使わない。API は src/api/〇〇Api.ts の関数を呼ぶ（architecture-frontend.md の3章）",
                   "sessionStorage": "sessionStorage は shared/session か、検索の条件の useSearchConditions の1か所で読む（architecture-frontend.md の5章）",
                   "localStorage": "localStorage は使わない（architecture-frontend.md の5章）"
                 }
@@ -366,7 +546,7 @@
               "level": "error",
               "options": {
                 "deniedGlobals": {
-                  "fetch": "fetch は shared/api/client.ts の関数（apiFetch など）を通す（architecture-frontend.md の4章）",
+                  "fetch": "fetch は使わない。API は src/api/〇〇Api.ts の関数を呼ぶ（architecture-frontend.md の3章）",
                   "sessionStorage": "rules・types・repository・shared/lib・shared/constants は、ブラウザの機能を使わない。純粋な関数と型だけにする（architecture-frontend.md の3章）",
                   "localStorage": "rules・types・repository・shared/lib・shared/constants は、ブラウザの機能を使わない。純粋な関数と型だけにする（architecture-frontend.md の3章）",
                   "window": "rules・types・repository・shared/lib・shared/constants は、ブラウザの機能を使わない。純粋な関数と型だけにする（architecture-frontend.md の3章）",
@@ -379,14 +559,22 @@
       }
     },
     {
-      "includes": ["src/app/**", "src/shared/**", "src/features/**"],
+      "includes": ["src/app/**", "src/shared/**", "src/features/**", "src/api/**"],
+      "plugins": ["./biome-plugins/no-function-declaration.grit", "./biome-plugins/use-state-type-argument.grit"],
       "linter": {
         "rules": {
           "suspicious": {
             "noExplicitAny": "error"
           },
           "style": {
-            "noNonNullAssertion": "error"
+            "noNonNullAssertion": "error",
+            "noDefaultExport": "error",
+            "useConsistentTypeDefinitions": {
+              "level": "error",
+              "options": {
+                "style": "type"
+              }
+            }
           }
         }
       }

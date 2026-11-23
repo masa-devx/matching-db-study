@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useNavigationType, useSearchParams } from 'react-router'
+import { ApiError } from './api/ApiError'
+import { apiUrl } from './api/client'
+import { matchingApi } from './api/matchingApi'
+import { membersApi } from './api/membersApi'
 import Button from './components/Button'
 import { SkeletonCards } from './components/Skeleton'
 import { useToast } from './components/Toast'
 import UpsellDialog from './components/UpsellDialog'
-import { apiFetch, apiUrl } from './shared/api/client'
 import { SEARCH_CONDITIONS_KEY } from './shared/session/session'
 
 // レガシー版（04）。検索のタブ（/search）＝条件で相手を探して、2列のカードで見る。
@@ -77,31 +80,25 @@ export default function SearchPage() {
   // M5（#198）：カードから、いいねとスキップ。相手のプロフィール（UserPage）に書いた送り方を、ここにもコピーした。
   // 送ったら、その人を一覧から外す（次に検索しても、いいねした相手・スキップした相手は出ない）
   const act = async (u: any, kind: 'likes' | 'skips') => {
-    const r = await apiFetch(`/api/me/${kind}`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ user_id: u.public_id }),
+    const sent = kind === 'likes' ? matchingApi.like(u.public_id) : matchingApi.skip(u.public_id).then(() => null)
+    const d = await sent.catch((e) => {
+      if (!(e instanceof ApiError)) throw e
+      // 無料の男性が、いいねの1日10回を超えたときは 403。誘導のモーダルを出す
+      if (kind === 'likes' && e.status === 403) {
+        setUpsell(true)
+      } else {
+        toast(kind === 'likes' ? 'いいねできませんでした' : 'スキップできませんでした', 'error')
+      }
+      return 'failed' as const
     })
-    // 無料の男性が、いいねの1日10回を超えたときは 403。誘導のモーダルを出す
-    if (kind === 'likes' && r.status === 403) {
-      setUpsell(true)
-      return
-    }
-    if (!r.ok) {
-      toast(kind === 'likes' ? 'いいねできませんでした' : 'スキップできませんでした', 'error')
-      return
-    }
+    if (d === 'failed') return
     setUsers((now) => now.filter((x) => x.public_id !== u.public_id))
     if (kind === 'skips') {
       toast('スキップしました')
       return
     }
-    const d = await r.json()
     // マッチの演出は、相手のプロフィールの画面にしかないので、ここでは文だけ
-    toast(d.matched ? 'マッチしました。メッセージのタブから話せます' : 'いいねしました')
+    toast(d?.matched ? 'マッチしました。メッセージのタブから話せます' : 'いいねしました')
   }
 
   // M5：最終ログインの目安。検索の条件（24時間・3日・1週間）と同じ区切りを、ここにも書いた。
@@ -140,19 +137,21 @@ export default function SearchPage() {
     if (c.sort) params.append('sort', c.sort)
     params.append('page', String(p))
     // 読み込み中・失敗は考えない（401 は client.ts がログインの画面へ移す）
-    apiFetch(`/api/users?${params}`, {
-      headers: { Accept: 'application/json' },
-    })
-      .then((r) => {
-        // 07・#150：有料の条件を残したまま無料になったときなど、API が 403 を返したら、モーダルを出して空にする
-        if (r.status === 403) {
+    membersApi
+      .search(params)
+      .then(
+        (rows) => {
+          setPaidBlocked(false)
+          return rows
+        },
+        (e) => {
+          // 07・#150：有料の条件を残したまま無料になったときなど、API が 403 を返したら、モーダルを出して空にする
+          if (!(e instanceof ApiError) || e.status !== 403) throw e
           setUpsell(true)
           setPaidBlocked(true)
           return []
-        }
-        setPaidBlocked(false)
-        return r.json()
-      })
+        },
+      )
       .then((rows) => {
         setUsers((before) => (p === 1 ? rows : [...before, ...rows]))
         setPage(p)

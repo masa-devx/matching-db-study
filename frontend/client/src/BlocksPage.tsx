@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
+import { ignoreApiError } from './api/ApiError'
+import { matchingApi } from './api/matchingApi'
 import Avatar from './components/Avatar'
 import Button from './components/Button'
 import EmptyState from './components/EmptyState'
 import Icon from './components/Icon'
 import { SkeletonRows } from './components/Skeleton'
 import { useToast } from './components/Toast'
-import { apiFetch } from './shared/api/client'
 
 // レガシー版（06）。ブロックした相手（/blocks）。ホームから開く。いいねの一覧の画面を写して、全部この部品に書く
 export default function BlocksPage() {
@@ -18,11 +19,7 @@ export default function BlocksPage() {
 
   const load = () => {
     // 読み込み中・失敗は考えない
-    apiFetch(`/api/me/blocks`, {
-      headers: { Accept: 'application/json' },
-    })
-      .then((r) => r.json())
-      .then(setBlocks)
+    matchingApi.blocks().then(setBlocks)
   }
 
   useEffect(() => {
@@ -32,14 +29,14 @@ export default function BlocksPage() {
   const unblock = (userId: string) => {
     setBusy(userId)
     // 確かめずに、すぐ解除する。ステータスを見ない。終わったら一覧を全部読み直す
-    apiFetch(`/api/me/blocks/${userId}`, {
-      method: 'DELETE',
-      headers: { Accept: 'application/json' },
-    }).then(() => {
-      setBusy('')
-      toast('解除しました')
-      load()
-    })
+    matchingApi
+      .unblock(userId)
+      .catch(ignoreApiError)
+      .then(() => {
+        setBusy('')
+        toast('解除しました')
+        load()
+      })
   }
 
   if (!blocks) return <SkeletonRows />

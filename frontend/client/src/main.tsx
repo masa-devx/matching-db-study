@@ -4,7 +4,7 @@ import { BrowserRouter } from 'react-router'
 import './index.css'
 import App from './App.tsx'
 import { configureApi } from './app/configureApi'
-import MaintenanceGate from './app/MaintenanceGate'
+import { MaintenanceGate } from './app/MaintenanceGate'
 import { SessionProvider } from './shared/session/SessionProvider'
 
 configureApi()

@@ -38,9 +38,14 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
   - 使うもの：React の Context → Zustand（05b から）
   - 版：React と同じ・入れたときの最新
   - 理由：標準の限界を体験してから移す。TanStack Query・OpenAPI は使わない
+- **画面から API を呼ぶ**
+  - 使うもの：axios（D-029。通信は既定の XMLHttpRequest）
+  - 版：1.21.1
+  - 理由：interceptors で 401・419・503 を1か所で扱う
 - **テスト**
   - 使うもの：Pest（バックエンド。テスト用の PostgreSQL に対して実行）・Vitest（画面）
-  - 版：入れたときの最新
+  - 入れる前：MSW（画面の結合テストの偽の応答）・Playwright（E2E）。入れるのはテストの PR（D-029）
+  - 版：入れたときの最新（MSW・Playwright は、入れたときに書く）
   - 理由：SQLite ではロックや UNIQUE の動きが違うため、本物の PostgreSQL で確かめる
 - **静的検査・整形**
   - 使うもの：Larastan（PHPStan）・Pint（API）・Biome（画面。lint と整形を1つで受け持つ）

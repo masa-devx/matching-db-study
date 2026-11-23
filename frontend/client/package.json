@@ -11,9 +11,10 @@
     "format": "biome format --write",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint:rules": "biome lint --only=style/noRestrictedImports --only=style/noRestrictedGlobals src && biome lint --error-on-warnings src/app src/shared src/features"
+    "lint:rules": "biome lint --only=style/noRestrictedImports --only=style/noRestrictedGlobals src && biome lint --error-on-warnings src/app src/shared src/features src/api"
   },
   "dependencies": {
+    "axios": "^1.21.1",
     "firebase": "13.1.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

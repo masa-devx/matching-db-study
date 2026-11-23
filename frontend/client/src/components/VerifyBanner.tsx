@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router'
-import { apiFetch, apiFetchWithoutLogin } from '../shared/api/client'
+import { ApiError } from '../api/ApiError'
+import { authApi } from '../api/authApi'
+import { profileApi } from '../api/profileApi'
 import { useSession } from '../shared/session/SessionProvider'
 import { useToast } from './Toast'
 
@@ -16,11 +18,7 @@ export default function VerifyBanner() {
   const sessionSaysUnverified = session.status === 'signedIn' && !session.account.emailVerified
 
   useEffect(() => {
-    apiFetch(`/api/me`, {
-      headers: { Accept: 'application/json' },
-    })
-      .then((r) => r.json())
-      .then(setMe)
+    profileApi.accountRecord().then(setMe)
   }, [location.pathname])
 
   // #263：別のタブで確認のリンクを開いたあと、ここで確認済みと分かったら、Session を読み直す（タブのバーの数やお知らせが出るように）
@@ -34,14 +32,17 @@ export default function VerifyBanner() {
   // 確認のメールをもう一度送る（設定・登録の画面に書いた送り方を、ここにもコピーした）
   const resend = () => {
     setSending(true)
-    apiFetchWithoutLogin(`/api/email-verifications`, {
-      method: 'POST',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: me.email }),
-    }).then((r) => {
-      setSending(false)
-      toast(r.ok ? '確認のメールを送りました' : '送れませんでした', r.ok ? undefined : 'error')
-    })
+    authApi.resendVerification(me.email).then(
+      () => {
+        setSending(false)
+        toast('確認のメールを送りました')
+      },
+      (e) => {
+        if (!(e instanceof ApiError)) throw e
+        setSending(false)
+        toast('送れませんでした', 'error')
+      },
+    )
   }
 
   return (

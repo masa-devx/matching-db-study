@@ -10,11 +10,14 @@ paths:
 
 画面（`frontend/client`・`frontend/admin`）のコードを書くときの、React と TypeScript と Biome の決まり。置き場・依存の向き・状態の置き場は [architecture-frontend.md](architecture-frontend.md)、テストは [testing.md](testing.md) に書く。ここには、それらと重ならない所だけを書く（2026-11-21 に人が決めた。#114。下書きの24個のうち、強く勧める18個を採った）。
 
+- 4章の書き方の形（S1〜S6）と、T2・T3 の書き換えは、2026-11-22〜23 に人が決めた（#275）
+
 解説（なぜこの形か・採らなかった6個・今のコードの数）は [explanations/frontend-coding.html](../../explanations/frontend-coding.html)。
 
 - 改訂版の新しいコード（`app/`・`features/`・`shared/`）は、すべての決まりに従う
 - レガシー版の画面は、移すチケット（`architecture-frontend.md` の9章）で直す。移さずに触るときも、触った所は従う
 - 番号（R1・T1・B1）は、解説のページと同じ。採らなかった番号（R10・R11・T5・T6・T8・B5）は欠番
+- S1〜S6 は、解説のページにはない（#275 で足した）
 
 ## 一覧
 
@@ -30,18 +33,27 @@ paths:
 | R8 | `&&` の左には真偽の値 | 止めない（レビュー） |
 | R9 | Context は `<Ctx value>`、ref は props で受ける | 止めない（レビュー） |
 | T1 | `any` を書かない | `lint:rules`（app・shared） |
-| T2 | 外から来る値は `unknown` で受けて絞り込む | 止めない（レビュー） |
-| T3 | `as`・`!` は人が確かめられる所だけ | `!` は `lint:rules`（app・shared） |
+| T2 | API の応答は `〇〇Api` の中で axios の型の引数で受ける | 止めない（レビュー） |
+| T3 | `as` は DOM と `as const` だけ。`!` は人が確かめられる所だけ | `!` は `lint:rules`（app・shared） |
 | T4 | `XxxResponse` は API の JSON のまま書く | 止めない（レビュー） |
 | T7 | `noUncheckedIndexedAccess` を入れる | `npm run build` |
 | B1 | 整形と import の並びは Biome の形を正とする | 止めない（`biome check`） |
 | B2 | 改訂版の置き場では `any`・`!` を error にする | `lint:rules`（app・shared） |
 | B3 | lint を止めるときは規則と理由を書く | 理由が空なら Biome が誤りにする |
 | B4 | a11y の規則をそのまま使う | `lint:rules`（app・shared） |
+| S1 | 部品・hook・関数はアロー関数で書く | `lint:rules`（プラグイン） |
+| S2 | export は名前付きだけ | `lint:rules`（`noDefaultExport`） |
+| S3 | 型は `type`。`interface` は宣言を足すときだけ | `lint:rules`（`useConsistentTypeDefinitions`） |
+| S4 | 外に出す部品の props は `type Props` | 止めない（レビュー） |
+| S5 | `useState` に型の引数を書く | `lint:rules`（プラグイン） |
+| S6 | `never` を使わない | 止めない（レビュー） |
 
-- `lint:rules`：会員の画面の `npm run lint:rules`。改訂版の置き場（`src/app`・`src/shared`・`src/features`）では、Biome の `recommended` の規則と、`biome.json` の `overrides` で足した規則を、警告も誤りとして見る（`recommended` に入っていない規則は流れない）。CI でも流れる
+- `lint:rules`：会員の画面の `npm run lint:rules`。改訂版の置き場（`src/app`・`src/shared`・`src/features`・`src/api`）では、Biome の `recommended` の規則と、`biome.json` の `overrides` で足した規則を、警告も誤りとして見る（`recommended` に入っていない規則は流れない）。CI でも流れる
 - `src/features` は、最初の機能（`features/messages` の下のタブの数。#247）を作ったときに、`lint:rules` の2つ目のコマンドに足した
-- 管理画面は、改訂版の置き場ができる #123 で、同じ形（`overrides`・`lint:rules`）を足す
+- `src/api` は、#292 で `lint:rules` の2つ目のコマンドに足した（まだないフォルダを渡すと、Biome が `fs/cantRead` の誤りにするため、作ったときに足した）
+- プラグイン：Biome の規則にない決まりを、GritQL（コードの形で探す言葉）で書いたもの。`frontend/client/biome-plugins/` に置き、`biome.json` の `overrides` の `plugins` に書く。`overrides` に書くと、その置き場だけに効く
+- `--only` を付けた1つ目のコマンドでは、プラグインは流れない（2つ目のコマンドで流れる）
+- 管理画面は、改訂版の置き場ができる #123 で、同じ形（`overrides`・`lint:rules`・プラグイン）を足す
 
 ## 言葉
 
@@ -51,6 +63,9 @@ paths:
 - 依存の配列：`useEffect(fn, [a, b])` の `[a, b]`。この値が変わったときだけ、Effect がもう一度動く
 - 絞り込み（narrowing）：`typeof`・`in`・`===` などで調べて、型を狭めること
 - 型の言い切り（type assertion）：`x as T` と `x!`。値を調べずに「この型だ」と TypeScript に伝える。動くときには何もしない
+- アロー関数：`const f = (x: number) => x + 1` の形の関数。`function f(x) {}`（関数の宣言）と違い、巻き上げ（宣言より前の行で使えること）がない
+- 名前付きの export：`export const X = …` と書き、`import { X } from './X'` で読む形。`export default` で出したものは、読む側が好きな名前を付けられる
+- 型の引数：`useState<string>('')` の `<string>`。関数に、どの型で動くかを渡す
 
 ## 1. React の書き方
 
@@ -87,7 +102,7 @@ paths:
 
 - API や Firestore を読む Effect には、必ず片付けを書く
 - 片付けでは、`AbortController` で止めるか、`ignore` の印を立てて結果を捨てる
-- `AbortController` で止められないものは、`ignore` の印で捨てる：`res.json()` が返ったあと `setXxx` までの間・`signal` を渡していない2本目の API
+- `AbortController` で止められないものは、`ignore` の印で捨てる：応答が返ったあと `setXxx` までの間・`signal` を渡していない2本目の API
 - なぜ：依存（会員の id・検索の条件）が変わると、前の応答があとから届き、新しい表示を上書きする
 - 根拠：https://react.dev/learn/synchronizing-with-effects（「Fetching data」）
 - `architecture-frontend.md` の4章の「検索の連打は `AbortController` で古い方を止める」を、データを取るすべての Effect に広げたもの
@@ -107,7 +122,7 @@ paths:
 ### R6. 一覧の `key` は、データの id にする
 
 - `map` で作る要素には、必ず `key` を付ける。データの id（`public_id` など）にする
-- 配列の番号（`i`）・`Math.random()`・描くたびに作る値を使わない。id がないデータは、`toXxx` で id を作る
+- 配列の番号（`i`）・`Math.random()`・描くたびに作る値を使わない。id がないデータは、`src/api/〇〇Api.ts` の関数の中で、画面の形に変えるときに id を作る
 - 例外：数が決まっていて、足し引き・並べ替えが起きない一覧（スケルトン）は、番号でよい。lint を止めて理由を書く（B3）
 - なぜ：番号だと、足す・消す・並べ替えるときに、入力中の値や開いている状態が、別の行に付いたまま残る
 - 根拠：https://react.dev/learn/rendering-lists（「Rules of keys」）
@@ -132,7 +147,7 @@ paths:
 ### R9. Context は `<Ctx value>` で渡し、ref は props で受ける
 
 - Context は `<SessionContext value={...}>` と書く。`<SessionContext.Provider>` と書かない
-- 部品が `ref` を受けるときは、ふつうの props（`function Input({ ref })`）で受ける。`forwardRef` を使わない
+- 部品が `ref` を受けるときは、ふつうの props（`const Input = ({ ref }: Props) => …`）で受ける。`forwardRef` を使わない
 - なぜ：React 19 から、どちらも短く書ける。React は、`<Context.Provider>` を使わないように勧め、`forwardRef` は先の版でなくすと書いている
 - 根拠：https://react.dev/blog/2024/12/05/react-19（「`<Context>` as a provider」・「`ref` as a prop」）
 
@@ -141,34 +156,37 @@ paths:
 ### T1. `any` を書かない
 
 - 型に `any` を書かない（`useState<any>`・`(row: any) =>`・`as any`）
-- 何が来るか分からない値は `unknown` にし、T2 で絞り込む。API の応答は `XxxResponse`（T4）、画面の値は画面の型で書く
+- 何が来るか分からない値（`catch` の `e`・`JSON.parse`・ストレージ）は `unknown` にし、T2 で絞り込む。API の応答は `XxxResponse`（T2・T4）、画面の値は画面の型で書く
 - `window` に足した値は、`declare global` で `Window` に宣言を足す（`window as any` と書かない）
 - なぜ：`any` は、その値の型の検査を止め、そこから読んだ値にも広がる
 - 根拠：https://www.typescriptlang.org/docs/handbook/declaration-files/do-s-and-don-ts.html
 - 機械：Biome の `noExplicitAny`（改訂版の置き場は error。B2）
 
-### T2. 外から来る値は、`unknown` か `XxxResponse` で受け、絞り込んでから使う
+### T2. API の応答は、`〇〇Api` の関数の中で axios の型の引数で受ける。`unknown` は4か所だけ
 
-- 外から来る値は、次のもの
-  - `res.json()` の結果
+- API の応答は、`src/api/〇〇Api.ts` の関数の中で、axios の型の引数で受ける（`client.get<XxxResponse>('/api/...')`）
+  - 形は確かめない（型ガードを書かない）
+  - 受けた `XxxResponse` は、同じ関数の中で画面の形に変えて返す（T4）
+- `unknown` で受けるのは、次の4か所だけ。`typeof`・`in`・`Array.isArray`・`instanceof` で調べてから使う
+  - `catch (e)` の `e`：`instanceof`（`ApiError`・`DOMException` など）で見分ける
   - `JSON.parse` の結果
   - `sessionStorage`・`localStorage` から読んだ文字
-  - Firestore のドキュメントの中身（`doc.data()`）
-  - `catch (e)` の `e`
-- API の応答は、`api.ts`（Repository の実装）の中で、1回だけ `XxxResponse` として受ける（T3 の例外）
-- それ以外は `unknown` で受け、`typeof`・`in`・`Array.isArray`・`instanceof` で調べてから使う。同じ調べ方を2か所で使うときは、型ガード（`function isXxx(v: unknown): v is Xxx`）にする
-- なぜ：`res.json()` と `JSON.parse` は `any` を返し、`noExplicitAny` では見つからない。ストレージには、古い版の画面が書いた値や、人が書き換えた値が入る
-- 根拠：https://www.typescriptlang.org/docs/handbook/2/narrowing.html
-- 見本：`shared/api/client.ts` の `codeOf`（`unknown` で受け、`typeof`・`in` で調べる）
+  - `client.ts` が 2xx でない応答の本文を読む所（HTML や空の応答もある。`code`・`message`・`errors` を調べて取り出す）
+- 同じ調べ方を2か所で使うときは、型ガード（`const isXxx = (v: unknown): v is Xxx => …`）にする
+- なぜ：応答の型を書く所を `〇〇Api` の関数の1か所にまとめる。形のずれはテストで見つける（D-006）。`JSON.parse` は `any` を返し、`noExplicitAny` では見つからない。ストレージには、古い版の画面が書いた値や、人が書き換えた値が入る
+- 弱いところ：API の形がずれても型の誤りにならず、違う値が画面に黙って出る。E2E（本物の API）で見つける（`architecture-frontend.md` の7章）
+- 根拠：https://www.typescriptlang.org/docs/handbook/2/narrowing.html・https://axios-http.com/docs/typescript
+- #292 で、形を確かめる型ガード（`isBadgeCountsResponse`）と `as AccountResponse` をやめ、この形にした
+- まだ移していないレガシー版の画面は、`〇〇Api` が返す API の形（`XxxResponse`）のまま使う（`profileApi.accountRecord()`・`profileApi.member()` など）。画面を移すときに、画面の形に変える関数にする
 
-### T3. `as` と `!` は、人が確かめられる所だけに書く
+### T3. `as` は DOM と `as const` だけに書く。`!` は人が確かめられる所だけ
 
-- 書いてよい所
+- `as` を書いてよい所
   - DOM（`document.getElementById('root')`・`e.target as Node`）：HTML を見れば確かめられる
-  - API の応答を `XxxResponse` として受ける1か所（T2）
   - `as const`
 - 書かない所
-  - `JSON.parse`・ストレージ・Firestore の値（T2 の絞り込みにする）
+  - API の応答（`res.data as XxxResponse`）：axios の型の引数で受ける（T2）
+  - `JSON.parse`・ストレージの値（T2 の絞り込みにする）
   - `useParams()` の値（`roomId!`）：`if (!roomId) return` で絞るか、ない場合の表示を書く
   - `as unknown as T`
 - 定数の形を確かめたいときは、`as` でなく `satisfies` を使う（`const LABELS = {...} satisfies Record<Plan, string>`）
@@ -183,10 +201,10 @@ paths:
   - API が `null` を返すキーは `| null`、返さないことがあるキーだけ `?`
   - 日時は `string`
 - 画面の型は、画面で使う形で別に書く（`userId`・`emailVerified: boolean`・`Date`）。`XxxResponse` から `Pick`・`Omit` で作らない
-- `toXxx` は、引数に `XxxResponse`、戻り値に画面の型を書く
-- なぜ：API の形が変わったときに、直す所を `api.ts` の中にとどめるため
+- 画面の形への変換は、`src/api/〇〇Api.ts` の、その API を呼ぶ関数の中に書く。`toXxx` という名前の関数は作らない
+- なぜ：API の形が変わったときに、直す所を `src/api/〇〇Api.ts` の中にとどめるため
 - 根拠：`architecture-frontend.md` の4章と D-006（画面の型は手で書く）から決めた（TypeScript の公式の文書の決まりではない）
-- 見本：`shared/session/SessionProvider.tsx` の `AccountResponse` と `Account`
+- 見本：`src/api/profileApi.ts` の `account()`（`AccountResponse` を受け、`shared/session/types.ts` の `Account` に変えて返す）
 
 ### T7. `tsconfig` に `noUncheckedIndexedAccess` を入れる
 
@@ -227,3 +245,58 @@ paths:
 - `a11y` の規則（`useButtonType`・`useAltText`・`useKeyWithClickEvents`・`useSemanticElements` など）を `off` にしない
 - 画像の `alt`・`<button>` の `type`・クリックできる要素のキーボード操作は、lint の指摘を直してから出す
 - なぜ：画面のレビュー役（`.claude/agents/frontend-reviewer.md`）が見るアクセシビリティのうち、lint で見つかるものは、レビューの前に機械で止める
+
+## 4. 書き方の形
+
+改訂版の置き場（`src/app`・`src/shared`・`src/features`・`src/api`）では、テストのファイルも含めて従う。
+
+### S1. 部品・hook・関数は、アロー関数で書く
+
+- `const UserCard = ({ user }: Props) => …`・`const useSearch = () => …`・`const isAdult = (age: number) => …` と書く
+- `function` の宣言（`function X() {}`・`export default function X() {}`）と、`function` の式（`const f = function () {}`）を書かない
+- `.tsx` で型の引数を付けるときは `<T,>` と書く（`const pick = <T,>(list: T[]) => …`。`<T>` だと JSX の始まりと読まれる）
+- クラス（`ApiError` など）と、オブジェクトのメソッドの短い書き方（`{ subscribe() {} }`）は、そのままでよい
+- なぜ：書き方を1つにそろえ、イベントの処理（`onClick={() => …}`）と同じ形にする（人が決めた）
+- 弱いところ
+  - 巻き上げがないので、ファイルの一番上の行で呼ぶ関数は、呼ぶ行より前で作る（関数の中から呼ぶだけなら、順番は問わない）
+  - React の文書の例は `function` で書いてある。コピーしたら直す
+- 機械：`biome-plugins/no-function-declaration.grit`（`JsFunctionDeclaration`・`JsFunctionExportDefaultDeclaration`・`JsFunctionExpression` を拾う）
+
+### S2. export は名前付きだけにする
+
+- `export const X = …` と書き、`import { X } from './X'` で読む。`export default` を書かない
+- 例外：ツールが default を読む設定のファイル（`vite.config.ts`・`vitest.config.ts` など。`src/` の外にある）
+- `lazy()` で分けて読むときは、名前付きの export を default に包む：`lazy(() => import('./X').then((m) => ({ default: m.X })))`
+- なぜ：どのファイルでも同じ名前で読まれ、名前で検索でき、名前を変えるときに読む所も一緒に変わる
+- 機械：Biome の `noDefaultExport`
+
+### S3. 型は `type` で書く。`interface` は、宣言を足すときだけ
+
+- 型は `type Account = { … }` と書く
+- `interface` を書いてよいのは、ブラウザやライブラリの型に宣言を足すとき（`declare global` の `Window`・`ImportMetaEnv`）だけ
+  - Biome はこのときも誤りにするので、`// biome-ignore lint/style/useConsistentTypeDefinitions: Window に宣言を足すため（S3）` と書く（B3）
+- なぜ：`interface` は、同じ名前を2回書くと宣言が足される。思わず型が広がらないように、書き方を `type` の1つにそろえる
+- 機械：Biome の `useConsistentTypeDefinitions`（`style: "type"`）
+
+### S4. 外に出す部品の props は `type Props` にする
+
+- 外に出す部品の props の型は `type Props` と名付け、部品のすぐ上に書く。引数で分割して受ける（`const SessionGate = ({ children }: Props) => …`）
+- 同じファイルの中だけで使う部品の props は `XxxProps`（`RowProps`）と名付ける
+- 1つのファイルから外に出す部品は1つだけにする（hook・型・定数は一緒に出してよい）
+- なぜ：どの部品のファイルを開いても、props の型を `Props` の名前で見つけられる
+- 機械：止めない（レビュー）
+
+### S5. `useState` には型の引数を書く
+
+- `useState<string>('')`・`useState<boolean>(false)`・`useState<Account | null>(null)` と書く
+- なぜ：初めの値から決まる型は、狭すぎることがある（`useState(null)` は `null` しか入らない型になる）。state にどの値が入るかを、読む人に見せる
+- 機械：`biome-plugins/use-state-type-argument.grit`（型の引数のない `useState(…)`・`React.useState(…)` を拾う。`useState<T>(…)` は拾わない）
+- 拾わないもの：別名で読んだ `useState`（`import { useState as useS }`）。レビューで見る
+
+### S6. `never` を使わない
+
+- 型に `never` を書かない。状態の抜けを `never` で見つける書き方（`const unreachable: never = status`）をしない
+- 状態（`status` の値）ごとの出し分けは、`if` か `switch` で書く
+- なぜ：書き方を読める形にそろえる（人が決めた）
+- 弱いところ：`status` に値を足しても、出し分けの抜けが型の誤りにならない。読み込み中・失敗・空のときを見る結合テスト（`architecture-frontend.md` の7章）で見つける
+- 機械：止めない（レビュー）

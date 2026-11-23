@@ -1,9 +1,10 @@
 import { addDoc, collection, doc, getDoc, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
+import { apiUrl } from './api/client'
+import { profileApi } from './api/profileApi'
 import { countReads, db, signInFirebase } from './firebase'
 import ReadCounter from './ReadCounter'
-import { apiFetch, apiUrl } from './shared/api/client'
 
 // レガシー版（05c）。Firestore 版のトーク画面（/messages-fs/:roomId）。05 の TalkPage を写して、取り方を Firestore に変えた。
 // limit のないリスナーで、ルームのメッセージを全部聞く（開くたびに全部読む）。時刻は画面の時計で入れる
@@ -22,11 +23,7 @@ export default function TalkFsPage() {
       // 相手を知るために、自分の受信箱のこのルームを読み、名前は Laravel（PostgreSQL）から読む
       const inbox = await getDoc(doc(db, 'users', me, 'rooms', roomId!))
       countReads(1)
-      apiFetch(`/api/users/${inbox.data()?.partnerUid}`, {
-        headers: { Accept: 'application/json' },
-      })
-        .then((r) => r.json())
-        .then(setPartner)
+      profileApi.member(inbox.data()?.partnerUid).then(setPartner)
       // limit なし：最初に全部が届き、あとは変わったものが届く
       stop = onSnapshot(query(collection(db, 'rooms', roomId!, 'messages'), orderBy('createdAt')), (snap) => {
         // 送ったばかりの自分のもの（まだサーバーに届いていない）は、手元の SDK が先に出すだけなので数えない

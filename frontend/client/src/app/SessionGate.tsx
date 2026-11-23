@@ -3,7 +3,11 @@ import { useSession } from '../shared/session/SessionProvider'
 
 // ログインしているかが決まるまで、どの画面も出さずに待つ（ログインの画面が一瞬出て戻るのを防ぐ）。
 // 読み込めなかったら、もう一度試すボタンを出す（FR-UI-013）。ログインしているか・していないかの出し分けは、そのあとで App と RequireAuth が決める
-export default function SessionGate({ children }: { children: ReactNode }) {
+type Props = {
+  children: ReactNode
+}
+
+export const SessionGate = ({ children }: Props) => {
   const { session, retry } = useSession()
   if (session.status === 'loading') {
     return (

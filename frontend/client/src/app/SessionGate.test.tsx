@@ -1,8 +1,8 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import type { SessionState } from '../shared/session/SessionProvider'
-import SessionGate from './SessionGate'
+import type { SessionState } from '../shared/session/types'
+import { SessionGate } from './SessionGate'
 
 // app/SessionGate.tsx：ログインしているかが決まるまでと、読み込めなかったときの見せ方（FR-UI-013）
 
@@ -13,7 +13,7 @@ vi.mock('../shared/session/SessionProvider', () => ({
   useSession: () => ({ session: state, retry, signIn: vi.fn(), signOut: vi.fn() }),
 }))
 
-function renderGate() {
+const renderGate = () => {
   return render(
     <SessionGate>
       <p>画面の中身</p>

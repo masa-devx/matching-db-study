@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
+import { ApiError } from './api/ApiError'
+import { authApi } from './api/authApi'
 import Button from './components/Button'
-import { apiFetchWithoutLogin } from './shared/api/client'
 import { useSession } from './shared/session/SessionProvider'
 import { ACCOUNT_SUSPENDED_REASON, SIGNED_OUT_REASON } from './shared/session/session'
 
@@ -30,26 +31,24 @@ export default function LoginPage() {
     setSuspended(false)
     setSending(true)
     // つながらないとき（API が止まっている）は、例外のまま何も出ない
-    const res = await apiFetchWithoutLogin(`/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ email, password }),
-    })
-    const data = await res.json()
-    setSending(false)
-    if (res.ok) {
-      // トークンは受け取らない。セッションの Cookie は HttpOnly なので、画面のスクリプトから読めない（D-027）。
-      // GET /api/me が通らなければ、Cookie が届いていない（127.0.0.1 で開いた・設定の漏れ）。何も出さずに戻さず、文を出す
-      if (await signIn()) {
-        navigate('/home')
-      } else {
-        setError('ログインできませんでした。画面を読み込み直してください')
-      }
-    } else {
+    try {
+      await authApi.login(email, password)
+    } catch (e) {
+      if (!(e instanceof ApiError)) throw e
+      setSending(false)
       // API の言葉をそのまま出す（「メールアドレスが違います」で、登録されているかが分かる）
-      setError(data.message)
+      setError(e.serverMessage ?? '')
       // A7（#213）：強制退会（同じ 403）のときは、停止の案内を出さない。API の code で見分ける
-      setSuspended(res.status === 403 && data.code === 'account_suspended')
+      setSuspended(e.status === 403 && e.code === 'account_suspended')
+      return
+    }
+    setSending(false)
+    // トークンは受け取らない。セッションの Cookie は HttpOnly なので、画面のスクリプトから読めない（D-027）。
+    // GET /api/me が通らなければ、Cookie が届いていない（127.0.0.1 で開いた・設定の漏れ）。何も出さずに戻さず、文を出す
+    if (await signIn()) {
+      navigate('/home')
+    } else {
+      setError('ログインできませんでした。画面を読み込み直してください')
     }
   }
 

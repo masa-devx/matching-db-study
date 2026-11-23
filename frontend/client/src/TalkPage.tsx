@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
+import { ApiError, ignoreApiError } from './api/ApiError'
+import { matchingApi } from './api/matchingApi'
+import { messagingApi } from './api/messagingApi'
+import { profileApi } from './api/profileApi'
 import Avatar from './components/Avatar'
 import Button from './components/Button'
 import ConfirmDialog from './components/ConfirmDialog'
@@ -8,7 +12,6 @@ import ReportDialog from './components/ReportDialog'
 import { SkeletonTalk } from './components/Skeleton'
 import { useToast } from './components/Toast'
 import UpsellDialog from './components/UpsellDialog'
-import { apiFetch } from './shared/api/client'
 
 // レガシー版（05）。トーク画面（/messages/:roomId）。取る・続き・5秒ごとの読み直し・送る・見せるを、全部この部品に書く。
 // M6（#190）：作り直した。相手のプロフィールへのリンク・日付の区切り・相手の吹き出しに写真・改行できる入力欄・
@@ -38,42 +41,35 @@ export default function TalkPage() {
   const toast = useToast()
   const navigate = useNavigate()
 
-  const headers = { Accept: 'application/json' }
-
   // 1ページ（新しい50件）を取る。1ページ目は今の一覧と入れ替え、2ページ目からは上に足す
   const load = (p: number) => {
-    apiFetch(`/api/me/talk-rooms/${roomId}/messages?page=${p}`, { headers })
-      .then((r) => r.json())
-      .then((rows) => {
-        // API は新しい順で返すので、逆にして古い順にする
-        const old = [...rows].reverse()
-        // 1ページ目は入れ替える（5秒ごとの読み直しでも入れ替えるので、上にさかのぼって読んだものが消える）
-        // 2ページ目からは、このときの messages の前に足す（読み直しと重なると、古い messages に足してしまう）
-        setMessages(p === 1 ? old : [...old, ...messages])
-        setPage(p)
-        // 50件より少なければ、もう古いものはない
-        setDone(rows.length < 50)
-        setLoaded(true)
-      })
+    messagingApi.messages(roomId ?? '', p).then((rows) => {
+      // API は新しい順で返すので、逆にして古い順にする
+      const old = [...rows].reverse()
+      // 1ページ目は入れ替える（5秒ごとの読み直しでも入れ替えるので、上にさかのぼって読んだものが消える）
+      // 2ページ目からは、このときの messages の前に足す（読み直しと重なると、古い messages に足してしまう）
+      setMessages(p === 1 ? old : [...old, ...messages])
+      setPage(p)
+      // 50件より少なければ、もう古いものはない
+      setDone(rows.length < 50)
+      setLoaded(true)
+    })
   }
 
   useEffect(() => {
     // 自分のメッセージかを見分けるために、自分の id を読む（ホームでも読んでいるが、もう一度読む）
-    apiFetch(`/api/me`, { headers })
-      .then((r) => r.json())
+    profileApi
+      .accountRecord()
       .then((u) => {
         setMe(u)
         // 07：性別を知るために、自分のプロフィールを読む（ホームと同じ2本を、ここにも写す）
-        return apiFetch(`/api/users/${u.public_id}`, { headers })
+        return profileApi.member(u.public_id)
       })
-      .then((r) => r.json())
       .then((u) => setMyGender(u.profile?.gender ?? ''))
     // 相手の名前と写真を出すために、トークの一覧を全部読んで、このルームを探す。
     // M6：既読（相手が最後に開いた日時）もここに入っているので、5秒ごとに、一覧も全部読み直す
     const loadPartner = () =>
-      apiFetch(`/api/me/talk-rooms`, { headers })
-        .then((r) => r.json())
-        .then((rooms) => setPartner(rooms.find((r: any) => r.room_id === roomId)))
+      messagingApi.talkRooms().then((rooms) => setPartner(rooms.find((r: any) => r.room_id === roomId)))
     loadPartner()
     load(1)
     // 開いたら、いちばん下（新しいもの）を見せる。届くまでの時間は考えず、少し待ってから動かす
@@ -143,32 +139,30 @@ export default function TalkPage() {
       if (box) box.scrollTop = box.scrollHeight
     }, 50)
     // 入力を確かめない。空のまま送ると API が 500 を返す（03c から、失敗はトーストで出す）
-    apiFetch(`/api/me/talk-rooms/${roomId}/messages`, {
-      method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body: temp.body }),
-    }).then((r) => {
-      setPending((now) => now.filter((m) => m.id !== temp.id))
-      if (!r.ok) {
+    messagingApi.sendMessage(roomId ?? '', temp.body).then(
+      () => {
+        setPending((now) => now.filter((m) => m.id !== temp.id))
+        load(1)
+      },
+      (e) => {
+        if (!(e instanceof ApiError)) throw e
+        setPending((now) => now.filter((m) => m.id !== temp.id))
         // M6：送れなかった文を、入力欄に戻す（前は、文が消えていた）。そのあいだに別の文を書いていたら、戻さない
         setBody((now) => (now ? now : temp.body))
         toast('送れませんでした。もう一度送ってください', 'error')
-        return
-      }
-      load(1)
-    })
+      },
+    )
   }
 
   // 06：相手をブロックする（相手の public_id は、トークの一覧から探したもの）。ステータスを見ない
   const block = () => {
-    apiFetch(`/api/me/blocks`, {
-      method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: partner?.user_id }),
-    }).then(() => {
-      toast('ブロックしました')
-      navigate('/messages', { viewTransition: true })
-    })
+    matchingApi
+      .block(partner?.user_id)
+      .catch(ignoreApiError)
+      .then(() => {
+        toast('ブロックしました')
+        navigate('/messages', { viewTransition: true })
+      })
   }
 
   // M6：日付の区切りに出す言葉（今日・昨日・月日と曜日）。一覧の画面とは別に、ここにも日付の比べ方を書いた

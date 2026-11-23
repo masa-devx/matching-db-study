@@ -1,4 +1,4 @@
-import { apiUrl } from '../shared/api/client'
+import { apiUrl } from '../api/client'
 
 // 03c：丸いアバター（FR-UI-031）。写真がなければ、ニックネームの1文字目をグラデーションの上に白で出す
 export default function Avatar({

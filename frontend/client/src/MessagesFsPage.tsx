@@ -1,9 +1,11 @@
 import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
+import { ApiError } from './api/ApiError'
+import { apiUrl } from './api/client'
+import { profileApi } from './api/profileApi'
 import { countReads, db, signInFirebase } from './firebase'
 import ReadCounter from './ReadCounter'
-import { apiFetch, apiUrl } from './shared/api/client'
 
 // レガシー版（05c）。Firestore 版のトークの一覧（/messages-fs）。05 の MessagesPage を写して、取り方だけを Firestore に変えた。
 // 受信箱には必要な情報（partnerUid・lastReadAt）しかないので、ルームごとに最新の1件・未読・相手の名前を読みに行く（N+1）
@@ -27,9 +29,11 @@ export default function MessagesFsPage() {
           countReads(Math.max(after.size, 1))
           const unread = after.docs.filter((m) => m.data().senderId !== uid).length
           // 相手の名前と写真は、Firestore にないので、ルームごとに Laravel（PostgreSQL）から読む
-          const partner = await apiFetch(`/api/users/${r.data().partnerUid}`, {
-            headers: { Accept: 'application/json' },
-          }).then((x) => x.json())
+          // 読めない相手（退会した・404）は、名前も写真もなし（「退会した会員」と出る）
+          const partner = await profileApi.member(r.data().partnerUid).catch((e) => {
+            if (!(e instanceof ApiError)) throw e
+            return null
+          })
           return { id: r.id, last: last.docs[0]?.data(), unread, partner }
         }),
       )

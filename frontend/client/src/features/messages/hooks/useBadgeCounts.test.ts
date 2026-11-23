@@ -1,32 +1,32 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { UnauthorizedError } from '../../../shared/api/ApiError'
-import type { SessionState } from '../../../shared/session/SessionProvider'
-import { fetchBadgeCounts } from '../api'
+import { UnauthorizedError } from '../../../api/ApiError'
+import { messagingApi } from '../../../api/messagingApi'
+import type { SessionState } from '../../../shared/session/types'
 import type { BadgeCounts } from '../types'
 import { useBadgeCounts } from './useBadgeCounts'
 
 // features/messages/hooks/useBadgeCounts.ts：下のタブの数を、いつ読むか（FR-UI-032・FR-UI-093）。
-// API を呼ぶ所（api.ts の fetchBadgeCounts）は偽物にする
+// API を呼ぶ所（src/api/messagingApi.ts の badgeCounts）は偽物にする
 
-vi.mock('../api', () => ({ fetchBadgeCounts: vi.fn() }))
+vi.mock('../../../api/messagingApi', () => ({ messagingApi: { badgeCounts: vi.fn() } }))
 
 let session: SessionState
 vi.mock('../../../shared/session/SessionProvider', () => ({
   useSession: () => ({ session }),
 }))
 
-const fetchMock = vi.mocked(fetchBadgeCounts)
+const fetchMock = vi.mocked(messagingApi.badgeCounts)
 const counts: BadgeCounts = { unreadMessages: 3, newMatches: 1, receivedLikes: 2 }
 // counts から計算したタブの数（メッセージのタブは、未読の合計と新しいマッチを足す）
 const tabs = { messagesTab: 4, likesTab: 2 }
 
-function signedIn(emailVerified: boolean): SessionState {
+const signedIn = (emailVerified: boolean): SessionState => {
   return { status: 'signedIn', account: { userId: 'u1', email: 'a@example.test', emailVerified } }
 }
 
 // あとから好きな時に返す応答（tsconfig の lib が Promise.withResolvers を持たないので、手で作る）
-function deferred(): { promise: Promise<BadgeCounts>; resolve: (value: BadgeCounts) => void } {
+const deferred = (): { promise: Promise<BadgeCounts>; resolve: (value: BadgeCounts) => void } => {
   let resolve: (value: BadgeCounts) => void = () => {}
   const promise = new Promise<BadgeCounts>((done) => {
     resolve = done
@@ -35,7 +35,7 @@ function deferred(): { promise: Promise<BadgeCounts>; resolve: (value: BadgeCoun
 }
 
 // 読み込みの片付け（then の中の setState）まで進める
-async function settle(): Promise<void> {
+const settle = async (): Promise<void> => {
   await act(async () => {})
 }
 

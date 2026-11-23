@@ -36,9 +36,10 @@
 | D-023 | メッセージの表を3つに分ける | 有効 | 05 |
 | D-024 | 見た目と動きは、ブラウザと React の標準で作る | 有効 | 03c |
 | D-025 | バックエンドは Controller → Service → Model | 有効 | サイクル 01 |
-| D-026 | 改訂版の画面の形（`features/`） | 有効 | #112 |
+| D-026 | 改訂版の画面の形（`features/`） | 有効（③・⑥は D-029 で置き換え） | #112 |
 | D-027 | 会員の認証をセッションに移す | 有効 | #246 |
 | D-028 | 古い Controller に、Model のスコープを呼ぶ1行だけを足す（移さない） | 有効 | #269 |
+| D-029 | 画面の API は axios で `src/api/` に集める。テストは MSW と Playwright | 有効 | #275・#292 |
 
 ## 準備で決めたこと
 
@@ -471,7 +472,7 @@
 
 ### D-026 改訂版の画面の形（`features/`）
 
-- 状態：有効
+- 状態：有効（③・⑥は D-029 で置き換え）
 - 一歩：#112
 - 決めたこと：
   - 改訂版の画面の形を決める（D-018 の container／presenter を具体にした）
@@ -480,10 +481,10 @@
   - 細かい決まり：
     - ①フォルダの名前は `features/`（管理画面の `domains/` もそろえる）
     - ②検索の条件は URL に置く
-    - ③API の形が画面の形と同じでも、必ず各機能の `api.ts` を通し、画面の型を返す
+    - ③API の形が画面の形と同じでも、必ず各機能の `api.ts` を通し、画面の型を返す（D-029 で、各機能の `api.ts` を `src/api/〇〇Api.ts` に変えた。画面の型を返すことは変えない）
     - ④import の決まりは、Biome の `noRestrictedImports` で止める
     - ⑤データの出どころを隠す型の約束と実装は Repository と呼び、出どころが2つある機能（今はメッセージ）にだけ作る
-    - ⑥presenter は、props だけで見せる部品の意味だけに使う。API の形を変える関数は `toXxx` と呼ぶ
+    - ⑥presenter は、props だけで見せる部品の意味だけに使う。API の形を変える関数は `toXxx` と呼ぶ（D-029 で、変換は `〇〇Api` の関数の中に書き、`toXxx` は作らないに変えた）
     - ⑦UseCase は hooks が受け持つ。純粋な関数に分けるのは、込み入った手順の所だけ
     - ⑧有料の出し分けは、`GET /api/me` が返す使える機能を読み、`plans/rules.ts` の1か所で判断する
     - ⑨ログインした自分は `shared/session/` に置く（どの機能の `rules.ts`・hook も型を使えるように）
@@ -552,3 +553,35 @@
   - リーダーの案を人が採った（2026-11-22）
 - 数字・リンク：[06-blocks-withdrawal.md の「#269 で変えたこと」](api/06-blocks-withdrawal.md)・[05-problems.md の #269](cycles/01-backend-foundation/05-problems.md)
 
+### D-029 画面の API は axios で `src/api/` に集める。テストは MSW と Playwright
+
+- 状態：有効
+- 一歩：#275（決めた）・#292（移した）
+- 決めたこと：
+  - 会員の画面で API を呼ぶのに axios を使う（#292 で入れた。1.21.1）。レガシー版の画面も含めて、全部を移した
+  - 通信は axios の既定（XMLHttpRequest）。`adapter: 'fetch'` は使わない
+  - axios を読めるのは `src/api/client.ts` だけ。`fetch` は、どこでも使わない
+  - `src/api/` に、次のものを置く
+    - `client.ts`：axios のインスタンス（`axios.create()` で作ったもの）。interceptors で CSRF・401／419・503 を1か所で扱う
+    - `ApiError.ts`：失敗の型（前の `shared/api/ApiError.ts` から移した）
+    - `〇〇Api.ts`：業務のまとまり（`docs/backend.md` の2章）ごと。`〇〇Api` のオブジェクトに、呼ぶ関数を並べる。応答の型と、画面の形への変換も、その関数の中に置く
+  - D-026 の③（必ず各機能の `api.ts` を通す）を、「必ず `src/api/〇〇Api.ts` を通す」に変えた。`features/*/api.ts` と `shared/api/` はやめる
+  - `src/api/` を読めるのは hook（`features/*/hooks/`・`shared/session/`）だけ。例外は architecture-frontend.md の3章（`app/configureApi.ts`・REST の Repository の実装・まだ移していないレガシー版の画面）。2xx でない応答は `client.ts` が `ApiError` を投げ、hook が状態に変える
+  - 応答は axios の型の引数（`get<XxxResponse>`）で受け、形は確かめない
+  - ブラウザの `fetch` を偽物にしていたテストは届かなくなったので、`describe.skip` で止め、#290 で MSW に書き直す（人が決めた。2026-11-23）
+  - テストは、会員から見える動きを確かめる結合テスト（Vitest・Testing Library・MSW）と E2E（Playwright）を中心にする。単体は `rules.ts` と形の変換だけ
+- ほかの案：
+  - `fetch` のまま（前の `shared/api/client.ts`）：道具は増えない。JSON を読む・型を付ける・送る前と受けたあとの処理を、自分で書き続ける
+  - 機能ごとの `api.ts`（D-026 の③）：機能の中で閉じる。いくつもの機能が使う API（いいね・ブロック）を、どの機能に置くかを毎回決める
+  - テストを、hook・presenter ごとの単体テストを中心にする
+- 理由：
+  - 401・419・503 を、interceptors の1か所で扱える（前は `apiFetch`・`apiFetchWithoutLogin`・`apiFetchForLogout` の3つに分けていた）
+  - API を呼ぶ所の名前が、バックエンドの業務のまとまりとそろい、1つの API の置き場が1つに決まる
+  - 動きを見るテストは、AI がコードを書き換えても、そのまま残る。AI の誤りにも気づきやすい
+  - 人が決めた（2026-11-22〜23）
+- 弱いところ：
+  - #290 までの間、ログイン・401・503・CSRF の送り直しを確かめるテストが止まっている（手元の API に当てて確かめた）
+  - 応答の形を確かめないので、API の形がずれても型の誤りにならず、画面に黙って出る。E2E で見つける
+  - E2E は遅く、待ち方で落ちることがある
+  - MSW の偽の応答が、本物の API とずれることがある
+- 数字・リンク：[architecture-frontend.md](../agents/rules/architecture-frontend.md) の2〜4章・7章・[quality-frontend.md](../agents/rules/quality-frontend.md) の T2・T3・[testing.md](../agents/rules/testing.md) の「画面のテスト」

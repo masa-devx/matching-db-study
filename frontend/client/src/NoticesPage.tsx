@@ -1,28 +1,33 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
+import { ApiError, ignoreApiError } from './api/ApiError'
+import { membersApi } from './api/membersApi'
 import Icon from './components/Icon'
 import { SkeletonRows } from './components/Skeleton'
-import { apiFetch } from './shared/api/client'
 
 // レガシー版（A7。#213）。運営からのお知らせ（/notices）。ホームのベルと、未読があるときの帯から来る。
 // 開いたら、まだ読んでいないお知らせを、1件ずつ「読んだ」と送る（まとめて送る API はない）
 export default function NoticesPage() {
   const [notices, setNotices] = useState<any[] | null>(null)
   const navigate = useNavigate()
-  const headers = { Accept: 'application/json' }
 
   useEffect(() => {
     // ログインが要るかの確かめを、ここにも書く
-    apiFetch(`/api/me/notices`, { headers })
-      .then((r) => r.json())
-      .then((rows) => {
+    membersApi.notices().then(
+      (rows) => {
         const list = Array.isArray(rows) ? rows : []
         setNotices(list)
-        // 画面には「未読」の印を残したまま、API には読んだと送る（次に開いたときは、印が消える）
+        // 画面には「未読」の印を残したまま、API には読んだと送る（次に開いたときは、印が消える）。失敗は見ない
         for (const n of list) {
-          if (!n.read_at) apiFetch(`/api/me/notices/${n.id}/read`, { method: 'POST', headers })
+          if (!n.read_at) membersApi.readNotice(n.id).catch(ignoreApiError)
         }
-      })
+      },
+      (e) => {
+        // 失敗の応答（500 など）は一覧でないので、0件として出す
+        if (!(e instanceof ApiError)) throw e
+        setNotices([])
+      },
+    )
   }, [])
 
   return (

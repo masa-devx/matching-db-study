@@ -1,33 +1,8 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { apiFetchWithoutLogin, codeOf } from '../api/client'
+import { ApiError } from '../../api/ApiError'
+import { profileApi } from '../../api/profileApi'
 import { ACCOUNT_SUSPENDED_REASON, clearSession } from './session'
-
-// GET /api/me の応答の形（レガシー版）。このファイルの外へ出さない（architecture-frontend.md の4章）
-type AccountResponse = {
-  public_id: string
-  email: string
-  email_verified_at: string | null
-}
-
-// ログインした自分のアカウント（画面の形）。名前は docs/glossary.md の「アカウント」（コードでは Me と呼ばない）
-export type Account = {
-  userId: string // users.public_id
-  email: string
-  emailVerified: boolean
-}
-
-function toAccount(res: AccountResponse): Account {
-  return { userId: res.public_id, email: res.email, emailVerified: res.email_verified_at !== null }
-}
-
-// 読み込み中・ログインしている・していない・読み込めなかった。
-// 起動のときに GET /api/me を読み、200 なら「している」、401 なら「していない」（セッションの Cookie で API が決める。D-027）
-export type SessionState =
-  | { status: 'loading' }
-  | { status: 'signedIn'; account: Account }
-  // reason：ログインの画面に出す理由（アカウント停止）。ないときは、理由を出さない（もとからしていない・切れた・ログアウトした）
-  | { status: 'signedOut'; reason?: typeof ACCOUNT_SUSPENDED_REASON }
-  | { status: 'error' }
+import type { SessionState } from './types'
 
 type SessionValue = {
   session: SessionState
@@ -47,13 +22,12 @@ const SessionContext = createContext<SessionValue | null>(null)
 // 401 でない失敗（500・つながらない・時間切れ）では、「読み込めませんでした」にする（API が戻れば、もう一度で戻れる）。
 // 503（メンテナンス中）は、client.ts が見分けて、メンテナンスの画面を出す。
 // Cookie はタブのあいだで共有する。タブを開き直したときに読み直し、ほかのタブで別の会員がログインしていたら、画面を読み込み直す（onAccountChanged）
-export function SessionProvider({
-  children,
-  onAccountChanged = () => window.location.reload(),
-}: {
+type Props = {
   children: ReactNode
   onAccountChanged?: () => void
-}) {
+}
+
+export const SessionProvider = ({ children, onAccountChanged = () => window.location.reload() }: Props) => {
   const [session, setSession] = useState<SessionState>({ status: 'loading' })
   // 読み込みが重なったとき（起動の読み込みの途中でログインした）、古い結果で上書きしないための番号
   const latest = useRef(0)
@@ -63,9 +37,8 @@ export function SessionProvider({
     current.current = session
   }, [session])
 
-  const signedOut = useCallback(async (res: Response) => {
+  const signedOut = useCallback((code: string | null) => {
     clearSession()
-    const code = await codeOf(res)
     setSession(
       code === 'account_suspended'
         ? { status: 'signedOut', reason: ACCOUNT_SUSPENDED_REASON }
@@ -77,21 +50,17 @@ export function SessionProvider({
     const id = ++latest.current
     setSession({ status: 'loading' })
     try {
-      const res = await apiFetchWithoutLogin('/api/me', { signal: AbortSignal.timeout(LOAD_TIMEOUT_MS) })
+      const account = await profileApi.account(AbortSignal.timeout(LOAD_TIMEOUT_MS))
       if (id !== latest.current) return false
-      if (res.status === 401) {
-        await signedOut(res)
-        return false
-      }
-      if (!res.ok) {
-        setSession({ status: 'error' })
-        return false
-      }
-      setSession({ status: 'signedIn', account: toAccount((await res.json()) as AccountResponse) })
+      setSession({ status: 'signedIn', account })
       return true
-    } catch {
+    } catch (e) {
       if (id !== latest.current) return false
-      // つながらない・時間切れ
+      if (e instanceof ApiError && e.status === 401) {
+        signedOut(e.code)
+        return false
+      }
+      // 401 でない失敗（500・503）・つながらない・時間切れ
       setSession({ status: 'error' })
       return false
     }
@@ -107,17 +76,16 @@ export function SessionProvider({
       const before = current.current
       if (document.visibilityState !== 'visible' || before.status !== 'signedIn') return
       try {
-        const res = await apiFetchWithoutLogin('/api/me')
-        if (res.status === 401) {
-          latest.current++
-          await signedOut(res)
-          return
-        }
-        if (res.ok && toAccount((await res.json()) as AccountResponse).userId !== before.account.userId) {
+        const account = await profileApi.account()
+        if (account.userId !== before.account.userId) {
           onAccountChanged()
         }
-      } catch {
-        // つながらないときは、今の画面のまま（次の API の失敗で扱う）
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 401) {
+          latest.current++
+          signedOut(e.code)
+        }
+        // ほかの失敗・つながらないときは、今の画面のまま（次の API の失敗で扱う）
       }
     }
     document.addEventListener('visibilitychange', recheck)
@@ -137,7 +105,7 @@ export function SessionProvider({
   return <SessionContext value={{ session, signIn, signOut, retry: load }}>{children}</SessionContext>
 }
 
-export function useSession(): SessionValue {
+export const useSession = (): SessionValue => {
   const value = useContext(SessionContext)
   if (!value) {
     throw new Error('useSession は SessionProvider の中で使う')

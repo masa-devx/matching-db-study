@@ -11,7 +11,7 @@ export const SIGNED_OUT_REASON = 'signed-out'
 export const ACCOUNT_SUSPENDED_REASON = 'account-suspended'
 
 // ログアウト・退会・ログインが切れた（401）ときに、画面に残したログインした自分の情報を全部消す
-export function clearSession(): void {
+export const clearSession = (): void => {
   sessionStorage.removeItem(LEGACY_TOKEN_KEY)
   sessionStorage.removeItem(SEARCH_CONDITIONS_KEY)
 }

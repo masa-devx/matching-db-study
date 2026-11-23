@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
+import { matchingApi } from './api/matchingApi'
 import Avatar from './components/Avatar'
 import EmptyState from './components/EmptyState'
 import { SkeletonRows } from './components/Skeleton'
-import { apiFetch } from './shared/api/client'
 
 // レガシー版（03b）。送ったいいねの一覧。取る・持つ・見せるを、全部この部品に書く。
 // M3（#184）：いいねのタブ（/likes）は、届いたいいね（LikesPage）にした。この画面は /likes/sent に移し、設定から開く
@@ -12,11 +12,7 @@ export default function SentLikesPage() {
 
   useEffect(() => {
     // 読み込み中・失敗は考えない。API が止まると、画面は空のまま
-    apiFetch(`/api/me/likes`, {
-      headers: { Accept: 'application/json' },
-    })
-      .then((r) => r.json())
-      .then(setLikes)
+    matchingApi.sentLikes().then(setLikes)
   }, [])
 
   // 03c：読み込み中は、行と同じ形のスケルトン（FR-UI-025）

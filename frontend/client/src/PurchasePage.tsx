@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router'
+import { ApiError, ignoreApiError } from './api/ApiError'
+import { billingApi } from './api/billingApi'
+import { profileApi } from './api/profileApi'
 import Button from './components/Button'
 import Icon from './components/Icon'
 import { SkeletonProfile } from './components/Skeleton'
 import { useToast } from './components/Toast'
-import { apiFetch } from './shared/api/client'
 
 // レガシー版（07）。購入の画面（/plans/:planId）。内容を確かめて「購入する」を押す。決済はしない（押したらすぐ有料）
 export default function PurchasePage() {
@@ -16,35 +18,33 @@ export default function PurchasePage() {
   const navigate = useNavigate()
   // M8（#198）：どの画面から来たか。買ったあと、そこに戻す（なければ、プランの一覧）
   const from = useLocation().state?.from
-  const headers = { Accept: 'application/json' }
 
   useEffect(() => {
     // 1つのプランを読む API はないので、一覧を全部読んで探す。男性でなければ 403 でホームに戻す
-    apiFetch(`/api/plans`, { headers }).then(async (r) => {
-      if (r.status === 403) {
-        navigate('/home')
-        return
-      }
-      const rows = await r.json()
-      setPlan(rows.find((p: any) => String(p.id) === planId))
-    })
-    apiFetch(`/api/me`, { headers })
-      .then((r) => r.json())
-      .then(setMe)
+    billingApi.plans().then(
+      (rows) => setPlan(rows.find((p: any) => String(p.id) === planId)),
+      (e) => {
+        if (e instanceof ApiError && e.status === 403) {
+          navigate('/home')
+          return
+        }
+        throw e
+      },
+    )
+    profileApi.accountRecord().then(setMe)
   }, [planId])
 
   const buy = () => {
     setSending(true)
-    apiFetch(`/api/me/purchases`, {
-      method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plan_id: plan.id }),
-    }).then(() => {
-      // ステータスを見ない
-      toast('有料会員になりました')
-      // M8：トークや検索から来た人は、その画面に戻す（買った目的を、すぐ果たせるように）
-      navigate(from ?? '/plans', { viewTransition: true })
-    })
+    billingApi
+      .purchase(plan.id)
+      .catch(ignoreApiError)
+      .then(() => {
+        // ステータスを見ない
+        toast('有料会員になりました')
+        // M8：トークや検索から来た人は、その画面に戻す（買った目的を、すぐ果たせるように）
+        navigate(from ?? '/plans', { viewTransition: true })
+      })
   }
 
   if (!plan || !me) return <SkeletonProfile />

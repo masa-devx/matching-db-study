@@ -1,8 +1,8 @@
 # 画面の作り方（レガシー版と改善版）
 
-状態：確定（改善版の形は #112・#113 で決めた。E2E の道具はまだ決めていない）
+状態：確定（改善版の形は #112・#113 で決めた。API を呼ぶ所を `src/api/` にまとめること・テストの道具は #275 で決め、#292 で `src/api/` に移した）
 決まり：改善版の画面の受け持ち・import の決まり・書き方・状態の置き場・テストは [architecture-frontend.md](../agents/rules/architecture-frontend.md) を正とする。この文書は、形を選んだ理由と、今のファイルをどこへ移すかの地図
-決定：[decisions.md](decisions.md) の D-004（React＋TypeScript＋Vite）・D-006（OpenAPI は使わない）・D-014（認証）・D-018（画面も分ける）・D-026（改善版の置き場）
+決定：[decisions.md](decisions.md) の D-004（React＋TypeScript＋Vite）・D-006（OpenAPI は使わない）・D-014（認証）・D-018（画面も分ける）・D-026（改善版の置き場）・D-029（axios・`src/api/`・MSW と Playwright）
 
 画面も、DB と同じく「レガシー版で作る → 測る → 直す → もう一度測る」で進める。03b から、画面の子 Issue も `legacy-repo` と `refactored-repo` に分ける。05b（Context から Zustand）は、それ自体が前と後の比べなので分けない。
 
@@ -32,17 +32,17 @@ export default function SearchPage() {
 | 項目 | レガシー版（legacy-repo） | 改善版（refactored-repo） | 測る・確かめること |
 | --- | --- | --- | --- |
 | コンポーネント設計 | 1画面に1つの大きな部品 | container（hook とつなぎ、presenter に渡す）・hook（取る・持つ）・presenter（props で見せるだけ）に分ける | 1つの部品の行の数。presenter を、API なしでテストできるか |
-| API との通信 | 部品の中の `useEffect` で、そのつど `fetch`。URL とトークンの読み出しを、あちこちに書く | API を呼ぶところを1か所にまとめる（送り先・`401`・失敗・読み込み中）。検索の連打は `AbortController` で止める | 連打したとき、古い結果があとから上書きするか |
+| API との通信 | 部品の中の `useEffect` で、そのつど `fetch`。URL とトークンの読み出しを、あちこちに書く | axios で、API を呼ぶところを `src/api/` にまとめる（送り先・`401`・失敗）。検索の連打は `AbortController` で止める | 連打したとき、古い結果があとから上書きするか |
 | 状態管理 | なんでも `useState` と Context に置く | どの状態をどこに置くかを分ける。05b で Zustand に移す | 描き直しの回数（React Profiler） |
 | 画面の表示速度 | 考えない | 04 の検索の一覧で直す（長い一覧・画像・バンドルの大きさ） | Lighthouse の LCP・INP・CLS。`vite build` の大きさ |
-| テスト | なし | Vitest＋Testing Library（presenter と、API を呼ぶところ）。直す前に、今の動きを確かめるテストを足す | テストが、要件 ID の受け入れ条件に対応しているか |
+| テスト | なし | 結合テスト（Vitest・Testing Library・MSW）と E2E（Playwright）を中心にする。直す前に、今の動きを確かめるテストを足す | テストが、要件 ID の受け入れ条件に対応しているか |
 | 開発効率 | ひな形のまま。型は `any` でよい | Biome（lint と整形）・型の検査・テストを CI に入れる。API がまだないときの仮の応答 | CI で止まるか |
 
 ## 認証（D-014）
 
 | | レガシー版 | 改善版 |
 | --- | --- | --- |
-| トークンの置き場所 | ログインの応答の JWT を sessionStorage に置き、`Authorization: Bearer` で送る | HttpOnly の Cookie（画面からは読めない）。`fetch` に `credentials: 'include'` |
+| トークンの置き場所 | ログインの応答の JWT を sessionStorage に置き、`Authorization: Bearer` で送る | HttpOnly の Cookie（画面からは読めない）。Cookie を送る設定（axios の `withCredentials`）は `src/api/client.ts` だけ |
 | 確かめること | XSS があると、トークンを持ち出せる | 同じ XSS でも、トークンを持ち出せない |
 
 ## 改善版の考え方
@@ -63,8 +63,8 @@ export default function SearchPage() {
 | Repository（型の約束） | `repository.ts` の `XxxRepository`（TS の `interface`） | データの出どころが2つあるとき、またはテストで外を偽物にしたいときだけ。今はメッセージだけ |
 | Repository の実装 | `repositories/restXxxRepository.ts`・`repositories/firestoreXxxRepository.ts` | 約束を作った機能だけ |
 | UseCase（手順と状態） | `hooks/` | いつも。React から外した純粋な関数に分けるのは、手順が込み入る所（購入・登録の手順など）だけ |
-| API を呼ぶ＋形を変える | `api.ts`（変える関数は `toXxx`） | API を呼ぶ機能。Repository を作った機能では、Repository の実装がこの受け持ちも持つ |
-| Infra（通信） | `shared/api/client.ts` | 1つだけ |
+| API を呼ぶ＋形を変える | `src/api/〇〇Api.ts`（変換は呼ぶ関数の中） | 業務のまとまりごと。hook と、REST の Repository の実装が呼ぶ |
+| Infra（通信） | `src/api/client.ts`（axios） | 1つだけ |
 | View | `pages/`（container）・`components/`（presenter） | いつも（小さな機能でも、2つのフォルダを作る） |
 
 言葉（container・presenter・Repository）の意味は、[architecture-frontend.md](../agents/rules/architecture-frontend.md) の2章。
@@ -76,6 +76,10 @@ export default function SearchPage() {
 ```text
 frontend/client/src/
 ├── main.tsx                       起動するだけ
+├── api/                           API を呼ぶ所。読むのは hook と、まだ移していないレガシー版の画面（architecture-frontend.md の3章）     ← shared/api・features/messages/api.ts・各画面の fetch
+│   ├── client.ts                  axios のインスタンス（axios.create() で作ったもの）：送り先・Cookie・CSRF・401／419・503
+│   ├── ApiError.ts                失敗の型（状態コード・code・メッセージ・入力の誤り）。#292 で移した
+│   └── 〇〇Api.ts                  業務のまとまりごと（authApi・profileApi・membersApi・matchingApi・messagingApi・billingApi）
 ├── app/                           組み立て。ルートと、どの画面にどの Repository の実装を渡すかを決めるのはここだけ
 │   ├── App.tsx                    Provider を重ねる（ログインした自分・トースト）            ← App.tsx の上半分
 │   ├── router.tsx                 ルートの表（パス・画面の題・どのタブを選ぶか）              ← App.tsx の Routes・TITLES・TabBar の UNDER_HOME
@@ -96,9 +100,6 @@ frontend/client/src/
 │   └── notices/                   運営からのお知らせ                                        ← NoticesPage・components/NoticeBanner
 │
 ├── shared/                        どの機能にも属さないもの（features を import しない）
-│   ├── api/
-│   │   ├── client.ts              fetch の包み：送り先・Cookie・401・失敗の形・中止
-│   │   └── ApiError.ts            失敗の型（状態コード・code・メッセージ・入力の誤り）
 │   ├── session/                   ログインした自分（Account の型・/api/me を読む・読み直す・useSession）← App.tsx・各画面の /api/me
 │   ├── firebase/app.ts            Emulator への接続（最初の1回だけ）                         ← firebase.ts の上半分
 │   ├── ui/                        見せるだけの部品                                          ← components/ の残り（Button・Avatar・Icon・EmptyState・Skeleton・ConfirmDialog・Toast）
@@ -125,7 +126,7 @@ frontend/client/src/
 | 会員のカード | 検索・いいね・ブロックの一覧 | `profile/` が presenter を出す |
 | 未読の数・届いたいいねの数 | 下のタブ | 数だけを返す API が1本なので、`messages/` が `useBadgeCounts` を出す（届いたいいねの数も。#247）。読むのは `TabBar` の中だけ。読み直す関数は、使う画面を移すときに足す |
 | 読んだ数の表示（`ReadCounter`） | Firestore 版のトークとその一覧 | `messages/components/`（数えるのは Firestore の Repository の実装） |
-| Firebase へのログイン（`signInFirebase`） | Firestore 版のトーク | Firestore の Repository の実装が、最初に使うときに1回だけ。`client.ts` を通す |
+| Firebase へのログイン（`signInFirebase`） | Firestore 版のトーク | Firestore の Repository の実装が、最初に使うときに1回だけ。Firestore のトークンは `messagingApi` から取る |
 
 - 退会は `settings/` に置く。`blocks/` は退会を受け持たない（#121 の範囲から外す）
 - 下のタブの数は、下のタブの数だけの機能（`features/tab-counts`）にする案・API を2本に分けてそれぞれの機能に持たせる案と比べ、1本の API と `features/messages` の hook にした（ポーリングを1本にするため。#247）。いいねの画面を移すときに見直す
@@ -143,13 +144,14 @@ features/search/
 ├── hooks/
 │   ├── useSearchConditions.ts     条件を URL に読み書きする（クエリがないときだけ、最後の条件に戻す）
 │   └── useSearchMembers.ts        取る・足す・重なりを除く・古い応答を捨てる・状態を持つ
-├── api.ts                         API を呼び、API の形（MemberCardResponse）を画面の形（MemberCard）に変える
 ├── types.ts                       画面の型（SearchConditions・MemberCard）
 ├── rules.ts                       画面の決まり（年齢の下 ≤ 上など）。純粋な関数
 └── *.test.ts(x)                   テストは隣に置く
 ```
 
-ファイルが少ない機能（`blocks/` など）も、`pages/` と `components/` は作る。画面をまだ移していない機能（今は下のタブの数だけの `messages/`）は、画面を移すチケットで作る（`architecture-frontend.md` の2章）。`hooks/`・`api.ts`・`types.ts`・`rules.ts` は、要るときだけ作る。
+- API を呼び、API の形（`MemberCardResponse`）を画面の形（`MemberCard`）に変えるのは、`src/api/membersApi.ts`。`useSearchMembers` が呼ぶ
+
+ファイルが少ない機能（`blocks/` など）も、`pages/` と `components/` は作る。画面をまだ移していない機能（今は下のタブの数だけの `messages/`）は、画面を移すチケットで作る（`architecture-frontend.md` の2章）。`hooks/`・`types.ts`・`rules.ts` は、要るときだけ作る。機能の中に `api.ts` は作らない（D-029）。
 
 ### データの出どころが2つある機能（`features/messages/`）
 
@@ -161,7 +163,7 @@ features/messages/
 ├── hooks/useRooms.ts・useTalk.ts               Repository を受け取って使う
 ├── repository.ts                                MessageRepository（型の約束）
 ├── repositories/
-│   ├── restMessageRepository.ts                 Laravel：ポーリング。client.ts を呼び、形を変える（api.ts は作らない）
+│   ├── restMessageRepository.ts                 Laravel：ポーリング。messagingApi を呼ぶ
 │   └── firestoreMessageRepository.ts            Firestore：onSnapshot。読んだ数もここで数える。Firebase へのログインもここ
 ├── types.ts・rules.ts                           Message・Room・送れる文字数
 └── *.test.ts(x)
@@ -192,6 +194,7 @@ features/messages/
 
 ## まだ決めていないこと
 
-- E2E の道具（[testing.md](../agents/rules/testing.md)）。移す前の今の動きを確かめるテストは、画面の単位で `fetch` を偽物にして書く（architecture-frontend.md の7章）
+- E2E（Playwright）を CI に入れるか。最初は手元で流す（architecture-frontend.md の7章）
+- REST のメッセージを画面の形（`isMine`）に変える所は、トークの画面を移すときに決める（`Account` は `public_id` だけを持つ。architecture-frontend.md の6章）
 - 有料で断るときの 403 に `code` を付けること（要件は `code: paid_required` を決めているが、API は返していない）。「使える機能を `/api/me` で返す」チケットに入れる
 - 検索のフリーワードを URL に入れたとき、アクセスのログに残してよいか

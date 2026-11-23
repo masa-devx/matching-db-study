@@ -1,0 +1,12 @@
+// 部品・hook・関数は、アロー関数で書く（quality-frontend.md の S1）。
+// function の宣言（export・async・型の引数の付いたもの・export default function を含む）と、function の式を拾う。
+// オブジェクトとクラスのメソッドの短い書き方（{ m() {} }）は拾わない
+language js
+
+or { JsFunctionDeclaration(), JsFunctionExportDefaultDeclaration(), JsFunctionExpression() } as $decl where {
+  register_diagnostic(
+    span = $decl,
+    message = "function で書かず、アロー関数（const xxx = () => …）で書く（quality-frontend.md の S1）",
+    severity = "error"
+  )
+}

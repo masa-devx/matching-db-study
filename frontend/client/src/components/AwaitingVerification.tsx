@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
-import { apiFetchWithoutLogin } from '../shared/api/client'
+import { authApi } from '../api/authApi'
 import { useSession } from '../shared/session/SessionProvider'
 import { useLogout } from '../shared/session/useLogout'
 import Button from './Button'
@@ -19,12 +19,8 @@ export default function AwaitingVerification({ email }: { email: string }) {
   const resend = async () => {
     setSending(true)
     try {
-      const res = await apiFetchWithoutLogin('/api/email-verifications', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      })
-      toast(res.ok ? '確認のメールを送りました' : '送れませんでした', res.ok ? undefined : 'error')
+      await authApi.resendVerification(email)
+      toast('確認のメールを送りました')
     } catch {
       toast('送れませんでした', 'error')
     } finally {
