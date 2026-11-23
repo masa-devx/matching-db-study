@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
+import { ApiError, ignoreApiError } from './api/ApiError'
+import { matchingApi } from './api/matchingApi'
+import { profileApi } from './api/profileApi'
 import Avatar from './components/Avatar'
 import Button from './components/Button'
 import EmptyState from './components/EmptyState'
@@ -7,7 +10,6 @@ import MatchCelebration from './components/MatchCelebration'
 import { SkeletonRows } from './components/Skeleton'
 import { useToast } from './components/Toast'
 import UpsellDialog from './components/UpsellDialog'
-import { apiFetch } from './shared/api/client'
 
 // レガシー版（M3。#184）。いいねのタブ（/likes）＝相手から届いたいいねの一覧。
 // 1人ずつ「マッチする」（いいねを送り返す）か「スキップ」（見送る。相手には伝わらない）を選ぶ。
@@ -23,19 +25,10 @@ export default function LikesPage() {
   const [matched, setMatched] = useState<any>(null)
   const toast = useToast()
 
-  const headers = {
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-  }
-
   // 届いたいいねと、スキップした相手を読む（2本。失敗は考えない。401 は client.ts が移す）
   const load = () => {
-    apiFetch(`/api/me/received-likes`, { headers })
-      .then((r) => r.json())
-      .then(setLikes)
-    apiFetch(`/api/me/skips`, { headers })
-      .then((r) => r.json())
-      .then(setSkips)
+    matchingApi.receivedLikes().then(setLikes)
+    matchingApi.skips().then(setSkips)
   }
 
   useEffect(() => {
@@ -45,42 +38,46 @@ export default function LikesPage() {
   // マッチする：いいねを送り返す（今ある POST /api/me/likes）。相手からのいいねがあるので、マッチになる
   const match = async (like: any) => {
     setBusy(like.user_id)
-    const r = await apiFetch(`/api/me/likes`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ user_id: like.user_id }),
+    const d = await matchingApi.like(like.user_id).catch((e) => {
+      if (!(e instanceof ApiError)) throw e
+      setBusy('')
+      // 送り返すいいねは、1日10回の数に入れない（#184）。それでも 403 が返ったら、誘導のモーダルを出す
+      if (e.status === 403) {
+        setUpsell(true)
+      } else {
+        toast('マッチできませんでした', 'error')
+      }
+      return null
     })
+    if (d === null) return
     setBusy('')
-    // 送り返すいいねは、1日10回の数に入れない（#184）。それでも 403 が返ったら、誘導のモーダルを出す
-    if (r.status === 403) {
-      setUpsell(true)
-      return
-    }
-    if (!r.ok) {
-      toast('マッチできませんでした', 'error')
-      return
-    }
     // マッチの演出に出す自分の写真を、ここで読む（相手のプロフィールの画面と同じ2本を、ここにも書いた）
-    const me = await apiFetch(`/api/me`, { headers }).then((x) => x.json())
-    const mine = await apiFetch(`/api/users/${me.public_id}`, { headers }).then((x) => x.json())
+    // 読めなくても演出は出す（写真なし。前は失敗の応答のまま続けていた）
+    const mine = await profileApi
+      .accountRecord()
+      .then((me) => profileApi.member(me.public_id))
+      .catch((e) => {
+        ignoreApiError(e)
+        return null
+      })
     // M3（#187）：応答のトークルームの ID を、演出の「メッセージを送る」に渡す
-    const d = await r.json()
-    setMatched({ me: mine.profile ?? {}, partner: like, roomId: d.room_id })
+    setMatched({ me: mine?.profile ?? {}, partner: like, roomId: d.room_id })
     setLikes((before) => (before ?? []).filter((x) => x.user_id !== like.user_id))
   }
 
   // スキップ：この相手を、届いたいいねと検索に出さないようにする
   const skip = (like: any) => {
     setBusy(like.user_id)
-    apiFetch(`/api/me/skips`, { method: 'POST', headers, body: JSON.stringify({ user_id: like.user_id }) }).then(
-      (r) => {
+    matchingApi.skip(like.user_id).then(
+      () => {
         setBusy('')
-        if (!r.ok) {
-          toast('スキップできませんでした', 'error')
-          return
-        }
         toast('スキップしました')
         load()
+      },
+      (e) => {
+        if (!(e instanceof ApiError)) throw e
+        setBusy('')
+        toast('スキップできませんでした', 'error')
       },
     )
   }
@@ -88,15 +85,18 @@ export default function LikesPage() {
   // スキップを元に戻す：また、届いたいいねと検索に出るようになる
   const restore = (s: any) => {
     setBusy(s.user_id)
-    apiFetch(`/api/me/skips/${s.user_id}`, { method: 'DELETE', headers }).then((r) => {
-      setBusy('')
-      if (!r.ok) {
+    matchingApi.restoreSkip(s.user_id).then(
+      () => {
+        setBusy('')
+        toast('元に戻しました')
+        load()
+      },
+      (e) => {
+        if (!(e instanceof ApiError)) throw e
+        setBusy('')
         toast('元に戻せませんでした', 'error')
-        return
-      }
-      toast('元に戻しました')
-      load()
-    })
+      },
+    )
   }
 
   // 年齢の計算を、またここにも書いた（誕生日の前だと1歳多い）

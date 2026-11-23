@@ -1,5 +1,9 @@
 import { useEffect, useOptimistic, useState, useTransition } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
+import { ApiError, ignoreApiError, StoppedRequestError } from './api/ApiError'
+import { apiUrl } from './api/client'
+import { matchingApi } from './api/matchingApi'
+import { profileApi } from './api/profileApi'
 import ConfirmDialog from './components/ConfirmDialog'
 import Icon from './components/Icon'
 import MatchCelebration from './components/MatchCelebration'
@@ -7,7 +11,6 @@ import ReportDialog from './components/ReportDialog'
 import { SkeletonProfile } from './components/Skeleton'
 import { useToast } from './components/Toast'
 import UpsellDialog from './components/UpsellDialog'
-import { apiFetch, apiUrl, StoppedRequestError } from './shared/api/client'
 
 // レガシー版（03b）。相手のプロフィール。取る・持つ・見せる・決まりを、全部この部品に書く
 // 03c：モーダル・トースト・スケルトン・マッチの演出は components/ の部品を使う
@@ -31,22 +34,14 @@ export default function UserPage() {
   const [upsell, setUpsell] = useState(false)
   const toast = useToast()
   const navigate = useNavigate()
-  const headers = {
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-  }
 
   useEffect(() => {
     // 読み込み中・失敗は考えない。すぐ別の人に移ると、前の人の応答があとから上書きする
-    apiFetch(`/api/users/${publicId}`, { headers })
-      .then((r) => {
-        return r.json()
-      })
-      .then((u) => {
-        setUser(u)
-        // M3（#187）：もうマッチしていれば、「メッセージを送る」を出す
-        setRoomId(u.room_id ?? null)
-      })
+    profileApi.member(publicId ?? '').then((u) => {
+      setUser(u)
+      // M3（#187）：もうマッチしていれば、「メッセージを送る」を出す
+      setRoomId(u.room_id ?? null)
+    })
     // もういいねしたかは、開いたときには分からない（その API がない）。押すまで「いいね」のまま
   }, [publicId])
 
@@ -54,30 +49,31 @@ export default function UserPage() {
     startTransition(async () => {
       try {
         setShownLiked(true)
-        const r = await apiFetch(`/api/me/likes`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ user_id: publicId }),
+        const d = await matchingApi.like(publicId ?? '').catch((e) => {
+          if (!(e instanceof ApiError)) throw e
+          // 07：無料の男性が1日10回を超えると 403。画面では何回目かが分からないので、断られてからモーダルを出す
+          if (e.status === 403) {
+            setUpsell(true)
+          } else {
+            // 2回目のいいね（500）などは、失敗のトースト。ハートは元に戻る
+            toast('いいねできませんでした', 'error')
+          }
+          return null
         })
-        // 07：無料の男性が1日10回を超えると 403。画面では何回目かが分からないので、断られてからモーダルを出す
-        if (r.status === 403) {
-          setUpsell(true)
-          return
-        }
-        if (!r.ok) {
-          // 2回目のいいね（500）などは、失敗のトースト。ハートは元に戻る
-          toast('いいねできませんでした', 'error')
-          return
-        }
-        const d = await r.json()
+        if (d === null) return
         setLiked(true)
         if (d.matched) {
           setRoomId(d.room_id ?? null)
           // マッチの演出に出す自分の写真を、ここで読む（ホームと同じ2本を写す）
-          const me = await apiFetch(`/api/me`, { headers }).then((x) => x.json())
-          const res = await apiFetch(`/api/users/${me.public_id}`, { headers })
-          const mine = await res.json()
-          setMatchedWith(mine.profile ?? {})
+          // 読めなくても演出は出す（写真なし。前は失敗の応答のまま続けていた）
+          const mine = await profileApi
+            .accountRecord()
+            .then((me) => profileApi.member(me.public_id))
+            .catch((e) => {
+              ignoreApiError(e)
+              return null
+            })
+          setMatchedWith(mine?.profile ?? {})
         } else {
           toast('いいねしました')
         }
@@ -89,24 +85,29 @@ export default function UserPage() {
 
   // M3（#187）：スキップする。届いたいいねの画面（LikesPage）に書いた送り方を、ここにもコピーした
   const skip = () => {
-    apiFetch(`/api/me/skips`, { method: 'POST', headers, body: JSON.stringify({ user_id: publicId }) }).then((r) => {
-      if (!r.ok) {
+    matchingApi.skip(publicId ?? '').then(
+      () => {
+        toast('スキップしました')
+        navigate(-1)
+      },
+      (e) => {
+        if (!(e instanceof ApiError)) throw e
         toast('スキップできませんでした', 'error')
-        return
-      }
-      toast('スキップしました')
-      navigate(-1)
-    })
+      },
+    )
   }
 
   // 06：ブロックする。ステータスを見ない（2回目は 500 でも「ブロックしました」と出る）
   const block = () => {
-    apiFetch(`/api/me/blocks`, { method: 'POST', headers, body: JSON.stringify({ user_id: publicId }) }).then(() => {
-      setConfirming(false)
-      toast('ブロックしました')
-      // 前の画面に戻る（戻った先は読み直すが、検索の一覧は条件を残したまま1ページ目から）
-      navigate(-1)
-    })
+    matchingApi
+      .block(publicId ?? '')
+      .catch(ignoreApiError)
+      .then(() => {
+        setConfirming(false)
+        toast('ブロックしました')
+        // 前の画面に戻る（戻った先は読み直すが、検索の一覧は条件を残したまま1ページ目から）
+        navigate(-1)
+      })
   }
 
   // 年齢の計算もここに書く（年の引き算なので、誕生日の前だと1歳多い）
