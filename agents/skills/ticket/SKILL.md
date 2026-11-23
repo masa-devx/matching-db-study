@@ -14,6 +14,7 @@ description: 改訂版（refactored-repo）のチケット（Issue）を、10種
 - 種類から `.github/ISSUE_TEMPLATE/r-*.md` を選ぶ（対応は process.md の3-1）。GitHub の画面は main のひな形を出すので、本文はこのファイルから作る
 - 同じチケットがないかを探す：`gh issue list --search "<言葉>" --state all`
 - PR が2つ以上になるものは、エピックにして子に分ける
+- 画面を移すチケットは、改善（`r-improvement.md`）で作り、「画面を移すときだけ」（画面・きっかけ・棚卸し・6つの領域）を埋める。1画面に1枚（`agents/rules/architecture-frontend.md` の9章）。ほかの改善では、その見出しを消す
 
 ## 2. 下書きを出す
 
