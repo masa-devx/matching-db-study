@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
+import { ApiError } from './api/ApiError'
+import { billingApi } from './api/billingApi'
+import { profileApi } from './api/profileApi'
 import Icon from './components/Icon'
 import { SkeletonRows } from './components/Skeleton'
-import { apiFetch } from './shared/api/client'
 
 // レガシー版（07）。プランの一覧（/plans）。男性の会員だけ。今の状態・プラン・購入の記録を、全部この部品に書く
 export default function PlansPage() {
@@ -12,24 +14,26 @@ export default function PlansPage() {
   const navigate = useNavigate()
   // M8（#198）：どの画面から来たか（トーク・検索など）。買ったあと、そこに戻す
   const from = useLocation().state?.from
-  const headers = { Accept: 'application/json' }
 
   useEffect(() => {
     // 男性でなければ API が 403 を返すので、ホームに戻す（画面では性別を確かめない）
-    apiFetch(`/api/plans`, { headers }).then(async (r) => {
-      if (r.status === 403) {
+    billingApi.plans().then(setPlans, (e) => {
+      if (e instanceof ApiError && e.status === 403) {
         navigate('/home')
         return
       }
-      setPlans(await r.json())
+      throw e
     })
     // 今の状態（is_paid・paid_until）は /api/me の users の行から読む
-    apiFetch(`/api/me`, { headers })
-      .then((r) => r.json())
-      .then(setMe)
-    apiFetch(`/api/me/purchases`, { headers })
-      .then((r) => r.json())
-      .then((rows) => setHistory(Array.isArray(rows) ? rows : []))
+    profileApi.accountRecord().then(setMe)
+    billingApi.purchases().then(
+      (rows) => setHistory(Array.isArray(rows) ? rows : []),
+      (e) => {
+        // 失敗の応答（500 など）は一覧でないので、買った記録なしとして出す
+        if (!(e instanceof ApiError)) throw e
+        setHistory([])
+      },
+    )
   }, [])
 
   if (!plans) return <SkeletonRows count={3} />
