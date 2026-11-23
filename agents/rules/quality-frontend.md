@@ -175,7 +175,7 @@ paths:
   - `client.ts` が 2xx でない応答の本文を読む所（HTML や空の応答もある。`code`・`message`・`errors` を調べて取り出す）
 - 同じ調べ方を2か所で使うときは、型ガード（`const isXxx = (v: unknown): v is Xxx => …`）にする
 - なぜ：応答の型を書く所を `〇〇Api` の関数の1か所にまとめる。形のずれはテストで見つける（D-006）。`JSON.parse` は `any` を返し、`noExplicitAny` では見つからない。ストレージには、古い版の画面が書いた値や、人が書き換えた値が入る
-- 弱いところ：API の形がずれても型の誤りにならず、違う値が画面に黙って出る。E2E（本物の API）で見つける（`architecture-frontend.md` の7章）
+- 弱いところ：API の形がずれても型の誤りにならず、違う値が画面に黙って出る。#299 で E2E（本物の API）を入れるまでは、見つける手段がない（`architecture-frontend.md` の7章）
 - 根拠：https://www.typescriptlang.org/docs/handbook/2/narrowing.html・https://axios-http.com/docs/typescript
 - #292 で、形を確かめる型ガード（`isBadgeCountsResponse`）と `as AccountResponse` をやめ、この形にした
 - まだ移していないレガシー版の画面は、`〇〇Api` が返す API の形（`XxxResponse`）のまま使う（`profileApi.accountRecord()`・`profileApi.member()` など）。画面を移すときに、画面の形に変える関数にする

@@ -185,7 +185,6 @@ it('番号が UUID の形でないと、見られずにサーバーのエラー�
 | `app/`・`shared/session/` の部品 | `tests/integration/app/`・`tests/integration/session/` | `tests/integration/app/RequireAuth.test.tsx` |
 | `src/api/client.ts` | `tests/api/client.test.ts` | ― |
 | 単体 | `tests/unit/`。`src` と同じフォルダの形 | `tests/unit/features/messages/rules.test.ts` |
-| E2E | `tests/e2e/<流れ>.spec.ts` | `tests/e2e/login.spec.ts` |
 | 偽の応答・道具 | `tests/support/` | `tests/support/handlers/profileApi.ts` |
 
 - `<機能>` は `docs/frontend.md` の「会員の画面の行き先」の機能の名前（`architecture-frontend.md` の7章）
@@ -215,16 +214,15 @@ describe('ログインした会員が、設定で、決まりに合わない新�
 ```
 
 - 「テストで使う値」には、変わらない値（入力・期待する文）・偽物（`vi.fn()`・`vi.mock()`）・画面を描く関数を置く
-- `beforeEach()` に書くのは、道具の準備と片付けだけ：偽物の片付け（`mockReset()`・`sessionStorage.clear()`）・`src/api/client.ts` への処理の渡し直し（`configureApiClient()`）・偽の時計・呼んだ回数を数える `vi.spyOn()`。データ（Cookie・`sessionStorage` に入れる値・偽の応答）は、それぞれの `it()` の中で用意する
+- `beforeEach()` に書くのは、道具の準備と片付けだけ：偽物の片付け（`mockReset()`・`sessionStorage.clear()`）・`src/api/client.ts` への処理の渡し直し（`configureApiClient()`）・偽の時計。データ（Cookie・`sessionStorage` に入れる値・偽の応答）は、それぞれの `it()` の中で用意する
 - jsdom にない機能の代わり（`<dialog>` の `showModal()` など。`tests/support/dialog.ts`）は、`beforeAll()` で1回だけ置く
 - 4章の「呼ぶ」は、会員の操作（`userEvent.click()` など）か、hook・関数を呼ぶ1行
-- E2E は `test.describe()` と `test()` で、名前の付け方は3章と同じ
 - 単体（`tests/unit/`）には、2章の並びを当てはめない（バックエンドの `tests/Unit/` と同じ）
 - 書き方の決まり（アロー関数・名前付き export・`type`・`useState` の型。`quality-frontend.md` の S1〜S5）に従う。7章の「無名関数に `: void` を書く」は PHP だけの決まりなので、当てはめない
 
 ### 偽の応答（MSW）
 
-- 既定の応答は `tests/support/handlers/〇〇Api.ts` に置く（`docs/api/` の改善版の例と同じ形）
+- 既定の応答は `tests/support/handlers/〇〇Api.ts` に置く（今の API と同じ形。`docs/api/` の改善版の今の列）
 - テストごとに違う応答（失敗・空・別の会員）は、その `it()` の中の「用意する」で `server.use(...)` で上書きする。テストが終わると、`tests/support/setup.ts` が戻す
 - 何本呼んだか・何を送ったかは、`sentRequests()`・`sentPaths()` で確かめる
 - 応答を返さない偽物で読み込み中を見るテストは、要求が偽物に届いたのを確かめてから終える（`await vi.waitFor(() => expect(sentRequests(…)).toHaveLength(1))`）。届く前に終えると、届くのが次のテストになり、次のテストの偽の応答を使ってしまう

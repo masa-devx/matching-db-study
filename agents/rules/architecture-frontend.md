@@ -395,17 +395,16 @@ flowchart TB
 
 ## 7. テスト
 
-会員から見える動きを確かめる、結合テストと E2E を中心にする（2026-11-23 に人が決めた。D-029）。
+会員から見える動きを確かめる結合テストを中心にする（2026-11-23 に人が決めた。D-029）。E2E は、まだ入れない。入れるのは #299（2026-11-23 に人が決めた）。
 
 - なぜ：中の作り（どの hook を呼ぶか・どのファイルに置くか）でなく、動き（画面に何が出るか・押したら何が起きるか）を見るテストは、AI がコードを書き換えても、そのまま残る。AI の誤りにも気づきやすい
-- 道具は Vitest・Testing Library・MSW（結合）と Playwright（E2E）。MSW と Playwright は #290 で入れた（版は AGENTS.md の技術スタック）
+- 道具は Vitest・Testing Library・MSW（結合）。MSW は #290 で入れた（版は AGENTS.md の技術スタック）。E2E の道具（Playwright）は #299 で入れる
 - テストのコードの書き方は [testing.md](testing.md) の「画面のテスト」に従う
 
 | 種類 | 何を | 道具 | 置き場（`frontend/client/` の下） |
 | --- | --- | --- | --- |
 | 結合 | 画面（container）を描き、会員の操作で確かめる | Vitest・Testing Library・MSW | `tests/integration/<機能>/` |
 | API を呼ぶ所 | `src/api/client.ts` の扱い | Vitest・MSW | `tests/api/client.test.ts` |
-| E2E | 本物の API と DB で、主な流れを通す | Playwright | `tests/e2e/` |
 | 単体 | `rules.ts` の純粋な関数・`〇〇Api` の中の形の変換 | Vitest | `tests/unit/`（`src` と同じフォルダの形） |
 | 道具 | MSW の server・偽の応答・Cookie などの道具 | MSW | `tests/support/` |
 
@@ -422,22 +421,14 @@ flowchart TB
 - 中身があるときだけでなく、読み込み中・失敗（500・つながらない）・空のときも見る
 - 実行：`frontend/client` で `npm test`
 - MSW の準備は `tests/support/server.ts`（`setupServer`）。`tests/support/setup.ts` が、テストの前に `listen`、テストごとに `resetHandlers`、終わりに `close` を呼ぶ
-- 偽の応答を置いていない API を呼んだら、そのテストを誤りにする（`onUnhandledFrame: 'error'`。MSW 3 で `onUnhandledRequest` から名前が変わった）
+- 偽の応答のない API は、`tests/support/server.ts` の `request:unhandled` で集め、`tests/support/setup.ts` の `afterEach` で誤りにする。`onUnhandledFrame: 'error'`（MSW 3 で `onUnhandledRequest` から名前が変わった）は、本物の API へ送らないためだけ
 - どの API を何本呼んだか・何を送ったかは、`tests/support/server.ts` の `sentRequests()`・`sentPaths()` で見る
-- テストの中の画面のオリジンと API の送り先は、どちらも `http://localhost:8000` にそろえる（`vite.config.ts` の `test`）。jsdom は、ほかのオリジンへの要求で CORS を確かめ、CORS の印のない偽の応答を止めるため。CORS は E2E で確かめる
+- テストの中の画面のオリジンと API の送り先は、どちらも `http://localhost:8000` にそろえる（`vite.config.ts` の `test`）。jsdom は、ほかのオリジンへの要求で CORS を確かめ、CORS の印のない偽の応答を止めるため。CORS は、#299 で E2E を入れるまで、テストで確かめる手段がない
 
 ### E2E
 
-- 本物の API と DB で、主な流れを通す（Playwright）
-- 置き場は `frontend/client/tests/e2e/`。設定は `frontend/client/playwright.config.ts`
-- 実行：`frontend/client` で `npm run test:e2e`（前提とコマンドは `docs/commands.md` の「画面の E2E」）
-- データは、バックエンドのシード（`backend/client/database/seeders/`）で入れる
-  - 読むだけの流れ（ログイン・検索）は、シードの会員（`search00001@example.test`）を使う
-  - 書き込む流れ（登録・いいね・マッチ・トーク・有料）は、毎回ちがうメールアドレスで、画面から登録した会員を使う。シードの会員には書き込まない
-  - 会員を用意する手順（登録・確認のメール・ログイン）は `tests/e2e/support.ts` の1か所に置く
-- 開発用の DB（`matching_dev`）に流すので、登録した会員（`e2e-…@example.test`）と、その会員のいいね・マッチ・メッセージ・購入が残る
-- 最初は手元で流す。CI に入れるかは、あとで決める
-- 主な流れの一覧（流れごとに1本以上）
+- まだ入れない（2026-11-23 に人が決めた）。入れるのは #299（本物の API と DB で、主な流れを通す）
+- #299 で書くときの、主な流れの一覧（流れごとに1本以上）
   - ログイン
   - 登録
   - 検索
@@ -454,7 +445,7 @@ flowchart TB
 ### 偽の応答
 
 - MSW の偽の応答は、`tests/support/handlers/〇〇Api.ts`（業務のまとまりごと。`src/api/〇〇Api.ts` と同じ名前）の1か所に置く
-- 応答の形は、`docs/api/` の改善版の例と同じにする
+- 応答の形は、今の API と同じにする（`docs/api/` の改善版の今の列。要件の形がまだ入っていない API は、今の形）
 - テストごとに違う応答（失敗・空）は、そのテストの中で、ハンドラーを上書きする
 
 ### 画面の要素の探し方
@@ -465,12 +456,11 @@ flowchart TB
 ### カバレッジ
 
 - 数字の目標を置かない。CI で、カバレッジの数字では落とさない
-- 抜けは、上の「主な流れの一覧」と、要件 ID ごとのテストで見る
+- 抜けは、要件 ID ごとのテストで見る。E2E を入れたら（#299）、上の「主な流れの一覧」でも見る
 
 ### 弱いところ
 
-- E2E は遅く、待ち方で落ちることがある（決まった時間だけ待たず、画面の要素が出るのを待つ。`testing.md` の「テストの独立性」）
-- MSW の偽の応答が、本物の API とずれることがある。ずれは E2E で見つける。API の形を変える PR では、`docs/api/` の例と偽の応答を一緒に直す
+- MSW の偽の応答が、本物の API とずれることがある。#299 で E2E を入れるまでは、ずれを見つける手段がない。API の形を変える PR では、`docs/api/` の例と偽の応答を一緒に直す
 
 ### 移すときのテスト
 
