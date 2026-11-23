@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
+import { ignoreApiError } from './api/ApiError'
+import { apiUrl } from './api/client'
+import { profileApi } from './api/profileApi'
 import Avatar from './components/Avatar'
 import Button from './components/Button'
 import ConfirmDialog from './components/ConfirmDialog'
 import Icon from './components/Icon'
 import { SkeletonProfile } from './components/Skeleton'
 import { useToast } from './components/Toast'
-import { apiFetch, apiUrl } from './shared/api/client'
 import { useLogout } from './shared/session/useLogout'
 
 // M4（#198）：プルダウンに出す都道府県と身長（検索の条件の画面にある一覧と同じものを、ここにも書いた）
@@ -79,18 +81,9 @@ export default function HomePage() {
   useEffect(() => {
     // 読み込み中と失敗は考えない。401 は client.ts がログインの画面へ移す。StrictMode なので、開発中は2本ずつ呼ばれる
     // 自分の public_id（#46）を知るために /api/me を呼び、そのあとプロフィールを呼ぶ（2本が順に流れる）
-    apiFetch(`/api/me`, {
-      headers: { Accept: 'application/json' },
-    })
-      .then((r) => r.json())
-      .then((u) =>
-        apiFetch(`/api/users/${u.public_id}`, {
-          headers: { Accept: 'application/json' },
-        }),
-      )
-      .then((r) => {
-        return r.json()
-      })
+    profileApi
+      .accountRecord()
+      .then((u) => profileApi.member(u.public_id))
       .then((u) => {
         setMe(u)
         setForm(u.profile ?? {})
@@ -106,13 +99,8 @@ export default function HomePage() {
     }
     setSaving(true)
     // 入力を確かめない。API も確かめないので、何でも入る
-    const res = await apiFetch(`/api/users/${me.public_id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({
+    const profile = await profileApi
+      .updateProfile(me.public_id, {
         nickname: form.nickname,
         prefecture: form.prefecture,
         height: form.height,
@@ -125,9 +113,12 @@ export default function HomePage() {
         marital_status: form.marital_status,
         introduction: form.introduction,
         image: form.image,
-      }),
-    })
-    const profile = await res.json()
+      })
+      // 失敗（500 など）でも止めない。前は失敗の応答をプロフィールとして置いていたが、今は前のプロフィールのまま
+      .catch((e) => {
+        ignoreApiError(e)
+        return me.profile
+      })
     setSaving(false)
     setMe({ ...me, profile })
     setEditing(false)

@@ -1,27 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
+import { ApiError, StoppedRequestError } from './api/ApiError'
+import { authApi } from './api/authApi'
+import { profileApi } from './api/profileApi'
 import ConfirmDialog from './components/ConfirmDialog'
 import Icon from './components/Icon'
 import { useToast } from './components/Toast'
-import { StoppedRequestError } from './shared/api/ApiError'
-import { apiFetch, apiFetchWithoutLogin } from './shared/api/client'
 import { useSession } from './shared/session/SessionProvider'
 import { useLogout } from './shared/session/useLogout'
-
-// 422 の応答の errors.<項目> の最初の文。なければ null（応答は外から来る値なので、unknown で受けて調べる。quality-frontend.md の T2）
-function fieldErrorOf(body: unknown, field: string): string | null {
-  if (typeof body !== 'object' || body === null || !('errors' in body)) return null
-  const errors: unknown = body.errors
-  if (typeof errors !== 'object' || errors === null || !(field in errors)) return null
-  const messages: unknown = Object.entries(errors).find(([key]) => key === field)?.[1]
-  return Array.isArray(messages) && typeof messages[0] === 'string' ? messages[0] : null
-}
-
-// 応答の message（文は API の lang/ja/errors.php にだけ書く）。読めないときは null
-function messageOf(body: unknown): string | null {
-  if (typeof body !== 'object' || body === null || !('message' in body)) return null
-  return typeof body.message === 'string' ? body.message : null
-}
 
 // レガシー版（M1。#181）。設定（/settings）。ホームの右上の歯車から来る。
 // アカウント（メールアドレスの確認・パスワード）・有料会員・検索・安全・案内・ログアウト・退会を、ここにまとめる。
@@ -50,25 +36,26 @@ export default function SettingsPage() {
 
   useEffect(() => {
     // ホームと同じ2本（自分・自分のプロフィール）を、ここにも書いた。メールアドレス・確認済みか・性別・有料かを知るため
-    const headers = { Accept: 'application/json' }
-    apiFetch(`/api/me`, { headers })
-      .then((r) => r.json())
-      .then((u) => apiFetch(`/api/users/${u.public_id}`, { headers }))
-      .then((r) => r.json())
+    profileApi
+      .accountRecord()
+      .then((u) => profileApi.member(u.public_id))
       .then((u) => setMe(u))
   }, [])
 
   // 確認のメールをもう一度送る（FR-AUTH-007 の API。ログインしていなくても呼べる API に、自分のメールアドレスを送る）
   const resend = () => {
     setResending(true)
-    apiFetchWithoutLogin(`/api/email-verifications`, {
-      method: 'POST',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: me.email }),
-    }).then((r) => {
-      setResending(false)
-      toast(r.ok ? '確認のメールを送りました' : '送れませんでした', r.ok ? undefined : 'error')
-    })
+    authApi.resendVerification(me.email).then(
+      () => {
+        setResending(false)
+        toast('確認のメールを送りました')
+      },
+      (e) => {
+        if (!(e instanceof ApiError)) throw e
+        setResending(false)
+        toast('送れませんでした', 'error')
+      },
+    )
   }
 
   // パスワードを変える。画面で確かめるのは、空でないことと、2回が同じことだけ。長さ（8〜64文字・72バイトまで）は API が見る（FR-AUTH-033・FR-AUTH-004）
@@ -83,33 +70,23 @@ export default function SettingsPage() {
     }
     setChangeBusy(true)
     try {
-      const r = await apiFetch(`/api/me/password`, {
-        method: 'PUT',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ current_password: current, password: next }),
-      })
-      if (r.status === 422) {
-        // 新しいパスワードが決まりに合わないときは errors.password に、今のパスワードが違うときは errors.current_password に文が入る。
-        // 画面の文は、応答が読めないときのためだけに置く
-        const body: unknown = await r.json().catch(() => null)
-        setChangeError(
-          fieldErrorOf(body, 'password') ??
-            fieldErrorOf(body, 'current_password') ??
-            messageOf(body) ??
-            '変えられませんでした',
-        )
-        return
-      }
-      if (!r.ok) {
-        setChangeError('変えられませんでした')
-        return
-      }
+      await authApi.changePassword(current, next)
       setChanging(false)
       toast('パスワードを変えました')
     } catch (e) {
+      if (e instanceof ApiError) {
+        // 新しいパスワードが決まりに合わないときは errors.password に、今のパスワードが違うときは errors.current_password に文が入る。
+        // 画面の文は、応答が読めないときのためだけに置く
+        setChangeError(
+          e.status === 422
+            ? (e.fieldError('password') ??
+                e.fieldError('current_password') ??
+                e.serverMessage ??
+                '変えられませんでした')
+            : '変えられませんでした',
+        )
+        return
+      }
       // 401・メンテナンスは、app/ の処理が画面を移す。ほかは、つながらない・時間切れ
       if (!(e instanceof StoppedRequestError)) {
         setChangeError('変えられませんでした。通信を確かめて、もう一度お試しください')
@@ -132,19 +109,18 @@ export default function SettingsPage() {
   // 06：退会する。422 のときだけ、モーダルの中に出す（ほかの失敗は考えない）
   const withdraw = async () => {
     setWithdrawBusy(true)
-    const res = await apiFetch(`/api/me`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({ password }),
-    })
-    setWithdrawBusy(false)
-    if (res.status === 422) {
-      setWithdrawError('パスワードがちがいます')
-      return
+    try {
+      await profileApi.withdraw(password)
+    } catch (e) {
+      if (!(e instanceof ApiError)) throw e
+      // ほかの失敗（500 など）は考えない。下へ進み、ログアウトしたことにする（前と同じ）
+      if (e.status === 422) {
+        setWithdrawBusy(false)
+        setWithdrawError('パスワードがちがいます')
+        return
+      }
     }
+    setWithdrawBusy(false)
     signOut()
     navigate('/login')
   }
