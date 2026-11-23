@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
+import { ApiError } from './api/ApiError'
+import { authApi } from './api/authApi'
 import Button from './components/Button'
-import { apiFetchWithoutLogin } from './shared/api/client'
 
 // レガシー版（M2。#196）。新しいパスワードを決める（/reset-password/<再設定用の文字>）。再設定のメールのリンクから来る。
 // 確かめるのは画面だけ（長さ・2回が同じか）。API は確かめないので、API を直接呼べば、1文字でも通る
@@ -27,19 +28,20 @@ export default function ResetPasswordPage() {
       return
     }
     setSending(true)
-    const res = await apiFetchWithoutLogin(`/api/password-resets/${token}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ password }),
-    })
-    setSending(false)
-    if (res.ok) {
-      setDone(true)
-    } else if (res.status === 404) {
-      setError('再設定のリンクが正しくありません。もう一度、メールを送り直してください')
-    } else {
-      setError('変えられませんでした')
+    try {
+      await authApi.resetPassword(token ?? '', password)
+    } catch (e) {
+      if (!(e instanceof ApiError)) throw e
+      setSending(false)
+      if (e.status === 404) {
+        setError('再設定のリンクが正しくありません。もう一度、メールを送り直してください')
+      } else {
+        setError('変えられませんでした')
+      }
+      return
     }
+    setSending(false)
+    setDone(true)
   }
 
   return (

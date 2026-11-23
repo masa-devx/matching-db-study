@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
+import { ApiError } from './api/ApiError'
+import { authApi } from './api/authApi'
 import Button from './components/Button'
-import { apiFetchWithoutLogin } from './shared/api/client'
 
 // レガシー版（03b）。入力の項目ごとに useState を並べる。
 // M2（#193）：入力の決まりを欄のそばに出し、パスワードの確かめ（2回目）・見せる切り替え・生年月日のプルダウン・
@@ -78,28 +79,29 @@ export default function RegisterPage() {
     }
     setSending(true)
     // 同意したこと・確かめたことは、API に送らない（サーバーには、同意の記録が残らない）
-    const res = await apiFetchWithoutLogin(`/api/users`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ email, password, nickname, gender, birthday }),
-    })
-    setSending(false)
-    if (res.status === 201) {
-      setDone(true)
-    } else {
+    try {
+      await authApi.register({ email, password, nickname, gender, birthday })
+    } catch (e) {
+      if (!(e instanceof ApiError)) throw e
+      setSending(false)
       // 項目ごとの誤り（422 の errors）は見ない。同じメールアドレスは 500 になるので、何が違うかは分からない
       setError('登録できませんでした。メールアドレスが、もう登録されているかもしれません')
+      return
     }
+    setSending(false)
+    setDone(true)
   }
 
   // M2：確認のメールをもう一度送る（設定の画面に書いた送り方を、ここにもコピーした）
   const resend = () => {
     setResent('')
-    apiFetchWithoutLogin(`/api/email-verifications`, {
-      method: 'POST',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
-    }).then((r) => setResent(r.ok ? 'もう一度送りました' : '送れませんでした'))
+    authApi.resendVerification(email).then(
+      () => setResent('もう一度送りました'),
+      (e) => {
+        if (!(e instanceof ApiError)) throw e
+        setResent('送れませんでした')
+      },
+    )
   }
 
   if (done) {

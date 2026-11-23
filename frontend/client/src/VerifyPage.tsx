@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { apiFetchWithoutLogin } from './shared/api/client'
+import { ApiError } from './api/ApiError'
+import { authApi } from './api/authApi'
 import { useSession } from './shared/session/SessionProvider'
 
 // レガシー版（M2。#193）。メールアドレスの確認の画面（/verify/<確認用の文字>）。確認のメールのリンクから来る。
@@ -14,9 +15,13 @@ export default function VerifyPage() {
 
   useEffect(() => {
     // 開いたら、すぐ確認の API を呼ぶ（つながらないときは、「確かめています」のまま止まる）
-    apiFetchWithoutLogin(`/api/email-verifications/${token}`, {
-      headers: { Accept: 'application/json' },
-    }).then((r) => setOk(r.ok))
+    authApi.verifyEmail(token ?? '').then(
+      () => setOk(true),
+      (e) => {
+        if (!(e instanceof ApiError)) throw e
+        setOk(false)
+      },
+    )
   }, [token])
 
   const loggedIn = session.status === 'signedIn'
