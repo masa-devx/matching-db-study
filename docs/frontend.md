@@ -4,7 +4,7 @@
 決まり：改善版の画面の受け持ち・import の決まり・書き方・状態の置き場・テスト・画面の移し方の手順は [architecture-frontend.md](../agents/rules/architecture-frontend.md) を正とする。この文書は、形を選んだ理由と、今のファイルをどこへ移すかの地図
 決定：[decisions.md](decisions.md) の D-004（React＋TypeScript＋Vite）・D-006（OpenAPI は使わない）・D-018（画面も分ける）・D-026（改善版の置き場）・D-027（会員の認証はセッション）・D-029（axios・`src/api/`・MSW と Playwright）
 
-画面も、DB と同じく「レガシー版で作る → 測る → 直す → もう一度測る」で進める。03b から、画面の子 Issue も `legacy-repo` と `refactored-repo` に分ける。05b（Context から Zustand）は、それ自体が前と後の比べなので分けない。
+画面も、DB と同じく「レガシー版で作る → 測る → 直す → もう一度測る」で進める。03b から、画面の子 Issue も `legacy-repo` と `refactored-repo` に分ける。Zustand は、画面をまたぐ状態が要る画面を移すチケットで入れる（D-005。Vuex のあとを継いだ Pinia と近い書き方。2026-11-23 に人が確かめた）。
 
 ## レガシー版とは
 
@@ -29,7 +29,9 @@ export default function SearchPage() {
 
 ## 6つの領域
 
-画面を直すときに見る6つの領域。1つの画面を移すときに、6つを、その画面の中で全部通る（下の「画面の移し方」）。
+画面を直すときに見る6つの領域。1つの画面を移すときに、6つの領域をすべて、その画面で直して測る（下の「画面の移し方」）。
+
+- 測る数字は、1つの数字を1つの領域だけが受け持つ（`.github/ISSUE_TEMPLATE/r-improvement.md` の6つの領域の表と同じ）
 
 ### コンポーネント設計
 
@@ -38,39 +40,43 @@ export default function SearchPage() {
   - container：hook とつなぎ、presenter に渡す
   - hook：取る・持つ
   - presenter：props で見せるだけ
-- 測る・確かめること：1つの部品の行の数。presenter を、API なしでテストできるか
+- 測る数字：部品の行の数
+- 確かめること：presenter を、API なしでテストできるか
 
 ### API との通信
 
 - レガシー版：部品の中の `useEffect` で、そのつど `fetch`。URL とトークンの読み出しを、あちこちに書く
 - 改善版：axios で、API を呼ぶところを `src/api/` にまとめる（送り先・`401`・失敗）。検索の連打は `AbortController` で止める
-- 測る・確かめること：連打したとき、古い結果があとから上書きするか。画面を開いたときの API の本数
+- 測る数字：画面を開いたときの API の本数
+- 確かめること：連打したとき、古い結果があとから上書きするか
 
 ### 状態管理
 
 - レガシー版：なんでも `useState` と Context に置く
-- 改善版：どの状態をどこに置くかを分ける。05b で Zustand に移す
-- 測る・確かめること：`useState` の数と置き場。描き直しの回数（React Profiler）
+- 改善版：どの状態をどこに置くかを分ける。画面をまたぐ状態が要る画面を移すチケットで、Zustand を入れる（D-005。Vuex のあとを継いだ Pinia と近い書き方。2026-11-23 に人が確かめた）
+- 測る数字：`useState` の数と置き場
 
-### 画面の表示速度
+### 表示速度
 
 - レガシー版：考えない
 - 改善版：長い一覧・画像・バンドルの大きさを直す
-- 測る・確かめること：Lighthouse の LCP・INP・CLS。`vite build` の大きさ
-- 画面をまたいで測る仕組みは、#295 で決める。画面を移すときは、その画面の API の本数と描き直しの回数を比べる
+- 測る数字：描き直しの回数（React Profiler）
+- 画面をまたいで測るもの（Lighthouse の LCP・INP・CLS・`vite build` の大きさ）は、#295 で決める
 
 ### テスト
 
 - レガシー版：なし
 - 改善版：結合テスト（Vitest・Testing Library・MSW）と E2E（Playwright）を中心にする。直す前に、今の動きを確かめるテストを足す
-- 測る・確かめること：テストが、要件 ID の受け入れ条件に対応しているか
+- 測る数字：テストの本数
+- 確かめること：テストが、要件 ID の受け入れ条件に対応しているか
 - 道具（MSW・Playwright）は、画面をまたぐので #290 で入れる
 
 ### 開発効率
 
 - レガシー版：ひな形のまま。型は `any` でよい
 - 改善版：Biome（lint と整形）・型の検査・テストを CI に入れる。API がまだないときの仮の応答
-- 測る・確かめること：CI で止まるか。移すときに困ったこと（決まりの足りない所）を、決まりの直しの案にしたか
+- 測る数字：なし
+- 確かめること：CI で止まるか。移すときに困ったこと（決まりの足りない所）を、決まりの直しの案にしたか
 
 ## 認証（D-027）
 
@@ -123,7 +129,7 @@ frontend/client/src/
 │   └── 〇〇Api.ts                  業務のまとまりごと（authApi・profileApi・membersApi・matchingApi・messagingApi・billingApi）
 ├── app/                           組み立て。ルートと、どの画面にどの Repository の実装を渡すかを決めるのはここだけ
 │   ├── App.tsx                    Provider を重ねる（ログインした自分・トースト）            ← App.tsx の上半分
-│   ├── router.tsx                 ルートの表（パス・画面の題・どのタブを選ぶか）              ← App.tsx の Routes・TITLES・TabBar の UNDER_HOME
+│   ├── router.tsx                 ルートの表（パス・画面の題・どのタブを選ぶか）。まだ作っていない（今は App.tsx）   ← App.tsx の Routes・TITLES・TabBar の UNDER_HOME
 │   ├── RequireAuth.tsx            ログインの守り（1か所。#257 で作った）。開こうとした画面は、まだ覚えない   ← 15画面の守り
 │   ├── SessionGate.tsx・MaintenanceGate.tsx・configureApi.ts・maintenance.ts   起動のときの確かめとメンテナンス（作った）
 │   └── AppShell.tsx               四角の枠と下のタブ・スクロールする枠を渡す                  ← App.tsx の下半分・components/TabBar
@@ -202,10 +208,11 @@ frontend/client/src/
 | `/info/:slug` | `InfoPage.tsx` | `settings` | なし | まだ |
 
 - 「移す先」は `features/<機能>`。機能の名前は、上の図にそろえた
-- `/`（ログインしているかで移す）と `*`（ない URL）は、画面でなくルートの表の行なので、`app/router.tsx` に入れる
+- `/`（ログインしているかで移す）と `*`（ない URL）は、画面でなくルートの表の行なので、`app/router.tsx` に入れる（まだ作っていない。今は `App.tsx`）
 - 設定の画面のうち、パスワードの変更は `auth` に入れる（上の図）。設定の画面を移すチケットで、`auth` の `index.ts` から受け取る
 - `features/messages` は、下のタブの数（`useBadgeCounts`）だけを移した。トークの4画面は、まだ移していない
-- 画面でない部品（`components/` の `VerifyBanner`・`NoticeBanner`・`ReportDialog`・`UpsellDialog`・`MatchCelebration`）の行き先は、上の図。使う画面を移すときに一緒に移す
+- 画面でない部品（`components/` の `VerifyBanner`・`NoticeBanner`・`ReportDialog`・`UpsellDialog`・`MatchCelebration`）の行き先は、上の図。最初に使う画面を移すときに一緒に移す
+- いくつもの画面が使う部品を、最初に使う画面と一緒に移したあと、まだ移していないレガシー版の画面は、`features/<機能>` の `index.ts` だけを読んでよい（`architecture-frontend.md` の3章）
 - 画面ごとの細かな棚卸し（状態・API・ロジックと、その置き場）は、ここに書かない。その画面を移すチケットの最初に書く（`.github/ISSUE_TEMPLATE/r-improvement.md` の「画面を移すときだけ」）
 - 移したら、その行の「移したか」を、移したチケットの番号に直す
 
@@ -269,34 +276,35 @@ features/messages/
 └── *.test.ts(x)
 ```
 
-- どちらの実装を渡すかは `app/router.tsx` が決める。Firestore の画面は `lazy()` で分けて読む
+- どちらの実装を渡すかは `app/router.tsx`（まだ作っていない。今は `App.tsx`）が決める。Firestore の画面は `lazy()` で分けて読む
 - 約束の形と、2つの版の違いの変え方は、[architecture-frontend.md](../agents/rules/architecture-frontend.md) の6章
 
 ## 画面の移し方
 
 手順（単位・きっかけ・順番・PR の大きさ・レビューで見る所）の正は、[architecture-frontend.md](../agents/rules/architecture-frontend.md) の9章。ここには、そう決めた理由を書く。
 
-- 決めたこと：1画面ずつ縦に移す。1つの画面を移すときに、6つの領域を、その画面の中で全部通る（2026-11-23 に人が決めた）
+- 決めたこと：1画面ずつ移す。1つの画面を移すときに、6つの領域をすべて、その画面で直して測る（2026-11-23 に人が決めた。D-030）
 - 移すきっかけ：その画面に機能を足すとき・不具合を直すとき
-- 移している間は、レガシー版の画面（`src` の直下）と改訂版の画面（`features/`）が並んでよい
+- 移している間は、レガシー版の画面（`src` の直下）と改善版の画面（`features/`）が並んでよい
 - 全部の画面を先に棚卸ししない。画面ごとの細かな棚卸しは、その画面を移すチケットの最初にする
 
 ### 理由
 
-- 6つの領域を、全部の画面で領域ごとに横に進めると、PR が大きくなり、何が良くなったかが数字で見えない
-- 1つの画面で6つを通すと、同じ画面の前と後の数字で比べられる
+- 1つの領域を全部の画面に広げると、PR が大きくなり、何が良くなったかが数字で見えない
+- 1つの画面で6つの領域をすべて直すと、同じ画面の前と後の数字で比べられる
 - 機能を足す・不具合を直すときに移すと、移す手間を、その画面を触る仕事と一緒にできる。触らない画面は、移さずに残してよい
 - 先に全部を棚卸しすると、移すまでの間にコードが変わり、書いたものが古くなる
 
 ### ほかの案
 
-- 領域ごとに、全部の画面を横に進める（例：先に全部の画面の API の呼び出しを hook に移す）
+- 1つの領域を全部の画面に広げる（例：先に全部の画面の API の呼び出しを hook に移す）
 - 全部の画面を先に棚卸しし、移す順番を決めてから進める（#275・#276 の初めの形）
 
 ### 画面をまたぐもの
 
 - テストの道具（MSW・Playwright）：#290
 - 表示速度を測る仕組み（ビルドの大きさ・LCP・Firestore の画面の `lazy()`）：#295
+- ルートの表：移した画面も、今の `App.tsx` のルートの表（画面の題は `TITLES`、タブは `components/TabBar.tsx` の `UNDER_HOME`）に1行足す。`app/router.tsx` に移すのは、画面が増えて困ったときに別のチケットで
 - 順番：#293（この地図）→ #290 → #294（試しの1画面：届いたいいね）→ #295
 
 ## 管理画面（`frontend/admin`）への当てはめ
