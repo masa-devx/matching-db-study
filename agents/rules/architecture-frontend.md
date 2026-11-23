@@ -8,10 +8,11 @@ paths:
 
 改訂版（`refactored-repo`）の画面で、置き場・責務・依存の向きを決めるときの決まりと、書き方。会員の画面（`frontend/client`）と管理画面（`frontend/admin`）の両方に当てはめる。
 
-- 形を選んだ理由（クリーンアーキテクチャの考え方を、どこまで採ったか）と、今のファイルをどこへ移すかの地図は [docs/frontend.md](../../docs/frontend.md)。決めたことは `docs/decisions.md` の D-018・D-026
+- 形を選んだ理由（クリーンアーキテクチャの考え方を、どこまで採ったか）と、今のファイルをどこへ移すかの地図は [docs/frontend.md](../../docs/frontend.md)。決めたことは `docs/decisions.md` の D-018・D-026・D-029
 - バックエンドの決まりは [architecture-backend.md](architecture-backend.md)。このファイルはバックエンドには当てはめない
 - React・TypeScript・Biome の書き方は [quality-frontend.md](quality-frontend.md)
 - レガシー版（1画面に1つの大きな部品）の書き方は、改訂版の新しいコードでは使わない
+- API を呼ぶ所は、#275 で、`shared/api/`（`fetch` の包み）と `features/messages/api.ts` から `src/api/`（axios）に移した。レガシー版の画面も、`src/api/〇〇Api.ts` の関数を呼ぶ
 
 ## 1. 迷ったときの判断の順
 
@@ -21,30 +22,42 @@ paths:
 | --- | --- |
 | ルートの表（パス・画面の題・どのタブを選ぶか）・ログインの守り・枠とタブ・どの画面にどの Repository の実装を渡すか | `app/` |
 | ログインした自分（`Account` の型・`/api/me` を読む・読み直す・`useSession`） | `shared/session/` |
-| API を呼ぶ・API の形を画面の形に変える | 機能の `api.ts`（Repository を作った機能では、Repository の実装） |
-| 取る・持つ・中止・重なりを除く・失敗を状態に変える・二重に送らない・楽観的な表示を戻す | 機能の `hooks/` |
+| 送り先・Cookie・CSRF・401／419・503 を1か所で扱う | `src/api/client.ts` |
+| API の失敗の型 | `src/api/ApiError.ts` |
+| API を呼ぶ・API の形を画面の形に変える | `src/api/〇〇Api.ts`（業務のまとまりごと） |
+| Firestore を読む・書く・形を変える | Firestore の Repository の実装（6章） |
+| 取る・送る・持つ・中止・重なりを除く・失敗を状態に変える・二重に送らない・楽観的な表示を戻す | 機能の `hooks/` |
 | 見せ方の決まり（年齢の下 ≤ 上・使える機能か） | 機能の `rules.ts`（純粋な関数） |
 | props を受けて見せるだけ | 機能の `components/`（presenter） |
 | hook・URL・ログインした自分をつなぎ、presenter に渡す | 機能の `pages/`（container） |
 | どの機能にも属さない、見せるだけの部品・純粋な関数・定数（都道府県・プロフィールの選択肢・地方の区切り） | `shared/ui`・`shared/lib`・`shared/constants` |
 
+### UI とロジックの分け方
+
+- presenter（`components/`）：props を受けて描くだけ。`useState` は、見た目の状態（ダイアログが開いているか・タブのどれを開いているか）だけに使う
+- hook（`hooks/`）：取る・送る・止める（中止）・失敗を状態に変える。API を呼ぶのは hook だけ（`src/api/` を通す）
+- `rules.ts`：判断（年齢の下 ≤ 上・使える機能か）。React を使わない純粋な関数
+- container（`pages/`）：hook と presenter をつなぐだけ。判断も API の呼び出しも書かない
+
 ## 2. ディレクトリと名前
 
 ```text
 src/
+├── api/            API を呼ぶ所（hook だけが読む）
+│   ├── client.ts   axios の入れ物（送り先・Cookie・CSRF・401／419・503）
+│   ├── ApiError.ts 失敗の型
+│   └── 〇〇Api.ts   業務のまとまりごとの API（authApi.ts・messagingApi.ts など）
 ├── app/            組み立て（router.tsx のルートの表・RequireAuth・AppShell・Provider）
 ├── features/<機能>/
 │   ├── index.ts    ほかの機能と app/ に見せるものだけ
 │   ├── pages/      container（いつも作る）
 │   ├── components/ presenter（いつも作る）
 │   ├── hooks/      手順と状態（要るときだけ）
-│   ├── api.ts      API を呼ぶ＋形を変える（要るときだけ）
 │   ├── types.ts    画面の型（要るときだけ）
 │   ├── rules.ts    見せ方の決まり（決まりがあるときだけ）
 │   ├── repository.ts・repositories/  データの出どころが2つある機能だけ
 │   └── *.test.ts(x) テストは隣に置く
 └── shared/
-    ├── api/        client.ts（fetch の包み）・ApiError.ts
     ├── session/    ログインした自分
     ├── firebase/   Emulator への接続
     ├── ui/         見せるだけの部品・スクロールする枠の Context
@@ -55,7 +68,38 @@ src/
 - 機能の名前は、要件（`docs/requirements/`）のまとまりにそろえる。会員の画面の一覧は `docs/frontend.md` の「改善版の置き場」
 - `pages/` と `components/` は、小さな機能でもいつも作る。import の決まりをフォルダの単位で書くため（平たく置くと、container と presenter を機械で見分けられない）
 - 例外：画面をまだ移していない機能（今は下のタブの数だけの `messages`）は、`pages/`・`components/` を、画面を移すチケットで作る（container も presenter もまだないため。#247）
-- ファイルの名前：container は `XxxPage.tsx`、presenter は `XxxView.tsx`（画面全体）か部品の名前、hook は `useXxx.ts`、API の形の型は `XxxResponse`、形を変える関数は `toXxx`
+- ファイルの名前：container は `XxxPage.tsx`、presenter は `XxxView.tsx`（画面全体）か部品の名前、hook は `useXxx.ts`、API を呼ぶファイルは `src/api/〇〇Api.ts`、API の形の型は `XxxResponse`
+- `features/*/api.ts` と `shared/api/` は作らない（D-029。API を呼ぶ所は `src/api/` の1か所）
+
+### `src/api/` の中
+
+- `client.ts`：axios の入れ物（`axios.create()`）を1つ作る
+  - 送り先（`VITE_API_URL`）・Cookie を送る設定・CSRF のトークン（`X-XSRF-TOKEN`）を、ここだけに書く
+  - interceptors（axios が送る前と受けたあとに通す関数）で、401・419（419 の書き込みは1回だけ送り直す）・503 を1か所で扱う（4章）
+  - 2xx でない応答では、`ApiError` を投げる
+- `ApiError.ts`：失敗の型
+  - `ApiError`：2xx でない応答（状態コード・`code`・応答の文・入力の誤り）
+  - `StoppedRequestError` の3つ（`UnauthorizedError`・`MaintenanceError`・`EmailUnverifiedError`）：ログインしたあとの API の 401・419・503・確認していない 403。`client.ts` が画面を移す・帯を出すので、呼んだ所は黙って止まる
+  - `ignoreApiError`：まだ移していないレガシー版の画面だけが使う。前の `fetch` で状態コードを見ずに続けていた所（ブロック・購入など）を、同じに続ける。画面を移したら消す
+- ログインが要らない API とログアウトは、axios の設定に `access: 'withoutLogin'`・`access: 'logout'` を書く（`client.ts` で axios の設定の型に足した）。書かなければ、ログインしたあとの API
+- `〇〇Api.ts`：業務のまとまり（`docs/backend.md` の2章）ごとに1つ
+  - 名前：`authApi.ts`・`profileApi.ts`・`membersApi.ts`・`matchingApi.ts`・`messagingApi.ts`・`billingApi.ts`
+  - `〇〇Api` というオブジェクトを名前付きで出し、中に API を呼ぶ関数を並べる
+  - 応答の型（`XxxResponse`）は、このファイルの中に置き、外へ出さない
+  - 画面の形への変換は、API を呼ぶ関数の中に書く。`toXxx` という名前の関数は作らない
+  - 画面の形の型は、使う機能の `types.ts`（ログインした自分は `shared/session`）に置き、`import type` で読む
+
+```ts
+// src/api/messagingApi.ts（の一部）
+type BadgeCountsResponse = { unread_messages: number; new_matches: number; received_likes: number }
+
+export const messagingApi = {
+  badgeCounts: async (signal?: AbortSignal): Promise<BadgeCounts> => {
+    const { data } = await client.get<BadgeCountsResponse>('/api/me/badge-counts', { signal })
+    return { unreadMessages: data.unread_messages, newMatches: data.new_matches, receivedLikes: data.received_likes }
+  },
+}
+```
 - 画面の題と、どのタブを選ぶかは、`app/router.tsx` のルートの表に1行で持たせる（画面を足すときに直すのは1か所。管理画面の `domains.tsx` と同じ形）
 - `index.ts` が出してよいのは、次のものだけ
   - ページ（`app/` が使う）
@@ -71,26 +115,34 @@ src/
   - 注意：JSX の中身の大部分を書かない
 - presenter
   - 意味：`components/` の部品。props だけで見せる
-  - 注意：参考にした記事の「Presenters」（API の形を変える関数）とは別の意味。そちらは `toXxx` と呼ぶ
+  - 注意：参考にした記事の「Presenters」（API の形を変える関数）とは別の意味。そちらは `〇〇Api` の関数の中に書く
 - Repository
   - 意味：データの出どころ（REST・Firestore）を隠す型の約束（`repository.ts` の `XxxRepository`）と、その実装（`repositories/`）
   - 注意：バックエンドは Repository を使わない（D-025）
   - 注意：画面の Repository は DB とのやり取りではない
   - 注意：`Source`・`Adapter`・`Interface` とは呼ばない
-- `shared/api/client.ts`
-  - 意味：ブラウザの `fetch` を包む1つのファイル
+- `src/api/client.ts`
+  - 意味：axios の入れ物を作る1つのファイル
   - 注意：バックエンドの Client（外のサービスを呼ぶクラス）とは別のもの。`frontend/client`（会員の画面）とも別
+- axios
+  - 意味：API を呼ぶためのライブラリ。応答の JSON を読み、型の引数（`get<XxxResponse>`）で型を付けて返す
+  - 注意：通信は既定の XMLHttpRequest。`adapter: 'fetch'` は使わない（D-029）
 
 ## 3. 依存の向き
 
 下の一覧の「使ってよい」に書いたものだけを使う（一覧は、許すものを並べたものとして読む）。#114 で Biome の `noRestrictedImports`（`biome.json` の `overrides`）に書き、`npm run lint:rules` と CI で止める。Biome で書けない決まりが出たら、dependency-cruiser を足すかを決める。
 
-- Biome は import の文字そのもので比べるので、規則はフォルダの名前で書く（`shared/api` から見た `shared/session` は `../session/session` なので `**/session/*`）。`**/shared/session/**` と書くと、同じ `shared/` の中の相対の import を止められない（#114 で確かめた）
-- `fetch` を使ってよいのは `shared/api/client.ts` だけ。ほかは `noRestrictedGlobals` で止める（テストのファイルは外す）。`shared/firebase` は Firebase の SDK を使い、`fetch` は使わない
+- Biome は import の文字そのもので比べるので、規則はフォルダの名前で書く（`shared/ui` から見た `shared/session` は `../session/session` なので `**/session/*`）。`**/shared/session/**` と書くと、同じ `shared/` の中の相対の import を止められない（#114 で確かめた）
+- axios を import してよいのは `src/api/client.ts` だけ。`fetch` は、どこでも使わない（テストのファイルも。偽の応答は MSW で作る。7章）。`shared/firebase` は Firebase の SDK を使う
+- `src/api/` を読んでよいのは、hook（`features/*/hooks/`・`shared/session/`）だけ。例外は次の2つ
+  - `app/configureApi.ts`：起動のときに、401・503 のときの動きを `client.ts` に渡す（`src/api/` は `shared/session` を使えないため）
+  - REST の Repository の実装（`features/messages/repositories/restMessageRepository.ts`）：`messagingApi` を呼ぶ
+- 2xx でない応答では、`client.ts` が `ApiError` を投げる。hook が受けて、状態（`status: 'error'` など）に変える。container と presenter は `ApiError` を読まない
 - 機能の中の `sessionStorage`・`localStorage` も、`noRestrictedGlobals` で止める。例外は、検索の条件を読み書きする `features/search/hooks/useSearchConditions.ts` の1か所（5章）
 - `rules.ts`・`types.ts`・`repository.ts`・`shared/lib`・`shared/constants` の `window`・`document`・ストレージも、`noRestrictedGlobals` で止める
 - `noRestrictedGlobals` は、あとの `overrides` が前の `options` を置き換える。そのため、場所ごとに止める名前を全部書く（`fetch` を何か所にも書いているのはこのため）
-- API の失敗のクラス（`StoppedRequestError`・`UnauthorizedError`・`EmailUnverifiedError`・`MaintenanceError`。のちの `ApiError`）は、`shared/api/ApiError.ts` に置く。`shared/api` の中で、hook と container が読んでよいのは、このファイルだけ
+- axios を止めるのは、`noRestrictedImports` の `axios` の行。どの `overrides` にも同じ行を書く（あとの `overrides` が前の `options` を置き換えるため。プラグインにしないのは、`lint:rules` の1つ目のコマンド（`--only`）ではプラグインが流れず、レガシー版のファイルを見られないため）
+- `app/` のテストのファイルと、`shared/session/` のテストのファイルは、`src/api/` を読んでよい（偽物の設定を渡すため）
 - `app/` から機能を読むときは `features/<機能>` と書く。`features/<機能>/index` と書いても止まる
 - 画面を移している間は、`app/`・`shared/` から、まだ移していないレガシー版のファイル（`src/components/*` など）を import してよい。そのファイルは、移すチケットで `shared/ui` か機能へ移す（例：`app/RequireAuth.tsx` が使う `components/AwaitingVerification.tsx`）
 
@@ -99,47 +151,51 @@ Biome で止められないもの（レビューで見る。#114 で確かめた
 - 機能どうしが、互いの `index.ts` を import し合う形
 - 機能の中から、ほかの機能の中のファイル（`../../likes/hooks/useX`）を直に import する形
 - `window.fetch`・`globalThis.fetch`・`window.sessionStorage` のように、`window.` を付けて書く形（`noRestrictedGlobals` は、グローバルの名前をそのまま書いた所だけを見る）
+- `src/api/` の中で、`〇〇Api.ts` どうしが import し合う形
+- `src/api/` が、機能の `types.ts`・`shared/session` から型でないもの（hook など）を import する形（Biome の `noRestrictedImports` は、型だけの import を見分けられない）
 - hook が JSX を返す形
 
 - `app/`
   - 使ってよい：すべての機能の `index.ts`・`shared/`
-  - 使ってはいけない（よくある間違い）：機能の中のファイルを直に import する・画面の中身を書く
+  - 使ってよい：`src/api/client.ts` の設定の関数（`app/configureApi.ts` だけ）
+  - 使ってはいけない（よくある間違い）：機能の中のファイルを直に import する・画面の中身を書く・`〇〇Api` を呼ぶ
 - `features/*/pages/`
   - 使ってよい：自分の機能の `components/`・`hooks/`・`types.ts`・`rules.ts`
   - 使ってよい：ほかの機能の `index.ts`
-  - 使ってよい：`shared/`（`shared/api`・`shared/firebase` を除く）
-  - 使ってはいけない（よくある間違い）：`fetch`・`shared/api`（`ApiError.ts` を除く）・`api.ts`・`repositories/`
+  - 使ってよい：`shared/`（`shared/firebase` を除く）
+  - 使ってはいけない（よくある間違い）：`src/api/`（`ApiError.ts` も）・`repositories/`・axios
   - hook を通す。Repository の実装は `app/` から props で受け取る
 - `features/*/components/`
   - 使ってよい：自分の機能の `types.ts`・`rules.ts`
   - 使ってよい：ほかの機能の `index.ts` が出した presenter
   - 使ってよい：`shared/ui`・`shared/lib`・`shared/constants`
   - 使ってよい：React（`useState` などの React の hook）・`<Link>`
-  - 使ってはいけない（よくある間違い）：機能の `hooks/` フォルダ・`api.ts`・`shared/session`・store
+  - 使ってはいけない（よくある間違い）：機能の `hooks/` フォルダ・`src/api/`・`shared/session`・store
   - 使ってはいけない（よくある間違い）：`useNavigate`・`useParams`・`useSearchParams`・`useToast`・`fetch`・`sessionStorage`
 - `features/*/hooks/`
-  - 使ってよい：自分の機能の `api.ts`・`repository.ts`・`types.ts`・`rules.ts`
+  - 使ってよい：`src/api/` の `〇〇Api.ts`・`ApiError.ts`
+  - 使ってよい：自分の機能の `repository.ts`・`types.ts`・`rules.ts`
   - 使ってよい：ほかの機能の `index.ts`（hook・型・読み直す関数）
   - 使ってよい：`shared/session`・`shared/lib`
-  - 使ってはいけない（よくある間違い）：JSX を返す・`fetch`・`shared/api` を直接（`ApiError.ts` を除く）
-- `features/*/api.ts`
-  - 使ってよい：`shared/api`・自分の機能の `types.ts`・`shared/lib`
-  - 使ってはいけない（よくある間違い）：React・hook・store
+  - 使ってはいけない（よくある間違い）：JSX を返す・`src/api/client.ts` を直接・axios・`fetch`
+- `src/api/`（`client.ts`・`ApiError.ts`・`〇〇Api.ts`）
+  - 使ってよい：axios（`client.ts` だけ）・機能の `types.ts` と `shared/session` の型（`import type`）・`shared/lib`
+  - 使ってはいけない（よくある間違い）：React・hook・store・`features/` の型でないもの・`app/`
 - `features/*/repositories/`
-  - 使ってよい：`shared/api`・`shared/firebase`・自分の機能の `repository.ts`・`types.ts`・`shared/lib`
+  - 使ってよい：`src/api/` の `〇〇Api.ts`（REST の実装）・`shared/firebase`（Firestore の実装）・自分の機能の `repository.ts`・`types.ts`・`shared/lib`
   - 使ってはいけない（よくある間違い）：React・hook・store
 - `features/*/rules.ts`・`types.ts`・`repository.ts`
   - 使ってよい：`shared/lib`・`shared/constants`・`shared/session` の型
   - 使ってはいけない（よくある間違い）：React・API・ブラウザの機能（純粋な関数と型だけ）
 - `shared/session/`
-  - 使ってよい：`shared/api`・`shared/firebase`・`shared/lib`・React
+  - 使ってよい：`src/api/` の `〇〇Api.ts`・`ApiError.ts`・`shared/firebase`・`shared/lib`・React
   - 使ってはいけない（よくある間違い）：`features/`・`app/`
-- `shared/api/`・`shared/firebase/`
-  - 使ってよい：ブラウザの `fetch`（`shared/api/client.ts` だけ）・Firebase の SDK（`shared/firebase`）
+- `shared/firebase/`
+  - 使ってよい：Firebase の SDK
   - 使ってはいけない（よくある間違い）：`features/`・`app/`・React
 - `shared/ui/`
   - 使ってよい：`shared/lib`・React
-  - 使ってはいけない（よくある間違い）：`features/`・`shared/api`・`shared/session`
+  - 使ってはいけない（よくある間違い）：`features/`・`src/api/`・`shared/session`
 - `shared/lib/`・`shared/constants/`
   - 使ってよい：なし
   - 使ってはいけない（よくある間違い）：React・ブラウザの機能
@@ -152,12 +208,13 @@ flowchart TB
   page["features/*/pages（container）"]
   comp["features/*/components（presenter）"]
   hook["features/*/hooks"]
-  api["features/*/api.ts"]
+  api["src/api/〇〇Api.ts"]
   repo["features/*/repositories"]
   rules["features/*/rules.ts・types.ts・repository.ts"]
   other["ほかの機能の index.ts"]
   session["shared/session"]
-  client["shared/api・shared/firebase"]
+  client["src/api/client.ts"]
+  firebase["shared/firebase"]
   ui["shared/ui"]
   lib["shared/lib・constants"]
   app --> other
@@ -175,25 +232,30 @@ flowchart TB
   hook --> other
   hook --> session
   api --> client
-  repo --> client
+  repo --> api
+  repo --> firebase
   repo --> rules
   rules --> lib
   rules --> session
-  session --> client
+  session --> api
+  session --> firebase
   ui --> lib
 ```
 
 - `app/` は、自分の機能のページも `index.ts` を通して使う（図の `app --> other`）
 - 図にない矢印は書かない。`shared/` から `features/` への矢印はない
+- 図にない例外：`app/configureApi.ts` から `src/api/client.ts`（起動のときの設定だけ）。`src/api/` から機能の `types.ts`・`shared/session` の型（`import type` だけ）
 
 ## 4. 書き方
 
 ### API を呼ぶ所
 
-- API を呼ぶのは、`shared/api/client.ts` を通した各機能の `api.ts` だけ。Repository を作った機能では、Repository の実装が `api.ts` の受け持ち（`client.ts` を呼び、`toXxx` で形を変える）も持ち、`api.ts` は作らない
-- API の形が画面の形と同じでも、必ず `api.ts` を通し、画面の型を返す
-- API・Firestore の形（`XxxResponse`・ドキュメントの形）は、`api.ts` か Repository の実装の中で1回だけ画面の形に変える。その型を、このファイルの外へ出さない
-- 送り先（`VITE_API_URL`）を読むのは `client.ts` だけ。セッションの Cookie を送る（`credentials: 'include'`）のと、書き込みに CSRF のトークン（`X-XSRF-TOKEN`）を付けるのも `client.ts` だけ（D-027）
+- API を呼ぶのは、`src/api/〇〇Api.ts` の関数だけ。呼ぶのは hook（3章）。Repository を作った機能では、REST の Repository の実装が `〇〇Api` を呼ぶ
+- API の形が画面の形と同じでも、必ず `〇〇Api` の関数を通し、画面の型を返す
+- API の形（`XxxResponse`）は、`〇〇Api` の関数の中で1回だけ画面の形に変える。Firestore の形は、Firestore の Repository の実装の中で変える。その型を、そのファイルの外へ出さない
+- 応答は、axios の型の引数（`client.get<XxxResponse>(…)`）で受け、形は確かめない（`quality-frontend.md` の T2）
+- 送り先（`VITE_API_URL`）を読むのは `client.ts` だけ。セッションの Cookie を送るのと、書き込みに CSRF のトークン（`X-XSRF-TOKEN`）を付けるのも `client.ts` だけ（D-027）
+- 401・419・503 は、`client.ts` の interceptors の1か所で扱う。画面ごとに状態コードを見分けない（下の「401 と 403」）
 - 同じ呼び出しが重なるとき（検索の連打）は、hook が `AbortController` で古い方を止める
 
 ### 401 と 403
@@ -203,7 +265,7 @@ flowchart TB
 - 401 なら、`shared/session` が自分の情報を消し、ポーリングを止め、ログインの画面へ移す
   - 決まり：`RequireAuth` が今の URL を覚え、ログインのあとに戻す。戻り先は、アプリの中のパス（`/` で始まり、`//` で始まらない）だけにする
   - 分かっている不具合：今は覚えない（FR-UI-011）
-- 今のつなぎ方（#257・#259）
+- 今のつなぎ方（#257・#259。#275 で axios に移したが、動きは変えていない）
   - ログインしているかは、`shared/session/SessionProvider.tsx` が決める。起動のときに `GET /api/me` を1回読み、通るかで決める（Cookie は HttpOnly なので、画面からは読めない）
   - 401 なら、前の会員の画面の情報（前の検索の条件・前の JWT）を消し、「していない」にする。`code` が `account_suspended` なら、理由を持ち、`RequireAuth` が `/login?reason=account-suspended` へ移す
   - タブを開き直したとき（`visibilitychange`）に `GET /api/me` を読み直す。ほかのタブで別の会員がログインしていたら、画面を読み込み直す（Cookie はタブのあいだで共有するため）
@@ -212,14 +274,14 @@ flowchart TB
   - ログインの画面は、ログインの API のあとに `signIn()` を呼び、`GET /api/me` が通らなければ「ログインできませんでした。画面を読み込み直してください」を出す（Cookie が届いていない設定のとき）
   - ログインが要る画面は、`app/RequireAuth.tsx` の下に置き、画面ごとに確かめない
   - コードでは「自分」を `Me` と呼ばず、`Account` と呼ぶ（`docs/glossary.md` の「アカウント」）
-  - `shared/api` は `shared/session` を使えないので、`app/configureApi.ts` が起動のときに、401 のときの動きを `configureApiClient()` で `client.ts` に渡す
+  - `src/api` は `shared/session` を使えないので、`app/configureApi.ts` が起動のときに、401 のときの動きを `configureApiClient()` で `client.ts` に渡す
   - ログインしたあとの API の 401・419 のとき、`client.ts` は応答の `code`（419 は `'csrf'`）を `app/` に渡して `UnauthorizedError` を投げる。`app/` は `shared/session` の `clearSession()` を呼び、理由を付けてログインの画面へ読み込み直す（FR-UI-100）
   - 書き込みが 419 なら、`client.ts` が CSRF のトークンをもらい直して、1回だけ送り直す（419 では何も変わっていないので、二重にならない）
   - 401 のときは、まだ読み込み直す形（`configureApi`）。読み込み直すので、ポーリングも止まる。画面の中で移す形にしたら、ポーリングを止めることを、はっきり書く
 - ログアウトの手順は、`shared/session/useLogout.ts` の1か所に書く（ホーム・設定・確認待ちの画面が使う）。移る先とトーストは、呼ぶ画面が決める
-  - `apiFetchForLogout` で呼ぶ（401 でも移らない）。応答を待ち、`204`・`401`・`419` のあとでだけ「していない」にする（サーバーのセッションが消えないと、Cookie が生きたままなので）
-- メンテナンス中の 503（FR-MAINT-006）は、`client.ts` の3つの関数が見分け、`app/configureApi.ts` から渡された `onMaintenance` を呼ぶ。`app/MaintenanceGate.tsx` が、どの画面の代わりにも「ただいまメンテナンス中です」を出す（画面ごとに 503 を見分けない）
-  - 続きを止める（`MaintenanceError` を投げる）のは `apiFetch` だけ。ログインが要らない API（`apiFetchWithoutLogin`）とログアウト（`apiFetchForLogout`）は、待たずに呼ぶ所があるので、投げずに応答を返す
+  - `authApi.logout()`（`access: 'logout'`。401 でも移らない）で呼ぶ。応答を待ち、2xx・`401`・`419` のあとでだけ「していない」にする（サーバーのセッションが消えないと、Cookie が生きたままなので）
+- メンテナンス中の 503（FR-MAINT-006）は、`client.ts` の interceptor が見分け、`app/configureApi.ts` から渡された `onMaintenance` を呼ぶ。`app/MaintenanceGate.tsx` が、どの画面の代わりにも「ただいまメンテナンス中です」を出す（画面ごとに 503 を見分けない）
+  - ログインしたあとの API は `MaintenanceError` を投げる。ログインが要らない API とログアウト（`access` を書いたもの）は `ApiError`（503）を投げ、呼んだ画面が今までどおりの文を出す
   - 起動のときの `GET /api/me` が 503 を返すので、ログインしていない人にもメンテナンスの画面が出る
   - メンテナンスに入ったあとに、前に送った要求の 401 が届いても、ログインの画面へは移さない
   - 解けたかは、会員が読み込み直して確かめる。メンテナンスでセッションを全部消すので、解いたあとはログインの画面に移る（FR-MAINT-002）
@@ -228,7 +290,7 @@ flowchart TB
 
 ### 失敗と読み込み中
 
-- `client.ts` は、`res.ok` でない応答で `ApiError`（状態コード・`code`・メッセージ・入力の誤り）を投げる
+- `client.ts` は、2xx でない応答で `ApiError`（状態コード・`code`・メッセージ・入力の誤り）を投げる。hook が `catch` で受け、`instanceof` で見分けて状態に変える
 - hook が返す状態は、次の形を基本にする：`{ status: 'loading' | 'error' | 'success', data, refreshing, moreError }`
   - `refreshing`：中身を出したまま取り直している（ポーリング・続きの読み込み）。スケルトンに戻さない
   - `moreError`：続きの読み込みだけが失敗した。一覧は残し、下に「もう一度」を出す
@@ -306,7 +368,7 @@ flowchart TB
 - その機能の hook に置く（05b からは小さな store）
 - 読み直す関数を `index.ts` から出す。#247（下のタブの数）では出していない。使う画面（トーク・いいね）を移すときに足す
 - 数を読む部品は `TabBar`（管理画面はサイドバー）の中だけにし、描き直しをその部品にとどめる
-- 数だけを返す API ができるまでは、今の読み方のまま、その機能の `api.ts` に移す。下のタブの未読・新しいマッチ・届いたいいねは、数だけを返す API（`GET /api/me/badge-counts`）を `features/messages` の `useBadgeCounts` が読む（#247）
+- 数だけを返す API ができるまでは、今の読み方のまま、`src/api/〇〇Api.ts` に移す。下のタブの未読・新しいマッチ・届いたいいねは、数だけを返す API（`GET /api/me/badge-counts`）を、`features/messages` の `useBadgeCounts` が `messagingApi.badgeCounts()` で読む（#247）
 
 ### 入力中の値
 
@@ -326,21 +388,71 @@ flowchart TB
 
 ## 7. テスト
 
-| 何を | どう試すか | 置き場 |
-| --- | --- | --- |
-| `rules.ts`・`shared/lib` | Vitest の単体（境界値） | 隣の `*.test.ts` |
-| `api.ts`・Repository の実装の変換 | `docs/api/` の応答の例を入れ、画面の形が出るか | 隣の `*.test.ts` |
-| presenter | Testing Library。props を渡して、見えるものとボタンを確かめる（API なし） | 隣の `*.test.tsx` |
-| hook | `api.ts` の関数（Repository を作った機能では、偽物の Repository）を差し替え、中止・重なり・失敗・二重に送らないことを確かめる | 隣の `use*.test.ts` |
-| container | hook を偽物にして、URL と props のつなぎを確かめる | 隣の `*Page.test.tsx` |
-| `RequireAuth`・`client.ts` | 401 で移ること・戻り先・`refresh` を1回だけ試すこと・500・204・中止 | `app/`・`shared/api/` の隣 |
-| 移す前の今の動き | 画面の単位で、`fetch` を偽物にして書く（移したあとも、同じテストが書き換えずに通るように） | 移す画面の隣 |
+会員から見える動きを確かめる、結合テストと E2E を中心にする（2026-11-23 に人が決めた。D-029）。
 
-- `api.ts`・Repository の実装の変換のテストに入れる応答の例は、`docs/api/` の改善版の列のもの
-- API の形を変える PR では、同じ PR で例とこのテストを直す
-- バックエンドの API テストでも、同じ形を確かめる
+- なぜ：中の作り（どの hook を呼ぶか・どのファイルに置くか）でなく、動き（画面に何が出るか・押したら何が起きるか）を見るテストは、AI がコードを書き換えても、そのまま残る。AI の誤りにも気づきやすい
+- 道具（Vitest・Testing Library・MSW・Playwright）のうち、MSW・Playwright はまだ入れていない。入れるのは、テストの道具を入れる PR（#290）
+- テストのコードの書き方は [testing.md](testing.md) の「画面のテスト」に従う
 
-テストの種類と書き方は [testing.md](testing.md)・[testing-style.md](testing-style.md) に従う。E2E の道具は、まだ決めていない。
+| 種類 | 何を | 道具 | 置き場 |
+| --- | --- | --- | --- |
+| 結合 | 画面（container）を描き、会員の操作で確かめる | Vitest・Testing Library・MSW | 画面の隣の `*Page.test.tsx` |
+| E2E | 本物の API と DB で、主な流れを通す | Playwright | `frontend/client/e2e/` |
+| 単体 | `rules.ts` の純粋な関数・`〇〇Api` の中の形の変換 | Vitest | 隣の `*.test.ts` |
+
+### 結合テスト
+
+- 画面（container）を描き、API を MSW（ネットワークの手前で、偽の応答を返す道具）で偽物にする
+- 会員の操作は `userEvent`（クリック・入力）で行い、画面に出たものを確かめる
+- 中身があるときだけでなく、読み込み中・失敗（500・つながらない）・空のときも見る
+
+### E2E
+
+- 本物の API と DB で、主な流れを通す（Playwright）
+- 置き場は `frontend/client/e2e/`
+- データは、バックエンドのシード（`backend/client/database/seeders/`）で入れる
+- 最初は手元で流す。CI に入れるかは、あとで決める
+- 主な流れの一覧（流れごとに1本以上）
+  - ログイン
+  - 登録
+  - 検索
+  - いいね
+  - マッチ
+  - トーク
+  - 有料
+
+### 単体テスト
+
+- `rules.ts` の純粋な関数（境界値）と、`〇〇Api` の関数の中の形の変換だけを、単体で確かめる
+- 形の変換のテストに入れる応答の例は、`docs/api/` の改善版の例と同じ形にする。API の形を変える PR では、同じ PR で例とこのテストを直す
+
+### 偽の応答
+
+- MSW の偽の応答は、`src/test/handlers/〇〇.ts`（業務のまとまりごと。`〇〇Api.ts` と同じ名前）の1か所に置く
+- 応答の形は、`docs/api/` の改善版の例と同じにする
+- テストごとに違う応答（失敗・空）は、そのテストの中で、ハンドラーを上書きする
+
+### 画面の要素の探し方
+
+- 次の順で探す：役割（`getByRole`）→ ラベル（`getByLabelText`）→ 文字（`getByText`）→ テスト用の ID（`getByTestId`）
+- 見た目のためのクラス名では探さない
+
+### カバレッジ
+
+- 数字の目標を置かない。CI で、カバレッジの数字では落とさない
+- 抜けは、上の「主な流れの一覧」と、要件 ID ごとのテストで見る
+
+### 弱いところ
+
+- E2E は遅く、待ち方で落ちることがある（決まった時間だけ待たず、画面の要素が出るのを待つ。`testing.md` の「テストの独立性」）
+- MSW の偽の応答が、本物の API とずれることがある。ずれは E2E で見つける。API の形を変える PR では、`docs/api/` の例と偽の応答を一緒に直す
+
+### 移すまでの間
+
+- ブラウザの `fetch` を偽物にしていたテストは、axios に移したので届かなくなった（axios は XMLHttpRequest で送る）。#275 で `describe.skip`（一部は `it.skip`）で止め、#290 で MSW の偽の応答に書き直す
+- `fetch` を包む関数と、形を確かめる型ガードのテスト（`shared/api/client.test.ts`・`features/messages/api.test.ts`）は、確かめる関数をなくしたので消した。#290 で、`src/api/client.ts` のテストを MSW で書く
+- それまでは、`noRestrictedGlobals` の `fetch` は、テストのファイルを外して止める
+- 画面を移すチケットで、先に足す「今の動きを確かめるテスト」も、結合テストの形（画面を描き、API を偽物にする）で書く。移したあとも、同じテストが書き換えずに通るようにする
 
 ## 8. 共通の原則
 
@@ -372,10 +484,10 @@ flowchart TB
 
 ## 10. やってはいけない書き方
 
-- 部品の中で `fetch` を書く・`import.meta.env.VITE_API_URL` を読む・トークンを読む
-- `res.ok` を見ずに、応答をそのまま状態に置く
+- 部品の中で API を呼ぶ・`import.meta.env.VITE_API_URL` を読む・トークンを読む
+- `fetch` を書く・axios を `src/api/client.ts` の外で import する
 - `any` を使う（代わりに何を書くかは [quality-frontend.md](quality-frontend.md) の T1・T2）
-- API の形（snake_case・生年月日）を、`api.ts`・Repository の実装の外で読む
+- API の形（snake_case・生年月日）を、`src/api/〇〇Api.ts`・Repository の実装の外で読む
 - ログインの守りを画面ごとに書く（`app/RequireAuth.tsx` の1か所）
 - presenter の中で、機能の hook・`shared/session`・ルーターの hook を使う
 - 画面の題・タブの選び方を、ルートの表の外に書く

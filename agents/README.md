@@ -41,18 +41,18 @@ architecture-backend.md の中身：
 
 architecture-frontend.md の中身：
 
-- 改訂版の画面の形：機能ごとのフォルダ・container／presenter・hook・`api.ts`・Repository
+- 改訂版の画面の形：機能ごとのフォルダ・container／presenter・hook・`src/api/`（axios）・Repository
 - 判断の順・ディレクトリと名前・依存の向き
 - 書き方：401 と 403・失敗と読み込み中・書き込み・機能をまたぐ部品・有料の出し分け
 - 状態の置き場・メッセージの2つの出どころ
-- テスト・共通の原則
+- テスト（結合テストと E2E を中心に）・共通の原則
 - 古いコードの移し方・管理画面での当てはめ
 
 ### テスト
 
 | ルール | 読むとき | 中身 |
 | --- | --- | --- |
-| [testing.md](rules/testing.md) | 振る舞いを検証する、テストを変える | 単体と E2E の分け方・API テストの観点・ダミーデータ・シードデータ・テストを弱めて通すことの禁止・テストの独立性 |
+| [testing.md](rules/testing.md) | 振る舞いを検証する、テストを変える | 単体と E2E の分け方・画面のテスト（結合テストと E2E）・API テストの観点・ダミーデータ・シードデータ・テストを弱めて通すことの禁止・テストの独立性 |
 | [testing-style.md](rules/testing-style.md) | テストのコードを書く・直す（`backend/*/tests/` を触ると読み込まれる） | テストの置き場と名前・ファイルの形・`describe()` と `it()`・並べ方・確かめ方・分かっている不具合の書き方・コメント |
 
 ### ログ
@@ -72,7 +72,7 @@ architecture-frontend.md の中身：
 | ルール | 読むとき | 中身 |
 | --- | --- | --- |
 | [quality-php.md](rules/quality-php.md) | PHP のコードを書く・変える | Pint の形・引数の渡し方・コンテナ・Model のプロパティ |
-| [quality-frontend.md](rules/quality-frontend.md) | 画面のコードを書く・変える | React の書き方・Effect・`key`・state の形・`any` と `as`・Biome |
+| [quality-frontend.md](rules/quality-frontend.md) | 画面のコードを書く・変える | React の書き方・Effect・`key`・state の形・`any` と `as`・API の応答の受け方・Biome・書き方の形（アロー関数・名前付きの export・`type`・`Props`・`useState` の型の引数） |
 | [quality-types.md](rules/quality-types.md) | PHP のコードを書く・変える | `strict_types`・言語の型と PHPDoc の使い分け・PHPStan のレベル（レガシー版 6・改善版 9）・してはいけないこと |
 
 使わない領域のルールは外し、この目次からも消す（例：DB を使わないなら database.md）。

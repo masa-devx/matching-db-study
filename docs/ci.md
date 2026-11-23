@@ -32,7 +32,7 @@ PR を出したとき・ブランチに push したときに、GitHub の上で�
 
 - 全体の lint（`npm run lint`）は、レガシー版の前からの指摘が残っているので、まだ流さない
 - 会員の画面の `lint:rules` は、置き場の決まり（`architecture-frontend.md` の3章）を書いた Biome の規則（`noRestrictedImports`・`noRestrictedGlobals`）を全体に流す
-- あわせて、改訂版の置き場（`src/app`・`src/shared`）では、Biome の `recommended` の規則と `overrides` で足した規則を、警告も誤りとして見る（`quality-frontend.md`）。`src/features` は、作るときに足す
+- あわせて、改訂版の置き場（`src/app`・`src/shared`・`src/features`・`src/api`）では、Biome の `recommended` の規則と `overrides` で足した規則（プラグインも）を、警告も誤りとして見る（`quality-frontend.md`）
 - 3つの確かめは、`npm ci` を1回で済ませるために1つのジョブで流す。前の確かめが落ちても、残りは `if: ${{ !cancelled() }}` で流し、どれが落ちたかを1回で分かるようにする
 - `mise.toml` が変わったときも動き、ワークフローの Node の版が `mise.toml` と同じかを確かめる
 - Node の版は `mise.toml` と同じにする（ワークフローの `NODE_VERSION`）
