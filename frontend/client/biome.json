@@ -61,7 +61,7 @@
       }
     },
     {
-      "includes": ["src/**/*.test.ts", "src/**/*.test.tsx"],
+      "includes": ["tests/**"],
       "linter": {
         "rules": {
           "style": {
@@ -173,7 +173,7 @@
       }
     },
     {
-      "includes": ["src/shared/session/**", "!src/shared/session/**/*.test.tsx"],
+      "includes": ["src/shared/session/**"],
       "linter": {
         "rules": {
           "style": {
@@ -424,7 +424,7 @@
       }
     },
     {
-      "includes": ["src/app/**", "!src/app/**/*.test.ts", "!src/app/**/*.test.tsx"],
+      "includes": ["src/app/**"],
       "linter": {
         "rules": {
           "style": {
@@ -490,7 +490,7 @@
       }
     },
     {
-      "includes": ["src/**", "!src/**/*.test.ts", "!src/**/*.test.tsx"],
+      "includes": ["src/**", "tests/**"],
       "linter": {
         "rules": {
           "style": {
@@ -507,12 +507,7 @@
       }
     },
     {
-      "includes": [
-        "src/features/**",
-        "!src/features/search/hooks/useSearchConditions.ts",
-        "!src/**/*.test.ts",
-        "!src/**/*.test.tsx"
-      ],
+      "includes": ["src/features/**", "!src/features/search/hooks/useSearchConditions.ts"],
       "linter": {
         "rules": {
           "style": {
@@ -536,8 +531,7 @@
         "src/features/*/types.ts",
         "src/features/*/repository.ts",
         "src/shared/lib/**",
-        "src/shared/constants/**",
-        "!src/**/*.test.ts"
+        "src/shared/constants/**"
       ],
       "linter": {
         "rules": {
@@ -559,7 +553,7 @@
       }
     },
     {
-      "includes": ["src/app/**", "src/shared/**", "src/features/**", "src/api/**"],
+      "includes": ["src/app/**", "src/shared/**", "src/features/**", "src/api/**", "tests/**"],
       "plugins": ["./biome-plugins/no-function-declaration.grit", "./biome-plugins/use-state-type-argument.grit"],
       "linter": {
         "rules": {
