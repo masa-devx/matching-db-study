@@ -1,6 +1,7 @@
 ---
 paths:
   - "frontend/*/src/**"
+  - "frontend/*/tests/**"
   - "frontend/*/biome.json"
   - "frontend/*/tsconfig*.json"
   - "frontend/*/package.json"
@@ -48,7 +49,7 @@ paths:
 | S5 | `useState` に型の引数を書く | `lint:rules`（プラグイン） |
 | S6 | `never` を使わない | 止めない（レビュー） |
 
-- `lint:rules`：会員の画面の `npm run lint:rules`。改訂版の置き場（`src/app`・`src/shared`・`src/features`・`src/api`）では、Biome の `recommended` の規則と、`biome.json` の `overrides` で足した規則を、警告も誤りとして見る（`recommended` に入っていない規則は流れない）。CI でも流れる
+- `lint:rules`：会員の画面の `npm run lint:rules`。改訂版の置き場（`src/app`・`src/shared`・`src/features`・`src/api`）とテストの置き場（`tests`）では、Biome の `recommended` の規則と、`biome.json` の `overrides` で足した規則を、警告も誤りとして見る（`recommended` に入っていない規則は流れない）。CI でも流れる
 - `src/features` は、最初の機能（`features/messages` の下のタブの数。#247）を作ったときに、`lint:rules` の2つ目のコマンドに足した
 - `src/api` は、#292 で `lint:rules` の2つ目のコマンドに足した（まだないフォルダを渡すと、Biome が `fs/cantRead` の誤りにするため、作ったときに足した）
 - プラグイン：Biome の規則にない決まりを、GritQL（コードの形で探す言葉）で書いたもの。`frontend/client/biome-plugins/` に置き、`biome.json` の `overrides` の `plugins` に書く。`overrides` に書くと、その置き場だけに効く
@@ -174,7 +175,7 @@ paths:
   - `client.ts` が 2xx でない応答の本文を読む所（HTML や空の応答もある。`code`・`message`・`errors` を調べて取り出す）
 - 同じ調べ方を2か所で使うときは、型ガード（`const isXxx = (v: unknown): v is Xxx => …`）にする
 - なぜ：応答の型を書く所を `〇〇Api` の関数の1か所にまとめる。形のずれはテストで見つける（D-006）。`JSON.parse` は `any` を返し、`noExplicitAny` では見つからない。ストレージには、古い版の画面が書いた値や、人が書き換えた値が入る
-- 弱いところ：API の形がずれても型の誤りにならず、違う値が画面に黙って出る。E2E（本物の API）で見つける（`architecture-frontend.md` の7章）
+- 弱いところ：API の形がずれても型の誤りにならず、違う値が画面に黙って出る。#299 で E2E（本物の API）を入れるまでは、見つける手段がない（`architecture-frontend.md` の7章）
 - 根拠：https://www.typescriptlang.org/docs/handbook/2/narrowing.html・https://axios-http.com/docs/typescript
 - #292 で、形を確かめる型ガード（`isBadgeCountsResponse`）と `as AccountResponse` をやめ、この形にした
 - まだ移していないレガシー版の画面は、`〇〇Api` が返す API の形（`XxxResponse`）のまま使う（`profileApi.accountRecord()`・`profileApi.member()` など）。画面を移すときに、画面の形に変える関数にする
@@ -248,7 +249,7 @@ paths:
 
 ## 4. 書き方の形
 
-改訂版の置き場（`src/app`・`src/shared`・`src/features`・`src/api`）では、テストのファイルも含めて従う。
+改訂版の置き場（`src/app`・`src/shared`・`src/features`・`src/api`）と、テストの置き場（`tests/`）で従う（`biome.json` の `overrides`）。
 
 ### S1. 部品・hook・関数は、アロー関数で書く
 

@@ -2,7 +2,7 @@
 
 状態：確定（改善版の形は #112・#113 で決めた。API を呼ぶ所を `src/api/` にまとめること・テストの道具は #275 で決め、#292 で `src/api/` に移した。21画面の行き先と移し方は #293 で書いた）
 決まり：改善版の画面の受け持ち・import の決まり・書き方・状態の置き場・テスト・画面の移し方の手順は [architecture-frontend.md](../agents/rules/architecture-frontend.md) を正とする。この文書は、形を選んだ理由と、今のファイルをどこへ移すかの地図
-決定：[decisions.md](decisions.md) の D-004（React＋TypeScript＋Vite）・D-006（OpenAPI は使わない）・D-018（画面も分ける）・D-026（改善版の置き場）・D-027（会員の認証はセッション）・D-029（axios・`src/api/`・MSW と Playwright）
+決定：[decisions.md](decisions.md) の D-004（React＋TypeScript＋Vite）・D-006（OpenAPI は使わない）・D-018（画面も分ける）・D-026（改善版の置き場）・D-027（会員の認証はセッション）・D-029（axios・`src/api/`・MSW。E2E の Playwright は #299）
 
 画面も、DB と同じく「レガシー版で作る → 測る → 直す → もう一度測る」で進める。03b から、画面の子 Issue も `legacy-repo` と `refactored-repo` に分ける。Zustand は、画面をまたぐ状態が要る画面を移すチケットで入れる（D-005。Vuex のあとを継いだ Pinia と近い書き方。2026-11-23 に人が確かめた）。
 
@@ -66,10 +66,10 @@ export default function SearchPage() {
 ### テスト
 
 - レガシー版：なし
-- 改善版：結合テスト（Vitest・Testing Library・MSW）と E2E（Playwright）を中心にする。直す前に、今の動きを確かめるテストを足す
+- 改善版：結合テスト（Vitest・Testing Library・MSW）を中心にする。直す前に、今の動きを確かめるテストを足す。E2E（Playwright）は #299 で足す
 - 測る数字：テストの本数
 - 確かめること：テストが、要件 ID の受け入れ条件に対応しているか
-- 道具（MSW・Playwright）は、画面をまたぐので #290 で入れる
+- 道具は、画面をまたぐので別のチケットで入れる。MSW は #290 で入れた（版は AGENTS.md の技術スタック）。E2E（Playwright）は #299
 
 ### 開発効率
 
@@ -163,6 +163,18 @@ frontend/client/src/
     └── index.css                  全体の土台                                                 ← index.css・App.css を分ける
 ```
 
+テストは `src` の外に集める（2026-11-23 に人が決めた。決まりは architecture-frontend.md の7章）。
+
+```text
+frontend/client/tests/
+├── integration/<機能>/            結合テスト（画面を描き、API は MSW）。機能の名前は下の「会員の画面の行き先」と同じ
+│   ├── app/                       RequireAuth・SessionGate・MaintenanceGate・configureApi・下のタブ
+│   └── session/                   shared/session（ログインした自分・ログアウト）
+├── api/client.test.ts             src/api/client.ts（CSRF・401／419・503・止めたとき・JSON でない応答）
+├── unit/                          単体（rules.ts・形の変換）。src と同じフォルダの形
+└── support/                       MSW の server・偽の応答（handlers/〇〇Api.ts）・Cookie・ダイアログの道具・Vitest の準備（setup.ts）
+```
+
 ### いくつもの画面で使うものの持ち主
 
 | もの | 今使っている画面 | 持ち主と、出すもの |
@@ -252,9 +264,10 @@ features/search/
 │   ├── useSearchConditions.ts     条件を URL に読み書きする（クエリがないときだけ、最後の条件に戻す）
 │   └── useSearchMembers.ts        取る・足す・重なりを除く・古い応答を捨てる・状態を持つ
 ├── types.ts                       画面の型（SearchConditions・MemberCard）
-├── rules.ts                       画面の決まり（年齢の下 ≤ 上など）。純粋な関数
-└── *.test.ts(x)                   テストは隣に置く
+└── rules.ts                       画面の決まり（年齢の下 ≤ 上など）。純粋な関数
 ```
+
+- テストは `tests/integration/search/`・`tests/unit/features/search/` に置く（隣には置かない）
 
 - API を呼び、API の形（`MemberCardResponse`）を画面の形（`MemberCard`）に変えるのは、`src/api/membersApi.ts`。`useSearchMembers` が呼ぶ
 
@@ -272,8 +285,7 @@ features/messages/
 ├── repositories/
 │   ├── restMessageRepository.ts                 Laravel：ポーリング。messagingApi を呼ぶ
 │   └── firestoreMessageRepository.ts            Firestore：onSnapshot。読んだ数もここで数える。Firebase へのログインもここ
-├── types.ts・rules.ts                           Message・Room・送れる文字数
-└── *.test.ts(x)
+└── types.ts・rules.ts                           Message・Room・送れる文字数
 ```
 
 - どちらの実装を渡すかは `app/router.tsx`（まだ作っていない。今は `App.tsx`）が決める。Firestore の画面は `lazy()` で分けて読む
@@ -302,7 +314,7 @@ features/messages/
 
 ### 画面をまたぐもの
 
-- テストの道具（MSW・Playwright）：#290
+- テストの道具：MSW は #290 で入れた。E2E（Playwright）は #299
 - 表示速度を測る仕組み（ビルドの大きさ・LCP・Firestore の画面の `lazy()`）：#295
 - ルートの表：移した画面も、今の `App.tsx` のルートの表（画面の題は `TITLES`、タブは `components/TabBar.tsx` の `UNDER_HOME`）に1行足す。`app/router.tsx` に移すのは、画面が増えて困ったときに別のチケットで
 - 順番：#293（この地図）→ #290 → #294（試しの1画面：届いたいいね）→ #295
@@ -329,7 +341,7 @@ features/messages/
 
 ## まだ決めていないこと
 
-- E2E（Playwright）を CI に入れるか。最初は手元で流す（architecture-frontend.md の7章）
+- E2E（Playwright）の置き場・データの扱い・CI に入れるか。#299 で決める（architecture-frontend.md の7章）
 - REST のメッセージを画面の形（`isMine`）に変える所は、トークの画面を移すときに決める（`Account` は `public_id` だけを持つ。architecture-frontend.md の6章）
 - 有料で断るときの 403 に `code` を付けること（要件は `code: paid_required` を決めているが、API は返していない）。「使える機能を `/api/me` で返す」チケットに入れる
 - 検索のフリーワードを URL に入れたとき、アクセスのログに残してよいか

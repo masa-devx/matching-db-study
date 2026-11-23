@@ -1,55 +1,48 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { HttpResponse, http } from 'msw'
 import { MemoryRouter } from 'react-router'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import TabBar from './TabBar'
+import { describe, expect, it } from 'vitest'
+import { apiUrl } from '../../../src/api/client'
+import TabBar from '../../../src/components/TabBar'
+import { SessionProvider } from '../../../src/shared/session/SessionProvider'
+import { sentPaths, server } from '../../support/server'
 
 // components/TabBar.tsx：下のタブのバッジ（FR-UI-032・FR-UI-064・FR-UI-073）。
-// 数は、数だけを返す API（GET /api/me/badge-counts）を1本だけ読む（docs/api/05-messages.md の「#247」）
+// 数は、数だけを返す API（GET /api/me/badge-counts。docs/api/05-messages.md）を1本だけ読む。本物の SessionProvider で包み、API は MSW で偽物にする
 
-const fetchMock = vi.fn<typeof fetch>()
+// テストで使う値
 
-vi.mock('../shared/session/SessionProvider', () => ({
-  useSession: () => ({
-    session: { status: 'signedIn', account: { userId: 'u1', email: 'a@example.test', emailVerified: true } },
-  }),
-}))
-
-function json(body: unknown): Response {
-  return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
+const respond = (counts: { unread_messages: number; new_matches: number; received_likes: number }): void => {
+  server.use(http.get(apiUrl('/api/me/badge-counts'), () => HttpResponse.json(counts)))
 }
 
-function respond(counts: { unread_messages: number; new_matches: number; received_likes: number }): void {
-  fetchMock.mockImplementation(async () => json(counts))
-}
-
-function renderAt(path: string): void {
+// ログインした自分は、本物の SessionProvider が GET /api/me（既定は、メールアドレスを確認した会員）から読む
+const renderAt = (path: string): void => {
   render(
-    <MemoryRouter initialEntries={[path]}>
-      <TabBar />
-    </MemoryRouter>,
+    <SessionProvider>
+      <MemoryRouter initialEntries={[path]}>
+        <TabBar />
+      </MemoryRouter>
+    </SessionProvider>,
   )
 }
 
-function tab(name: string): HTMLElement {
+const tab = (name: string): HTMLElement => {
   return screen.getByRole('link', { name: new RegExp(name) })
 }
 
-beforeEach(() => {
-  fetchMock.mockReset()
-  vi.stubGlobal('fetch', fetchMock)
-})
-
-// axios に移したため（ブラウザの fetch を偽物にしても、axios は XMLHttpRequest で送るので届かない）。#290 で MSW に書き直す
-describe.skip('ログインした会員が、検索の画面（/search）を開く', () => {
+/**
+ * 正常系：要件が通す操作
+ */
+describe('ログインした会員が、検索の画面（/search）を開く', () => {
   it('タブの数のために呼ぶ API は、数だけを返す API の1本だけ（トークの一覧・届いたいいねの一覧は読まない）', async () => {
     respond({ unread_messages: 3, new_matches: 1, received_likes: 2 })
 
     renderAt('/search')
 
     expect(await within(tab('いいね')).findByText('2')).toBeInTheDocument()
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-    const [url] = fetchMock.mock.calls[0] ?? []
-    expect(new URL(String(url)).pathname).toBe('/api/me/badge-counts')
+    // GET /api/me は、ログインした自分を読む SessionProvider の1本
+    expect(sentPaths()).toEqual(['GET /api/me', 'GET /api/me/badge-counts'])
   })
 
   it('メッセージのタブに、未読の合計と新しいマッチを足した数が出る（FR-UI-032・FR-UI-073）', async () => {
@@ -86,13 +79,19 @@ describe.skip('ログインした会員が、検索の画面（/search）を開�
     expect(within(tab('いいね')).getByText('99')).toBeInTheDocument()
   })
 
-  it('0 なら、バッジは出ない（FR-UI-032）', async () => {
+  it('数が 0 になったら、バッジは消え、「0」とも出ない（FR-UI-032）', async () => {
+    // 読み込む前と見分けるため、先に1以上の数を出してから 0 にする
+    respond({ unread_messages: 3, new_matches: 1, received_likes: 2 })
+    renderAt('/search')
+    expect(await within(tab('いいね')).findByText('2')).toBeInTheDocument()
     respond({ unread_messages: 0, new_matches: 0, received_likes: 0 })
 
-    renderAt('/search')
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'))
+    })
 
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
-    await act(async () => {}) // 応答を数として置くところまで進める
+    await waitFor(() => expect(within(tab('いいね')).queryByText('2')).not.toBeInTheDocument())
+    expect(within(tab('メッセージ')).queryByText('4')).not.toBeInTheDocument()
     expect(within(tab('メッセージ')).queryByText('0')).not.toBeInTheDocument()
     expect(within(tab('いいね')).queryByText('0')).not.toBeInTheDocument()
   })

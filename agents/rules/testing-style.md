@@ -1,12 +1,14 @@
 ---
 paths:
   - "backend/*/tests/**"
+  - "frontend/*/tests/**"
 ---
 
 # テストコードの書き方
 
 Pest のテストを、あとから読んだ人が「どの API の、どんな前提で、何を確かめているか」をすぐ分かるように書く。
 何を確かめるか（観点・ダミーデータ・テストを弱めて通さない）は [testing.md](testing.md) に書く。ここは書き方だけ。2026-11-19 に人が決めた。
+会員の画面（`frontend/client/tests/`）のテストも同じ形で書く。違う所だけを9章に書く（2026-11-23 に人が決めた）。
 
 ## 1. 置き場と名前
 
@@ -170,3 +172,64 @@ it('番号が UUID の形でないと、見られずにサーバーのエラー�
 ## 8. 書いたら流す
 
 [docs/commands.md](../../docs/commands.md) の「テスト」「静的検査・整形」を流す。1つのファイルだけを流すときは、パスを付ける。
+
+## 9. 画面のテスト（`frontend/client/tests/`）
+
+1〜8章を、そのまま当てはめる。2章の並び（使う値 → 正常系 → 異常系と `/** */` の区切り）・3章の名前・4章の「用意する → 呼ぶ → 確かめる」・6章の「分かっている不具合：…」・7章のコメントの決まりは、バックエンドと同じ。ここには、違う所だけを書く。
+
+### 置き場と名前
+
+| もの | 置き場 | 例 |
+| --- | --- | --- |
+| 結合テスト | `tests/integration/<機能>/<確かめるファイルの名前>.test.ts(x)` | `tests/integration/settings/SettingsPage.test.tsx` |
+| `app/`・`shared/session/` の部品 | `tests/integration/app/`・`tests/integration/session/` | `tests/integration/app/RequireAuth.test.tsx` |
+| `src/api/client.ts` | `tests/api/client.test.ts` | ― |
+| 単体 | `tests/unit/`。`src` と同じフォルダの形 | `tests/unit/features/messages/rules.test.ts` |
+| 偽の応答・道具 | `tests/support/` | `tests/support/handlers/profileApi.ts` |
+
+- `<機能>` は `docs/frontend.md` の「会員の画面の行き先」の機能の名前（`architecture-frontend.md` の7章）
+- ファイルの名前は、確かめるファイルの名前に `.test` を付ける（画面を移して名前が変わったら、テストの名前も変える）
+
+### ファイルの形
+
+```tsx
+// SettingsPage.tsx のパスワードの変更（FR-AUTH-033）。API は MSW で偽物にする
+
+// テストで使う値
+const CURRENT_PASSWORD = 'password'
+
+/**
+ * 異常系：要件が断る操作
+ */
+describe('ログインした会員が、設定で、決まりに合わない新しいパスワードに変える（422）', () => {
+  it('API が返した文を出す（FR-AUTH-033）', async () => {
+    server.use(http.put(apiUrl('/api/me/password'), () => HttpResponse.json(body, { status: 422 })))
+    await fillPasswordForm()
+
+    await userEvent.click(screen.getByRole('button', { name: '変える' }))
+
+    expect(await screen.findByText('新しいパスワードは8文字以上にしてください')).toBeInTheDocument()
+  })
+})
+```
+
+- 「テストで使う値」には、変わらない値（入力・期待する文）・偽物（`vi.fn()`・`vi.mock()`）・画面を描く関数を置く
+- `beforeEach()` に書くのは、道具の準備と片付けだけ：偽物の片付け（`mockReset()`・`sessionStorage.clear()`）・`src/api/client.ts` への処理の渡し直し（`configureApiClient()`）・偽の時計。データ（Cookie・`sessionStorage` に入れる値・偽の応答）は、それぞれの `it()` の中で用意する
+- jsdom にない機能の代わり（`<dialog>` の `showModal()` など。`tests/support/dialog.ts`）は、`beforeAll()` で1回だけ置く
+- 4章の「呼ぶ」は、会員の操作（`userEvent.click()` など）か、hook・関数を呼ぶ1行
+- 単体（`tests/unit/`）には、2章の並びを当てはめない（バックエンドの `tests/Unit/` と同じ）
+- 書き方の決まり（アロー関数・名前付き export・`type`・`useState` の型。`quality-frontend.md` の S1〜S5）に従う。7章の「無名関数に `: void` を書く」は PHP だけの決まりなので、当てはめない
+
+### 偽の応答（MSW）
+
+- 既定の応答は `tests/support/handlers/〇〇Api.ts` に置く（今の API と同じ形。`docs/api/` の改善版の今の列）
+- テストごとに違う応答（失敗・空・別の会員）は、その `it()` の中の「用意する」で `server.use(...)` で上書きする。テストが終わると、`tests/support/setup.ts` が戻す
+- 何本呼んだか・何を送ったかは、`sentRequests()`・`sentPaths()` で確かめる
+- 応答を返さない偽物で読み込み中を見るテストは、要求が偽物に届いたのを確かめてから終える（`await vi.waitFor(() => expect(sentRequests(…)).toHaveLength(1))`）。届く前に終えると、届くのが次のテストになり、次のテストの偽の応答を使ってしまう
+
+### 画面の要素の探し方と確かめ方
+
+- 画面の要素は、役割（`getByRole`）→ ラベル（`getByLabelText`）→ 文字（`getByText`）→ テスト用の ID（`getByTestId`）の順で探す
+- 画面の文は、文字で書いて確かめる。状態だけを見ない
+- 失敗するはずの呼び出しは `await expect(…).rejects.toThrow(<失敗の型>)` で、`await` を付け、失敗の型まで確かめる
+- 偽の時計（`vi.useFakeTimers()`）を使うテストでは、`vi.waitFor()` が時計を進めながら待つ。時間の境目を数えるときは、本物の時計で待つ（`tests/integration/messages/useBadgeCounts.test.ts` の `waitWithRealClock`）

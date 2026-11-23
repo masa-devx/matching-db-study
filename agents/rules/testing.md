@@ -2,9 +2,9 @@
 paths:
   - "backend/*/tests/**"
   - "backend/*/phpunit.xml"
+  - "frontend/*/tests/**"
   - "frontend/*/src/**/*.test.*"
   - "frontend/*/vitest.config.*"
-  - "frontend/*/e2e/**"
 ---
 
 # 単体/E2Eの切り分けと、テストを弱めて通すことの禁止
@@ -19,13 +19,13 @@ paths:
 | 結合（API テスト） | Pest（テスト用の PostgreSQL に対して実行） | DB や API をまたぐ制御・API の振る舞い |
 | 結合（画面） | Vitest・Testing Library・MSW | 画面を描き、会員の操作で見える動き |
 | アーキテクチャ | Pest の `arch()`（`pestphp/pest-plugin-arch`） | 層の依存の向きと名前（`architecture-backend.md` の8章） |
-| E2E | Playwright（会員の画面） | 主な流れ・認可・状態遷移 |
+| E2E | Playwright（会員の画面。まだ入れない。#299） | 主な流れ・認可・状態遷移 |
 
-- MSW・Playwright は、まだ入れていない。入れるのは、テストの道具を入れる PR（`docs/decisions.md` の D-029）
+- MSW は #290 で入れた（`docs/decisions.md` の D-029。版は AGENTS.md の技術スタック）。会員の画面の E2E（Playwright）は、まだ入れない。入れるのは #299
 
 ### 単体
 
-- 置き場所：`backend/client/tests/Unit/`・`backend/admin/tests/Unit/`（`app/` の構造を再現）・`frontend/*/src/**/*.test.ts(x)`（確かめるファイルの隣）
+- 置き場所：`backend/client/tests/Unit/`・`backend/admin/tests/Unit/`（`app/` の構造を再現）・`frontend/client/tests/unit/`（`src` と同じフォルダの形）。管理画面（`frontend/admin`）は、今は確かめるファイルの隣の `src/**/*.test.ts(x)`
 - 実行：`docker compose run --rm app ./vendor/bin/pest tests/Unit`。画面は `frontend/client`（管理画面は `frontend/admin`）で `npm test`（Vitest・Testing Library・jsdom。#114）
 
 ### 結合（API テスト）
@@ -41,14 +41,14 @@ paths:
 
 ### 結合（画面）
 
-- 置き場所：`frontend/client/src/**/*Page.test.tsx`（画面の隣）。偽の応答は `frontend/client/src/test/handlers/〇〇.ts`
+- 置き場所：`frontend/client/tests/integration/<機能>/`（機能の名前は `docs/frontend.md` の「会員の画面の行き先」）。`src/api/client.ts` は `frontend/client/tests/api/client.test.ts`。偽の応答は `frontend/client/tests/support/handlers/〇〇Api.ts`
+- テストは `src` の外の `frontend/client/tests/` に集める（2026-11-23 に人が決めた。表は `architecture-frontend.md` の7章）
 - 実行：`frontend/client` で `npm test`
 - 書き方は、下の「画面のテスト」
 
 ### E2E
 
-- 置き場所：`frontend/client/e2e/`
-- 実行：最初は手元で流す（コマンドは、Playwright を入れる PR で `docs/commands.md` に書く）。CI に入れるかは、あとで決める
+- 会員の画面の E2E は、まだ入れない（2026-11-23 に人が決めた）。置き場・実行のコマンド・データの扱いは、入れる #299 で決める
 - データ：バックエンドのシード（下の「E2E のシードデータ」）
 
 ### 管理画面（`backend/admin`）のテスト
@@ -151,16 +151,18 @@ $loginUser = DummyUser::create(paid: true);   // users.created_at は 2026-11-10
 
 ## 画面のテスト
 
-会員の画面（`frontend/client`）は、会員から見える動きを確かめる、結合テストと E2E を中心にする（2026-11-23 に人が決めた。D-029）。置き場と受け持ちは `architecture-frontend.md` の7章を正とし、ここにはテストを書くときの決まりだけを書く。
+会員の画面（`frontend/client`）は、会員から見える動きを確かめる結合テストを中心にする（2026-11-23 に人が決めた。D-029）。E2E は、まだ入れない（#299）。置き場と受け持ちは `architecture-frontend.md` の7章を正とし、ここにはテストを書くときの決まりだけを書く。
 
 - なぜ：中の作りでなく動きを見るテストは、AI がコードを書き換えても、そのまま残る。AI の誤りにも気づきやすい
 - 結合テスト：画面（container）を描き、API を MSW で偽物にし、会員の操作（`userEvent`）で確かめる。読み込み中・失敗・空のときも見る
-- E2E：本物の API と DB で、主な流れを通す（Playwright）。主な流れの一覧（ログイン・登録・検索・いいね・マッチ・トーク・有料）の、流れごとに1本以上
+- E2E：#299 で入れる。本物の API と DB で、主な流れの一覧（ログイン・登録・検索・いいね・マッチ・トーク・有料。`architecture-frontend.md` の7章）を、流れごとに1本以上通す
 - 単体テスト：`rules.ts` の純粋な関数と、`〇〇Api` の中の形の変換だけ
-- 偽の応答は、`src/test/handlers/〇〇.ts` の1か所に置き、`docs/api/` の改善版の例と同じ形にする
+- 偽の応答は、`tests/support/handlers/〇〇Api.ts` の1か所に置き、今の API と同じ形（`docs/api/` の改善版の今の列）にする。テストごとに違う応答（失敗・空）は、そのテストの中で `server.use(...)` で上書きする
+- 偽の応答のない API は、`tests/support/server.ts` の `request:unhandled` で集め、`tests/support/setup.ts` の `afterEach` で誤りにする（`onUnhandledFrame: 'error'` は、本物の API へ送らないためだけ）
+- 応答を待っているテストは、要求が偽物に届いたのを確かめてから終える（`sentRequests()`）。届く前に終えると、届くのが次のテストになり、次のテストの偽の応答を使ってしまう
 - 画面の要素は、役割 → ラベル → 文字 → テスト用の ID の順で探す
-- カバレッジは、数字の目標を置かず、CI で落とさない。抜けは、主な流れの一覧で見る
-- 弱いところ：E2E は遅く、待ち方で落ちることがある。MSW の偽の応答が本物とずれることがある（ずれは E2E で見つける）
+- カバレッジは、数字の目標を置かず、CI で落とさない。抜けは、要件 ID ごとのテストで見る（E2E を入れたら、主な流れの一覧でも見る）
+- 弱いところ：MSW の偽の応答が本物とずれることがある。#299 で E2E を入れるまでは、ずれを見つける手段がない
 
 ## 単体とE2Eの切り分け
 
@@ -188,7 +190,7 @@ E2Eは、固定のシードデータを入れたデータベースに対して�
 - 最低限用意する: 権限ごとのログインユーザー（管理者・一般など固定メール＋固定ID）、
   他人のデータが見えないことを確かめるための「別の持ち主のデータ」
 - 実行の流れ: シード投入 → アプリ起動 → E2E 実行
-  （コマンドは、Playwright を入れる PR で書く）
+  （会員の画面のコマンドは、E2E を入れる #299 で `docs/commands.md` に書く）
 - 読み取り専用のテストは既存シードを使う。変更を伴うテストは専用データをfixturesで作り、
   後始末する（共有シードを書き換えると並列実行で他のテストが壊れる）
 
@@ -227,7 +229,7 @@ await expect(createInvoice(input)).rejects.toThrow(InvoiceValidationError);
   片方だけだと compose の値が勝つ。00 で DB の接続先とメールの送り先の2回、テストが開発用の設定のまま動いた）
 - E2Eでアプリ内部のAPI応答をモックしない（結合を確かめるのがE2Eの仕事）
 - 一部だけ実行する指定・飛ばす指定（記入例: `.only` / `.skip`）を残したままコミットしない
-  - 例外：人が決め、理由と書き直すチケットの番号をコメントに書いたものだけ（D-029。#290 で外す）
+  - 例外：人が決め、理由と書き直すチケットの番号をコメントに書いたものだけ（今は使っている所がない。D-029 で止めたものは、#290 で全部書き直した）
 - 新規テストは先にRed（失敗）を確認してから実装する
 - 期待結果はプランの「新規テストケース」と要件を出典にする。実装コードを正解にしない
 - **例外：今の動きを確かめるテスト**（移す前に足す API テスト）は、最初から通り、期待値は今の振る舞いになる。テストを弱めて通したものと見分けるため、次の順で書く

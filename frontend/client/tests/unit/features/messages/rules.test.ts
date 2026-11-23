@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { messagesTabCount } from './rules'
+import { messagesTabCount } from '../../../../src/features/messages/rules'
 
 // features/messages/rules.ts：メッセージのタブのバッジの数（FR-UI-032・FR-UI-073）
 

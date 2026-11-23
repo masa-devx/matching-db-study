@@ -81,9 +81,13 @@ AI が守る決まり（推測で流さない・許可の一覧に足す基準�
 - 実行場所：`frontend/client/`（管理画面は `frontend/admin/`）
 - コマンド
   - テスト：`npm test`（Vitest。1回流して終わる）。直しながら流し続けるなら `npm run test:watch`
-  - 置き場の決まり：`npm run lint:rules`（会員の画面だけ。`architecture-frontend.md` の3章を書いた Biome の規則を全体に流し、改訂版の置き場（`src/app`・`src/shared`・`src/features`・`src/api`）では `recommended` の規則と `overrides` で足した規則を、警告も誤りとして見る。`quality-frontend.md`）
+  - 置き場の決まり：`npm run lint:rules`（会員の画面だけ。`architecture-frontend.md` の3章を書いた Biome の規則を全体に流し、改訂版の置き場（`src/app`・`src/shared`・`src/features`・`src/api`）とテストの置き場（`tests`）では `recommended` の規則と `overrides` で足した規則を、警告も誤りとして見る。`quality-frontend.md`）
 - 前提：`npm install` 済み
-- テストは、確かめるファイルの隣に `*.test.ts(x)` で置く。画面は jsdom の上で描く（`vite.config.ts` の `test`）
+- テストは `tests/` に置く（`integration/<機能>/`・`api/`・`unit/`。`architecture-frontend.md` の7章）。対象は `tests/**/*.test.ts(x)`。画面は jsdom の上で描く（`vite.config.ts` の `test`）
+  - 1つのファイルだけ：`npx vitest run tests/api/client.test.ts`
+- API は MSW で偽物にする（`tests/support/server.ts`・`tests/support/handlers/`）。本物の API には送らないので、API が止まっていても流せる
+- テストの型は `npm run build`（`tsc -b`。`tsconfig.test.json`）で一緒に確かめる
+- 画面の E2E（本物の API と DB で流すテスト）は、まだない。入れるのは #299
 - 使わないもの：全体の lint（`npm run lint`）で置き場の決まりを確かめる（レガシー版の前からの指摘が混ざり、見分けにくいため）
 
 ## 管理画面を起動

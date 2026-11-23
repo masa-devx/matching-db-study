@@ -43,9 +43,9 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
   - 版：1.21.1
   - 理由：interceptors で 401・419・503 を1か所で扱う
 - **テスト**
-  - 使うもの：Pest（バックエンド。テスト用の PostgreSQL に対して実行）・Vitest（画面）
-  - 入れる前：MSW（画面の結合テストの偽の応答）・Playwright（E2E）。入れるのはテストの PR（D-029）
-  - 版：入れたときの最新（MSW・Playwright は、入れたときに書く）
+  - 使うもの：Pest（バックエンド。テスト用の PostgreSQL に対して実行）・Vitest（画面）・MSW（画面の結合テストの偽の応答）
+  - 版：Pest・Vitest は入れたときの最新。MSW 3.0.7（#290。D-029）
+  - 画面の E2E（Playwright）は、まだ入れない。入れるのは #299
   - 理由：SQLite ではロックや UNIQUE の動きが違うため、本物の PostgreSQL で確かめる
 - **静的検査・整形**
   - 使うもの：Larastan（PHPStan）・Pint（API）・Biome（画面。lint と整形を1つで受け持つ）
@@ -71,7 +71,7 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
   - `Endpoints.php`：テストで呼ぶ API の URL を作るクラス。URL の文字はここにだけ書く
 - `frontend/client/`：React（03b から）
   - 改訂版の置き場の地図は [docs/frontend.md](docs/frontend.md)、決まりは [architecture-frontend.md](agents/rules/architecture-frontend.md)
-  - テストは `src/**/*.test.tsx`
+  - テストは `tests/`：`integration/<機能>/`（結合）・`api/`（`src/api/client.ts`）・`unit/`（単体）・`support/`（MSW の偽物）
 - `backend/admin/`：管理画面（12）の API（Laravel）
   - 会員の側のコードは読み込まない
   - 表は会員の側と共通。表の作り（マイグレーション）は、管理画面の表も含めて `backend/client/` にまとめる
