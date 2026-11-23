@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useNavigate, useSearchParams } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ToastProvider } from '../components/Toast'
-import type { SessionState } from '../shared/session/SessionProvider'
+import type { SessionState } from '../shared/session/types'
 import { RequireAuth } from './RequireAuth'
 
 // app/RequireAuth.tsx：ログインが要る画面の守り。ログインしていない・確認していない・使える会員の出し分け（FR-UI-011・FR-AUTH-021）

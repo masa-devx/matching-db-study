@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import type { SessionState } from '../shared/session/SessionProvider'
+import type { SessionState } from '../shared/session/types'
 import { SessionGate } from './SessionGate'
 
 // app/SessionGate.tsx：ログインしているかが決まるまでと、読み込めなかったときの見せ方（FR-UI-013）

@@ -52,12 +52,14 @@ type NoticeResponse = {
 }
 
 export const membersApi = {
+  // API の形のまま（レガシー版の画面が読む。移すときに画面の形にする）
   // 会員を探す。条件は検索の画面が作ったクエリのまま
   search: async (query: URLSearchParams): Promise<SearchedMemberResponse[]> => {
     const { data } = await client.get<SearchedMemberResponse[]>(`/api/users?${query}`)
     return data
   },
 
+  // API の形のまま（レガシー版の画面が読む。移すときに画面の形にする）
   searchConditions: async (): Promise<SearchConditionResponse[]> => {
     const { data } = await client.get<SearchConditionResponse[]>('/api/me/search-conditions')
     return data
@@ -79,6 +81,7 @@ export const membersApi = {
     await client.post('/api/me/reports', input)
   },
 
+  // API の形のまま（レガシー版の画面が読む。移すときに画面の形にする）
   notices: async (): Promise<NoticeResponse[]> => {
     const { data } = await client.get<NoticeResponse[]>('/api/me/notices')
     return data

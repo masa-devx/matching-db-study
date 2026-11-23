@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
-import { ApiError } from './api/ApiError'
+import { ApiError, ignoreApiError } from './api/ApiError'
 import { membersApi } from './api/membersApi'
 import { profileApi } from './api/profileApi'
 import Button from './components/Button'
@@ -235,6 +235,11 @@ export default function SearchConditionsPage() {
       .accountRecord()
       .then((u) => profileApi.member(u.public_id))
       .then((u) => setLocked(u.profile?.gender === 'male' && !u.is_paid))
+      // 読めなくても、前と同じく「使える」として続ける（有料かは、検索の API が決める）
+      .catch((e) => {
+        ignoreApiError(e)
+        setLocked(false)
+      })
   }, [])
 
   // 都道府県と、プロフィールの6項目の、選ぶ・外す（どれも、選んだ名前の配列で持つ）

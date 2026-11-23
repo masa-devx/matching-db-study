@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { UnauthorizedError } from '../../../api/ApiError'
 import { messagingApi } from '../../../api/messagingApi'
-import type { SessionState } from '../../../shared/session/SessionProvider'
+import type { SessionState } from '../../../shared/session/types'
 import type { BadgeCounts } from '../types'
 import { useBadgeCounts } from './useBadgeCounts'
 

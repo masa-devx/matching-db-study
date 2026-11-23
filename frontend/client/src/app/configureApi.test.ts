@@ -15,7 +15,7 @@ const setUp = async () => {
   const moveTo = vi.fn<(url: string) => void>()
   configureApi(moveTo)
   return {
-    // 前の apiFetch と同じ呼び方で、axios の入れ物を呼ぶ（axios に移したため。#290 で MSW に書き直す）
+    // 前の apiFetch と同じ呼び方で、axios のインスタンスを呼ぶ（axios に移したため。#290 で MSW に書き直す）
     apiFetch: (path: string, init: { method?: string; body?: string } = {}) =>
       client.request({ url: path, method: init.method ?? 'GET', data: init.body }),
     UnauthorizedError,

@@ -19,12 +19,14 @@ type PurchaseResponse = {
 }
 
 export const billingApi = {
+  // API の形のまま（レガシー版の画面が読む。移すときに画面の形にする）
   // プランの一覧。男性でなければ 403
   plans: async (): Promise<PlanResponse[]> => {
     const { data } = await client.get<PlanResponse[]>('/api/plans')
     return data
   },
 
+  // API の形のまま（レガシー版の画面が読む。移すときに画面の形にする）
   purchases: async (): Promise<PurchaseResponse[]> => {
     const { data } = await client.get<PurchaseResponse[]>('/api/me/purchases')
     return data

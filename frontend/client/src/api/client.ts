@@ -1,7 +1,7 @@
-// API を呼ぶ axios の入れ物（architecture-frontend.md の2章・4章）。axios を読めるのは、このファイルだけ。
+// API を呼ぶ axios のインスタンス（axios.create() で作ったもの。architecture-frontend.md の2章・4章）。axios を読めるのは、このファイルだけ。
 // 送り先（VITE_API_URL）を読み、セッションの Cookie と CSRF のトークンを付けるのも、ここだけ（Sanctum の SPA 認証。D-027）。
 // 画面はトークンを持たない。ログインしているかは、ブラウザが自動で付ける HttpOnly の Cookie で、API が決める。
-// 前は shared/api/client.ts が fetch を包んでいた。動きは同じにしてある（#275。D-029）
+// 前は shared/api/client.ts が fetch を包んでいた。動きは同じにしてある（#292。D-029）
 
 import axios, { type AxiosResponse, type Method } from 'axios'
 import { ApiError, EmailUnverifiedError, MaintenanceError, UnauthorizedError } from './ApiError'
@@ -14,6 +14,7 @@ declare module 'axios' {
     //   パスワードが違うときも 401 が返るので、ログインの画面へは移さず、ApiError を投げる（画面に誤りの文を出す）
     // 'logout'：ログアウト。401 でも移らない（もうログインしていないのと同じなので、自分でしたログアウトとして扱う）
     // 'withoutLogin'・'logout' でも、503 ならメンテナンスの画面を出す（続きは ApiError で止める）
+    // 'withoutLogin' と 'logout' は、client.ts の中では同じ動き（呼ぶ理由を読む人に見せるために分けている）
     access?: 'withoutLogin' | 'logout'
     // 419 のあとに1回送り直したか（このファイルの中だけで使う）
     csrfRetried?: boolean
@@ -51,12 +52,17 @@ export const apiUrl = (path: string): string => {
 
 // どの API も、セッションの Cookie を付けて送る（withCredentials）。
 // axios の xsrf の設定は、Cookie を読むだけで、ないときに先にもらう動きがない。そのため使わず（withXSRFToken: false）、
-// 下の interceptor で、書き込みにだけ付ける
+// 下の interceptor で、書き込みにだけ付ける。
+// 応答の本文は JSON として読み、読めなければ失敗にする（responseType: 'json'・silentJSONParsing: false）。
+// 書かないと、axios は JSON として読めない本文を、文字のまま data に入れる（前の res.json() は失敗にしていた）。
+// 204 などの空の本文は、読まずに空のまま返す（失敗にならない）
 export const client = axios.create({
   baseURL: API_URL,
   withCredentials: true,
   withXSRFToken: false,
   headers: { Accept: 'application/json' },
+  responseType: 'json',
+  transitional: { silentJSONParsing: false },
 })
 
 const isWrite = (method: Method | string | undefined): boolean => {
@@ -156,8 +162,14 @@ const toThrown = (res: AxiosResponse, access: 'withoutLogin' | 'logout' | undefi
 }
 
 client.interceptors.response.use(undefined, async (error: unknown) => {
-  // 止めた（signal・時間切れ）ときは、前の fetch と同じく AbortError にする（hook が「止めたので黙る」と見分ける）
+  // AbortSignal で止めたときは、前の fetch と同じく、AbortSignal の止めた理由を投げる
+  // （abort() は AbortError・AbortSignal.timeout() の時間切れは TimeoutError）。axios は理由を捨てて CanceledError にするので、ここで戻す。
+  // 理由は名前で見分ける（テストの jsdom では DOMException が2種類あり、instanceof DOMException では見分けられないため）。
+  // ほかの理由なら AbortError にする（hook が「止めたので黙る」と見分ける）
   if (axios.isCancel(error)) {
+    const signal = error.config?.signal
+    const reason: unknown = signal instanceof AbortSignal ? signal.reason : undefined
+    if (reason instanceof Error && (reason.name === 'AbortError' || reason.name === 'TimeoutError')) throw reason
     throw new DOMException('止めました', 'AbortError')
   }
   // つながらない・応答がない：そのまま投げる（呼んだ所が「つながらない」として扱う）
@@ -165,6 +177,11 @@ client.interceptors.response.use(undefined, async (error: unknown) => {
     throw error
   }
   const { response, config } = error
+  // 2xx なのに、本文を JSON として読めない（送り先の設定違いで、画面の index.html が返るなど）。
+  // API の応答ではないので、つながらないときと同じに、そのまま投げる（起動の GET /api/me なら「読み込めませんでした」になる）
+  if (response.status >= 200 && response.status < 300) {
+    throw error
+  }
   // 書き込みが 419 なら、CSRF のトークンが古い（メンテナンスでセッションが消えた・24時間で切れた）。もらい直して、1回だけ送り直す
   // （419 では何も変わっていないので、送り直しても二重にならない。もう一度 419 なら、上の決まりで扱う）
   if (response.status === 419 && isWrite(config.method) && config.csrfRetried !== true) {

@@ -47,6 +47,31 @@
                   {
                     "group": ["axios", "axios/*"],
                     "message": "axios を読めるのは src/api/client.ts だけ。API は src/api/〇〇Api.ts の関数を呼ぶ（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["**/api/client"],
+                    "importNamePattern": "(client|configureApiClient)",
+                    "message": "レガシー版の画面は、axios のインスタンス（client）と configureApiClient を直に使わない。src/api/〇〇Api.ts の関数を呼ぶ（architecture-frontend.md の3章）"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/**/*.test.ts", "src/**/*.test.tsx"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["axios", "axios/*"],
+                    "message": "axios を読めるのは src/api/client.ts だけ。API は src/api/〇〇Api.ts の関数を呼ぶ（architecture-frontend.md の3章）"
                   }
                 ]
               }
@@ -83,6 +108,10 @@
                   {
                     "group": ["react", "react-dom", "react-dom/*", "react-router"],
                     "message": "src/api は、React を使わない（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["**/features/**", "!**/features/*/types", "**/session/*", "!**/session/types"],
+                    "message": "src/api が読んでよいのは、機能の types.ts と shared/session/types.ts の型だけ（architecture-frontend.md の3章）"
                   }
                 ]
               }
@@ -159,6 +188,11 @@
                   {
                     "group": ["**/app/*", "**/features/**", "**/ui/*", "**/api/client"],
                     "message": "shared/session は、app・features・shared/ui・src/api/client.ts を使わない。API は src/api/〇〇Api.ts の関数を呼ぶ（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["**/api/ApiError"],
+                    "importNamePattern": "ignoreApiError",
+                    "message": "ignoreApiError は、まだ移していないレガシー版の画面だけが使う。改訂版では、ApiError を受けて状態に変える（architecture-frontend.md の2章）"
                   }
                 ]
               }
@@ -300,6 +334,11 @@
                       "**/repositories/*"
                     ],
                     "message": "hook は、src/api/client.ts・shared/firebase・shared/ui・components・pages・repositories を直に使わない。src/api/〇〇Api.ts の関数か repository.ts を通す（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["**/api/ApiError"],
+                    "importNamePattern": "ignoreApiError",
+                    "message": "ignoreApiError は、まだ移していないレガシー版の画面だけが使う。改訂版では、ApiError を受けて状態に変える（architecture-frontend.md の2章）"
                   }
                 ]
               }
@@ -335,6 +374,11 @@
                   {
                     "group": ["react", "react-dom", "react-dom/*", "react-router"],
                     "message": "repositories は、React を使わない（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["**/api/ApiError"],
+                    "importNamePattern": "ignoreApiError",
+                    "message": "ignoreApiError は、まだ移していないレガシー版の画面だけが使う。改訂版では、ApiError を受けて状態に変える（architecture-frontend.md の2章）"
                   }
                 ]
               }
@@ -399,6 +443,11 @@
                   {
                     "group": ["**/api/*"],
                     "message": "app は、src/api を使わない。401・503 のときの動きを渡す app/configureApi.ts だけが src/api/client.ts を読む（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["**/api/ApiError"],
+                    "importNamePattern": "ignoreApiError",
+                    "message": "ignoreApiError は、まだ移していないレガシー版の画面だけが使う。改訂版では、ApiError を受けて状態に変える（architecture-frontend.md の2章）"
                   }
                 ]
               }
@@ -427,6 +476,11 @@
                   {
                     "group": ["**/api/*", "!**/api/client"],
                     "message": "app/configureApi.ts が読んでよいのは、src/api/client.ts の設定の関数だけ（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["**/api/ApiError"],
+                    "importNamePattern": "ignoreApiError",
+                    "message": "ignoreApiError は、まだ移していないレガシー版の画面だけが使う。改訂版では、ApiError を受けて状態に変える（architecture-frontend.md の2章）"
                   }
                 ]
               }

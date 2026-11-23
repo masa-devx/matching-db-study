@@ -41,11 +41,13 @@ type FirebaseTokenResponse = {
 }
 
 export const messagingApi = {
+  // API の形のまま（レガシー版の画面が読む。移すときに画面の形にする）
   talkRooms: async (): Promise<TalkRoomResponse[]> => {
     const { data } = await client.get<TalkRoomResponse[]>('/api/me/talk-rooms')
     return data
   },
 
+  // API の形のまま（レガシー版の画面が読む。移すときに画面の形にする）
   messages: async (roomId: string, page: number): Promise<MessageResponse[]> => {
     const { data } = await client.get<MessageResponse[]>(`/api/me/talk-rooms/${roomId}/messages`, { params: { page } })
     return data
@@ -61,6 +63,7 @@ export const messagingApi = {
     return { unreadMessages: data.unread_messages, newMatches: data.new_matches, receivedLikes: data.received_likes }
   },
 
+  // API の形のまま（レガシー版の画面が読む。移すときに画面の形にする）
   // Firebase にログインするためのカスタムトークン
   firebaseToken: async (): Promise<FirebaseTokenResponse> => {
     const { data } = await client.post<FirebaseTokenResponse>('/api/me/firebase-token')

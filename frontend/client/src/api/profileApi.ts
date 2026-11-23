@@ -1,4 +1,4 @@
-import type { Account } from '../shared/session/SessionProvider'
+import type { Account } from '../shared/session/types'
 import { client } from './client'
 
 // Profile（docs/backend.md の2章）：自分のアカウント（/me）・相手のプロフィール・プロフィールを直す・退会
@@ -71,18 +71,21 @@ export const profileApi = {
     return { userId: data.public_id, email: data.email, emailVerified: data.email_verified_at !== null }
   },
 
-  // ログインした自分の行（API の形のまま）。まだ移していないレガシー版の画面が、is_paid・paid_until などを読む
+  // API の形のまま（レガシー版の画面が読む。移すときに画面の形にする）
+  // ログインした自分の行。レガシー版の画面が、is_paid・paid_until などを読む
   accountRecord: async (): Promise<AccountResponse> => {
     const { data } = await client.get<AccountResponse>('/api/me')
     return data
   },
 
-  // 会員とプロフィール（API の形のまま。レガシー版の画面が読む）
+  // API の形のまま（レガシー版の画面が読む。移すときに画面の形にする）
+  // 会員とプロフィール
   member: async (userId: string): Promise<MemberResponse> => {
     const { data } = await client.get<MemberResponse>(`/api/users/${userId}`)
     return data
   },
 
+  // API の形のまま（レガシー版の画面が読む。移すときに画面の形にする）
   // 自分のプロフィールを直す。応答は直したあとのプロフィール
   updateProfile: async (userId: string, input: ProfileInput): Promise<ProfileResponse> => {
     const { data } = await client.put<ProfileResponse>(`/api/users/${userId}`, input)

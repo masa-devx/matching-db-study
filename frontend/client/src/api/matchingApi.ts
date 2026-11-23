@@ -48,16 +48,19 @@ type BlockResponse = {
 }
 
 export const matchingApi = {
+  // API の形のまま（レガシー版の画面が読む。移すときに画面の形にする）
   like: async (userId: string): Promise<LikeResponse> => {
     const { data } = await client.post<LikeResponse>('/api/me/likes', { user_id: userId })
     return data
   },
 
+  // API の形のまま（レガシー版の画面が読む。移すときに画面の形にする）
   sentLikes: async (): Promise<SentLikeResponse[]> => {
     const { data } = await client.get<SentLikeResponse[]>('/api/me/likes')
     return data
   },
 
+  // API の形のまま（レガシー版の画面が読む。移すときに画面の形にする）
   receivedLikes: async (): Promise<ReceivedLikeResponse[]> => {
     const { data } = await client.get<ReceivedLikeResponse[]>('/api/me/received-likes')
     return data
@@ -67,6 +70,7 @@ export const matchingApi = {
     await client.post('/api/me/skips', { user_id: userId })
   },
 
+  // API の形のまま（レガシー版の画面が読む。移すときに画面の形にする）
   skips: async (): Promise<SkipResponse[]> => {
     const { data } = await client.get<SkipResponse[]>('/api/me/skips')
     return data
@@ -81,6 +85,7 @@ export const matchingApi = {
     await client.post('/api/me/blocks', { user_id: userId })
   },
 
+  // API の形のまま（レガシー版の画面が読む。移すときに画面の形にする）
   blocks: async (): Promise<BlockResponse[]> => {
     const { data } = await client.get<BlockResponse[]>('/api/me/blocks')
     return data

@@ -1,6 +1,6 @@
 # 画面の作り方（レガシー版と改善版）
 
-状態：確定（改善版の形は #112・#113 で決めた。API を呼ぶ所を `src/api/` にまとめること・テストの道具は #275 で決めた）
+状態：確定（改善版の形は #112・#113 で決めた。API を呼ぶ所を `src/api/` にまとめること・テストの道具は #275 で決め、#292 で `src/api/` に移した）
 決まり：改善版の画面の受け持ち・import の決まり・書き方・状態の置き場・テストは [architecture-frontend.md](../agents/rules/architecture-frontend.md) を正とする。この文書は、形を選んだ理由と、今のファイルをどこへ移すかの地図
 決定：[decisions.md](decisions.md) の D-004（React＋TypeScript＋Vite）・D-006（OpenAPI は使わない）・D-014（認証）・D-018（画面も分ける）・D-026（改善版の置き場）・D-029（axios・`src/api/`・MSW と Playwright）
 
@@ -76,9 +76,9 @@ export default function SearchPage() {
 ```text
 frontend/client/src/
 ├── main.tsx                       起動するだけ
-├── api/                           API を呼ぶ所。読むのは hook だけ（architecture-frontend.md の3章）     ← shared/api・features/messages/api.ts・各画面の fetch
-│   ├── client.ts                  axios の入れ物：送り先・Cookie・CSRF・401／419・503
-│   ├── ApiError.ts                失敗の型（状態コード・code・メッセージ・入力の誤り）。#275 で移した
+├── api/                           API を呼ぶ所。読むのは hook と、まだ移していないレガシー版の画面（architecture-frontend.md の3章）     ← shared/api・features/messages/api.ts・各画面の fetch
+│   ├── client.ts                  axios のインスタンス（axios.create() で作ったもの）：送り先・Cookie・CSRF・401／419・503
+│   ├── ApiError.ts                失敗の型（状態コード・code・メッセージ・入力の誤り）。#292 で移した
 │   └── 〇〇Api.ts                  業務のまとまりごと（authApi・profileApi・membersApi・matchingApi・messagingApi・billingApi）
 ├── app/                           組み立て。ルートと、どの画面にどの Repository の実装を渡すかを決めるのはここだけ
 │   ├── App.tsx                    Provider を重ねる（ログインした自分・トースト）            ← App.tsx の上半分
@@ -195,5 +195,6 @@ features/messages/
 ## まだ決めていないこと
 
 - E2E（Playwright）を CI に入れるか。最初は手元で流す（architecture-frontend.md の7章）
+- REST のメッセージを画面の形（`isMine`）に変える所は、トークの画面を移すときに決める（`Account` は `public_id` だけを持つ。architecture-frontend.md の6章）
 - 有料で断るときの 403 に `code` を付けること（要件は `code: paid_required` を決めているが、API は返していない）。「使える機能を `/api/me` で返す」チケットに入れる
 - 検索のフリーワードを URL に入れたとき、アクセスのログに残してよいか
