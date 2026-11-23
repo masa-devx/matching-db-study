@@ -1,6 +1,7 @@
 ---
 paths:
   - "frontend/*/src/**"
+  - "frontend/*/tests/**"
   - "frontend/*/biome.json"
   - "frontend/*/tsconfig*.json"
   - "frontend/*/package.json"
@@ -48,7 +49,7 @@ paths:
 | S5 | `useState` に型の引数を書く | `lint:rules`（プラグイン） |
 | S6 | `never` を使わない | 止めない（レビュー） |
 
-- `lint:rules`：会員の画面の `npm run lint:rules`。改訂版の置き場（`src/app`・`src/shared`・`src/features`・`src/api`）では、Biome の `recommended` の規則と、`biome.json` の `overrides` で足した規則を、警告も誤りとして見る（`recommended` に入っていない規則は流れない）。CI でも流れる
+- `lint:rules`：会員の画面の `npm run lint:rules`。改訂版の置き場（`src/app`・`src/shared`・`src/features`・`src/api`）とテストの置き場（`tests`）では、Biome の `recommended` の規則と、`biome.json` の `overrides` で足した規則を、警告も誤りとして見る（`recommended` に入っていない規則は流れない）。CI でも流れる
 - `src/features` は、最初の機能（`features/messages` の下のタブの数。#247）を作ったときに、`lint:rules` の2つ目のコマンドに足した
 - `src/api` は、#292 で `lint:rules` の2つ目のコマンドに足した（まだないフォルダを渡すと、Biome が `fs/cantRead` の誤りにするため、作ったときに足した）
 - プラグイン：Biome の規則にない決まりを、GritQL（コードの形で探す言葉）で書いたもの。`frontend/client/biome-plugins/` に置き、`biome.json` の `overrides` の `plugins` に書く。`overrides` に書くと、その置き場だけに効く
@@ -248,7 +249,7 @@ paths:
 
 ## 4. 書き方の形
 
-改訂版の置き場（`src/app`・`src/shared`・`src/features`・`src/api`）では、テストのファイルも含めて従う。
+改訂版の置き場（`src/app`・`src/shared`・`src/features`・`src/api`）と、テストの置き場（`tests/`）で従う（`biome.json` の `overrides`）。
 
 ### S1. 部品・hook・関数は、アロー関数で書く
 

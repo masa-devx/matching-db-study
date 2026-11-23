@@ -55,8 +55,7 @@ src/
 │   ├── hooks/      手順と状態（要るときだけ）
 │   ├── types.ts    画面の型（要るときだけ）
 │   ├── rules.ts    見せ方の決まり（決まりがあるときだけ）
-│   ├── repository.ts・repositories/  データの出どころが2つある機能だけ
-│   └── *.test.ts(x) テストは隣に置く
+│   └── repository.ts・repositories/  データの出どころが2つある機能だけ
 └── shared/
     ├── session/    ログインした自分
     ├── firebase/   Emulator への接続
@@ -65,6 +64,7 @@ src/
     └── constants/  定数（都道府県の名前・プロフィールの選択肢）
 ```
 
+- テストは `src` の外の `frontend/client/tests/` に置く（7章）
 - 機能の名前は、要件（`docs/requirements/`）のまとまりにそろえる。会員の画面の一覧は `docs/frontend.md` の「改善版の置き場」、21画面の行き先は同じ文書の「会員の画面の行き先」
 - `pages/` と `components/` は、小さな機能でもいつも作る。import の決まりをフォルダの単位で書くため（平たく置くと、container と presenter を機械で見分けられない）
 - 例外：画面をまだ移していない機能（今は下のタブの数だけの `messages`）は、`pages/`・`components/` を、画面を移すチケットで作る（container も presenter もまだないため。#247）
@@ -398,26 +398,44 @@ flowchart TB
 会員から見える動きを確かめる、結合テストと E2E を中心にする（2026-11-23 に人が決めた。D-029）。
 
 - なぜ：中の作り（どの hook を呼ぶか・どのファイルに置くか）でなく、動き（画面に何が出るか・押したら何が起きるか）を見るテストは、AI がコードを書き換えても、そのまま残る。AI の誤りにも気づきやすい
-- 道具（Vitest・Testing Library・MSW・Playwright）のうち、MSW・Playwright はまだ入れていない。入れるのは、テストの道具を入れる PR（#290）
+- 道具は Vitest・Testing Library・MSW（結合）と Playwright（E2E）。MSW と Playwright は #290 で入れた（版は AGENTS.md の技術スタック）
 - テストのコードの書き方は [testing.md](testing.md) の「画面のテスト」に従う
 
-| 種類 | 何を | 道具 | 置き場 |
+| 種類 | 何を | 道具 | 置き場（`frontend/client/` の下） |
 | --- | --- | --- | --- |
-| 結合 | 画面（container）を描き、会員の操作で確かめる | Vitest・Testing Library・MSW | 画面の隣の `*Page.test.tsx` |
-| E2E | 本物の API と DB で、主な流れを通す | Playwright | `frontend/client/e2e/` |
-| 単体 | `rules.ts` の純粋な関数・`〇〇Api` の中の形の変換 | Vitest | 隣の `*.test.ts` |
+| 結合 | 画面（container）を描き、会員の操作で確かめる | Vitest・Testing Library・MSW | `tests/integration/<機能>/` |
+| API を呼ぶ所 | `src/api/client.ts` の扱い | Vitest・MSW | `tests/api/client.test.ts` |
+| E2E | 本物の API と DB で、主な流れを通す | Playwright | `tests/e2e/` |
+| 単体 | `rules.ts` の純粋な関数・`〇〇Api` の中の形の変換 | Vitest | `tests/unit/`（`src` と同じフォルダの形） |
+| 道具 | MSW の server・偽の応答・Cookie などの道具 | MSW | `tests/support/` |
+
+- テストは `src` の外の `tests/` に集める（2026-11-23 に人が決めた）。確かめるファイルの隣には置かない
+  - なぜ：画面を移すと、ファイルの置き場が変わる。テストを業務の名前で分けておけば、移してもテストの置き場が変わらない（バックエンドの `tests/Feature/<業務のまとまり>/` と同じ考え）
+- `<機能>` は、`docs/frontend.md` の「会員の画面の行き先」の機能の名前（`auth`・`profile`・`likes`・`messages`・`settings` など）。画面をまだ移していなくても、移す先の機能の名前で置く
+- `app/` の部品（RequireAuth・SessionGate・MaintenanceGate・configureApi・下のタブ）は `tests/integration/app/`、`shared/session/` は `tests/integration/session/`
+- 書き方（並べ方・名前）は [testing-style.md](testing-style.md) の「画面のテスト」
 
 ### 結合テスト
 
 - 画面（container）を描き、API を MSW（ネットワークの手前で、偽の応答を返す道具）で偽物にする
 - 会員の操作は `userEvent`（クリック・入力）で行い、画面に出たものを確かめる
 - 中身があるときだけでなく、読み込み中・失敗（500・つながらない）・空のときも見る
+- 実行：`frontend/client` で `npm test`
+- MSW の準備は `tests/support/server.ts`（`setupServer`）。`tests/support/setup.ts` が、テストの前に `listen`、テストごとに `resetHandlers`、終わりに `close` を呼ぶ
+- 偽の応答を置いていない API を呼んだら、そのテストを誤りにする（`onUnhandledFrame: 'error'`。MSW 3 で `onUnhandledRequest` から名前が変わった）
+- どの API を何本呼んだか・何を送ったかは、`tests/support/server.ts` の `sentRequests()`・`sentPaths()` で見る
+- テストの中の画面のオリジンと API の送り先は、どちらも `http://localhost:8000` にそろえる（`vite.config.ts` の `test`）。jsdom は、ほかのオリジンへの要求で CORS を確かめ、CORS の印のない偽の応答を止めるため。CORS は E2E で確かめる
 
 ### E2E
 
 - 本物の API と DB で、主な流れを通す（Playwright）
-- 置き場は `frontend/client/e2e/`
+- 置き場は `frontend/client/tests/e2e/`。設定は `frontend/client/playwright.config.ts`
+- 実行：`frontend/client` で `npm run test:e2e`（前提とコマンドは `docs/commands.md` の「画面の E2E」）
 - データは、バックエンドのシード（`backend/client/database/seeders/`）で入れる
+  - 読むだけの流れ（ログイン・検索）は、シードの会員（`search00001@example.test`）を使う
+  - 書き込む流れ（登録・いいね・マッチ・トーク・有料）は、毎回ちがうメールアドレスで、画面から登録した会員を使う。シードの会員には書き込まない
+  - 会員を用意する手順（登録・確認のメール・ログイン）は `tests/e2e/support.ts` の1か所に置く
+- 開発用の DB（`matching_dev`）に流すので、登録した会員（`e2e-…@example.test`）と、その会員のいいね・マッチ・メッセージ・購入が残る
 - 最初は手元で流す。CI に入れるかは、あとで決める
 - 主な流れの一覧（流れごとに1本以上）
   - ログイン
@@ -435,7 +453,7 @@ flowchart TB
 
 ### 偽の応答
 
-- MSW の偽の応答は、`src/test/handlers/〇〇.ts`（業務のまとまりごと。`〇〇Api.ts` と同じ名前）の1か所に置く
+- MSW の偽の応答は、`tests/support/handlers/〇〇Api.ts`（業務のまとまりごと。`src/api/〇〇Api.ts` と同じ名前）の1か所に置く
 - 応答の形は、`docs/api/` の改善版の例と同じにする
 - テストごとに違う応答（失敗・空）は、そのテストの中で、ハンドラーを上書きする
 
@@ -454,12 +472,11 @@ flowchart TB
 - E2E は遅く、待ち方で落ちることがある（決まった時間だけ待たず、画面の要素が出るのを待つ。`testing.md` の「テストの独立性」）
 - MSW の偽の応答が、本物の API とずれることがある。ずれは E2E で見つける。API の形を変える PR では、`docs/api/` の例と偽の応答を一緒に直す
 
-### 移すまでの間
+### 移すときのテスト
 
-- ブラウザの `fetch` を偽物にしていたテストは、axios に移したので届かなくなった（axios は XMLHttpRequest で送る）。#292 で `describe.skip`（一部は `it.skip`）で止め、#290 で MSW の偽の応答に書き直す
-- `fetch` を包む関数と、形を確かめる型ガードのテスト（`shared/api/client.test.ts`・`features/messages/api.test.ts`）は、確かめる関数をなくしたので消した。#290 で、`src/api/client.ts` のテストを MSW で書く
-- それまでは、`noRestrictedGlobals` の `fetch` は、テストのファイルを外して止める
-- 画面を移すチケットで、先に足す「今の動きを確かめるテスト」も、結合テストの形（画面を描き、API を偽物にする）で書く。移したあとも、同じテストが、import の行と置き場のほかは書き換えずに通るようにする
+- 画面を移すチケットで、先に足す「今の動きを確かめるテスト」も、結合テストの形（画面を描き、API を MSW で偽物にする）で書く。移したあとも、同じテストが、import の行と置き場のほかは書き換えずに通るようにする
+- `src/api/client.ts` の動き（CSRF・401／419・503・止めたとき・JSON でない応答）は、`tests/api/client.test.ts` が MSW で確かめる（#290）
+- テストのファイルでも `fetch` は使わない（`noRestrictedGlobals`。#290 で、テストのファイルの例外を外した）
 
 ## 8. 共通の原則
 
