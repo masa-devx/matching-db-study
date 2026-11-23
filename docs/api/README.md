@@ -12,7 +12,7 @@ API の正本。作る前に設計を書き、確かめてもらってから実�
 ### パスの名前
 
 - `/api/` のあとに、複数形の名詞（`/users`・`/likes`）。動詞は使わない
-- 例外：認証の `/api/auth/login`・`/api/auth/logout`・`/api/auth/refresh`
+- 例外：認証の `/api/auth/login`・`/api/auth/logout`
   - 広く使われている名前で、作る・消すものの名詞にすると分かりにくいため
 - 持ち主の下にあるものは入れ子にする（`/rooms/{public_id}/messages`）
 - ログインした本人のものは `/me` の下に置く
@@ -26,7 +26,7 @@ API の正本。作る前に設計を書き、確かめてもらってから実�
 - 1つのもの（会員・05 のトークルームなど）は、その表の `public_id`（UUID v7。例 `019a6f2e-3c4d-7b8a-9e10-2f3a4b5c6d7e`）で指す
 - 連番の `id` は URL に使わない
 - 一覧の応答で相手を指す `user_id` も `public_id`（詳細へのリンクに使うため）
-- JWT の `sub` は中の `id` のまま（D-022）
+- 会員の側の認証はセッション（D-027）。管理画面の JWT の `sub` は、中の `id` のまま（D-022）
 
 ### 成功のステータス
 
@@ -78,7 +78,6 @@ API の正本。作る前に設計を書き、確かめてもらってから実�
 | [01b](01b-auth.md) | `POST /api/auth/login` | ログインする | 実装済み（レガシー版） |
 | [01b](01b-auth.md) | `GET /api/me` | 自分の情報を見る | 実装済み（レガシー版） |
 | [01b](01b-auth.md) | `POST /api/auth/logout` | ログアウトする | 実装済み（レガシー版） |
-| [01b](01b-auth.md) | `POST /api/auth/refresh`（改善版だけ） | トークンを取り替える | 確定 |
 | [01b](01b-auth.md) | `PUT /api/me/password` | パスワードを変える（M1 設定画面。#181） | 実装済み（レガシー版） |
 | [01b](01b-auth.md) | `POST /api/password-resets`・`PUT /api/password-resets/{token}` | パスワードを忘れたときの再設定（メールを送る・新しいパスワードを決める。M2。#196） | 実装済み（レガシー版） |
 | [02](02-likes.md) | `POST /api/me/likes` | いいねを送る（03 でマッチを作る・`matched` を返す） | 実装済み（レガシー版）。03 の変更も実装済み（レガシー版） |

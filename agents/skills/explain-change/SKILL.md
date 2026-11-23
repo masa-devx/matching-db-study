@@ -47,9 +47,9 @@ description: 実装したあとに、書いたコード・SQL・テストを解�
 
 あわせて、ページの先頭と `explanations/index.html` の目次の状態を、レガシー版のあとは「レガシー版まで」、改善したあとは「実装済み」にする。
 
-## 4. claude.ai に載せ直す
+## 4. 手元で開けるか確かめる
 
-記録を書いたページを、[explain-step](../explain-step/SKILL.md) の「5. claude.ai に載せる」と同じ手順で載せ直す。`agents/notes.local.md` にある URL を使い、同じリンクのまま更新する。
+記録を書いたページを、[explain-step](../explain-step/SKILL.md) の「5. 手元で開けるか確かめる」と同じ手順で開き、図と SQL の並びが描けているかを確かめる。claude.ai の Artifact には載せない（2026-11-15 から。#111）。
 
 ## 5. チャットで伝えて、止まる
 

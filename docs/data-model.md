@@ -411,7 +411,7 @@ Laravel のひな形が作った表（この学習では扱わない）：`passw
 | `profiles` | その会員についての情報 |
 | `likes` | いいね（02） |
 | `user_matches` | マッチ（03） |
-| `refresh_tokens` | 取り替え用のトークン（01b） |
+| `refresh_tokens` | 取り替え用のトークン（01b）。作らない（D-027） |
 | `search_conditions` | 保存した検索条件（04b） |
 | `skips` | スキップ（M3） |
 | `report_cases`・`reports` | 通報（M7） |
@@ -471,6 +471,7 @@ Laravel のひな形が作った表（この学習では扱わない）：`passw
 
 #### `refresh_tokens`
 
+- 作らない（D-027 でセッションにしたため）。下は、D-014 のときの予定
 - `token_hash` の UNIQUE（SHA-256）
 - `user_id` → `users.id` の外部キー
 - 持つもの：家族の番号・期限・使った時刻・止めた時刻

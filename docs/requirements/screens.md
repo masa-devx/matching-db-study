@@ -982,7 +982,7 @@
 
 ## 前提と要確認事項
 
-- 前提：レガシー版は、ログインの JWT を sessionStorage に置き、`Authorization: Bearer` で送る（D-014）。改善版は HttpOnly の Cookie
+- 前提：改善版は、セッションの HttpOnly の Cookie で認証する（D-027）。レガシー版は、ログインの JWT を sessionStorage に置き、`Authorization: Bearer` で送っていた（前の予定の D-014）
 - 前提：レガシー版は、1画面に1つの大きな部品で書き、テスト・画面の CI を持たない（D-018）。改善版で Vitest・Biome（`npm run lint:rules`）・型の検査（`npm run build`）を CI に入れる
 - 前提：API の CORS は、Laravel の標準の設定（`api/*` をどこからでも呼べる）で、Vite の開発サーバー（`http://localhost:5173`）から呼べるかを確かめる。呼べなければ、API の子 Issue で直す
 - 前提（M2。#193 で変えた）：メールアドレスの確認のリンクは、画面（`/verify/<確認用の文字>`）を開く。画面が、今の API（`GET /api/email-verifications/{token}`）を呼んで、結果を出す（FR-UI-085）。前は、リンクが API をそのまま開き、JSON が出ていた

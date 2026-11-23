@@ -129,7 +129,7 @@
 | --- | --- | --- |
 | 00 | 環境を作る | PostgreSQL（Docker）・Laravel のマイグレーション・流れた SQL を見る方法 |
 | 01 | 会員とプロフィール | 主キー・データの型・NOT NULL・CHECK・1対1 |
-| 01b | 認証と認可 | パスワードのハッシュ・JWT と取り替え用のトークン・メールアドレスの確認・ログインの回数制限・トランザクション・認証と認可の違い |
+| 01b | 認証と認可 | パスワードのハッシュ・セッションと HttpOnly の Cookie・メールアドレスの確認・ログインの回数制限・トランザクション・認証と認可の違い |
 | 02 | いいね | 中間テーブル・自分の表どうしの多対多・UNIQUE で二重を防ぐ |
 | 03 | マッチ | 自己結合（お互いにいいね）・INNER と LEFT JOIN |
 | 03b | React を足す | Vite・API との通信・Context で状態を持つ・コンポーネント設計・テスト・開発効率・CORS |
@@ -149,10 +149,10 @@
 
 ### 一歩ごとの補足
 
-- 01b：レガシー版は 30日の JWT を JSON で返す。改善版は 15分の JWT と取り替え用のトークンを HttpOnly の Cookie に置く（D-014）
+- 01b：レガシー版は 30日の JWT を JSON で返す。改善版はセッション（表 `sessions`）にし、ブラウザには HttpOnly の Cookie で番号だけを渡す（D-027）。前は、15分の JWT と取り替え用のトークンにする予定だった（D-014）
 - 03b（[docs/frontend.md](../docs/frontend.md)）
   - レガシー版は、ひな形のままのスパゲティコード（1画面に1つの大きな部品）で、トークンを sessionStorage に置く
-  - 改善版は container／presenter に分け、トークンを HttpOnly の Cookie に移して、XSS への強さを比べる
+  - 改善版は container／presenter に分け、ログインの状態をセッションの HttpOnly の Cookie に移して、XSS への強さを比べる（D-027）
 - 03c：動かすのは `transform` と `opacity` だけにして、CLS とバンドルの大きさを前と後で測る（[docs/design.md](../docs/design.md)）
 - 04：画面の表示速度（長い一覧・Web Vitals・バンドルの大きさ）も、同じ一覧で測る
 - 05c：05 と同じ「相手ごとの最新の1件」を、Firebase Emulator（手元の Firestore）で作る
