@@ -1,3 +1,4 @@
+import type { MatchPerson } from '../features/likes/types'
 import type { Account } from '../shared/session/types'
 import { client } from './client'
 
@@ -83,6 +84,14 @@ export const profileApi = {
   member: async (userId: string): Promise<MemberResponse> => {
     const { data } = await client.get<MemberResponse>(`/api/users/${userId}`)
     return data
+  },
+
+  // マッチの演出に出す、自分の写真とニックネーム（画面の形）。届いたいいねの画面が使う。
+  // 自分の public_id を知るために GET /api/me を読み、そのあと自分のプロフィールを読む（2本が順に流れる。移す前の画面と同じ）
+  myMatchPerson: async (): Promise<MatchPerson> => {
+    const account = await profileApi.accountRecord()
+    const member = await profileApi.member(account.public_id)
+    return { nickname: member.profile?.nickname ?? null, image: member.profile?.image ?? null }
   },
 
   // API の形のまま（レガシー版の画面が読む。移すときに画面の形にする）

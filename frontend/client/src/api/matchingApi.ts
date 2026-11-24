@@ -1,3 +1,5 @@
+import type { LikeResult, ReceivedLike, SkippedMember } from '../features/likes/types'
+import { ageFromBirthday } from '../shared/lib/date'
 import { client } from './client'
 
 // Matching（docs/backend.md の2章）：いいね・届いたいいね・スキップ・マッチ・ブロック
@@ -48,10 +50,10 @@ type BlockResponse = {
 }
 
 export const matchingApi = {
-  // API の形のまま（レガシー版の画面が読む。移すときに画面の形にする）
-  like: async (userId: string): Promise<LikeResponse> => {
+  // いいねを送る（画面の形）。届いたいいね・相手のプロフィール・検索の画面が使う
+  like: async (userId: string): Promise<LikeResult> => {
     const { data } = await client.post<LikeResponse>('/api/me/likes', { user_id: userId })
-    return data
+    return { matched: data.matched, roomId: data.room_id ?? null }
   },
 
   // API の形のまま（レガシー版の画面が読む。移すときに画面の形にする）
@@ -60,20 +62,36 @@ export const matchingApi = {
     return data
   },
 
-  // API の形のまま（レガシー版の画面が読む。移すときに画面の形にする）
-  receivedLikes: async (): Promise<ReceivedLikeResponse[]> => {
+  // 届いたいいねの一覧（画面の形）
+  receivedLikes: async (): Promise<ReceivedLike[]> => {
     const { data } = await client.get<ReceivedLikeResponse[]>('/api/me/received-likes')
-    return data
+    return data.map((like) => ({
+      userId: like.user_id,
+      nickname: like.nickname,
+      age: like.birthday ? ageFromBirthday(like.birthday) : null,
+      prefecture: like.prefecture,
+      image: like.image,
+      likedAt: new Date(like.liked_at),
+    }))
   },
 
   skip: async (userId: string): Promise<void> => {
     await client.post('/api/me/skips', { user_id: userId })
   },
 
-  // API の形のまま（レガシー版の画面が読む。移すときに画面の形にする）
-  skips: async (): Promise<SkipResponse[]> => {
+  // スキップした相手の一覧（画面の形）。
+  // 分かっている不具合：同じ相手を2回スキップすると、API が2行返す（表に UNIQUE がない）。行を見分けるため、key に順番を足す
+  skips: async (): Promise<SkippedMember[]> => {
     const { data } = await client.get<SkipResponse[]>('/api/me/skips')
-    return data
+    return data.map((skip, index) => ({
+      key: `${skip.user_id}-${index}`,
+      userId: skip.user_id,
+      nickname: skip.nickname,
+      age: skip.birthday ? ageFromBirthday(skip.birthday) : null,
+      prefecture: skip.prefecture,
+      image: skip.image,
+      skippedAt: new Date(skip.skipped_at),
+    }))
   },
 
   // スキップを元に戻す

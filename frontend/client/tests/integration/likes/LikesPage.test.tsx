@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiUrl } from '../../../src/api/client'
 import { ToastProvider } from '../../../src/components/Toast'
-import LikesPage from '../../../src/LikesPage'
+import { LikesPage } from '../../../src/features/likes'
 import { SessionProvider } from '../../../src/shared/session/SessionProvider'
 import { stubDialog } from '../../support/dialog'
 import {

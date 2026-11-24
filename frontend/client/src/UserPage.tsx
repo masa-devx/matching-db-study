@@ -6,11 +6,11 @@ import { matchingApi } from './api/matchingApi'
 import { profileApi } from './api/profileApi'
 import ConfirmDialog from './components/ConfirmDialog'
 import Icon from './components/Icon'
-import MatchCelebration from './components/MatchCelebration'
 import ReportDialog from './components/ReportDialog'
 import { SkeletonProfile } from './components/Skeleton'
 import { useToast } from './components/Toast'
 import UpsellDialog from './components/UpsellDialog'
+import { MatchCelebration } from './features/likes'
 
 // レガシー版（03b）。相手のプロフィール。取る・持つ・見せる・決まりを、全部この部品に書く
 // 03c：モーダル・トースト・スケルトン・マッチの演出は components/ の部品を使う
@@ -63,7 +63,7 @@ export default function UserPage() {
         if (d === null) return
         setLiked(true)
         if (d.matched) {
-          setRoomId(d.room_id ?? null)
+          setRoomId(d.roomId)
           // マッチの演出に出す自分の写真を、ここで読む（ホームと同じ2本を写す）
           // 読めなくても演出は出す（写真なし。前は失敗の応答のまま続けていた）
           const mine = await profileApi
