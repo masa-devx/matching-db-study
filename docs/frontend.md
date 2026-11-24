@@ -184,7 +184,7 @@ frontend/client/tests/
 | 誘導のダイアログ・有料の印 | ほぼ全部の画面 | `plans/` が出す。ダイアログは container が受け取って渡す |
 | 通報のダイアログ | トーク・相手のプロフィール | `reports/` が出す。container が受け取って渡す |
 | 会員のカード | 検索・いいね・ブロックの一覧 | `profile/` が presenter を出す |
-| 未読の数・届いたいいねの数 | 下のタブ | 数だけを返す API が1本なので、`messages/` が `useBadgeCounts` を出す（届いたいいねの数も。#247）。読むのは `TabBar` の中だけ。読み直す関数は、使う画面を移すときに足す |
+| 未読の数・届いたいいねの数 | 下のタブ | 数だけを返す API が1本なので、`messages/` が `useBadgeCounts` を出す（届いたいいねの数も。#247）。読むのは `TabBar` の中だけ。読み直す関数 `recountBadges` も `messages/` が出す（届いたいいねの画面が呼ぶ。#294） |
 | 読んだ数の表示（`ReadCounter`） | Firestore 版のトークとその一覧 | `messages/components/`（数えるのは Firestore の Repository の実装） |
 | Firebase へのログイン（`signInFirebase`） | Firestore 版のトーク | Firestore の Repository の実装が、最初に使うときに1回だけ。Firestore のトークンは `messagingApi` から取る |
 
@@ -222,7 +222,8 @@ frontend/client/tests/
 - 「移す先」は `features/<機能>`。機能の名前は、上の図にそろえた
 - `/`（ログインしているかで移す）と `*`（ない URL）は、画面でなくルートの表の行なので、`app/router.tsx` に入れる（まだ作っていない。今は `App.tsx`）
 - 設定の画面のうち、パスワードの変更は `auth` に入れる（上の図）。設定の画面を移すチケットで、`auth` の `index.ts` から受け取る
-- `features/messages` は、下のタブの数（`useBadgeCounts`）だけを移した。トークの4画面は、まだ移していない
+- `features/messages` は、下のタブの数（`useBadgeCounts`）と、その数を読み直す関数（`recountBadges`）だけを移した。トークの4画面は、まだ移していない
+- 「ニックネームがなければ『退会した会員』」の決まりは、今は `features/likes/rules.ts` の `displayName` にある。トーク・ブロックの画面にも同じ決まりがあるので、2つ目の機能（トークなど）を移すときに `shared/lib` へ移す（PR #301 のレビューで決めた）
 - 画面でない部品（`components/` の `VerifyBanner`・`NoticeBanner`・`ReportDialog`・`UpsellDialog`・`MatchCelebration`）の行き先は、上の図。最初に使う画面を移すときに一緒に移す
 - いくつもの画面が使う部品を、最初に使う画面と一緒に移したあと、まだ移していないレガシー版の画面は、`features/<機能>` の `index.ts` だけを読んでよい（`architecture-frontend.md` の3章）
 - 画面ごとの細かな棚卸し（状態・API・ロジックと、その置き場）は、ここに書かない。その画面を移すチケットの最初に書く（`.github/ISSUE_TEMPLATE/r-improvement.md` の「画面を移すときだけ」）

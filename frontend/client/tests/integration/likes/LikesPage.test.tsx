@@ -136,6 +136,25 @@ describe('ログインした会員が、いいねのタブ（/likes）を開き�
   })
 })
 
+describe('ログインした会員が、いいねのタブを開き、写真のある相手からいいねが届いている', () => {
+  it('その相手の行に、写真が出る（FR-UI-064）', async () => {
+    server.use(
+      http.get(RECEIVED_LIKES_URL, () =>
+        HttpResponse.json([receivedLikeBody({ image: '/storage/photos/user-b.jpg' })]),
+      ),
+    )
+    renderLikes()
+
+    await waitForList()
+
+    // 写真は飾り（alt が空）なので、役割は presentation になる
+    expect(within(cardOf('ゆき')).getByRole('presentation')).toHaveAttribute(
+      'src',
+      apiUrl('/storage/photos/user-b.jpg'),
+    )
+  })
+})
+
 describe('ログインした会員が、いいねのタブを開き、今年の誕生日がまだ来ていない相手からいいねが届いている', () => {
   it('年齢が、今日の年齢で出る（誕生日の前なので29歳。FR-UI-064）', async () => {
     server.use(http.get(RECEIVED_LIKES_URL, () => HttpResponse.json([receivedLikeBody({ birthday: '1996-12-31' })])))
@@ -260,6 +279,8 @@ describe('ログインした会員が、届いたいいねの相手で「マッ�
 
     expect(await within(tabOf('いいね')).findByText('1')).toBeInTheDocument()
     expect(within(tabOf('メッセージ')).getByText('5')).toBeInTheDocument()
+    // 演出は、自分の写真を読む2本（GET /api/me・GET /api/users/<自分の ID>）のあとに出る。届く前に終えると、次のテストに数えられる
+    await screen.findByRole('dialog', { name: 'マッチしました' })
   })
 })
 
@@ -328,6 +349,9 @@ describe('ログインした会員が、届いたいいねの相手で「スキ�
     await userEvent.click(within(cardOf('ゆき')).getByRole('button', { name: 'スキップ' }))
 
     expect(await within(tabOf('いいね')).findByText('1')).toBeInTheDocument()
+    // 2つの一覧の読み直しが届いてから終える（届く前に終えると、次のテストに数えられる）
+    await vi.waitFor(() => expect(sentRequests('GET', '/api/me/skips')).toHaveLength(2))
+    expect(sentRequests('GET', '/api/me/received-likes')).toHaveLength(2)
   })
 })
 
@@ -344,7 +368,23 @@ describe('ログインした会員が、いいねのタブを開き、1人をス
     expect(screen.getByRole('button', { name: 'みおさんのスキップを元に戻す' })).toBeEnabled()
   })
 
-  it('「元に戻す」を押すと、スキップを消し、「元に戻しました」と出し、2つの一覧を読み直す（FR-LIKE-013・FR-UI-066）', async () => {
+  it('「元に戻す」を押すと、スキップを消し、「元に戻しました」と出し、2つの一覧を読み直して、その相手が届いたいいねに、また出る（FR-LIKE-013・FR-UI-066）', async () => {
+    // API の側で元に戻したあとの一覧（その相手が、スキップした相手から、届いたいいねに戻る）
+    let restored = false
+    server.use(
+      http.delete(SKIP_URL, () => {
+        restored = true
+        return new HttpResponse(null, { status: 204 })
+      }),
+      http.get(RECEIVED_LIKES_URL, () =>
+        HttpResponse.json(
+          restored
+            ? [...receivedLikesBody, receivedLikeBody({ user_id: 'user-d', nickname: 'みお', birthday: '1995-06-01' })]
+            : receivedLikesBody,
+        ),
+      ),
+      http.get(SKIPS_URL, () => HttpResponse.json(restored ? [] : skipsBody)),
+    )
     renderLikes()
     await waitForList()
     await userEvent.click(screen.getByText('スキップした相手（1人）'))
@@ -352,8 +392,10 @@ describe('ログインした会員が、いいねのタブを開き、1人をス
     await userEvent.click(screen.getByRole('button', { name: 'みおさんのスキップを元に戻す' }))
 
     expect(await screen.findByText('元に戻しました')).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: /みお/ })).toHaveAttribute('href', '/users/user-d')
+    expect(screen.queryByText(/スキップした相手/)).not.toBeInTheDocument()
     expect(sentRequests('DELETE', '/api/me/skips/user-d')).toHaveLength(1)
-    await vi.waitFor(() => expect(sentRequests('GET', '/api/me/skips')).toHaveLength(2))
+    expect(sentRequests('GET', '/api/me/skips')).toHaveLength(2)
     expect(sentRequests('GET', '/api/me/received-likes')).toHaveLength(2)
   })
 
@@ -376,6 +418,9 @@ describe('ログインした会員が、いいねのタブを開き、1人をス
     await userEvent.click(screen.getByRole('button', { name: 'みおさんのスキップを元に戻す' }))
 
     expect(await within(tabOf('いいね')).findByText('3')).toBeInTheDocument()
+    // 2つの一覧の読み直しが届いてから終える（届く前に終えると、次のテストに数えられる）
+    await vi.waitFor(() => expect(sentRequests('GET', '/api/me/skips')).toHaveLength(2))
+    expect(sentRequests('GET', '/api/me/received-likes')).toHaveLength(2)
   })
 })
 
@@ -421,7 +466,8 @@ describe('ログインした会員が「マッチする」を押し、いいね�
 })
 
 describe('ログインした会員が「マッチする」を押し、API が失敗する（500）', () => {
-  it('「マッチできませんでした」と出し、その相手を一覧に残し、ボタンをまた押せるようにする', async () => {
+  it('「マッチできませんでした」と出し、その相手を一覧に残し、ボタンをまた押せるようにし、失敗は記録しない', async () => {
+    const reportErrorSpy = vi.spyOn(globalThis, 'reportError').mockImplementation(() => {})
     server.use(http.post(LIKES_URL, () => new HttpResponse(null, { status: 500 })))
     renderLikes()
     await waitForList()
@@ -429,6 +475,8 @@ describe('ログインした会員が「マッチする」を押し、API が失
     await userEvent.click(within(cardOf('ゆき')).getByRole('button', { name: 'マッチする' }))
 
     expect(await screen.findByText('マッチできませんでした')).toBeInTheDocument()
+    // API が返した失敗は、サーバーのログに残るので、画面では記録しない
+    expect(reportErrorSpy).not.toHaveBeenCalled()
     expect(within(cardOf('ゆき')).getByRole('button', { name: 'マッチする' })).toBeEnabled()
     expect(screen.queryByRole('dialog', { name: '有料会員になると使えます' })).not.toBeInTheDocument()
   })
@@ -561,5 +609,21 @@ describe('ログインした会員が「元に戻す」を押し、つながら�
     expect(await screen.findByText('元に戻せませんでした')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'みおさんのスキップを元に戻す' })).toBeEnabled()
     expect(reportErrorSpy).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('ログインした会員が「マッチする」を押し、メンテナンス中（503）', () => {
+  it('「マッチできませんでした」は出さず、失敗も記録せず、ボタンをまた押せるようにする（メンテナンスの画面は client.ts が出す。FR-MAINT-006）', async () => {
+    const reportErrorSpy = vi.spyOn(globalThis, 'reportError').mockImplementation(() => {})
+    server.use(http.post(LIKES_URL, () => HttpResponse.json({ message: 'メンテナンス中です' }, { status: 503 })))
+    renderLikes()
+    await waitForList()
+
+    await userEvent.click(within(cardOf('ゆき')).getByRole('button', { name: 'マッチする' }))
+
+    await vi.waitFor(() => expect(sentRequests('POST', '/api/me/likes')).toHaveLength(1))
+    await vi.waitFor(() => expect(within(cardOf('ゆき')).getByRole('button', { name: 'マッチする' })).toBeEnabled())
+    expect(screen.queryByText('マッチできませんでした')).not.toBeInTheDocument()
+    expect(reportErrorSpy).not.toHaveBeenCalled()
   })
 })

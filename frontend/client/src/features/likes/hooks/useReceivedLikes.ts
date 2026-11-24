@@ -45,6 +45,8 @@ const failureOf = (e: unknown): 'failed' | 'stopped' => {
 // 届いたいいねの画面の手順と状態（FR-LIKE-010〜013）。届いたいいねとスキップした相手を読み、
 // 「マッチする」（いいねを送り返す）・「スキップ」・「元に戻す」を送る。
 // 成功したら、下のタブの数を読み直す（FR-UI-064）。スキップ・元に戻すのあとは、2つの一覧も読み直す
+// 分かっている不具合（移す前の画面と同じ）：送り終えてから一覧が変わるまでの間、同じ相手のボタンをもう一度押せる。
+// 送っている間の印は1人分だけ。書き込みのあとの読み直しが重なると、古い応答で新しい一覧を上書きする（#302）
 export const useReceivedLikes = (): ReceivedLikes => {
   const [lists, setLists] = useState<Lists>(LOADING)
   const [busyUserId, setBusyUserId] = useState<string | null>(null)
@@ -52,7 +54,8 @@ export const useReceivedLikes = (): ReceivedLikes => {
   const [celebration, setCelebration] = useState<Celebration | null>(null)
 
   // 2つの一覧を読む（2本）。どちらかが読めなければ、失敗にして「もう一度」を出す（FR-UI-013）。
-  // 読み直している間は、前の一覧を出したまま。isStale が true を返したら、届いた応答を捨てる（quality-frontend.md の R4）
+  // 読み直している間は、前の一覧を出したまま。読み直しに失敗したら、書き込みのあとでも、一覧の代わりに失敗の表示にする（「もう一度」で読み直せる）。
+  // isStale が true を返したら、届いた応答を捨てる（quality-frontend.md の R4）
   const load = async (isStale: () => boolean): Promise<void> => {
     try {
       const [likes, skips] = await Promise.all([matchingApi.receivedLikes(), matchingApi.skips()])
