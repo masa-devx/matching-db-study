@@ -310,6 +310,7 @@ flowchart TB
   - `StoppedRequestError`（ログインが切れた・メンテナンス中・確認していない）：`client.ts` が画面を移す・帯を出すので、黙る。読み込みなら状態を変えず、書き込みなら `'stopped'` を返す
   - `ApiError`：状態（`status: 'error'`）か、書き込みの結果（`'failed'`）に変える
   - どちらでもない失敗（つながらない・時間切れ）：サーバーのログに残らないので、`reportError` で記録してから、`ApiError` と同じに変える（`logging.md` の4）
+  - 例外：画面に何も出さずに読み直すだけの hook（`recountBadges`）は、`ApiError` も記録する。会員にも画面にも失敗が見えず、記録のほかに気づく手段がないため
   - hook の外へ投げ直さない。投げ直すと、処理されない失敗になり、送っている間の印が消えず、ボタンが押せないまま残る
 - 失敗の JSON を、一覧として置かない
 
@@ -383,6 +384,7 @@ flowchart TB
 
 - Zustand の小さな store に置く（D-005。Vuex のあとを継いだ Pinia と近い書き方。2026-11-23 に人が確かめた）。下のタブの数は、#294 で、`TabBar` の中の state から store に移した（届いたいいねの画面が、書き込みのあとに読み直すため）
 - store は、それを読む hook のファイルの中に作り、外に出さない（例：`features/messages/hooks/useBadgeCounts.ts` の `useBadgeCountsStore`）。外に出すのは、読む hook と、読み直す関数だけ
+  - `features/*/hooks/` のほかの置き場で `zustand` を import すると、Biome の `noRestrictedImports` が止める（`biome.json` の `overrides`。PR #301 のレビューで足した）
   - なぜ：store を書き換える所を、そのファイルの中だけにする。presenter は store を読まない（3章）
   - API を呼ぶ関数（`recountBadges`）も、同じファイルに置く。`src/api` を読んでよいのは `hooks/` の置き場だけ（3章）なので、store を `hooks/` の外のファイル（`stores/` など）に分けない
 - 読み直す関数（`recountBadges`）を `features/messages/index.ts` から出す。数が変わる書き込みのあと、その画面の hook が呼ぶ（4章の「書き込み」）
@@ -533,6 +535,7 @@ flowchart TB
    - その画面の `ignoreApiError` の呼び出しは、代わりに hook の `catch` で、今と同じに続ける（失敗しても先へ進む動きを変えない）
    - その画面だけが使っていた「API の形のまま」の `〇〇Api` の関数を、画面の形を返すようにする
    - ほかのまだ移していない画面も使う「API の形のまま」の関数は、形を変えずに残し、画面の形を返す関数を別の名前で足す（例：`profileApi.myMatchPerson()`。`member()` は、まだ移していない相手のプロフィールの画面が使う）。残した関数は、最後に使う画面を移すチケットで消す（#294 で決めた）
+     - 例外：呼ぶ所を型の検査で追え、同じ PR で全部直せるときは、その場で形を変えてよい。呼ぶ所を PR に並べる（例：`matchingApi.like()`。`UserPage` と `SearchPage` が呼ぶ。PR #301 のレビューで決めた）
    - 状態の置き場は5章に従う。画面をまたぐ状態が要る画面なら、このとき Zustand の store を作る（5章）
 4. 振る舞いを変える：機能を足す・不具合を直す・失敗を状態に変える・失敗の表示を足す。3とは別のコミットにし、テストを足す
 5. 測る：後の数字を取り、6つの領域の前と後を PR に書く。`docs/frontend.md` の「会員の画面の行き先」の「移したか」を直す
