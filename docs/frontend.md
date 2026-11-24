@@ -4,7 +4,7 @@
 決まり：改善版の画面の受け持ち・import の決まり・書き方・状態の置き場・テスト・画面の移し方の手順は [architecture-frontend.md](../agents/rules/architecture-frontend.md) を正とする。この文書は、形を選んだ理由と、今のファイルをどこへ移すかの地図
 決定：[decisions.md](decisions.md) の D-004（React＋TypeScript＋Vite）・D-006（OpenAPI は使わない）・D-018（画面も分ける）・D-026（改善版の置き場）・D-027（会員の認証はセッション）・D-029（axios・`src/api/`・MSW。E2E の Playwright は #299）
 
-画面も、DB と同じく「レガシー版で作る → 測る → 直す → もう一度測る」で進める。03b から、画面の子 Issue も `legacy-repo` と `refactored-repo` に分ける。Zustand は、画面をまたぐ状態が要る画面を移すチケットで入れる（D-005。Vuex のあとを継いだ Pinia と近い書き方。2026-11-23 に人が確かめた）。
+画面も、DB と同じく「レガシー版で作る → 測る → 直す → もう一度測る」で進める。03b から、画面の子 Issue も `legacy-repo` と `refactored-repo` に分ける。Zustand は、画面をまたぐ状態が要る画面を移すチケットで使う（D-005。Vuex のあとを継いだ Pinia と近い書き方。2026-11-23 に人が確かめた）。入れたのは #294（下のタブの数）。
 
 ## レガシー版とは
 
@@ -53,7 +53,7 @@ export default function SearchPage() {
 ### 状態管理
 
 - レガシー版：なんでも `useState` と Context に置く
-- 改善版：どの状態をどこに置くかを分ける。画面をまたぐ状態が要る画面を移すチケットで、Zustand を入れる（D-005。Vuex のあとを継いだ Pinia と近い書き方。2026-11-23 に人が確かめた）
+- 改善版：どの状態をどこに置くかを分ける。画面をまたぐ状態が要る画面を移すチケットで、Zustand の store にする（D-005。Vuex のあとを継いだ Pinia と近い書き方。2026-11-23 に人が確かめた）。#294 で Zustand を入れ、下のタブの数を store にした
 - 測る数字：`useState` の数と置き場
 
 ### 表示速度
@@ -151,7 +151,7 @@ frontend/client/src/
 │   ├── session/                   ログインした自分（Account の型・/api/me を読む・読み直す・useSession）← App.tsx・各画面の /api/me
 │   ├── firebase/app.ts            Emulator への接続（最初の1回だけ）                         ← firebase.ts の上半分
 │   ├── ui/                        見せるだけの部品                                          ← components/ の残り（Button・Avatar・Icon・EmptyState・Skeleton・ConfirmDialog・Toast）
-│   │   ├── AsyncView.tsx          読み込み中・失敗・空・中身を出し分ける（新しく作る）
+│   │   ├── AsyncView.tsx          読み込み中・失敗・中身を出し分ける（#294 で作った。空は画面が決める）
 │   │   └── InfiniteList.tsx       下まで来たら1回だけ知らせる（新しく作る）
 │   ├── lib/
 │   │   ├── date.ts                年齢の計算（1か所）
@@ -204,7 +204,7 @@ frontend/client/tests/
 | `/reset-password/:token` | `ResetPasswordPage.tsx` | `auth` | `authApi` | まだ |
 | `/home` | `HomePage.tsx` | `profile` | `profileApi` | まだ |
 | `/users/:publicId` | `UserPage.tsx` | `profile` | `profileApi`・`matchingApi` | まだ |
-| `/likes` | `LikesPage.tsx` | `likes` | `matchingApi`・`profileApi` | まだ（#294） |
+| `/likes` | `LikesPage.tsx` | `likes` | `matchingApi`・`profileApi` | #294 |
 | `/likes/sent` | `SentLikesPage.tsx` | `likes` | `matchingApi` | まだ |
 | `/messages` | `MessagesPage.tsx` | `messages` | `messagingApi` | まだ |
 | `/messages/:roomId` | `TalkPage.tsx` | `messages` | `messagingApi`・`matchingApi`・`profileApi` | まだ |
