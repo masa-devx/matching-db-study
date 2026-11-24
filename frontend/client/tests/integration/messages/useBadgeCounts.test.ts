@@ -135,6 +135,22 @@ describe('メールアドレスを確認した会員の画面に、下のタブ�
   })
 })
 
+describe('メールアドレスを確認した会員が、下のタブの数を読んだあとに、ログアウトする', () => {
+  it('タブに出す数を、どれも 0 に戻す（同じタブで次にログインした会員に、前の会員の数を出さない）', async () => {
+    const { result } = renderHook(({ pathname }) => ({ session: useSession(), tabs: useBadgeCounts(pathname) }), {
+      wrapper,
+      initialProps: { pathname: '/search' },
+    })
+    await waitWithRealClock(() => expect(result.current.tabs).toEqual(tabs))
+
+    act(() => {
+      result.current.session.signOut()
+    })
+
+    expect(result.current.tabs).toEqual({ messagesTab: 0, likesTab: 0 })
+  })
+})
+
 describe('メールアドレスを確認した会員が、下のタブのある画面を移る', () => {
   it('画面を移ったときに読み直す（トークを開いて戻れば、未読が減る）', async () => {
     const { result, rerender } = renderBadgeCounts()

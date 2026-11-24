@@ -15,27 +15,26 @@ export const LikesPage = () => {
     if ((await received.match(like)) === 'failed') toast('マッチできませんでした', 'error')
   }
 
+  // 'stopped'（ログインが切れた・メンテナンス中など）は、client.ts が画面を移すので、トーストを出さない
   const onSkip = async (like: ReceivedLike): Promise<void> => {
-    if (await received.skip(like)) {
-      toast('スキップしました')
-      return
-    }
-    toast('スキップできませんでした', 'error')
+    const outcome = await received.skip(like)
+    if (outcome === 'done') toast('スキップしました')
+    if (outcome === 'failed') toast('スキップできませんでした', 'error')
   }
 
   const onRestore = async (skipped: SkippedMember): Promise<void> => {
-    if (await received.restore(skipped)) {
-      toast('元に戻しました')
-      return
-    }
-    toast('元に戻せませんでした', 'error')
+    const outcome = await received.restore(skipped)
+    if (outcome === 'done') toast('元に戻しました')
+    if (outcome === 'failed') toast('元に戻せませんでした', 'error')
   }
 
   return (
     <LikesView
+      status={received.status}
       likes={received.likes}
       skips={received.skips}
       busyUserId={received.busyUserId}
+      onRetry={received.reload}
       onMatch={onMatch}
       onSkip={onSkip}
       onRestore={onRestore}
