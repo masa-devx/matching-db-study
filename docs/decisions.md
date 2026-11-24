@@ -100,9 +100,10 @@
 - 決めたこと：
   - 画面の状態は、まず React の Context で持つ
   - 描き直しが気になったら Zustand に移す（05b）
+  - 画面をまたいで読み直す状態が要るときも、Zustand に移す（#294。PR #301 のレビューで足した）
 - ほかの案：最初から Zustand・TanStack Query・Redux Toolkit を使う
 - 理由：標準の仕組みの限界を体験してから移すと、移した理由を説明できる
-- 数字・リンク：―
+- 数字・リンク：#294 で Zustand を入れた。届いたいいねの画面が、スキップ・マッチのあとに下のタブの数を読み直すため、数を `TabBar` の中の state から store に移した（`architecture-frontend.md` の5章）
 
 ### D-006 OpenAPI は使わない
 

@@ -35,8 +35,8 @@ AI（Claude Code・Codex）が最初に読む地図。`CLAUDE.md` はこのフ�
   - 理由：会員の側と干渉しないよう、別のアプリにする。表は共通（同じ DB）
   - よくある管理画面の形（サイドバー・表・グラフ）を、部品のライブラリでそろえる（12 の解説）
 - **状態の管理（画面）**
-  - 使うもの：React の Context → Zustand（05b から）
-  - 版：React と同じ・入れたときの最新
+  - 使うもの：React の Context → Zustand（#294 で入れ、下のタブの数を store にした。ほかの状態は、画面を移すチケットで移す）
+  - 版：React と同じ・Zustand 5.1.0
   - 理由：標準の限界を体験してから移す。TanStack Query・OpenAPI は使わない
 - **画面から API を呼ぶ**
   - 使うもの：axios（D-029。通信は既定の XMLHttpRequest）

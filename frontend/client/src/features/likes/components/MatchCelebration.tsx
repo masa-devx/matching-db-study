@@ -1,22 +1,19 @@
 import { Link } from 'react-router'
-import Avatar from './Avatar'
-import Icon from './Icon'
+import Avatar from '../../../components/Avatar'
+import Icon from '../../../components/Icon'
+import type { MatchPerson } from '../types'
 
-// 03c：マッチの演出（FR-UI-028）。2人の写真が左右から寄り、真ん中にハートがふくらむ
-type Person = { image?: string | null; nickname?: string | null }
-
-export default function MatchCelebration({
-  me,
-  partner,
-  roomId,
-  onClose,
-}: {
-  me: Person | null
-  partner: Person
-  // M3（#187）：マッチしてできたトークルーム。あれば、「メッセージを送る」で、その相手のトークへ直接移る
+// マッチの演出（FR-UI-028）。2人の写真が左右から寄り、真ん中にハートがふくらむ。
+// 届いたいいねの画面と、相手のプロフィールの画面（まだ移していない。features/likes の index.ts から読む）が使う
+type Props = {
+  me: MatchPerson | null
+  partner: MatchPerson
+  // マッチしてできたトークルーム。あれば、「メッセージを送る」で、その相手のトークへ直接移る（FR-UI-069）
   roomId?: string | null
   onClose: () => void
-}) {
+}
+
+export const MatchCelebration = ({ me, partner, roomId, onClose }: Props) => {
   return (
     <div className="match-overlay" role="dialog" aria-modal="true" aria-labelledby="match-title">
       <div className="match-photos">

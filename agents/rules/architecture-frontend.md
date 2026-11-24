@@ -149,7 +149,9 @@ export const messagingApi = {
 - axios を止めるのは、`noRestrictedImports` の `axios` の行。どの `overrides` にも同じ行を書く（あとの `overrides` が前の `options` を置き換えるため。プラグインにしないのは、`lint:rules` の1つ目のコマンド（`--only`）ではプラグインが流れず、レガシー版のファイルを見られないため）
 - `app/` のテストのファイルと、`shared/session/` のテストのファイルは、`src/api/` を読んでよい（偽物の設定を渡すため）
 - `app/` から機能を読むときは `features/<機能>` と書く。`features/<機能>/index` と書いても止まる
-- 画面を移している間は、`app/`・`shared/` から、まだ移していないレガシー版のファイル（`src/components/*` など）を import してよい。そのファイルは、移すチケットで `shared/ui` か機能へ移す（例：`app/RequireAuth.tsx` が使う `components/AwaitingVerification.tsx`）
+- 画面を移している間は、`app/`・`shared/`・`features/` から、まだ移していないレガシー版のファイル（`src/components/*` など）を import してよい。そのファイルは、移すチケットで `shared/ui` か機能へ移す（例：`app/RequireAuth.tsx` が使う `components/AwaitingVerification.tsx`・`features/likes` が使う `Avatar`・`Button`・`EmptyState`・`Skeleton`・`UpsellDialog`・`Toast`）
+  - 1つの画面を移すたびに、いくつもの画面が使う部品まで移すと、PR が大きくなるため（#294 で決めた）
+  - 3章の一覧の「使ってよい」に、この部品も足して読む。hook は、Biome が `components/` を止めるので、読めない（`useToast` も使えない。下の4章の「書き込み」）
 - まだ移していないレガシー版の画面は、`features/<機能>` の `index.ts` だけを読んでよい（いくつもの画面が使う部品を、最初に使う画面と一緒に移したあと。例：`MatchCelebration` を `features/likes` に移したあとの `UserPage`・`SearchPage`）
 
 Biome で止められないもの（レビューで見る。#114 で確かめた）：
@@ -301,14 +303,23 @@ flowchart TB
   - `refreshing`：中身を出したまま取り直している（ポーリング・続きの読み込み）。スケルトンに戻さない
   - `moreError`：続きの読み込みだけが失敗した。一覧は残し、下に「もう一度」を出す
   - 中止（`AbortError`）では、状態を変えない
-- presenter は、`shared/ui/AsyncView` で、読み込み中・失敗・空・中身を出し分ける。スケルトンは画面ごとのものを props で渡す（中身と形をそろえ、CLS を出さない。FR-UI-025）
+- presenter は、`shared/ui/AsyncView` で、読み込み中・失敗・中身を出し分ける（#294 で作った）。スケルトンは画面ごとのものを props で渡す（中身と形をそろえ、CLS を出さない。FR-UI-025）
+  - 失敗のときは「読み込めませんでした」と「もう一度」を出す（FR-UI-013）。「もう一度」で呼ぶ関数は、hook が返す
+  - 空のときの出し方は、画面ごとに違うので、presenter が中身の中で決める（届いたいいねが空でも、スキップした相手の一覧は出す）
+- hook は、受けた失敗を、次のように扱う（#294 で決めた）
+  - `StoppedRequestError`（ログインが切れた・メンテナンス中・確認していない）：`client.ts` が画面を移す・帯を出すので、黙る。読み込みなら状態を変えず、書き込みなら `'stopped'` を返す
+  - `ApiError`：状態（`status: 'error'`）か、書き込みの結果（`'failed'`）に変える
+  - どちらでもない失敗（つながらない・時間切れ）：サーバーのログに残らないので、`reportError` で記録してから、`ApiError` と同じに変える（`logging.md` の4）
+  - 例外：画面に何も出さずに読み直すだけの hook（`recountBadges`）は、`ApiError` も記録する。会員にも画面にも失敗が見えず、記録のほかに気づく手段がないため
+  - hook の外へ投げ直さない。投げ直すと、処理されない失敗になり、送っている間の印が消えず、ボタンが押せないまま残る
 - 失敗の JSON を、一覧として置かない
 
 ### 書き込み
 
 - 書き込みの hook は、送っている間（`submitting`）は次を受け付けない。購入のように二重になると困る書き込みは、API の側でも二重を止めているかを確かめる
+- 書き込みの hook は、結果（`'done' | 'failed' | 'stopped'` など）を返す。トーストを出すのは container（`pages/`）。hook は `components/Toast` を読めない（3章。#294 で決めた）
 - 楽観的な表示（いいね・メッセージの送信）は、hook が送る側で id を作り、届いた本物と突き合わせて消す。失敗したら hook が戻す
-- 書き込みのあとに、ほかの機能の数（未読・届いたいいね）が変わるときは、その機能の `index.ts` が出す「読み直す関数」を呼ぶ
+- 書き込みのあとに、ほかの機能の数（未読・届いたいいね）が変わるときは、その機能の `index.ts` が出す「読み直す関数」を呼ぶ（例：届いたいいねのスキップ・マッチ・元に戻すのあとに、`features/messages` の `recountBadges`）
 - 購入が成功したあと、有料の機能の API が 403 を返したあとは、`shared/session` の読み直す関数を呼ぶ（使える機能が変わるため）
 
 ### 機能をまたぐ部品
@@ -363,7 +374,7 @@ flowchart TB
 
 ### ログインした自分（性別・使える機能）
 
-- `shared/session/` に置く（今は Context）。画面をまたぐ状態が要る画面を移すチケットで、Zustand を入れる（D-005。Vuex のあとを継いだ Pinia と近い書き方。2026-11-23 に人が確かめた）
+- `shared/session/` に置く（今は Context）。画面をまたぐ状態が要る画面を移すチケットで、Zustand に移す（Zustand は #294 で入れた。D-005。Vuex のあとを継いだ Pinia と近い書き方。2026-11-23 に人が確かめた）
 - `GET /api/me` を読むのは、起動したとき・購入が成功したとき・有料の機能で 403 が返ったとき
 - ログアウトのときは消し、Firebase からも抜ける
 
@@ -371,10 +382,15 @@ flowchart TB
 
 未読の数・届いたいいねの数・管理画面のまだ対応していない通報の数。
 
-- その機能の hook に置く。画面をまたぐ状態が要る画面を移すチケットで、小さな store にする（D-005。Vuex のあとを継いだ Pinia と近い書き方。2026-11-23 に人が確かめた）
-- 読み直す関数を `index.ts` から出す。#247（下のタブの数）では出していない。使う画面（トーク・いいね）を移すときに足す
+- Zustand の小さな store に置く（D-005。Vuex のあとを継いだ Pinia と近い書き方。2026-11-23 に人が確かめた）。下のタブの数は、#294 で、`TabBar` の中の state から store に移した（届いたいいねの画面が、書き込みのあとに読み直すため）
+- store は、それを読む hook のファイルの中に作り、外に出さない（例：`features/messages/hooks/useBadgeCounts.ts` の `useBadgeCountsStore`）。外に出すのは、読む hook と、読み直す関数だけ
+  - `features/*/hooks/` のほかの置き場で `zustand` を import すると、Biome の `noRestrictedImports` が止める（`biome.json` の `overrides`。PR #301 のレビューで足した）
+  - なぜ：store を書き換える所を、そのファイルの中だけにする。presenter は store を読まない（3章）
+  - API を呼ぶ関数（`recountBadges`）も、同じファイルに置く。`src/api` を読んでよいのは `hooks/` の置き場だけ（3章）なので、store を `hooks/` の外のファイル（`stores/` など）に分けない
+- 読み直す関数（`recountBadges`）を `features/messages/index.ts` から出す。数が変わる書き込みのあと、その画面の hook が呼ぶ（4章の「書き込み」）
+- 読むのをやめたら（ログアウトして下のタブが消えた）、store の数を消す。消さないと、同じタブで次にログインした会員に、読み終えるまで前の会員の数が出る
 - 数を読む部品は `TabBar`（管理画面はサイドバー）の中だけにし、描き直しをその部品にとどめる
-- 数だけを返す API ができるまでは、今の読み方のまま、`src/api/〇〇Api.ts` に移す。下のタブの未読・新しいマッチ・届いたいいねは、数だけを返す API（`GET /api/me/badge-counts`）を、`features/messages` の `useBadgeCounts` が `messagingApi.badgeCounts()` で読む（#247）
+- 数だけを返す API ができるまでは、今の読み方のまま、`src/api/〇〇Api.ts` に移す。下のタブの未読・新しいマッチ・届いたいいねは、数だけを返す API（`GET /api/me/badge-counts`）を、`features/messages` の `useBadgeCounts`・`recountBadges` が `messagingApi.badgeCounts()` で読む（#247・#294）
 
 ### 入力中の値
 
@@ -382,6 +398,7 @@ flowchart TB
 - ほかの所から入れる値（保存した条件・URL）も、hook が持つ
 - presenter は `value` と `onChange` を受け取るだけ
 - それ以外（ダイアログが開いているか、など）は presenter の `useState`
+- 例外：API の結果で開くダイアログ（403 のときの有料会員への誘導・マッチの演出）は、hook が持つ。開くかを決めるのが API の結果だから（#294 で決めた）
 
 ## 6. データの出どころが2つある機能（メッセージ）
 
@@ -511,12 +528,15 @@ flowchart TB
 
 1. 棚卸し：その画面の状態（`useState`・Context）・呼ぶ API・ロジック（判断・計算・形の変換）を数え、置き場（1章の表）を決めて、チケットに書く。前の数字（6つの領域の「測る数字」）を取る
 2. 今の動きを確かめるテスト：結合テスト（画面を描き、MSW で API を偽物にする。7章）を足し、移す前のコードで通す（最初のコミット）
+   - 今の動きが「処理されない失敗」（画面の外へ投げ直す。読み込めないと読み込み中のまま、など）になる場面は、テストを書けない（Vitest が、処理されない失敗を誤りにする）。チケットと PR に「分かっている不具合」として書き、4で直すときにテストを足す（#294 で決めた）
 3. 移す：画面の見え方と動きを変えずに、`features/<機能>/` に移す（2つ目のコミット）
    - 2のテストを、import の行と置き場のほかは書き換えずに通す
    - ルートの表（`App.tsx`）を新しい画面に向け、古いファイルを消す
    - その画面の `ignoreApiError` の呼び出しは、代わりに hook の `catch` で、今と同じに続ける（失敗しても先へ進む動きを変えない）
    - その画面だけが使っていた「API の形のまま」の `〇〇Api` の関数を、画面の形を返すようにする
-   - 状態の置き場は5章に従う。画面をまたぐ状態が要る画面なら、このとき Zustand を入れる（5章）
+   - ほかのまだ移していない画面も使う「API の形のまま」の関数は、形を変えずに残し、画面の形を返す関数を別の名前で足す（例：`profileApi.myMatchPerson()`。`member()` は、まだ移していない相手のプロフィールの画面が使う）。残した関数は、最後に使う画面を移すチケットで消す（#294 で決めた）
+     - 例外：呼ぶ所を型の検査で追え、同じ PR で全部直せるときは、その場で形を変えてよい。呼ぶ所を PR に並べる（例：`matchingApi.like()`。`UserPage` と `SearchPage` が呼ぶ。PR #301 のレビューで決めた）
+   - 状態の置き場は5章に従う。画面をまたぐ状態が要る画面なら、このとき Zustand の store を作る（5章）
 4. 振る舞いを変える：機能を足す・不具合を直す・失敗を状態に変える・失敗の表示を足す。3とは別のコミットにし、テストを足す
 5. 測る：後の数字を取り、6つの領域の前と後を PR に書く。`docs/frontend.md` の「会員の画面の行き先」の「移したか」を直す
 

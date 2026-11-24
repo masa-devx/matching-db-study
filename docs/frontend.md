@@ -4,7 +4,7 @@
 決まり：改善版の画面の受け持ち・import の決まり・書き方・状態の置き場・テスト・画面の移し方の手順は [architecture-frontend.md](../agents/rules/architecture-frontend.md) を正とする。この文書は、形を選んだ理由と、今のファイルをどこへ移すかの地図
 決定：[decisions.md](decisions.md) の D-004（React＋TypeScript＋Vite）・D-006（OpenAPI は使わない）・D-018（画面も分ける）・D-026（改善版の置き場）・D-027（会員の認証はセッション）・D-029（axios・`src/api/`・MSW。E2E の Playwright は #299）
 
-画面も、DB と同じく「レガシー版で作る → 測る → 直す → もう一度測る」で進める。03b から、画面の子 Issue も `legacy-repo` と `refactored-repo` に分ける。Zustand は、画面をまたぐ状態が要る画面を移すチケットで入れる（D-005。Vuex のあとを継いだ Pinia と近い書き方。2026-11-23 に人が確かめた）。
+画面も、DB と同じく「レガシー版で作る → 測る → 直す → もう一度測る」で進める。03b から、画面の子 Issue も `legacy-repo` と `refactored-repo` に分ける。Zustand は、画面をまたぐ状態が要る画面を移すチケットで使う（D-005。Vuex のあとを継いだ Pinia と近い書き方。2026-11-23 に人が確かめた）。入れたのは #294（下のタブの数）。
 
 ## レガシー版とは
 
@@ -53,7 +53,7 @@ export default function SearchPage() {
 ### 状態管理
 
 - レガシー版：なんでも `useState` と Context に置く
-- 改善版：どの状態をどこに置くかを分ける。画面をまたぐ状態が要る画面を移すチケットで、Zustand を入れる（D-005。Vuex のあとを継いだ Pinia と近い書き方。2026-11-23 に人が確かめた）
+- 改善版：どの状態をどこに置くかを分ける。画面をまたぐ状態が要る画面を移すチケットで、Zustand の store にする（D-005。Vuex のあとを継いだ Pinia と近い書き方。2026-11-23 に人が確かめた）。#294 で Zustand を入れ、下のタブの数を store にした
 - 測る数字：`useState` の数と置き場
 
 ### 表示速度
@@ -151,7 +151,7 @@ frontend/client/src/
 │   ├── session/                   ログインした自分（Account の型・/api/me を読む・読み直す・useSession）← App.tsx・各画面の /api/me
 │   ├── firebase/app.ts            Emulator への接続（最初の1回だけ）                         ← firebase.ts の上半分
 │   ├── ui/                        見せるだけの部品                                          ← components/ の残り（Button・Avatar・Icon・EmptyState・Skeleton・ConfirmDialog・Toast）
-│   │   ├── AsyncView.tsx          読み込み中・失敗・空・中身を出し分ける（新しく作る）
+│   │   ├── AsyncView.tsx          読み込み中・失敗・中身を出し分ける（#294 で作った。空は画面が決める）
 │   │   └── InfiniteList.tsx       下まで来たら1回だけ知らせる（新しく作る）
 │   ├── lib/
 │   │   ├── date.ts                年齢の計算（1か所）
@@ -184,7 +184,7 @@ frontend/client/tests/
 | 誘導のダイアログ・有料の印 | ほぼ全部の画面 | `plans/` が出す。ダイアログは container が受け取って渡す |
 | 通報のダイアログ | トーク・相手のプロフィール | `reports/` が出す。container が受け取って渡す |
 | 会員のカード | 検索・いいね・ブロックの一覧 | `profile/` が presenter を出す |
-| 未読の数・届いたいいねの数 | 下のタブ | 数だけを返す API が1本なので、`messages/` が `useBadgeCounts` を出す（届いたいいねの数も。#247）。読むのは `TabBar` の中だけ。読み直す関数は、使う画面を移すときに足す |
+| 未読の数・届いたいいねの数 | 下のタブ | 数だけを返す API が1本なので、`messages/` が `useBadgeCounts` を出す（届いたいいねの数も。#247）。読むのは `TabBar` の中だけ。読み直す関数 `recountBadges` も `messages/` が出す（届いたいいねの画面が呼ぶ。#294） |
 | 読んだ数の表示（`ReadCounter`） | Firestore 版のトークとその一覧 | `messages/components/`（数えるのは Firestore の Repository の実装） |
 | Firebase へのログイン（`signInFirebase`） | Firestore 版のトーク | Firestore の Repository の実装が、最初に使うときに1回だけ。Firestore のトークンは `messagingApi` から取る |
 
@@ -204,7 +204,7 @@ frontend/client/tests/
 | `/reset-password/:token` | `ResetPasswordPage.tsx` | `auth` | `authApi` | まだ |
 | `/home` | `HomePage.tsx` | `profile` | `profileApi` | まだ |
 | `/users/:publicId` | `UserPage.tsx` | `profile` | `profileApi`・`matchingApi` | まだ |
-| `/likes` | `LikesPage.tsx` | `likes` | `matchingApi`・`profileApi` | まだ（#294） |
+| `/likes` | `LikesPage.tsx` | `likes` | `matchingApi`・`profileApi` | #294 |
 | `/likes/sent` | `SentLikesPage.tsx` | `likes` | `matchingApi` | まだ |
 | `/messages` | `MessagesPage.tsx` | `messages` | `messagingApi` | まだ |
 | `/messages/:roomId` | `TalkPage.tsx` | `messages` | `messagingApi`・`matchingApi`・`profileApi` | まだ |
@@ -222,7 +222,8 @@ frontend/client/tests/
 - 「移す先」は `features/<機能>`。機能の名前は、上の図にそろえた
 - `/`（ログインしているかで移す）と `*`（ない URL）は、画面でなくルートの表の行なので、`app/router.tsx` に入れる（まだ作っていない。今は `App.tsx`）
 - 設定の画面のうち、パスワードの変更は `auth` に入れる（上の図）。設定の画面を移すチケットで、`auth` の `index.ts` から受け取る
-- `features/messages` は、下のタブの数（`useBadgeCounts`）だけを移した。トークの4画面は、まだ移していない
+- `features/messages` は、下のタブの数（`useBadgeCounts`）と、その数を読み直す関数（`recountBadges`）だけを移した。トークの4画面は、まだ移していない
+- 「ニックネームがなければ『退会した会員』」の決まりは、今は `features/likes/rules.ts` の `displayName` にある。トーク・ブロックの画面にも同じ決まりがあるので、2つ目の機能（トークなど）を移すときに `shared/lib` へ移す（PR #301 のレビューで決めた）
 - 画面でない部品（`components/` の `VerifyBanner`・`NoticeBanner`・`ReportDialog`・`UpsellDialog`・`MatchCelebration`）の行き先は、上の図。最初に使う画面を移すときに一緒に移す
 - いくつもの画面が使う部品を、最初に使う画面と一緒に移したあと、まだ移していないレガシー版の画面は、`features/<機能>` の `index.ts` だけを読んでよい（`architecture-frontend.md` の3章）
 - 画面ごとの細かな棚卸し（状態・API・ロジックと、その置き場）は、ここに書かない。その画面を移すチケットの最初に書く（`.github/ISSUE_TEMPLATE/r-improvement.md` の「画面を移すときだけ」）

@@ -52,6 +52,10 @@
                     "group": ["**/api/client"],
                     "importNamePattern": "(client|configureApiClient)",
                     "message": "レガシー版の画面は、axios のインスタンス（client）と configureApiClient を直に使わない。src/api/〇〇Api.ts の関数を呼ぶ（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["zustand", "zustand/*"],
+                    "message": "zustand の store を作れるのは features/*/hooks/ の中だけ。store は、それを読む hook のファイルの中に作り、外に出さない（architecture-frontend.md の5章）"
                   }
                 ]
               }
@@ -112,6 +116,10 @@
                   {
                     "group": ["**/features/**", "!**/features/*/types", "**/session/*", "!**/session/types"],
                     "message": "src/api が読んでよいのは、機能の types.ts と shared/session/types.ts の型だけ（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["zustand", "zustand/*"],
+                    "message": "zustand の store を作れるのは features/*/hooks/ の中だけ。store は、それを読む hook のファイルの中に作り、外に出さない（architecture-frontend.md の5章）"
                   }
                 ]
               }
@@ -136,6 +144,10 @@
                   {
                     "group": ["react", "react-dom", "react-dom/*", "react-router"],
                     "message": "src/api/client.ts は、React を使わない（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["zustand", "zustand/*"],
+                    "message": "zustand の store を作れるのは features/*/hooks/ の中だけ。store は、それを読む hook のファイルの中に作り、外に出さない（architecture-frontend.md の5章）"
                   }
                 ]
               }
@@ -164,6 +176,10 @@
                   {
                     "group": ["react", "react-dom", "react-dom/*", "react-router"],
                     "message": "shared/firebase は、React を使わない（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["zustand", "zustand/*"],
+                    "message": "zustand の store を作れるのは features/*/hooks/ の中だけ。store は、それを読む hook のファイルの中に作り、外に出さない（architecture-frontend.md の5章）"
                   }
                 ]
               }
@@ -193,6 +209,10 @@
                     "group": ["**/api/ApiError"],
                     "importNamePattern": "ignoreApiError",
                     "message": "ignoreApiError は、まだ移していないレガシー版の画面だけが使う。改訂版では、ApiError を受けて状態に変える（architecture-frontend.md の2章）"
+                  },
+                  {
+                    "group": ["zustand", "zustand/*"],
+                    "message": "zustand の store を作れるのは features/*/hooks/ の中だけ。store は、それを読む hook のファイルの中に作り、外に出さない（architecture-frontend.md の5章）"
                   }
                 ]
               }
@@ -217,6 +237,10 @@
                   {
                     "group": ["**/features/**", "**/api/*", "**/firebase/*", "**/session/*"],
                     "message": "shared/ui は、features・src/api・shared/firebase・shared/session を使わない（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["zustand", "zustand/*"],
+                    "message": "zustand の store を作れるのは features/*/hooks/ の中だけ。store は、それを読む hook のファイルの中に作り、外に出さない（architecture-frontend.md の5章）"
                   }
                 ]
               }
@@ -245,6 +269,10 @@
                   {
                     "group": ["react", "react-dom", "react-dom/*", "react-router"],
                     "message": "shared/lib・shared/constants は、React を使わない（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["zustand", "zustand/*"],
+                    "message": "zustand の store を作れるのは features/*/hooks/ の中だけ。store は、それを読む hook のファイルの中に作り、外に出さない（architecture-frontend.md の5章）"
                   }
                 ]
               }
@@ -269,6 +297,10 @@
                   {
                     "group": ["**/api/*", "**/firebase/*", "**/repositories/*"],
                     "message": "container（pages）は、src/api（ApiError も）・shared/firebase・repositories を直に使わない。hook を通す（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["zustand", "zustand/*"],
+                    "message": "zustand の store を作れるのは features/*/hooks/ の中だけ。store は、それを読む hook のファイルの中に作り、外に出さない（architecture-frontend.md の5章）"
                   }
                 ]
               }
@@ -303,6 +335,10 @@
                     "group": ["**/Toast"],
                     "message": "presenter（components）は、トーストを出さない。container（pages）から props で受け取る（architecture-frontend.md の3章）",
                     "importNamePattern": "useToast"
+                  },
+                  {
+                    "group": ["zustand", "zustand/*"],
+                    "message": "zustand の store を作れるのは features/*/hooks/ の中だけ。store は、それを読む hook のファイルの中に作り、外に出さない（architecture-frontend.md の5章）"
                   }
                 ]
               }
@@ -379,6 +415,10 @@
                     "group": ["**/api/ApiError"],
                     "importNamePattern": "ignoreApiError",
                     "message": "ignoreApiError は、まだ移していないレガシー版の画面だけが使う。改訂版では、ApiError を受けて状態に変える（architecture-frontend.md の2章）"
+                  },
+                  {
+                    "group": ["zustand", "zustand/*"],
+                    "message": "zustand の store を作れるのは features/*/hooks/ の中だけ。store は、それを読む hook のファイルの中に作り、外に出さない（architecture-frontend.md の5章）"
                   }
                 ]
               }
@@ -415,6 +455,10 @@
                   {
                     "group": ["react", "react-dom", "react-dom/*", "react-router"],
                     "message": "rules・types・repository は、React を使わない（architecture-frontend.md の3章）"
+                  },
+                  {
+                    "group": ["zustand", "zustand/*"],
+                    "message": "zustand の store を作れるのは features/*/hooks/ の中だけ。store は、それを読む hook のファイルの中に作り、外に出さない（architecture-frontend.md の5章）"
                   }
                 ]
               }
@@ -448,6 +492,10 @@
                     "group": ["**/api/ApiError"],
                     "importNamePattern": "ignoreApiError",
                     "message": "ignoreApiError は、まだ移していないレガシー版の画面だけが使う。改訂版では、ApiError を受けて状態に変える（architecture-frontend.md の2章）"
+                  },
+                  {
+                    "group": ["zustand", "zustand/*"],
+                    "message": "zustand の store を作れるのは features/*/hooks/ の中だけ。store は、それを読む hook のファイルの中に作り、外に出さない（architecture-frontend.md の5章）"
                   }
                 ]
               }
@@ -481,6 +529,10 @@
                     "group": ["**/api/ApiError"],
                     "importNamePattern": "ignoreApiError",
                     "message": "ignoreApiError は、まだ移していないレガシー版の画面だけが使う。改訂版では、ApiError を受けて状態に変える（architecture-frontend.md の2章）"
+                  },
+                  {
+                    "group": ["zustand", "zustand/*"],
+                    "message": "zustand の store を作れるのは features/*/hooks/ の中だけ。store は、それを読む hook のファイルの中に作り、外に出さない（architecture-frontend.md の5章）"
                   }
                 ]
               }

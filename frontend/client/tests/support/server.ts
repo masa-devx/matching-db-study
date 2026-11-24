@@ -1,12 +1,13 @@
 import { setupServer } from 'msw/node'
 import { authHandlers } from './handlers/authApi'
+import { matchingHandlers } from './handlers/matchingApi'
 import { messagingHandlers } from './handlers/messagingApi'
 import { profileHandlers } from './handlers/profileApi'
 
 // テストの API の偽物（MSW。architecture-frontend.md の7章）。ネットワークの手前で要求を受け、tests/support/handlers/ の偽の応答を返す。
 // 準備と片付け（listen・resetHandlers・close）は tests/support/setup.ts が呼ぶ。
 // テストごとに違う応答は、そのテストの中で server.use(...) で上書きする（テストが終わると resetHandlers で戻る）
-export const server = setupServer(...authHandlers, ...profileHandlers, ...messagingHandlers)
+export const server = setupServer(...authHandlers, ...profileHandlers, ...messagingHandlers, ...matchingHandlers)
 
 // 送った要求。テストで「どの API を何本呼んだか」「何を送ったか」を見るために覚える（テストが終わると消す）
 const sent: Request[] = []
